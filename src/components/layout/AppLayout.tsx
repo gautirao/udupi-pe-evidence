@@ -39,9 +39,9 @@ const navigation = [
 ];
 
 const adminNavigation = [
-  { name: 'Analytics', href: '/admin/analytics', icon: BarChart3 },
   { name: 'Feed Runs', href: '/admin/feeds', icon: FileText },
   { name: 'Facebook Groups', href: '/admin/groups', icon: Users },
+  { name: 'Manual Posts', href: '/admin/posts', icon: FileText },
   { name: 'Listings', href: '/admin/listings', icon: Home },
 ];
 
