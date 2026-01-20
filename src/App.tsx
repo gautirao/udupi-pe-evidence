@@ -8,6 +8,10 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import FacebookGroups from "./pages/admin/FacebookGroups";
+import FeedRuns from "./pages/admin/FeedRuns";
+import ManualPost from "./pages/admin/ManualPost";
+import Listings from "./pages/admin/Listings";
 
 const queryClient = new QueryClient();
 
@@ -25,6 +29,39 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              }
+            />
+            {/* Admin Routes */}
+            <Route
+              path="/admin/groups"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FacebookGroups />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/feeds"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FeedRuns />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/posts"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <ManualPost />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/listings"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Listings />
                 </ProtectedRoute>
               }
             />
