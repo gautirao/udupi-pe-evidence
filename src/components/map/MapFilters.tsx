@@ -1,0 +1,249 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Slider } from '@/components/ui/slider';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PropertyFilters, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
+import { formatPrice } from '@/lib/formatters';
+import { CalendarIcon, Filter, MapPin, X, ChevronDown } from 'lucide-react';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
+
+interface MapFiltersProps {
+  filters: PropertyFilters;
+  onFiltersChange: (filters: PropertyFilters) => void;
+}
+
+const propertyTypes: { value: PropertyType; label: string }[] = [
+  { value: 'land', label: 'Land' },
+  { value: 'house', label: 'House' },
+  { value: 'commercial', label: 'Commercial' },
+  { value: 'other', label: 'Other' },
+];
+
+export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
+  const { data: localities = [] } = useLocalities();
+  const { data: priceRange } = usePriceRange();
+  const [localityOpen, setLocalityOpen] = useState(false);
+
+  const handlePropertyTypeChange = (type: PropertyType, checked: boolean) => {
+    const currentTypes = filters.propertyTypes || [];
+    const newTypes = checked
+      ? [...currentTypes, type]
+      : currentTypes.filter((t) => t !== type);
+    onFiltersChange({ ...filters, propertyTypes: newTypes.length > 0 ? newTypes : undefined });
+  };
+
+  const handleLocalitySelect = (locality: string) => {
+    const currentLocalities = filters.localities || [];
+    const newLocalities = currentLocalities.includes(locality)
+      ? currentLocalities.filter((l) => l !== locality)
+      : [...currentLocalities, locality];
+    onFiltersChange({ ...filters, localities: newLocalities.length > 0 ? newLocalities : undefined });
+  };
+
+  const handlePriceChange = (values: number[]) => {
+    onFiltersChange({
+      ...filters,
+      priceMin: values[0] > (priceRange?.min || 0) ? values[0] : undefined,
+      priceMax: values[1] < (priceRange?.max || 10000000) ? values[1] : undefined,
+    });
+  };
+
+  const clearFilters = () => {
+    onFiltersChange({});
+  };
+
+  const hasActiveFilters =
+    (filters.propertyTypes && filters.propertyTypes.length > 0) ||
+    (filters.localities && filters.localities.length > 0) ||
+    filters.priceMin !== undefined ||
+    filters.priceMax !== undefined ||
+    filters.dateFrom !== undefined ||
+    filters.dateTo !== undefined;
+
+  return (
+    <Card className="h-full overflow-hidden flex flex-col">
+      <CardHeader className="pb-3 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Filters
+          </CardTitle>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2">
+              <X className="h-3.5 w-3.5 mr-1" />
+              Clear
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex-1 overflow-y-auto scrollbar-thin space-y-6">
+        {/* Property Type */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Property Type</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {propertyTypes.map((type) => (
+              <div key={type.value} className="flex items-center space-x-2">
+                <Checkbox
+                  id={`type-${type.value}`}
+                  checked={filters.propertyTypes?.includes(type.value) || false}
+                  onCheckedChange={(checked) =>
+                    handlePropertyTypeChange(type.value, checked as boolean)
+                  }
+                />
+                <Label
+                  htmlFor={`type-${type.value}`}
+                  className="text-sm font-normal cursor-pointer"
+                >
+                  {type.label}
+                </Label>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Locality */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Locality</Label>
+          <Popover open={localityOpen} onOpenChange={setLocalityOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between h-9 text-sm"
+              >
+                <span className="truncate">
+                  {filters.localities && filters.localities.length > 0
+                    ? `${filters.localities.length} selected`
+                    : 'Select localities'}
+                </span>
+                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[250px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search localities..." className="h-9" />
+                <CommandList>
+                  <CommandEmpty>No locality found.</CommandEmpty>
+                  <CommandGroup>
+                    {localities.map((locality) => (
+                      <CommandItem
+                        key={locality}
+                        value={locality}
+                        onSelect={() => handleLocalitySelect(locality)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={filters.localities?.includes(locality) || false}
+                            className="pointer-events-none"
+                          />
+                          <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="truncate">{locality}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+          {filters.localities && filters.localities.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {filters.localities.map((locality) => (
+                <Badge
+                  key={locality}
+                  variant="secondary"
+                  className="text-xs cursor-pointer"
+                  onClick={() => handleLocalitySelect(locality)}
+                >
+                  {locality}
+                  <X className="h-3 w-3 ml-1" />
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Price Range */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Price Range</Label>
+          {priceRange && (
+            <>
+              <Slider
+                min={priceRange.min}
+                max={priceRange.max}
+                step={Math.max(1, Math.floor((priceRange.max - priceRange.min) / 100))}
+                value={[filters.priceMin ?? priceRange.min, filters.priceMax ?? priceRange.max]}
+                onValueChange={handlePriceChange}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{formatPrice(filters.priceMin ?? priceRange.min)}</span>
+                <span>{formatPrice(filters.priceMax ?? priceRange.max)}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Date Range */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Date Posted</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'h-9 text-xs justify-start text-left font-normal',
+                    !filters.dateFrom && 'text-muted-foreground'
+                  )}
+                >
+                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                  {filters.dateFrom ? format(filters.dateFrom, 'MMM d') : 'From'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={filters.dateFrom}
+                  onSelect={(date) => onFiltersChange({ ...filters, dateFrom: date })}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    'h-9 text-xs justify-start text-left font-normal',
+                    !filters.dateTo && 'text-muted-foreground'
+                  )}
+                >
+                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                  {filters.dateTo ? format(filters.dateTo, 'MMM d') : 'To'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={filters.dateTo}
+                  onSelect={(date) => onFiltersChange({ ...filters, dateTo: date })}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
