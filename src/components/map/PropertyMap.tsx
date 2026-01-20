@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
+import MarkerClusterGroupModule from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Home, MapPin, Ruler, Phone, Calendar } from 'lucide-react';
+import { Home, MapPin, Ruler, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
+
+// Handle different export patterns from react-leaflet-cluster
+const MarkerClusterGroup = (MarkerClusterGroupModule as any).default || MarkerClusterGroupModule;
 
 // Fix default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
