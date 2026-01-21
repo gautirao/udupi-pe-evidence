@@ -343,17 +343,21 @@
           const post = postsOnPage[parseInt(index)];
           if (post) {
             const text = getPostText(post);
+            console.log(`[Udupi Tracker] Post ${index} extracted text:`, text ? text.substring(0, 200) : 'NULL');
             if (text) {
               const timestamp = getPostTimestamp(post);
+              const author = getAuthorName(post);
+              console.log(`[Udupi Tracker] Post ${index} author:`, author, 'timestamp:', timestamp);
               posts.push({
                 content: text,
-                author_name: getAuthorName(post),
+                author_name: author,
                 posted_at: timestamp ? timestamp.toISOString() : null,
                 external_post_id: `fb_${Date.now()}_${index}`
               });
             }
           }
         });
+        console.log(`[Udupi Tracker] Total extracted:`, posts.length, 'posts');
         sendResponse({
           posts,
           groupName: getGroupName()
