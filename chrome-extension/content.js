@@ -99,13 +99,95 @@
     return null;
   }
 
-  // Get post timestamp
+  // Get post timestamp - returns Date object or null
   function getPostTimestamp(postElement) {
-    const timeEl = postElement.querySelector('a[href*="/posts/"] span, abbr[data-utime], span[id^="jsc"]');
-    if (timeEl) {
-      return timeEl.getAttribute('data-utime') || timeEl.textContent;
+    // Try multiple selectors for Facebook's timestamp elements
+    const timeSelectors = [
+      'abbr[data-utime]',
+      'a[href*="/posts/"] span',
+      'span[id^="jsc"]',
+      'a[role="link"] span[aria-labelledby]',
+      '[data-testid="post_timestamp"]',
+      'a[href*="?__cft__"] span'
+    ];
+
+    for (const selector of timeSelectors) {
+      const timeEl = postElement.querySelector(selector);
+      if (timeEl) {
+        // Check for unix timestamp attribute
+        const utime = timeEl.getAttribute('data-utime');
+        if (utime) {
+          return new Date(parseInt(utime) * 1000);
+        }
+        
+        // Try to parse text-based timestamps
+        const text = timeEl.textContent?.trim();
+        if (text) {
+          const parsed = parseRelativeTime(text);
+          if (parsed) return parsed;
+        }
+      }
     }
+    
     return null;
+  }
+
+  // Parse Facebook's relative time strings (e.g., "2h", "1d", "Yesterday at 5:00 PM")
+  function parseRelativeTime(text) {
+    const now = new Date();
+    const lower = text.toLowerCase();
+    
+    // Handle "Just now", "now"
+    if (lower.includes('just now') || lower === 'now') {
+      return now;
+    }
+    
+    // Handle minutes: "5m", "5 mins", "5 minutes ago"
+    const minMatch = lower.match(/(\d+)\s*m(?:in|ins|inutes?)?\s*(?:ago)?/);
+    if (minMatch) {
+      return new Date(now.getTime() - parseInt(minMatch[1]) * 60 * 1000);
+    }
+    
+    // Handle hours: "2h", "2 hrs", "2 hours ago"
+    const hourMatch = lower.match(/(\d+)\s*h(?:r|rs|ours?)?\s*(?:ago)?/);
+    if (hourMatch) {
+      return new Date(now.getTime() - parseInt(hourMatch[1]) * 60 * 60 * 1000);
+    }
+    
+    // Handle days: "1d", "2 days ago"
+    const dayMatch = lower.match(/(\d+)\s*d(?:ay|ays?)?\s*(?:ago)?/);
+    if (dayMatch) {
+      return new Date(now.getTime() - parseInt(dayMatch[1]) * 24 * 60 * 60 * 1000);
+    }
+    
+    // Handle "Yesterday"
+    if (lower.includes('yesterday')) {
+      return new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    }
+    
+    // Handle weeks: "1w", "2 weeks ago"
+    const weekMatch = lower.match(/(\d+)\s*w(?:eek|eeks?)?\s*(?:ago)?/);
+    if (weekMatch) {
+      return new Date(now.getTime() - parseInt(weekMatch[1]) * 7 * 24 * 60 * 60 * 1000);
+    }
+    
+    return null;
+  }
+
+  // Check if a post is within the last N days
+  function isWithinDays(postElement, days) {
+    const timestamp = getPostTimestamp(postElement);
+    if (!timestamp) return false;
+    
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    
+    return timestamp >= cutoff;
+  }
+
+  // Get posts from the last N days
+  function getRecentPosts(days) {
+    return postsOnPage.filter(post => isWithinDays(post, days));
   }
 
   // Add selection overlay to a post
@@ -161,9 +243,11 @@
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
       case 'getStats':
+        const recentPosts = getRecentPosts(2);
         sendResponse({
           total: postsOnPage.length,
-          selected: selectedPosts.size
+          selected: selectedPosts.size,
+          recentCount: recentPosts.length
         });
         break;
 
@@ -173,6 +257,24 @@
           post.classList.add('udupi-selected');
           const checkbox = post.querySelector('.udupi-post-checkbox');
           if (checkbox) checkbox.checked = true;
+        });
+        sendResponse({ selected: selectedPosts.size });
+        break;
+
+      case 'selectRecent':
+        // Select only posts from the last 2 days
+        const days = message.days || 2;
+        selectedPosts.clear();
+        postsOnPage.forEach((post, index) => {
+          const checkbox = post.querySelector('.udupi-post-checkbox');
+          if (isWithinDays(post, days)) {
+            selectedPosts.add(String(index));
+            post.classList.add('udupi-selected');
+            if (checkbox) checkbox.checked = true;
+          } else {
+            post.classList.remove('udupi-selected');
+            if (checkbox) checkbox.checked = false;
+          }
         });
         sendResponse({ selected: selectedPosts.size });
         break;
@@ -194,10 +296,11 @@
           if (post) {
             const text = getPostText(post);
             if (text) {
+              const timestamp = getPostTimestamp(post);
               posts.push({
                 content: text,
                 author_name: getAuthorName(post),
-                posted_at: getPostTimestamp(post),
+                posted_at: timestamp ? timestamp.toISOString() : null,
                 external_post_id: `fb_${Date.now()}_${index}`
               });
             }
@@ -206,6 +309,32 @@
         sendResponse({
           posts,
           groupName: getGroupName()
+        });
+        break;
+
+      case 'extractRecent':
+        // Extract posts from the last N days directly
+        const extractDays = message.days || 2;
+        const recentPostsToExtract = getRecentPosts(extractDays);
+        const extractedPosts = [];
+        
+        recentPostsToExtract.forEach((post, i) => {
+          const text = getPostText(post);
+          if (text) {
+            const timestamp = getPostTimestamp(post);
+            extractedPosts.push({
+              content: text,
+              author_name: getAuthorName(post),
+              posted_at: timestamp ? timestamp.toISOString() : null,
+              external_post_id: `fb_${Date.now()}_${i}`
+            });
+          }
+        });
+        
+        sendResponse({
+          posts: extractedPosts,
+          groupName: getGroupName(),
+          totalScanned: postsOnPage.length
         });
         break;
     }
