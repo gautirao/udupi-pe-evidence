@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import MarkerClusterGroupModule from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
@@ -9,9 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Home, MapPin, Ruler, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
-
-// Handle different export patterns from react-leaflet-cluster
-const MarkerClusterGroup = (MarkerClusterGroupModule as any).default || MarkerClusterGroupModule;
 
 // Fix default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -142,71 +138,63 @@ export function PropertyMap({ listings, selectedListing, onSelectListing }: Prop
         />
         <MapController selectedListing={selectedListing} />
         
-        <MarkerClusterGroup
-          chunkedLoading
-          iconCreateFunction={createClusterIcon}
-          maxClusterRadius={60}
-          spiderfyOnMaxZoom
-          showCoverageOnHover={false}
-        >
-          {markers.map(({ listing, position, icon }) => (
-            <Marker
-              key={listing.id}
-              position={position}
-              icon={icon}
-              eventHandlers={{
-                click: () => onSelectListing?.(listing),
-              }}
-            >
-              <Popup>
-                <div className="min-w-[200px] max-w-[280px]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge className={`${propertyTypeColors[listing.property_type]} text-white`}>
-                      {propertyTypeLabels[listing.property_type]}
+        {markers.map(({ listing, position, icon }) => (
+          <Marker
+            key={listing.id}
+            position={position}
+            icon={icon}
+            eventHandlers={{
+              click: () => onSelectListing?.(listing),
+            }}
+          >
+            <Popup>
+              <div className="min-w-[200px] max-w-[280px]">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge className={`${propertyTypeColors[listing.property_type]} text-white`}>
+                    {propertyTypeLabels[listing.property_type]}
+                  </Badge>
+                  {listing.confidence_score && listing.confidence_score < 70 && (
+                    <Badge variant="outline" className="text-yellow-600 border-yellow-400">
+                      Low confidence
                     </Badge>
-                    {listing.confidence_score && listing.confidence_score < 70 && (
-                      <Badge variant="outline" className="text-yellow-600 border-yellow-400">
-                        Low confidence
-                      </Badge>
-                    )}
-                  </div>
-
-                  {listing.price && (
-                    <p className="text-lg font-bold text-primary mb-2">
-                      {formatPrice(listing.price, listing.price_unit)}
-                    </p>
                   )}
-
-                  {listing.locality && (
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
-                      <MapPin className="h-3.5 w-3.5" />
-                      <span>{listing.locality}</span>
-                    </div>
-                  )}
-
-                  {listing.land_area && (
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
-                      <Ruler className="h-3.5 w-3.5" />
-                      <span>{listing.land_area} {listing.land_area_unit || 'sq ft'}</span>
-                    </div>
-                  )}
-
-                  {listing.property_type === 'house' && listing.bedrooms && (
-                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
-                      <Home className="h-3.5 w-3.5" />
-                      <span>{listing.bedrooms} BHK</span>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2 pt-2 border-t">
-                    <Calendar className="h-3 w-3" />
-                    <span>{format(new Date(listing.created_at), 'MMM d, yyyy')}</span>
-                  </div>
                 </div>
-              </Popup>
-            </Marker>
-          ))}
-        </MarkerClusterGroup>
+
+                {listing.price && (
+                  <p className="text-lg font-bold text-primary mb-2">
+                    {formatPrice(listing.price, listing.price_unit)}
+                  </p>
+                )}
+
+                {listing.locality && (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    <span>{listing.locality}</span>
+                  </div>
+                )}
+
+                {listing.land_area && (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
+                    <Ruler className="h-3.5 w-3.5" />
+                    <span>{listing.land_area} {listing.land_area_unit || 'sq ft'}</span>
+                  </div>
+                )}
+
+                {listing.property_type === 'house' && listing.bedrooms && (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
+                    <Home className="h-3.5 w-3.5" />
+                    <span>{listing.bedrooms} BHK</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2 pt-2 border-t">
+                  <Calendar className="h-3 w-3" />
+                  <span>{format(new Date(listing.created_at), 'MMM d, yyyy')}</span>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
 
       {/* Legend */}
