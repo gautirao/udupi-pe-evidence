@@ -13,6 +13,7 @@ import FeedRuns from "./pages/admin/FeedRuns";
 import ManualPost from "./pages/admin/ManualPost";
 import Listings from "./pages/admin/Listings";
 import ChromeExtensionSetup from "./pages/admin/ChromeExtensionSetup";
+import ProcessPosts from "./pages/admin/ProcessPosts";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +72,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <ChromeExtensionSetup />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/process"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <ProcessPosts />
                 </ProtectedRoute>
               }
             />
