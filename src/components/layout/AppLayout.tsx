@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Shield,
   Chrome,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +44,7 @@ const adminNavigation = [
   { name: 'Feed Runs', href: '/admin/feeds', icon: FileText },
   { name: 'Facebook Groups', href: '/admin/groups', icon: Users },
   { name: 'Manual Posts', href: '/admin/posts', icon: FileText },
+  { name: 'Process Posts', href: '/admin/process', icon: Sparkles },
   { name: 'Listings', href: '/admin/listings', icon: Home },
   { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
 ];
