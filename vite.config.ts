@@ -12,6 +12,12 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  // Force Vite to re-optimize dependencies after dependency version changes.
+  // This prevents stale prebundled chunks (node_modules/.vite) from causing
+  // React context rendering/runtime errors.
+  optimizeDeps: {
+    force: true,
+  },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
