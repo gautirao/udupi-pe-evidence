@@ -12,6 +12,7 @@ import FacebookGroups from "./pages/admin/FacebookGroups";
 import FeedRuns from "./pages/admin/FeedRuns";
 import ManualPost from "./pages/admin/ManualPost";
 import Listings from "./pages/admin/Listings";
+import ChromeExtensionSetup from "./pages/admin/ChromeExtensionSetup";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <Listings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/extension"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <ChromeExtensionSetup />
                 </ProtectedRoute>
               }
             />

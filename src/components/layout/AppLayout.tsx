@@ -27,6 +27,7 @@ import {
   Home,
   ChevronRight,
   Shield,
+  Chrome,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +44,7 @@ const adminNavigation = [
   { name: 'Facebook Groups', href: '/admin/groups', icon: Users },
   { name: 'Manual Posts', href: '/admin/posts', icon: FileText },
   { name: 'Listings', href: '/admin/listings', icon: Home },
+  { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
