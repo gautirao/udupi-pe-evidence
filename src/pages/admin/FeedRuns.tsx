@@ -85,12 +85,12 @@ export default function FeedRuns() {
             <Button variant="outline" size="icon" onClick={() => refetch()}>
               <RefreshCw className="h-4 w-4" />
             </Button>
-            <Select value={selectedGroup} onValueChange={setSelectedGroup}>
+            <Select value={selectedGroup || "__all__"} onValueChange={(val) => setSelectedGroup(val === "__all__" ? "" : val)}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="All groups" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All groups</SelectItem>
+                <SelectItem value="__all__">All groups</SelectItem>
                 {groups.map((group) => (
                   <SelectItem key={group.id} value={group.id}>
                     {group.name}
