@@ -55,29 +55,77 @@
 
   // Get text content from a post element
   function getPostText(postElement) {
-    // Try to find the main text content
+    // Clone the element to avoid modifying the original
+    const clone = postElement.cloneNode(true);
+    
+    // Remove our injected overlay elements from the clone
+    clone.querySelectorAll('.udupi-post-overlay, .udupi-checkbox, .udupi-label').forEach(el => el.remove());
+    
+    // Try to find the main text content using Facebook-specific selectors
     const textSelectors = [
       '[data-ad-preview="message"]',
       '[data-ad-comet-preview="message"]',
       '.x1iorvi4.x1pi30zi.x1swvt13',
       '.xdj266r.x11i5rnm.xat24cr.x1mh8g0r',
-      '[dir="auto"]'
+      // More specific Facebook post content selectors
+      'div[dir="auto"][style*="webkit-line-clamp"]',
+      'div[dir="auto"]:not([role])',
+      'span[dir="auto"]:not([role])'
     ];
 
     for (const selector of textSelectors) {
-      const textEl = postElement.querySelector(selector);
-      if (textEl && textEl.textContent.trim().length > 20) {
-        return textEl.textContent.trim();
+      const textEl = clone.querySelector(selector);
+      if (textEl) {
+        const text = textEl.textContent.trim();
+        // Skip if it looks like UI text or is too short
+        if (text.length > 20 && !isUIText(text)) {
+          return text;
+        }
       }
     }
 
-    // Fallback: get all text but filter out navigation/UI text
-    const text = postElement.textContent;
-    if (text && text.length > 50) {
-      return text.substring(0, 5000); // Limit to prevent huge payloads
+    // Fallback: collect all [dir="auto"] text nodes that look like content
+    const allDirAuto = clone.querySelectorAll('[dir="auto"]');
+    let longestText = '';
+    allDirAuto.forEach(el => {
+      const text = el.textContent.trim();
+      if (text.length > longestText.length && !isUIText(text)) {
+        longestText = text;
+      }
+    });
+    
+    if (longestText.length > 20) {
+      return longestText.substring(0, 5000);
+    }
+
+    // Last resort: get cleaned full text
+    const fullText = clone.textContent;
+    if (fullText && fullText.length > 50) {
+      // Clean up the text
+      const cleaned = fullText
+        .replace(/\s+/g, ' ')
+        .replace(/(Like|Comment|Share|Reply|See more|View \d+ more comments?)/gi, '')
+        .trim();
+      if (cleaned.length > 30 && !isUIText(cleaned)) {
+        return cleaned.substring(0, 5000);
+      }
     }
 
     return null;
+  }
+  
+  // Check if text looks like Facebook UI rather than post content
+  function isUIText(text) {
+    const uiPatterns = [
+      /^(Like|Comment|Share|Reply|See more)$/i,
+      /^Select for extraction$/i,
+      /^\d+\s*(likes?|comments?|shares?)$/i,
+      /^(Write a comment|Add a comment)$/i,
+      /^(Top comments?|Most relevant|Newest)$/i,
+      /^(Public|Friends|Only me)$/i,
+      /^\d+[hmdwy]$/i, // Time stamps like "2h", "1d"
+    ];
+    return uiPatterns.some(pattern => pattern.test(text.trim()));
   }
 
   // Get author name from post
