@@ -214,7 +214,7 @@
       
       seenUrls.add(cleanUrl);
       images.push({ url: cleanUrl, alt, width, height });
-      console.log(`${logPrefix}   -> ADDED (${source}): ${cleanUrl.substring(0, 100)}...`);
+      console.log(`${logPrefix}   -> ADDED (${source}): ${cleanUrl}`);
       return true;
     }
     
