@@ -22,33 +22,42 @@
   // Scan page for Facebook posts
   function scanForPosts() {
     // Facebook uses various selectors for posts - try multiple approaches
+    // Use more specific selectors first to avoid nested matches
     const postSelectors = [
       '[data-pagelet^="FeedUnit"]',
-      '[role="article"]',
-      '.x1yztbdb.x1n2onr6.xh8yej3.x1ja2u2z', // Common Facebook post container
-      'div[data-ad-preview="message"]'
+      '[role="article"]:not([data-pagelet^="FeedUnit"] [role="article"])', // Avoid nested articles
     ];
 
     let newPostsFound = 0;
+    const processedElements = new Set();
     
     for (const selector of postSelectors) {
       document.querySelectorAll(selector).forEach(el => {
         // Skip if already tracked
         if (el.dataset.udupiTracked) return;
         
+        // Skip if this element is inside an already-tracked element
+        if (el.closest('[data-udupi-tracked="true"]')) return;
+        
+        // Skip if we already processed this element in this scan
+        if (processedElements.has(el)) return;
+        processedElements.add(el);
+        
         // Only add if it looks like a post (has text content)
         const text = getPostText(el);
         if (text && text.length > 20) {
           // Generate a unique key for this post
-          const postKey = `post_${trackedPostElements.size}_${Date.now()}`;
+          const postKey = `post_${trackedPostElements.size}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
           el.dataset.udupiTracked = 'true';
           el.dataset.udupiKey = postKey;
           
           trackedPostElements.set(postKey, el);
           newPostsFound++;
           
-          // Add selection overlay
-          addPostOverlay(el);
+          // Add selection overlay only if not already present
+          if (!el.querySelector('.udupi-post-overlay')) {
+            addPostOverlay(el);
+          }
         }
       });
     }
@@ -169,49 +178,43 @@
     const logPrefix = postId ? `[Udupi Tracker] [Post ${postId}]` : '[Udupi Tracker]';
     console.log(`${logPrefix} Scanning for images...`);
     
+    // Helper to check if URL is valid post image
+    function isValidImageUrl(url) {
+      if (!url || url.length < 10) return false;
+      // Must be from Facebook CDN
+      if (!url.includes('scontent') && !url.includes('fbcdn')) return false;
+      // Skip profile pictures and small icons
+      if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) return false;
+      // Skip reaction/emoji images
+      if (url.includes('/reaction/') || url.includes('emoji') || url.includes('/rsrc')) return false;
+      return true;
+    }
+    
+    // Helper to add image URL if valid
+    function addImageUrl(url, alt = null, width = null, height = null, source = 'img') {
+      if (!isValidImageUrl(url)) return false;
+      
+      const cleanUrl = url.split('&amp;').join('&');
+      if (seenUrls.has(cleanUrl)) return false;
+      
+      seenUrls.add(cleanUrl);
+      images.push({ url: cleanUrl, alt, width, height });
+      console.log(`${logPrefix}   -> ADDED (${source}): ${cleanUrl.substring(0, 80)}...`);
+      return true;
+    }
+    
     // Get ALL img elements first, then filter
     const allImgs = postElement.querySelectorAll('img');
-    console.log(`[Udupi Tracker] Total img elements found: ${allImgs.length}`);
+    console.log(`${logPrefix} Total img elements found: ${allImgs.length}`);
     
     allImgs.forEach((img, idx) => {
-      // Get the best quality URL available
-      let url = img.src || img.dataset.src || img.getAttribute('data-src');
-      
-      // Debug log each image
-      console.log(`${logPrefix} Image ${idx}: src=${url ? url.substring(0, 80) + '...' : 'NONE'}`);
-      
-      if (!url || url.length < 10) {
-        console.log(`${logPrefix}   -> Skipped: no valid URL`);
-        return;
-      }
-      
-      // Must be from Facebook CDN
-      if (!url.includes('scontent') && !url.includes('fbcdn')) {
-        console.log(`${logPrefix}   -> Skipped: not Facebook CDN`);
-        return;
-      }
-      
-      // Skip profile pictures and small icons
-      if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) {
-        console.log(`${logPrefix}   -> Skipped: profile pic pattern`);
-        return;
-      }
-      
-      // Skip reaction/emoji images
-      if (url.includes('/reaction/') || url.includes('emoji') || url.includes('/rsrc')) {
-        console.log(`${logPrefix}   -> Skipped: reaction/emoji`);
-        return;
-      }
-      
-      // Check if this is inside a profile link (skip those)
+      // Skip if inside profile link or SVG
       if (img.closest('a[href*="/profile"]') || img.closest('a[aria-label*="profile"]') || img.closest('svg')) {
-        console.log(`${logPrefix}   -> Skipped: inside profile link`);
         return;
       }
       
       // Skip emojis based on alt text
       if (img.alt && /^[\u{1F300}-\u{1F9FF}]|^:[\w]+:$/u.test(img.alt)) {
-        console.log(`${logPrefix}   -> Skipped: emoji alt text`);
         return;
       }
       
@@ -219,41 +222,58 @@
       const width = img.naturalWidth || img.width || parseInt(img.getAttribute('width')) || 0;
       const height = img.naturalHeight || img.height || parseInt(img.getAttribute('height')) || 0;
       
-      // Keep the full URL (don't strip params as it may break the image)
-      const cleanUrl = url.split('&amp;').join('&'); // Fix HTML entity encoding
-      
-      // Deduplicate
-      if (seenUrls.has(cleanUrl)) {
-        console.log(`${logPrefix}   -> Skipped: duplicate`);
-        return;
+      // Try multiple sources for the URL
+      // 1. Check srcset first (often has higher quality images)
+      const srcset = img.getAttribute('srcset');
+      if (srcset) {
+        // Parse srcset and get the highest resolution
+        const srcsetParts = srcset.split(',').map(s => s.trim());
+        srcsetParts.forEach(part => {
+          const [url] = part.split(/\s+/);
+          if (url) addImageUrl(url, img.alt, width, height, 'srcset');
+        });
       }
       
-      seenUrls.add(cleanUrl);
-      images.push({
-        url: cleanUrl,
-        alt: img.alt || null,
-        width: width || null,
-        height: height || null
-      });
-      console.log(`${logPrefix}   -> ADDED: ${cleanUrl}... (${width}x${height})`);
+      // 2. Check src
+      const src = img.src || img.dataset.src || img.getAttribute('data-src');
+      if (src) {
+        addImageUrl(src, img.alt, width, height, 'src');
+      }
+      
+      // 3. Check data attributes for lazy-loaded images
+      const dataSrc = img.getAttribute('data-src') || img.getAttribute('data-lazy-src');
+      if (dataSrc && dataSrc !== src) {
+        addImageUrl(dataSrc, img.alt, width, height, 'data-src');
+      }
     });
     
-    // Also check for background images in divs (Facebook sometimes uses these)
+    // Check for background images in divs (Facebook sometimes uses these)
     postElement.querySelectorAll('div[style*="background-image"]').forEach(div => {
       const style = div.getAttribute('style');
       const match = style.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/);
       if (match && match[1]) {
-        let url = match[1].split('&amp;').join('&');
-        if ((url.includes('scontent') || url.includes('fbcdn')) && !seenUrls.has(url)) {
-          seenUrls.add(url);
-          images.push({
-            url: url,
-            alt: null,
-            width: null,
-            height: null
-          });
-          console.log(`${logPrefix}   -> ADDED (bg): ${url.substring(0, 60)}...`);
+        addImageUrl(match[1], null, null, null, 'bg-image');
+      }
+    });
+    
+    // Check for image links (Facebook sometimes wraps images in links)
+    postElement.querySelectorAll('a[href*="photo"], a[href*="/photos/"]').forEach(link => {
+      const img = link.querySelector('img');
+      if (img) {
+        const src = img.src || img.dataset.src;
+        if (src) {
+          const width = img.naturalWidth || img.width || 0;
+          const height = img.naturalHeight || img.height || 0;
+          addImageUrl(src, img.alt, width, height, 'photo-link');
         }
+      }
+    });
+    
+    // Check for image containers with data attributes
+    postElement.querySelectorAll('[data-imgperflogname="profilePhoto"], [data-visualcompletion="media-vc-image"]').forEach(container => {
+      const img = container.querySelector('img') || container;
+      if (img && img.src) {
+        addImageUrl(img.src, img.alt || null, null, null, 'data-attr');
       }
     });
     
