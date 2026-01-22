@@ -36,6 +36,12 @@
         // Skip if already tracked
         if (el.dataset.udupiTracked) return;
         
+        // Skip if this element is nested inside another tracked post (prevents duplicate checkboxes)
+        if (el.closest('[data-udupi-tracked="true"]')) return;
+        
+        // Skip if this element contains a tracked post (it's a parent container, not a post)
+        if (el.querySelector('[data-udupi-tracked="true"]')) return;
+        
         // Only add if it looks like a post (has text content)
         const text = getPostText(el);
         if (text && text.length > 20) {
