@@ -160,6 +160,96 @@
     return null;
   }
 
+  // Get image URLs from post
+  function getPostImages(postElement) {
+    const images = [];
+    const seenUrls = new Set();
+    
+    // Various selectors for Facebook post images
+    const imageSelectors = [
+      'img[src*="scontent"]',           // Main Facebook CDN images
+      'img[src*="fbcdn"]',              // Facebook CDN alternative
+      'img[data-src*="scontent"]',      // Lazy-loaded images
+      'img[data-src*="fbcdn"]',
+      'a[href*="/photo"] img',          // Images in photo links
+      'div[data-pagelet*="Photo"] img', // Photo pagelet images
+      'img[alt]:not([alt=""])',         // Images with alt text (likely content images)
+    ];
+    
+    for (const selector of imageSelectors) {
+      postElement.querySelectorAll(selector).forEach(img => {
+        // Get the best quality URL available
+        let url = img.src || img.dataset.src || img.getAttribute('data-src');
+        
+        if (!url) return;
+        
+        // Skip tiny images (likely icons/emojis), profile pics, and UI elements
+        const width = img.naturalWidth || img.width || parseInt(img.getAttribute('width')) || 0;
+        const height = img.naturalHeight || img.height || parseInt(img.getAttribute('height')) || 0;
+        
+        // Skip very small images (likely icons) - but be lenient since dimensions might not be loaded
+        if (width > 0 && width < 50 && height > 0 && height < 50) return;
+        
+        // Skip profile pictures (usually in specific containers or have specific patterns)
+        if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) return;
+        if (img.closest('a[href*="/profile"]') || img.closest('a[aria-label*="profile"]')) return;
+        
+        // Skip emoji images
+        if (img.alt && /^[\u{1F300}-\u{1F9FF}]|^:[\w]+:$/u.test(img.alt)) return;
+        
+        // Skip reaction images
+        if (url.includes('/reaction/') || url.includes('emoji')) return;
+        
+        // Normalize URL (remove tracking params but keep essential ones)
+        try {
+          const urlObj = new URL(url);
+          // Keep only essential params for image loading
+          const essentialParams = ['_nc_cat', '_nc_sid', '_nc_ohc', '_nc_ht', 'oh', 'oe'];
+          const newParams = new URLSearchParams();
+          essentialParams.forEach(param => {
+            if (urlObj.searchParams.has(param)) {
+              newParams.set(param, urlObj.searchParams.get(param));
+            }
+          });
+          url = `${urlObj.origin}${urlObj.pathname}?${newParams.toString()}`;
+        } catch (e) {
+          // If URL parsing fails, use original
+        }
+        
+        // Deduplicate
+        if (!seenUrls.has(url)) {
+          seenUrls.add(url);
+          images.push({
+            url: url,
+            alt: img.alt || null,
+            width: width || null,
+            height: height || null
+          });
+        }
+      });
+    }
+    
+    // Also check for background images in divs (Facebook sometimes uses these)
+    postElement.querySelectorAll('div[style*="background-image"]').forEach(div => {
+      const style = div.getAttribute('style');
+      const match = style.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/);
+      if (match && match[1]) {
+        let url = match[1];
+        if ((url.includes('scontent') || url.includes('fbcdn')) && !seenUrls.has(url)) {
+          seenUrls.add(url);
+          images.push({
+            url: url,
+            alt: null,
+            width: null,
+            height: null
+          });
+        }
+      }
+    });
+    
+    return images;
+  }
+
   // Get post timestamp - returns Date object or null
   function getPostTimestamp(postElement) {
     // Try multiple selectors for Facebook's timestamp elements
@@ -413,7 +503,12 @@
           const post = postsOnPage[parseInt(index)];
           if (post) {
             const text = getPostText(post);
+            const images = getPostImages(post);
             console.log(`[Udupi Tracker] Post ${index} extracted text:`, text ? text.substring(0, 200) : 'NULL');
+            console.log(`[Udupi Tracker] Post ${index} images found:`, images.length);
+            images.forEach((img, i) => {
+              console.log(`[Udupi Tracker]   Image ${i + 1}:`, img.url.substring(0, 100) + '...', `(${img.width}x${img.height})`);
+            });
             if (text) {
               const timestamp = getPostTimestamp(post);
               const author = getAuthorName(post);
@@ -422,12 +517,14 @@
                 content: text,
                 author_name: author,
                 posted_at: timestamp ? timestamp.toISOString() : null,
-                external_post_id: `fb_${Date.now()}_${index}`
+                external_post_id: `fb_${Date.now()}_${index}`,
+                images: images
               });
             }
           }
         });
         console.log(`[Udupi Tracker] Total extracted:`, posts.length, 'posts');
+        console.log(`[Udupi Tracker] Total images across all posts:`, posts.reduce((sum, p) => sum + (p.images?.length || 0), 0));
         sendResponse({
           posts,
           groupName: getGroupName()
@@ -442,17 +539,25 @@
         
         recentPostsToExtract.forEach((post, i) => {
           const text = getPostText(post);
+          const images = getPostImages(post);
+          console.log(`[Udupi Tracker] Recent post ${i} text:`, text ? text.substring(0, 150) : 'NULL');
+          console.log(`[Udupi Tracker] Recent post ${i} images:`, images.length);
+          images.forEach((img, j) => {
+            console.log(`[Udupi Tracker]   Image ${j + 1}:`, img.url.substring(0, 80) + '...');
+          });
           if (text) {
             const timestamp = getPostTimestamp(post);
             extractedPosts.push({
               content: text,
               author_name: getAuthorName(post),
               posted_at: timestamp ? timestamp.toISOString() : null,
-              external_post_id: `fb_${Date.now()}_${i}`
+              external_post_id: `fb_${Date.now()}_${i}`,
+              images: images
             });
           }
         });
         
+        console.log(`[Udupi Tracker] Extracted ${extractedPosts.length} recent posts with ${extractedPosts.reduce((sum, p) => sum + (p.images?.length || 0), 0)} total images`);
         sendResponse({
           posts: extractedPosts,
           groupName: getGroupName(),
