@@ -43,10 +43,11 @@ document.getElementById('saveConfig').addEventListener('click', async () => {
 // Auto-scroll to load more posts
 document.getElementById('autoScrollBtn').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const btn = document.getElementById('autoScrollBtn');
+  const autoScrollBtn = document.getElementById('autoScrollBtn');
+  const stopScrollBtn = document.getElementById('stopScrollBtn');
   
-  btn.disabled = true;
-  btn.textContent = '📜 Scrolling... (0/50)';
+  autoScrollBtn.style.display = 'none';
+  stopScrollBtn.style.display = 'block';
   showStatus('Auto-scrolling to load more posts...', 'info');
   
   try {
@@ -72,7 +73,8 @@ document.getElementById('autoScrollBtn').addEventListener('click', async () => {
     clearInterval(pollInterval);
     
     if (result.success) {
-      showStatus(`✓ Loaded ${result.newPosts} new posts! Total: ${result.endPosts}`, 'success');
+      const stoppedText = result.stopped ? ' (stopped)' : '';
+      showStatus(`✓ Loaded ${result.newPosts} new posts! Total: ${result.endPosts}${stoppedText}`, 'success');
       // Update stats
       const stats = await chrome.tabs.sendMessage(tab.id, { action: 'getStats' });
       if (stats) {
@@ -86,8 +88,20 @@ document.getElementById('autoScrollBtn').addEventListener('click', async () => {
     showStatus(`Error: ${error.message}`, 'error');
   }
   
-  btn.disabled = false;
-  btn.textContent = '📜 Load More Posts (Auto-Scroll)';
+  autoScrollBtn.style.display = 'block';
+  stopScrollBtn.style.display = 'none';
+});
+
+// Stop scrolling button
+document.getElementById('stopScrollBtn').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+  try {
+    await chrome.tabs.sendMessage(tab.id, { action: 'stopScroll' });
+    showStatus('Stopping scroll...', 'info');
+  } catch (error) {
+    showStatus(`Error: ${error.message}`, 'error');
+  }
 });
 
 // Select all posts
