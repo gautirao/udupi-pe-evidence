@@ -40,6 +40,7 @@ export interface RawPost {
   source_url: string | null;
   is_processed: boolean;
   created_at: string;
+  images: Array<{ url: string; alt?: string | null; width?: number | null; height?: number | null }>;
 }
 
 // Facebook Groups Hooks
@@ -250,7 +251,7 @@ export function useAdminListings(limit = 100) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('property_listings')
-        .select('*')
+        .select('*, raw_posts(images)')
         .order('created_at', { ascending: false })
         .limit(limit);
 

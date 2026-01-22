@@ -39,8 +39,8 @@ import {
   MapPin,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   Filter,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -226,6 +226,7 @@ export default function Listings() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-20">Image</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Locality</TableHead>
                   <TableHead>Price</TableHead>
@@ -237,8 +238,41 @@ export default function Listings() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredListings.map((listing) => (
+                {filteredListings.map((listing) => {
+                  // Get images from joined raw_posts data
+                  const rawPost = (listing as any).raw_posts;
+                  const images = rawPost?.images || [];
+                  const firstImage = images[0]?.url;
+                  
+                  return (
                   <TableRow key={listing.id} className={cn(!listing.is_valid && 'opacity-50')}>
+                    <TableCell>
+                      {firstImage ? (
+                        <div className="relative w-12 h-12 rounded overflow-hidden bg-muted">
+                          <img 
+                            src={firstImage} 
+                            alt="Property" 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                          <div className="hidden absolute inset-0 flex items-center justify-center">
+                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          {images.length > 1 && (
+                            <div className="absolute bottom-0 right-0 bg-black/70 text-white text-xs px-1 rounded-tl">
+                              +{images.length - 1}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded bg-muted flex items-center justify-center">
+                          <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge className={propertyTypeColors[listing.property_type]}>
                         {listing.property_type}
@@ -280,7 +314,8 @@ export default function Listings() {
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </Card>

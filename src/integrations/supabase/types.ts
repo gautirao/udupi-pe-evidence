@@ -254,6 +254,7 @@ export type Database = {
           external_post_id: string | null
           feed_run_id: string | null
           id: string
+          images: Json | null
           is_processed: boolean
           posted_at: string | null
           source_url: string | null
@@ -265,6 +266,7 @@ export type Database = {
           external_post_id?: string | null
           feed_run_id?: string | null
           id?: string
+          images?: Json | null
           is_processed?: boolean
           posted_at?: string | null
           source_url?: string | null
@@ -276,6 +278,7 @@ export type Database = {
           external_post_id?: string | null
           feed_run_id?: string | null
           id?: string
+          images?: Json | null
           is_processed?: boolean
           posted_at?: string | null
           source_url?: string | null

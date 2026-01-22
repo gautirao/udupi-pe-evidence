@@ -5,11 +5,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+interface PostImage {
+  url: string
+  alt?: string | null
+  width?: number | null
+  height?: number | null
+}
+
 interface IncomingPost {
   content: string
   author_name?: string
   posted_at?: string
   external_post_id?: string
+  images?: PostImage[]
 }
 
 interface IngestRequest {
@@ -93,7 +101,12 @@ Deno.serve(async (req) => {
       external_post_id: post.external_post_id?.substring(0, 255) || null,
       source_url: body.source_url?.substring(0, 2000) || null,
       is_processed: false,
+      images: post.images || [],
     }))
+
+    // Log image counts
+    const totalImages = validPosts.reduce((sum, p) => sum + (p.images?.length || 0), 0)
+    console.log(`[ingest-posts] Total images across all posts: ${totalImages}`)
 
     const { data: insertedPosts, error: insertError } = await supabase
       .from('raw_posts')
