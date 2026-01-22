@@ -189,7 +189,12 @@
     // Helper to normalize and extract best quality URL
     function normalizeUrl(url) {
       if (!url) return null;
-      let cleanUrl = url.split('&amp;').join('&');
+      // Decode ALL HTML entities properly using DOM parser
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = url;
+      let cleanUrl = textarea.value;
+      // Also handle any remaining &amp; just in case
+      cleanUrl = cleanUrl.replace(/&amp;/g, '&');
       // Remove resize parameters to get original
       cleanUrl = cleanUrl.replace(/&w=\d+/, '').replace(/&h=\d+/, '');
       return cleanUrl;
