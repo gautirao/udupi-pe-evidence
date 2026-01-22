@@ -40,6 +40,56 @@ document.getElementById('saveConfig').addEventListener('click', async () => {
   showStatus('Configuration saved!', 'success');
 });
 
+// Auto-scroll to load more posts
+document.getElementById('autoScrollBtn').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const btn = document.getElementById('autoScrollBtn');
+  
+  btn.disabled = true;
+  btn.textContent = '📜 Scrolling... (0/50)';
+  showStatus('Auto-scrolling to load more posts...', 'info');
+  
+  try {
+    // Start scroll and poll for updates
+    const scrollPromise = chrome.tabs.sendMessage(tab.id, { 
+      action: 'autoScroll',
+      scrollCount: 50,
+      delay: 800
+    });
+    
+    // Poll for progress updates
+    const pollInterval = setInterval(async () => {
+      try {
+        const stats = await chrome.tabs.sendMessage(tab.id, { action: 'getStats' });
+        if (stats) {
+          document.getElementById('postsFound').textContent = stats.total || 0;
+          document.getElementById('recentPosts').textContent = stats.recentCount || 0;
+        }
+      } catch (e) { /* ignore */ }
+    }, 2000);
+    
+    const result = await scrollPromise;
+    clearInterval(pollInterval);
+    
+    if (result.success) {
+      showStatus(`✓ Loaded ${result.newPosts} new posts! Total: ${result.endPosts}`, 'success');
+      // Update stats
+      const stats = await chrome.tabs.sendMessage(tab.id, { action: 'getStats' });
+      if (stats) {
+        document.getElementById('postsFound').textContent = stats.total || 0;
+        document.getElementById('recentPosts').textContent = stats.recentCount || 0;
+      }
+    } else {
+      showStatus('Scroll already in progress', 'info');
+    }
+  } catch (error) {
+    showStatus(`Error: ${error.message}`, 'error');
+  }
+  
+  btn.disabled = false;
+  btn.textContent = '📜 Load More Posts (Auto-Scroll)';
+});
+
 // Select all posts
 document.getElementById('selectAllBtn').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });

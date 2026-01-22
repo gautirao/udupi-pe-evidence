@@ -238,6 +238,54 @@
     return postsOnPage.filter(post => isWithinDays(post, days));
   }
 
+  // Auto-scroll to load more posts
+  let isScrolling = false;
+  
+  async function autoScroll(scrollCount = 50, delayMs = 800) {
+    if (isScrolling) {
+      console.log('[Udupi Tracker] Already scrolling...');
+      return { success: false, reason: 'already_scrolling' };
+    }
+    
+    isScrolling = true;
+    const startPosts = postsOnPage.length;
+    console.log(`[Udupi Tracker] Starting auto-scroll. Current posts: ${startPosts}`);
+    
+    for (let i = 0; i < scrollCount; i++) {
+      // Scroll down
+      window.scrollBy(0, window.innerHeight * 0.8);
+      
+      // Wait for content to load
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      
+      // Scan for new posts
+      scanForPosts();
+      
+      // Log progress every 10 scrolls
+      if ((i + 1) % 10 === 0) {
+        console.log(`[Udupi Tracker] Scroll ${i + 1}/${scrollCount} - Posts found: ${postsOnPage.length}`);
+      }
+    }
+    
+    // Final scan
+    scanForPosts();
+    isScrolling = false;
+    
+    const newPosts = postsOnPage.length - startPosts;
+    console.log(`[Udupi Tracker] Auto-scroll complete. New posts loaded: ${newPosts}, Total: ${postsOnPage.length}`);
+    
+    return { 
+      success: true, 
+      startPosts, 
+      endPosts: postsOnPage.length, 
+      newPosts 
+    };
+  }
+  
+  function getScrollStatus() {
+    return isScrolling;
+  }
+
   // Add selection overlay to a post
   function addPostOverlay(postElement) {
     const overlay = document.createElement('div');
@@ -295,9 +343,18 @@
         sendResponse({
           total: postsOnPage.length,
           selected: selectedPosts.size,
-          recentCount: recentPosts.length
+          recentCount: recentPosts.length,
+          isScrolling: getScrollStatus()
         });
         break;
+
+      case 'autoScroll':
+        const scrollCount = message.scrollCount || 50;
+        const delay = message.delay || 800;
+        autoScroll(scrollCount, delay).then(result => {
+          sendResponse(result);
+        });
+        return true; // Keep channel open for async response
 
       case 'selectAll':
         postsOnPage.forEach((post, index) => {
