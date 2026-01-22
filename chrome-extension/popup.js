@@ -46,8 +46,8 @@ document.getElementById('autoScrollBtn').addEventListener('click', async () => {
   const autoScrollBtn = document.getElementById('autoScrollBtn');
   const stopScrollBtn = document.getElementById('stopScrollBtn');
   
-  autoScrollBtn.style.display = 'none';
-  stopScrollBtn.style.display = 'block';
+  autoScrollBtn.classList.add('hidden');
+  stopScrollBtn.classList.remove('hidden');
   showStatus('Auto-scrolling to load more posts...', 'info');
   
   try {
@@ -88,8 +88,8 @@ document.getElementById('autoScrollBtn').addEventListener('click', async () => {
     showStatus(`Error: ${error.message}`, 'error');
   }
   
-  autoScrollBtn.style.display = 'block';
-  stopScrollBtn.style.display = 'none';
+  autoScrollBtn.classList.remove('hidden');
+  stopScrollBtn.classList.add('hidden');
 });
 
 // Stop scrolling button
