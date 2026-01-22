@@ -235,7 +235,7 @@
         width: width || null,
         height: height || null
       });
-      console.log(`${logPrefix}   -> ADDED: ${cleanUrl.substring(0, 60)}... (${width}x${height})`);
+      console.log(`${logPrefix}   -> ADDED: ${cleanUrl}... (${width}x${height})`);
     });
     
     // Also check for background images in divs (Facebook sometimes uses these)
