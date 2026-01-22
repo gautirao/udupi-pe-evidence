@@ -165,76 +165,84 @@
     const images = [];
     const seenUrls = new Set();
     
-    // Various selectors for Facebook post images
-    const imageSelectors = [
-      'img[src*="scontent"]',           // Main Facebook CDN images
-      'img[src*="fbcdn"]',              // Facebook CDN alternative
-      'img[data-src*="scontent"]',      // Lazy-loaded images
-      'img[data-src*="fbcdn"]',
-      'a[href*="/photo"] img',          // Images in photo links
-      'div[data-pagelet*="Photo"] img', // Photo pagelet images
-      'img[alt]:not([alt=""])',         // Images with alt text (likely content images)
-    ];
+    // Debug: log what we're searching in
+    console.log('[Udupi Tracker] Scanning for images in post element...');
     
-    for (const selector of imageSelectors) {
-      postElement.querySelectorAll(selector).forEach(img => {
-        // Get the best quality URL available
-        let url = img.src || img.dataset.src || img.getAttribute('data-src');
-        
-        if (!url) return;
-        
-        // Skip tiny images (likely icons/emojis), profile pics, and UI elements
-        const width = img.naturalWidth || img.width || parseInt(img.getAttribute('width')) || 0;
-        const height = img.naturalHeight || img.height || parseInt(img.getAttribute('height')) || 0;
-        
-        // Skip very small images (likely icons) - but be lenient since dimensions might not be loaded
-        if (width > 0 && width < 50 && height > 0 && height < 50) return;
-        
-        // Skip profile pictures (usually in specific containers or have specific patterns)
-        if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) return;
-        if (img.closest('a[href*="/profile"]') || img.closest('a[aria-label*="profile"]')) return;
-        
-        // Skip emoji images
-        if (img.alt && /^[\u{1F300}-\u{1F9FF}]|^:[\w]+:$/u.test(img.alt)) return;
-        
-        // Skip reaction images
-        if (url.includes('/reaction/') || url.includes('emoji')) return;
-        
-        // Normalize URL (remove tracking params but keep essential ones)
-        try {
-          const urlObj = new URL(url);
-          // Keep only essential params for image loading
-          const essentialParams = ['_nc_cat', '_nc_sid', '_nc_ohc', '_nc_ht', 'oh', 'oe'];
-          const newParams = new URLSearchParams();
-          essentialParams.forEach(param => {
-            if (urlObj.searchParams.has(param)) {
-              newParams.set(param, urlObj.searchParams.get(param));
-            }
-          });
-          url = `${urlObj.origin}${urlObj.pathname}?${newParams.toString()}`;
-        } catch (e) {
-          // If URL parsing fails, use original
-        }
-        
-        // Deduplicate
-        if (!seenUrls.has(url)) {
-          seenUrls.add(url);
-          images.push({
-            url: url,
-            alt: img.alt || null,
-            width: width || null,
-            height: height || null
-          });
-        }
+    // Get ALL img elements first, then filter
+    const allImgs = postElement.querySelectorAll('img');
+    console.log(`[Udupi Tracker] Total img elements found: ${allImgs.length}`);
+    
+    allImgs.forEach((img, idx) => {
+      // Get the best quality URL available
+      let url = img.src || img.dataset.src || img.getAttribute('data-src');
+      
+      // Debug log each image
+      console.log(`[Udupi Tracker] Image ${idx}: src=${url ? url.substring(0, 80) + '...' : 'NONE'}`);
+      
+      if (!url || url.length < 10) {
+        console.log(`[Udupi Tracker]   -> Skipped: no valid URL`);
+        return;
+      }
+      
+      // Must be from Facebook CDN
+      if (!url.includes('scontent') && !url.includes('fbcdn')) {
+        console.log(`[Udupi Tracker]   -> Skipped: not Facebook CDN`);
+        return;
+      }
+      
+      // Skip profile pictures and small icons
+      if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) {
+        console.log(`[Udupi Tracker]   -> Skipped: profile pic pattern`);
+        return;
+      }
+      
+      // Skip reaction/emoji images
+      if (url.includes('/reaction/') || url.includes('emoji') || url.includes('/rsrc')) {
+        console.log(`[Udupi Tracker]   -> Skipped: reaction/emoji`);
+        return;
+      }
+      
+      // Check if this is inside a profile link (skip those)
+      if (img.closest('a[href*="/profile"]') || img.closest('a[aria-label*="profile"]') || img.closest('svg')) {
+        console.log(`[Udupi Tracker]   -> Skipped: inside profile link`);
+        return;
+      }
+      
+      // Skip emojis based on alt text
+      if (img.alt && /^[\u{1F300}-\u{1F9FF}]|^:[\w]+:$/u.test(img.alt)) {
+        console.log(`[Udupi Tracker]   -> Skipped: emoji alt text`);
+        return;
+      }
+      
+      // Get dimensions if available
+      const width = img.naturalWidth || img.width || parseInt(img.getAttribute('width')) || 0;
+      const height = img.naturalHeight || img.height || parseInt(img.getAttribute('height')) || 0;
+      
+      // Keep the full URL (don't strip params as it may break the image)
+      const cleanUrl = url.split('&amp;').join('&'); // Fix HTML entity encoding
+      
+      // Deduplicate
+      if (seenUrls.has(cleanUrl)) {
+        console.log(`[Udupi Tracker]   -> Skipped: duplicate`);
+        return;
+      }
+      
+      seenUrls.add(cleanUrl);
+      images.push({
+        url: cleanUrl,
+        alt: img.alt || null,
+        width: width || null,
+        height: height || null
       });
-    }
+      console.log(`[Udupi Tracker]   -> ADDED: ${cleanUrl.substring(0, 60)}... (${width}x${height})`);
+    });
     
     // Also check for background images in divs (Facebook sometimes uses these)
     postElement.querySelectorAll('div[style*="background-image"]').forEach(div => {
       const style = div.getAttribute('style');
       const match = style.match(/url\(["']?(https?:\/\/[^"')]+)["']?\)/);
       if (match && match[1]) {
-        let url = match[1];
+        let url = match[1].split('&amp;').join('&');
         if ((url.includes('scontent') || url.includes('fbcdn')) && !seenUrls.has(url)) {
           seenUrls.add(url);
           images.push({
@@ -243,10 +251,12 @@
             width: null,
             height: null
           });
+          console.log(`[Udupi Tracker]   -> ADDED (bg): ${url.substring(0, 60)}...`);
         }
       }
     });
     
+    console.log(`[Udupi Tracker] Total images extracted from post: ${images.length}`);
     return images;
   }
 
