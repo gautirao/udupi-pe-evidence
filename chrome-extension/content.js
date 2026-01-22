@@ -3,6 +3,7 @@
   'use strict';
 
   const selectedPosts = new Set();
+  const trackedPostElements = new Map(); // Use Map to track posts by unique key
   let postsOnPage = [];
 
   // Initialize when DOM is ready
@@ -28,29 +29,41 @@
       'div[data-ad-preview="message"]'
     ];
 
-    const allPosts = new Set();
+    let newPostsFound = 0;
     
     for (const selector of postSelectors) {
       document.querySelectorAll(selector).forEach(el => {
+        // Skip if already tracked
+        if (el.dataset.udupiTracked) return;
+        
         // Only add if it looks like a post (has text content)
         const text = getPostText(el);
         if (text && text.length > 20) {
-          allPosts.add(el);
+          // Generate a unique key for this post
+          const postKey = `post_${trackedPostElements.size}_${Date.now()}`;
+          el.dataset.udupiTracked = 'true';
+          el.dataset.udupiKey = postKey;
+          
+          trackedPostElements.set(postKey, el);
+          newPostsFound++;
+          
+          // Add selection overlay
+          addPostOverlay(el);
         }
       });
     }
 
-    postsOnPage = Array.from(allPosts);
-    console.log(`[Udupi Tracker] Found ${postsOnPage.length} posts`);
+    // Update postsOnPage array from tracked elements
+    postsOnPage = Array.from(trackedPostElements.values());
     
-    // Add selection overlay to each post
+    // Update indices for all posts
     postsOnPage.forEach((post, index) => {
-      if (!post.dataset.udupiTracked) {
-        post.dataset.udupiTracked = 'true';
-        post.dataset.udupiIndex = index;
-        addPostOverlay(post);
-      }
+      post.dataset.udupiIndex = String(index);
     });
+    
+    if (newPostsFound > 0) {
+      console.log(`[Udupi Tracker] Found ${newPostsFound} new posts. Total: ${postsOnPage.length}`);
+    }
   }
 
   // Get text content from a post element
