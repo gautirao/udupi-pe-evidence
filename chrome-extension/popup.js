@@ -194,7 +194,10 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 
   try {
     // Get selected posts from content script
+    console.log('[Udupi Popup] Requesting extractSelected from content script...');
     const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractSelected' });
+    console.log('[Udupi Popup] Response from content script:', response);
+    console.log('[Udupi Popup] Posts count:', response?.posts?.length);
     
     if (!response || !response.posts || response.posts.length === 0) {
       showStatus('No posts selected', 'error');
@@ -203,6 +206,7 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
     }
 
     showStatus(`Sending ${response.posts.length} posts to server...`, 'info');
+    console.log('[Udupi Popup] About to send', response.posts.length, 'posts to API');
 
     // Send to API
     const apiResponse = await fetch(apiUrl, {
