@@ -628,19 +628,27 @@
         break;
 
       case 'extractSelected':
+        console.log(`[Udupi Tracker] extractSelected called. selectedPosts size: ${selectedPosts.size}`);
+        console.log(`[Udupi Tracker] selectedPosts indices:`, Array.from(selectedPosts));
+        console.log(`[Udupi Tracker] postsOnPage length: ${postsOnPage.length}`);
+        
         const posts = [];
-        selectedPosts.forEach(index => {
+        const selectedArray = Array.from(selectedPosts);
+        
+        for (let i = 0; i < selectedArray.length; i++) {
+          const index = selectedArray[i];
           const post = postsOnPage[parseInt(index)];
+          console.log(`[Udupi Tracker] Processing index ${index}, post exists: ${!!post}`);
+          
           if (post) {
             const postId = post.dataset.udupiKey || index;
             const text = getPostText(post);
             const images = getPostImages(post, postId);
-            console.log(`[Udupi Tracker] [Post ${postId}] Extracted text:`, text ? text.substring(0, 200) : 'NULL');
+            console.log(`[Udupi Tracker] [Post ${postId}] Extracted text length:`, text ? text.length : 0);
             console.log(`[Udupi Tracker] [Post ${postId}] Images found:`, images.length);
             if (text) {
               const timestamp = getPostTimestamp(post);
               const author = getAuthorName(post);
-              console.log(`[Udupi Tracker] Post ${index} author:`, author, 'timestamp:', timestamp);
               posts.push({
                 content: text,
                 author_name: author,
@@ -648,11 +656,15 @@
                 external_post_id: `fb_${Date.now()}_${index}`,
                 images: images
               });
+              console.log(`[Udupi Tracker] Added post ${i+1}/${selectedArray.length} to extraction array`);
             }
           }
-        });
-        console.log(`[Udupi Tracker] Total extracted:`, posts.length, 'posts');
-        console.log(`[Udupi Tracker] Total images across all posts:`, posts.reduce((sum, p) => sum + (p.images?.length || 0), 0));
+        }
+        
+        console.log(`[Udupi Tracker] ===== EXTRACTION COMPLETE =====`);
+        console.log(`[Udupi Tracker] Total posts extracted: ${posts.length}`);
+        console.log(`[Udupi Tracker] Total images: ${posts.reduce((sum, p) => sum + (p.images?.length || 0), 0)}`);
+        
         sendResponse({
           posts,
           groupName: getGroupName()
