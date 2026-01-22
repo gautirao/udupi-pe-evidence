@@ -21,10 +21,11 @@
 
   // Scan page for Facebook posts
   function scanForPosts() {
-    // Facebook uses various selectors for posts
+    // Facebook uses various selectors for posts - try multiple approaches
+    // Use more specific selectors first to avoid nested matches
     const postSelectors = [
       '[data-pagelet^="FeedUnit"]',
-      '[role="article"]',
+      '[role="article"]:not([data-pagelet^="FeedUnit"] [role="article"])', // Avoid nested articles
     ];
 
     let newPostsFound = 0;
@@ -33,11 +34,10 @@
     for (const selector of postSelectors) {
       document.querySelectorAll(selector).forEach(el => {
         // Skip if already tracked
-        if (el.dataset.udupiTracked === 'true') return;
+        if (el.dataset.udupiTracked) return;
         
         // Skip if this element is inside an already-tracked element
-        const parent = el.parentElement?.closest('[data-udupi-tracked="true"]');
-        if (parent) return;
+        if (el.closest('[data-udupi-tracked="true"]')) return;
         
         // Skip if we already processed this element in this scan
         if (processedElements.has(el)) return;
