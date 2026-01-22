@@ -354,6 +354,7 @@
 
   // Auto-scroll to load more posts
   let isScrolling = false;
+  let stopScrollRequested = false;
   
   async function autoScroll(scrollCount = 50, delayMs = 800) {
     if (isScrolling) {
@@ -362,10 +363,17 @@
     }
     
     isScrolling = true;
+    stopScrollRequested = false;
     const startPosts = postsOnPage.length;
     console.log(`[Udupi Tracker] Starting auto-scroll. Current posts: ${startPosts}`);
     
     for (let i = 0; i < scrollCount; i++) {
+      // Check if stop was requested
+      if (stopScrollRequested) {
+        console.log(`[Udupi Tracker] Scroll stopped by user at ${i}/${scrollCount}`);
+        break;
+      }
+      
       // Scroll down
       window.scrollBy(0, window.innerHeight * 0.8);
       
@@ -384,6 +392,7 @@
     // Final scan
     scanForPosts();
     isScrolling = false;
+    stopScrollRequested = false;
     
     const newPosts = postsOnPage.length - startPosts;
     console.log(`[Udupi Tracker] Auto-scroll complete. New posts loaded: ${newPosts}, Total: ${postsOnPage.length}`);
@@ -392,8 +401,18 @@
       success: true, 
       startPosts, 
       endPosts: postsOnPage.length, 
-      newPosts 
+      newPosts,
+      stopped: stopScrollRequested
     };
+  }
+  
+  function stopScroll() {
+    if (isScrolling) {
+      stopScrollRequested = true;
+      console.log('[Udupi Tracker] Stop scroll requested');
+      return { success: true };
+    }
+    return { success: false, reason: 'not_scrolling' };
   }
   
   function getScrollStatus() {
@@ -469,6 +488,10 @@
           sendResponse(result);
         });
         return true; // Keep channel open for async response
+
+      case 'stopScroll':
+        sendResponse(stopScroll());
+        break;
 
       case 'selectAll':
         postsOnPage.forEach((post, index) => {

@@ -106,6 +106,13 @@
       background: linear-gradient(135deg, #10b981, #059669);
       color: white;
     }
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      color: white;
+    }
+    .btn-danger:hover {
+      opacity: 0.9;
+    }
     .status {
       padding: 8px 12px;
       border-radius: 6px;
@@ -181,6 +188,7 @@
     </button>
     
     <button class="btn btn-secondary" id="autoScrollBtn">📜 Load More Posts (Auto-Scroll)</button>
+    <button class="btn btn-danger" id="stopScrollBtn" style="display: none;">⏹️ Stop Scrolling</button>
     <button class="btn btn-secondary" id="selectAllBtn">Select All Posts</button>
     <button class="btn btn-primary" id="extractBtn" disabled>Extract Selected</button>
     
