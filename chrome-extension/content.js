@@ -632,86 +632,117 @@
         console.log(`[Udupi Tracker] selectedPosts indices:`, Array.from(selectedPosts));
         console.log(`[Udupi Tracker] postsOnPage length: ${postsOnPage.length}`);
         
-        const posts = [];
-        const selectedArray = Array.from(selectedPosts);
-        
-        for (let i = 0; i < selectedArray.length; i++) {
-          const index = selectedArray[i];
-          const post = postsOnPage[parseInt(index)];
-          console.log(`[Udupi Tracker] Processing index ${index}, post exists: ${!!post}`);
+        // Use async extraction with scroll-to-visible
+        (async () => {
+          const posts = [];
+          const selectedArray = Array.from(selectedPosts);
+          let skippedCount = 0;
           
-          if (post) {
-            const postId = post.dataset.udupiKey || index;
+          for (let i = 0; i < selectedArray.length; i++) {
+            const index = selectedArray[i];
+            const post = postsOnPage[parseInt(index)];
+            console.log(`[Udupi Tracker] Processing ${i+1}/${selectedArray.length} (index ${index}), post exists: ${!!post}`);
+            
+            if (post) {
+              const postId = post.dataset.udupiKey || index;
+              
+              // SCROLL POST INTO VIEW to force Facebook to reload content
+              post.scrollIntoView({ behavior: 'instant', block: 'center' });
+              await new Promise(resolve => setTimeout(resolve, 150)); // Wait for DOM to update
+              
+              const text = getPostText(post);
+              const images = getPostImages(post, postId);
+              
+              // Log text preview (first 100 chars) for debugging
+              const textPreview = text ? text.substring(0, 100).replace(/\n/g, ' ') : '(no text extracted)';
+              console.log(`[Udupi Tracker] [Post ${postId}] Text preview: "${textPreview}"`);
+              console.log(`[Udupi Tracker] [Post ${postId}] Text length: ${text ? text.length : 0}, Images: ${images.length}`);
+              
+              if (text && text.length > 10) {
+                const timestamp = getPostTimestamp(post);
+                const author = getAuthorName(post);
+                posts.push({
+                  content: text,
+                  author_name: author,
+                  posted_at: timestamp ? timestamp.toISOString() : null,
+                  external_post_id: `fb_${Date.now()}_${index}`,
+                  images: images
+                });
+                console.log(`[Udupi Tracker] ✓ Added post ${i+1}/${selectedArray.length} to extraction array`);
+              } else {
+                skippedCount++;
+                console.log(`[Udupi Tracker] ✗ SKIPPED post ${i+1}/${selectedArray.length} - text too short or empty (${text?.length || 0} chars)`);
+              }
+            }
+          }
+          
+          console.log(`[Udupi Tracker] ===== EXTRACTION COMPLETE =====`);
+          console.log(`[Udupi Tracker] Total posts extracted: ${posts.length}`);
+          console.log(`[Udupi Tracker] Total skipped: ${skippedCount}`);
+          console.log(`[Udupi Tracker] Total images: ${posts.reduce((sum, p) => sum + (p.images?.length || 0), 0)}`);
+          
+          sendResponse({
+            posts,
+            groupName: getGroupName(),
+            skipped: skippedCount
+          });
+        })();
+        return true; // Keep channel open for async response
+
+      case 'extractRecent':
+        // Extract posts from the last N days with scroll-to-visible
+        const extractDays = message.days || 2;
+        const recentPostsToExtract = getRecentPosts(extractDays);
+        
+        (async () => {
+          const extractedPosts = [];
+          let skippedCount = 0;
+          
+          console.log(`[Udupi Tracker] Starting extraction of ${recentPostsToExtract.length} recent posts...`);
+          
+          for (let i = 0; i < recentPostsToExtract.length; i++) {
+            const post = recentPostsToExtract[i];
+            const postId = post.dataset.udupiKey || i;
+            
+            // SCROLL POST INTO VIEW to force Facebook to reload content
+            post.scrollIntoView({ behavior: 'instant', block: 'center' });
+            await new Promise(resolve => setTimeout(resolve, 150)); // Wait for DOM to update
+            
             const text = getPostText(post);
             const images = getPostImages(post, postId);
             
-            // Log text preview (first 100 chars) for debugging
-            const textPreview = text ? text.substring(0, 100).replace(/\n/g, ' ') : '(no text extracted)';
-            console.log(`[Udupi Tracker] [Post ${postId}] Text preview: "${textPreview}..."`);
-            console.log(`[Udupi Tracker] [Post ${postId}] Text length: ${text ? text.length : 0}, Images: ${images.length}`);
+            const textPreview = text ? text.substring(0, 100).replace(/\n/g, ' ') : '(no text)';
+            console.log(`[Udupi Tracker] [${i+1}/${recentPostsToExtract.length}] [Post ${postId}] "${textPreview}"`);
+            console.log(`[Udupi Tracker] [Post ${postId}] Text: ${text?.length || 0} chars, Images: ${images.length}`);
             
-            // Check if post DOM is still populated (Facebook may have unloaded off-screen content)
-            const hasVisibleContent = post.textContent && post.textContent.trim().length > 50;
-            console.log(`[Udupi Tracker] [Post ${postId}] DOM has content: ${hasVisibleContent}, innerText length: ${post.textContent?.length || 0}`);
-            
-            if (text) {
+            if (text && text.length > 10) {
               const timestamp = getPostTimestamp(post);
-              const author = getAuthorName(post);
-              posts.push({
+              extractedPosts.push({
                 content: text,
-                author_name: author,
+                author_name: getAuthorName(post),
                 posted_at: timestamp ? timestamp.toISOString() : null,
-                external_post_id: `fb_${Date.now()}_${index}`,
+                external_post_id: `fb_${Date.now()}_${i}`,
                 images: images
               });
-              console.log(`[Udupi Tracker] ✓ Added post ${i+1}/${selectedArray.length} to extraction array`);
+              console.log(`[Udupi Tracker] ✓ Added post ${i+1}/${recentPostsToExtract.length}`);
             } else {
-              console.log(`[Udupi Tracker] ✗ SKIPPED post ${i+1}/${selectedArray.length} - no text content extracted`);
+              skippedCount++;
+              console.log(`[Udupi Tracker] ✗ Skipped post ${i+1}/${recentPostsToExtract.length} - content too short`);
             }
           }
-        }
-        
-        console.log(`[Udupi Tracker] ===== EXTRACTION COMPLETE =====`);
-        console.log(`[Udupi Tracker] Total posts extracted: ${posts.length}`);
-        console.log(`[Udupi Tracker] Total images: ${posts.reduce((sum, p) => sum + (p.images?.length || 0), 0)}`);
-        
-        sendResponse({
-          posts,
-          groupName: getGroupName()
-        });
-        break;
-
-      case 'extractRecent':
-        // Extract posts from the last N days directly
-        const extractDays = message.days || 2;
-        const recentPostsToExtract = getRecentPosts(extractDays);
-        const extractedPosts = [];
-        
-        recentPostsToExtract.forEach((post, i) => {
-          const postId = post.dataset.udupiKey || i;
-          const text = getPostText(post);
-          const images = getPostImages(post, postId);
-          console.log(`[Udupi Tracker] [Post ${postId}] Text:`, text ? text.substring(0, 150) : 'NULL');
-          console.log(`[Udupi Tracker] [Post ${postId}] Images:`, images.length);
-          if (text) {
-            const timestamp = getPostTimestamp(post);
-            extractedPosts.push({
-              content: text,
-              author_name: getAuthorName(post),
-              posted_at: timestamp ? timestamp.toISOString() : null,
-              external_post_id: `fb_${Date.now()}_${i}`,
-              images: images
-            });
-          }
-        });
-        
-        console.log(`[Udupi Tracker] Extracted ${extractedPosts.length} recent posts with ${extractedPosts.reduce((sum, p) => sum + (p.images?.length || 0), 0)} total images`);
-        sendResponse({
-          posts: extractedPosts,
-          groupName: getGroupName(),
-          totalScanned: postsOnPage.length
-        });
-        break;
+          
+          console.log(`[Udupi Tracker] ===== RECENT EXTRACTION COMPLETE =====`);
+          console.log(`[Udupi Tracker] Extracted: ${extractedPosts.length}, Skipped: ${skippedCount}`);
+          console.log(`[Udupi Tracker] Total images: ${extractedPosts.reduce((sum, p) => sum + (p.images?.length || 0), 0)}`);
+          
+          sendResponse({
+            posts: extractedPosts,
+            groupName: getGroupName(),
+            totalScanned: postsOnPage.length,
+            skipped: skippedCount
+          });
+        })();
+        return true; // Keep channel open for async response
     }
     return true; // Keep channel open for async response
   });
