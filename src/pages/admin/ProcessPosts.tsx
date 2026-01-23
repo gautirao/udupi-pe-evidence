@@ -77,56 +77,95 @@ export default function ProcessPosts() {
     setIsProcessing(true);
     setProgress(0);
     setResult(null);
+    setConsoleCollapsed(false); // Expand console for live logs
 
     debug.info(`Starting AI processing batch`, `Batch size: ${batchSize}, Pending posts: ${unprocessedPosts.length}`);
 
     try {
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setProgress((prev) => Math.min(prev + 5, 90));
-      }, 500);
-
-      debug.ai('Invoking parse-posts edge function...');
       const startTime = Date.now();
+      
+      // Use streaming mode for real-time logs
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-posts`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ batch_size: batchSize, stream: true }),
+        }
+      );
 
-      const { data, error } = await supabase.functions.invoke('parse-posts', {
-        body: { batch_size: batchSize },
-      });
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
 
-      const duration = Date.now() - startTime;
-      clearInterval(progressInterval);
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      let buffer = '';
+      let processed = 0;
+      let totalPosts = unprocessedPosts.length;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Process complete SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              if (data.type === 'done') {
+                // Final summary
+                const duration = Date.now() - startTime;
+                setResult({
+                  success: true,
+                  processed: data.processed,
+                  listings_created: data.listings_created,
+                  failed: data.failed,
+                  failed_posts: data.failed_posts,
+                  message: `Processed ${data.processed} posts, created ${data.listings_created} listings (${data.geocoded} geocoded)`,
+                });
+                debug.success(`Batch complete in ${duration}ms`);
+              } else if (data.type && data.message) {
+                // Log event from edge function
+                debug.addLog(data.type, data.message, data.details);
+                
+                // Update progress based on processing messages
+                if (data.message.includes('Processing post')) {
+                  const match = data.message.match(/(\d+)\/(\d+)/);
+                  if (match) {
+                    processed = parseInt(match[1]);
+                    totalPosts = parseInt(match[2]);
+                    setProgress(Math.round((processed / totalPosts) * 100));
+                  }
+                }
+              }
+            } catch (e) {
+              // Skip malformed JSON
+              console.warn('Failed to parse SSE event:', line);
+            }
+          }
+        }
+      }
+
       setProgress(100);
-
-      if (error) {
-        debug.error('Edge function error', error.message);
-        throw error;
-      }
-
-      const result = data as ProcessingResult & { geocoded?: number };
-      setResult(result);
-
-      debug.success(`Processing complete in ${duration}ms`);
-      debug.info(`Posts processed: ${result.processed}`);
-      
-      if (result.listings_created > 0) {
-        debug.success(`Listings created: ${result.listings_created}`);
-      }
-      
-      if (result.geocoded && result.geocoded > 0) {
-        debug.ai(`Geocoded: ${result.geocoded} localities`);
-      }
-      
-      if (result.failed > 0) {
-        debug.warning(`Failed: ${result.failed} posts`);
-        result.failed_posts?.forEach((fp) => {
-          debug.error(`Post ${fp.id.substring(0, 8)}...`, fp.reason);
-        });
-      }
 
       toast({
         title: 'Processing Complete',
-        description: result.message,
-        variant: result.listings_created > 0 ? 'default' : 'default',
+        description: `Batch processed successfully`,
       });
 
       // Refresh data
