@@ -12,6 +12,7 @@ import { useRawPosts, useAdminListings, useUpdateRawPost, useResetPostForReproce
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
+import { DebugConsole, useDebugLogs } from '@/components/admin/DebugConsole';
 import {
   Sparkles,
   Loader2,
@@ -48,6 +49,7 @@ interface ProcessingResult {
 export default function ProcessPosts() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const debug = useDebugLogs();
   
   const { data: rawPosts = [], isLoading: loadingPosts, refetch: refetchPosts } = useRawPosts(undefined, 200);
   const { data: listings = [], isLoading: loadingListings, refetch: refetchListings } = useAdminListings(50);
@@ -60,6 +62,7 @@ export default function ProcessPosts() {
   const [editingPost, setEditingPost] = useState<RawPost | null>(null);
   const [editContent, setEditContent] = useState('');
   const [viewingPost, setViewingPost] = useState<RawPost | null>(null);
+  const [consoleCollapsed, setConsoleCollapsed] = useState(false);
 
   const unprocessedPosts = rawPosts.filter((p) => !p.is_processed);
   const processedPosts = rawPosts.filter((p) => p.is_processed);
@@ -75,37 +78,66 @@ export default function ProcessPosts() {
     setProgress(0);
     setResult(null);
 
+    debug.info(`Starting AI processing batch`, `Batch size: ${batchSize}, Pending posts: ${unprocessedPosts.length}`);
+
     try {
       // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setProgress((prev) => Math.min(prev + 5, 90));
       }, 500);
 
+      debug.ai('Invoking parse-posts edge function...');
+      const startTime = Date.now();
+
       const { data, error } = await supabase.functions.invoke('parse-posts', {
         body: { batch_size: batchSize },
       });
 
+      const duration = Date.now() - startTime;
       clearInterval(progressInterval);
       setProgress(100);
 
       if (error) {
+        debug.error('Edge function error', error.message);
         throw error;
       }
 
-      setResult(data as ProcessingResult);
+      const result = data as ProcessingResult & { geocoded?: number };
+      setResult(result);
+
+      debug.success(`Processing complete in ${duration}ms`);
+      debug.info(`Posts processed: ${result.processed}`);
       
+      if (result.listings_created > 0) {
+        debug.success(`Listings created: ${result.listings_created}`);
+      }
+      
+      if (result.geocoded && result.geocoded > 0) {
+        debug.ai(`Geocoded: ${result.geocoded} localities`);
+      }
+      
+      if (result.failed > 0) {
+        debug.warning(`Failed: ${result.failed} posts`);
+        result.failed_posts?.forEach((fp) => {
+          debug.error(`Post ${fp.id.substring(0, 8)}...`, fp.reason);
+        });
+      }
+
       toast({
         title: 'Processing Complete',
-        description: data.message,
-        variant: data.listings_created > 0 ? 'default' : 'default',
+        description: result.message,
+        variant: result.listings_created > 0 ? 'default' : 'default',
       });
 
       // Refresh data
+      debug.info('Refreshing data...');
       await Promise.all([refetchPosts(), refetchListings()]);
       queryClient.invalidateQueries({ queryKey: ['property-listings'] });
+      debug.success('Data refreshed');
 
     } catch (err) {
       console.error('Processing error:', err);
+      debug.error('Processing failed', err instanceof Error ? err.message : 'Unknown error');
       toast({
         title: 'Processing Failed',
         description: err instanceof Error ? err.message : 'Unknown error occurred',
@@ -318,6 +350,14 @@ export default function ProcessPosts() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Debug Console */}
+            <DebugConsole
+              logs={debug.logs}
+              onClear={debug.clearLogs}
+              isCollapsed={consoleCollapsed}
+              onToggleCollapse={() => setConsoleCollapsed(!consoleCollapsed)}
+            />
 
             {/* Raw Posts Browser */}
             <Card>
