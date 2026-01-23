@@ -26,6 +26,7 @@ const createMarkerIcon = (propertyType: PropertyType) => {
   const colors: Record<PropertyType, string> = {
     land: '#22c55e',
     house: '#ea580c',
+    apartment: '#8b5cf6',
     commercial: '#3b82f6',
     other: '#6b7280',
   };
@@ -113,6 +114,7 @@ export function PropertyMap({ listings, selectedListing, onSelectListing }: Prop
   const propertyTypeLabels: Record<PropertyType, string> = {
     land: 'Land',
     house: 'House',
+    apartment: 'Apartment',
     commercial: 'Commercial',
     other: 'Other',
   };
@@ -120,6 +122,7 @@ export function PropertyMap({ listings, selectedListing, onSelectListing }: Prop
   const propertyTypeColors: Record<PropertyType, string> = {
     land: 'bg-green-500',
     house: 'bg-orange-500',
+    apartment: 'bg-violet-500',
     commercial: 'bg-blue-500',
     other: 'bg-gray-500',
   };

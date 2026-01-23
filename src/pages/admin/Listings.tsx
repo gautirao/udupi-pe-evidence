@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils';
 const propertyTypeColors: Record<PropertyType, string> = {
   land: 'bg-green-500/10 text-green-600',
   house: 'bg-orange-500/10 text-orange-600',
+  apartment: 'bg-violet-500/10 text-violet-600',
   commercial: 'bg-blue-500/10 text-blue-600',
   other: 'bg-gray-500/10 text-gray-600',
 };
@@ -196,6 +197,7 @@ export default function Listings() {
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="land">Land</SelectItem>
                   <SelectItem value="house">House</SelectItem>
+                  <SelectItem value="apartment">Apartment</SelectItem>
                   <SelectItem value="commercial">Commercial</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
@@ -344,6 +346,7 @@ export default function Listings() {
                   <SelectContent>
                     <SelectItem value="land">Land</SelectItem>
                     <SelectItem value="house">House</SelectItem>
+                    <SelectItem value="apartment">Apartment</SelectItem>
                     <SelectItem value="commercial">Commercial</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
