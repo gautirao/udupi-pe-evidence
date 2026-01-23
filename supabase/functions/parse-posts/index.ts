@@ -114,9 +114,14 @@ Deno.serve(async (req) => {
     let postsProcessed = 0
     let postsFailed = 0
 
+    const failedPosts: { id: string; reason: string; content_preview: string }[] = [];
+
     for (const post of rawPosts) {
       try {
-        console.log(`[parse-posts] Parsing post ${post.id}`)
+        const contentPreview = post.content.substring(0, 100).replace(/\n/g, ' ');
+        console.log(`[parse-posts] ========== Processing post ${post.id} ==========`);
+        console.log(`[parse-posts] Content preview: "${contentPreview}..."`);
+        console.log(`[parse-posts] Content length: ${post.content.length} chars`);
         
         // Call AI to parse the post
         const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -166,7 +171,9 @@ Deno.serve(async (req) => {
 
         if (!aiResponse.ok) {
           const errorText = await aiResponse.text()
-          console.error(`[parse-posts] AI API error for post ${post.id}:`, aiResponse.status, errorText)
+          const reason = `AI API error: ${aiResponse.status} - ${errorText.substring(0, 200)}`;
+          console.error(`[parse-posts] ✗ FAILED post ${post.id}: ${reason}`);
+          failedPosts.push({ id: post.id, reason, content_preview: contentPreview });
           postsFailed++
           continue
         }
@@ -175,13 +182,17 @@ Deno.serve(async (req) => {
         const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0]
         
         if (!toolCall?.function?.arguments) {
-          console.error(`[parse-posts] No tool call in AI response for post ${post.id}`)
+          const reason = 'No tool call in AI response';
+          console.error(`[parse-posts] ✗ FAILED post ${post.id}: ${reason}`);
+          console.error(`[parse-posts] AI response:`, JSON.stringify(aiData).substring(0, 500));
+          failedPosts.push({ id: post.id, reason, content_preview: contentPreview });
           postsFailed++
           continue
         }
 
         const parsed: ParsedProperty = JSON.parse(toolCall.function.arguments)
-        console.log(`[parse-posts] Post ${post.id} - is_real_estate: ${parsed.is_real_estate}, confidence: ${parsed.confidence_score}`)
+        console.log(`[parse-posts] AI Result: is_real_estate=${parsed.is_real_estate}, type=${parsed.property_type}, confidence=${parsed.confidence_score}`);
+        console.log(`[parse-posts] Extracted: locality="${parsed.locality}", price=${parsed.price}, bedrooms=${parsed.bedrooms}`);
 
         // Only create listing if it's a real estate post with reasonable confidence
         if (parsed.is_real_estate && parsed.confidence_score >= 50) {
@@ -208,12 +219,19 @@ Deno.serve(async (req) => {
             })
 
           if (insertError) {
-            console.error(`[parse-posts] Error inserting listing for post ${post.id}:`, insertError)
+            const reason = `DB insert error: ${insertError.message}`;
+            console.error(`[parse-posts] ✗ FAILED post ${post.id}: ${reason}`);
+            failedPosts.push({ id: post.id, reason, content_preview: contentPreview });
             postsFailed++
           } else {
             listingsCreated++
-            console.log(`[parse-posts] Created listing for post ${post.id}`)
+            console.log(`[parse-posts] ✓ Created listing for post ${post.id}`)
           }
+        } else {
+          const reason = parsed.is_real_estate 
+            ? `Low confidence: ${parsed.confidence_score}%` 
+            : 'Not a real estate listing';
+          console.log(`[parse-posts] ○ SKIPPED post ${post.id}: ${reason}`);
         }
 
         // Mark post as processed
@@ -225,10 +243,15 @@ Deno.serve(async (req) => {
         postsProcessed++
 
       } catch (err) {
-        console.error(`[parse-posts] Error processing post ${post.id}:`, err)
+        const reason = err instanceof Error ? err.message : 'Unknown error';
+        console.error(`[parse-posts] ✗ FAILED post ${post.id}:`, err);
+        failedPosts.push({ id: post.id, reason, content_preview: post.content.substring(0, 100) });
         postsFailed++
       }
     }
+    
+    console.log(`[parse-posts] ========== BATCH COMPLETE ==========`);
+    console.log(`[parse-posts] Processed: ${postsProcessed}, Created: ${listingsCreated}, Failed: ${postsFailed}`);
 
     // Update feed run stats if we have a feed_run_id
     if (feedRunId) {
@@ -247,6 +270,7 @@ Deno.serve(async (req) => {
         processed: postsProcessed,
         listings_created: listingsCreated,
         failed: postsFailed,
+        failed_posts: failedPosts,
         message: `Processed ${postsProcessed} posts, created ${listingsCreated} listings`
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
