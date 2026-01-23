@@ -57,6 +57,7 @@ export default function ProcessPosts() {
   const resetPostForReprocessing = useResetPostForReprocessing();
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isResettingAll, setIsResettingAll] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [editingPost, setEditingPost] = useState<RawPost | null>(null);
@@ -214,6 +215,39 @@ export default function ProcessPosts() {
   const handleResetPost = async (postId: string) => {
     await resetPostForReprocessing.mutateAsync(postId);
     refetchPosts();
+  };
+
+  const handleResetAllPosts = async () => {
+    if (processedPosts.length === 0) return;
+    
+    setIsResettingAll(true);
+    debug.info(`Resetting all processed posts`, `${processedPosts.length} posts`);
+    
+    try {
+      const { error } = await supabase
+        .from('raw_posts')
+        .update({ is_processed: false })
+        .eq('is_processed', true);
+      
+      if (error) throw error;
+      
+      debug.success(`Reset ${processedPosts.length} posts for reprocessing`);
+      toast({
+        title: 'Posts Reset',
+        description: `${processedPosts.length} posts marked for reprocessing`,
+      });
+      
+      await refetchPosts();
+    } catch (err) {
+      debug.error('Failed to reset posts', err instanceof Error ? err.message : 'Unknown error');
+      toast({
+        title: 'Reset Failed',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsResettingAll(false);
+    }
   };
 
   const handleViewPost = (post: RawPost) => {
@@ -390,13 +424,6 @@ export default function ProcessPosts() {
               </CardContent>
             </Card>
 
-            {/* Debug Console */}
-            <DebugConsole
-              logs={debug.logs}
-              onClear={debug.clearLogs}
-              isCollapsed={consoleCollapsed}
-              onToggleCollapse={() => setConsoleCollapsed(!consoleCollapsed)}
-            />
 
             {/* Raw Posts Browser */}
             <Card>
@@ -450,45 +477,73 @@ export default function ProcessPosts() {
                   </TabsContent>
                   
                   <TabsContent value="processed">
-                    <ScrollArea className="h-[300px] pr-4">
-                      {processedPosts.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-8">No processed posts</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {processedPosts.slice(0, 20).map((post) => (
-                            <div key={post.id} className="p-3 rounded-lg border bg-card">
-                              <p className="text-sm line-clamp-2 mb-2">{post.content}</p>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">
-                                  {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
-                                </span>
-                                <div className="flex gap-1">
-                                  <Button size="sm" variant="ghost" onClick={() => handleViewPost(post)}>
-                                    <Eye className="h-3 w-3" />
-                                  </Button>
-                                  <Button 
-                                    size="sm" 
-                                    variant="ghost" 
-                                    onClick={() => handleResetPost(post.id)}
-                                    title="Reset for reprocessing"
-                                  >
-                                    <RotateCcw className="h-3 w-3" />
-                                  </Button>
+                    <div className="space-y-3">
+                      {processedPosts.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={handleResetAllPosts}
+                          disabled={isResettingAll}
+                        >
+                          {isResettingAll ? (
+                            <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-3 w-3 mr-2" />
+                          )}
+                          Reset All for Reprocessing ({processedPosts.length})
+                        </Button>
+                      )}
+                      <ScrollArea className="h-[260px] pr-4">
+                        {processedPosts.length === 0 ? (
+                          <p className="text-center text-muted-foreground py-8">No processed posts</p>
+                        ) : (
+                          <div className="space-y-2">
+                            {processedPosts.slice(0, 20).map((post) => (
+                              <div key={post.id} className="p-3 rounded-lg border bg-card">
+                                <p className="text-sm line-clamp-2 mb-2">{post.content}</p>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                                  </span>
+                                  <div className="flex gap-1">
+                                    <Button size="sm" variant="ghost" onClick={() => handleViewPost(post)}>
+                                      <Eye className="h-3 w-3" />
+                                    </Button>
+                                    <Button 
+                                      size="sm" 
+                                      variant="ghost" 
+                                      onClick={() => handleResetPost(post.id)}
+                                      title="Reset for reprocessing"
+                                    >
+                                      <RotateCcw className="h-3 w-3" />
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </ScrollArea>
+                            ))}
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </div>
                   </TabsContent>
                 </Tabs>
               </CardContent>
             </Card>
           </div>
 
-          {/* Recent Listings */}
-          <Card>
+          {/* Right Column - Debug Console & Recent Listings */}
+          <div className="space-y-6">
+            {/* Debug Console */}
+            <DebugConsole
+              logs={debug.logs}
+              onClear={debug.clearLogs}
+              isCollapsed={consoleCollapsed}
+              onToggleCollapse={() => setConsoleCollapsed(!consoleCollapsed)}
+            />
+
+            {/* Recent Listings */}
+            <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Home className="h-5 w-5" />
@@ -566,7 +621,8 @@ export default function ProcessPosts() {
                 </ScrollArea>
               )}
             </CardContent>
-          </Card>
+            </Card>
+          </div>
         </div>
       </div>
 
