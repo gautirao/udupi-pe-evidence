@@ -644,8 +644,16 @@
             const postId = post.dataset.udupiKey || index;
             const text = getPostText(post);
             const images = getPostImages(post, postId);
-            console.log(`[Udupi Tracker] [Post ${postId}] Extracted text length:`, text ? text.length : 0);
-            console.log(`[Udupi Tracker] [Post ${postId}] Images found:`, images.length);
+            
+            // Log text preview (first 100 chars) for debugging
+            const textPreview = text ? text.substring(0, 100).replace(/\n/g, ' ') : '(no text extracted)';
+            console.log(`[Udupi Tracker] [Post ${postId}] Text preview: "${textPreview}..."`);
+            console.log(`[Udupi Tracker] [Post ${postId}] Text length: ${text ? text.length : 0}, Images: ${images.length}`);
+            
+            // Check if post DOM is still populated (Facebook may have unloaded off-screen content)
+            const hasVisibleContent = post.textContent && post.textContent.trim().length > 50;
+            console.log(`[Udupi Tracker] [Post ${postId}] DOM has content: ${hasVisibleContent}, innerText length: ${post.textContent?.length || 0}`);
+            
             if (text) {
               const timestamp = getPostTimestamp(post);
               const author = getAuthorName(post);
@@ -656,7 +664,9 @@
                 external_post_id: `fb_${Date.now()}_${index}`,
                 images: images
               });
-              console.log(`[Udupi Tracker] Added post ${i+1}/${selectedArray.length} to extraction array`);
+              console.log(`[Udupi Tracker] ✓ Added post ${i+1}/${selectedArray.length} to extraction array`);
+            } else {
+              console.log(`[Udupi Tracker] ✗ SKIPPED post ${i+1}/${selectedArray.length} - no text content extracted`);
             }
           }
         }
