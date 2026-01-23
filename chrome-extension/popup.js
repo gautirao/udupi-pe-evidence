@@ -142,30 +142,19 @@ document.getElementById('extractRecentBtn').addEventListener('click', async () =
       return;
     }
 
-    showStatus(`Found ${response.posts.length} recent posts. Sending to server...`, 'info');
+    showStatus(`Found ${response.posts.length} recent posts. Sending in batches...`, 'info');
 
-    // Send to API
-    const apiResponse = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'apikey': apiKey
-      },
-      body: JSON.stringify({
-        posts: response.posts,
-        source_url: tab.url,
-        group_name: response.groupName
-      })
-    });
+    // Send posts in batches
+    const totalImported = await sendPostsInBatches(
+      response.posts,
+      apiUrl,
+      apiKey,
+      tab.url,
+      response.groupName,
+      showStatus
+    );
 
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      throw new Error(`API error: ${errorText}`);
-    }
-
-    const result = await apiResponse.json();
-    showStatus(`✓ ${result.imported || response.posts.length} posts imported successfully!`, 'success');
+    showStatus(`✓ ${totalImported} posts imported successfully!`, 'success');
     
     // Update stats
     document.getElementById('postsSelected').textContent = '0';
@@ -176,6 +165,52 @@ document.getElementById('extractRecentBtn').addEventListener('click', async () =
   
   document.getElementById('extractRecentBtn').disabled = false;
 });
+
+// Batch size for sending posts
+const BATCH_SIZE = 50;
+
+// Helper function to send posts in batches
+async function sendPostsInBatches(posts, apiUrl, apiKey, sourceUrl, groupName, updateStatus) {
+  const totalPosts = posts.length;
+  let totalImported = 0;
+  let batchNumber = 0;
+  const totalBatches = Math.ceil(totalPosts / BATCH_SIZE);
+  
+  console.log(`[Udupi Popup] Starting batch upload: ${totalPosts} posts in ${totalBatches} batches`);
+  
+  for (let i = 0; i < totalPosts; i += BATCH_SIZE) {
+    batchNumber++;
+    const batch = posts.slice(i, i + BATCH_SIZE);
+    
+    console.log(`[Udupi Popup] Sending batch ${batchNumber}/${totalBatches}: ${batch.length} posts`);
+    updateStatus(`Sending batch ${batchNumber}/${totalBatches} (${i + batch.length}/${totalPosts} posts)...`, 'info');
+    
+    const apiResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'apikey': apiKey
+      },
+      body: JSON.stringify({
+        posts: batch,
+        source_url: sourceUrl,
+        group_name: groupName
+      })
+    });
+
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      throw new Error(`Batch ${batchNumber} failed: ${errorText}`);
+    }
+
+    const result = await apiResponse.json();
+    totalImported += result.imported || batch.length;
+    console.log(`[Udupi Popup] Batch ${batchNumber} complete: ${result.imported || batch.length} imported`);
+  }
+  
+  return totalImported;
+}
 
 // Extract selected posts
 document.getElementById('extractBtn').addEventListener('click', async () => {
@@ -205,31 +240,20 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
       return;
     }
 
-    showStatus(`Sending ${response.posts.length} posts to server...`, 'info');
-    console.log('[Udupi Popup] About to send', response.posts.length, 'posts to API');
+    const totalPosts = response.posts.length;
+    console.log(`[Udupi Popup] About to send ${totalPosts} posts to API`);
 
-    // Send to API
-    const apiResponse = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'apikey': apiKey
-      },
-      body: JSON.stringify({
-        posts: response.posts,
-        source_url: tab.url,
-        group_name: response.groupName
-      })
-    });
+    // Send posts in batches
+    const totalImported = await sendPostsInBatches(
+      response.posts,
+      apiUrl,
+      apiKey,
+      tab.url,
+      response.groupName,
+      showStatus
+    );
 
-    if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      throw new Error(`API error: ${errorText}`);
-    }
-
-    const result = await apiResponse.json();
-    showStatus(`✓ ${result.imported || response.posts.length} posts sent successfully!`, 'success');
+    showStatus(`✓ ${totalImported} posts sent successfully!`, 'success');
     
     // Clear selection
     await chrome.tabs.sendMessage(tab.id, { action: 'clearSelection' });
