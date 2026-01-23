@@ -23,6 +23,12 @@ interface ParsedProperty {
   confidence_score: number
 }
 
+interface GeocodedLocation {
+  latitude: number
+  longitude: number
+  display_name: string | null
+}
+
 const SYSTEM_PROMPT = `You are a real estate listing parser. Your job is to analyze Facebook posts and determine if they are real estate listings.
 
 IMPORTANT: Only classify posts as real estate if they are:
@@ -54,6 +60,88 @@ For valid real estate posts, extract:
 - contact_info: any contact details (name, email, etc.)
 - description: brief summary of the property (max 200 chars)
 - confidence_score: 0-100 how confident you are this is a real estate listing`
+
+// Geocode a locality using cache first, then Nominatim
+async function geocodeLocality(
+  supabase: any,
+  locality: string
+): Promise<GeocodedLocation | null> {
+  // Normalize locality for cache lookup
+  const normalizedLocality = locality.trim().toLowerCase()
+  
+  // Check cache first
+  const { data: cached, error: cacheError } = await supabase
+    .from('geocode_cache')
+    .select('latitude, longitude, display_name')
+    .ilike('locality', normalizedLocality)
+    .limit(1)
+    .maybeSingle()
+  
+  if (!cacheError && cached) {
+    console.log(`[parse-posts] 📍 Geocode cache HIT for "${locality}"`)
+    return {
+      latitude: cached.latitude,
+      longitude: cached.longitude,
+      display_name: cached.display_name
+    }
+  }
+  
+  console.log(`[parse-posts] 📍 Geocode cache MISS for "${locality}", calling Nominatim...`)
+  
+  // Call Nominatim API (OSM geocoding)
+  // Add context for better results in India
+  const searchQuery = `${locality}, Karnataka, India`
+  const nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
+    `q=${encodeURIComponent(searchQuery)}` +
+    `&format=json&limit=1&countrycodes=in`
+  
+  try {
+    const response = await fetch(nominatimUrl, {
+      headers: {
+        'User-Agent': 'UdupiPropertyTracker/1.0 (property listing aggregator)'
+      }
+    })
+    
+    if (!response.ok) {
+      console.error(`[parse-posts] Nominatim error: ${response.status}`)
+      return null
+    }
+    
+    const results = await response.json()
+    
+    if (!results || results.length === 0) {
+      console.log(`[parse-posts] 📍 No geocode results for "${locality}"`)
+      return null
+    }
+    
+    const result = results[0]
+    const latitude = parseFloat(result.lat)
+    const longitude = parseFloat(result.lon)
+    const display_name = result.display_name
+    
+    // Cache the result
+    const { error: cacheError } = await supabase
+      .from('geocode_cache')
+      .insert({
+        locality: normalizedLocality,
+        latitude,
+        longitude,
+        display_name
+      })
+    
+    if (cacheError) {
+      console.error(`[parse-posts] Failed to cache geocode result:`, cacheError)
+    } else {
+      console.log(`[parse-posts] 📍 Cached geocode for "${locality}": ${latitude}, ${longitude}`)
+    }
+    
+    return { latitude, longitude, display_name }
+    
+  } catch (err) {
+    console.error(`[parse-posts] Geocoding error for "${locality}":`, err)
+    return null
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -113,6 +201,7 @@ Deno.serve(async (req) => {
     let listingsCreated = 0
     let postsProcessed = 0
     let postsFailed = 0
+    let geocodedCount = 0
 
     const failedPosts: { id: string; reason: string; content_preview: string }[] = [];
 
@@ -196,6 +285,19 @@ Deno.serve(async (req) => {
 
         // Only create listing if it's a real estate post with reasonable confidence
         if (parsed.is_real_estate && parsed.confidence_score >= 50) {
+          // Geocode the locality if available
+          let latitude: number | null = null
+          let longitude: number | null = null
+          
+          if (parsed.locality) {
+            const geocoded = await geocodeLocality(supabase, parsed.locality)
+            if (geocoded) {
+              latitude = geocoded.latitude
+              longitude = geocoded.longitude
+              geocodedCount++
+            }
+          }
+
           const { error: insertError } = await supabase
             .from('property_listings')
             .insert({
@@ -204,6 +306,8 @@ Deno.serve(async (req) => {
               price: parsed.price,
               price_unit: parsed.price_unit || 'INR',
               locality: parsed.locality,
+              latitude,
+              longitude,
               bedrooms: parsed.bedrooms,
               bathrooms: parsed.bathrooms,
               land_area: parsed.land_area,
@@ -225,7 +329,8 @@ Deno.serve(async (req) => {
             postsFailed++
           } else {
             listingsCreated++
-            console.log(`[parse-posts] ✓ Created listing for post ${post.id}`)
+            const coordStatus = latitude ? `with coords (${latitude.toFixed(4)}, ${longitude?.toFixed(4)})` : 'no coords';
+            console.log(`[parse-posts] ✓ Created listing for post ${post.id} ${coordStatus}`)
           }
         } else {
           const reason = parsed.is_real_estate 
@@ -251,7 +356,7 @@ Deno.serve(async (req) => {
     }
     
     console.log(`[parse-posts] ========== BATCH COMPLETE ==========`);
-    console.log(`[parse-posts] Processed: ${postsProcessed}, Created: ${listingsCreated}, Failed: ${postsFailed}`);
+    console.log(`[parse-posts] Processed: ${postsProcessed}, Created: ${listingsCreated}, Geocoded: ${geocodedCount}, Failed: ${postsFailed}`);
 
     // Update feed run stats if we have a feed_run_id
     if (feedRunId) {
@@ -269,9 +374,10 @@ Deno.serve(async (req) => {
         success: true,
         processed: postsProcessed,
         listings_created: listingsCreated,
+        geocoded: geocodedCount,
         failed: postsFailed,
         failed_posts: failedPosts,
-        message: `Processed ${postsProcessed} posts, created ${listingsCreated} listings`
+        message: `Processed ${postsProcessed} posts, created ${listingsCreated} listings (${geocodedCount} geocoded)`
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
