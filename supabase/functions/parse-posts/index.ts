@@ -29,6 +29,42 @@ interface GeocodedLocation {
   display_name: string | null
 }
 
+// Normalize property type synonyms to enum values
+function normalizePropertyType(type: string): 'house' | 'apartment' | 'land' | 'commercial' | 'other' {
+  const normalized = type.toLowerCase().trim()
+  
+  // Apartment synonyms
+  const apartmentSynonyms = ['flat', 'flats', 'apartment', 'apartments', 'condo', 'condominium', 'unit', 'studio']
+  if (apartmentSynonyms.includes(normalized)) {
+    return 'apartment'
+  }
+  
+  // House synonyms
+  const houseSynonyms = ['house', 'home', 'villa', 'bungalow', 'duplex', 'townhouse', 'cottage', 'mansion', 'residence']
+  if (houseSynonyms.includes(normalized)) {
+    return 'house'
+  }
+  
+  // Land synonyms
+  const landSynonyms = ['land', 'plot', 'site', 'lot', 'acre', 'acres', 'ground', 'property']
+  if (landSynonyms.includes(normalized)) {
+    return 'land'
+  }
+  
+  // Commercial synonyms
+  const commercialSynonyms = ['commercial', 'shop', 'office', 'warehouse', 'godown', 'showroom', 'retail', 'industrial', 'business']
+  if (commercialSynonyms.includes(normalized)) {
+    return 'commercial'
+  }
+  
+  // Valid enum values pass through
+  if (['house', 'apartment', 'land', 'commercial', 'other'].includes(normalized)) {
+    return normalized as 'house' | 'apartment' | 'land' | 'commercial' | 'other'
+  }
+  
+  return 'other'
+}
+
 const SYSTEM_PROMPT = `You are a real estate listing parser. Your job is to analyze Facebook posts and determine if they are real estate listings.
 
 IMPORTANT: Only classify posts as real estate if they are:
@@ -298,11 +334,17 @@ Deno.serve(async (req) => {
             }
           }
 
+          // Normalize property type (handles synonyms like flat -> apartment)
+          const normalizedType = normalizePropertyType(parsed.property_type)
+          if (normalizedType !== parsed.property_type) {
+            console.log(`[parse-posts] 🔄 Normalized property type: "${parsed.property_type}" -> "${normalizedType}"`)
+          }
+
           const { error: insertError } = await supabase
             .from('property_listings')
             .insert({
               raw_post_id: post.id,
-              property_type: parsed.property_type,
+              property_type: normalizedType,
               price: parsed.price,
               price_unit: parsed.price_unit || 'INR',
               locality: parsed.locality,
