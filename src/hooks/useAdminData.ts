@@ -242,6 +242,58 @@ export function useCreateRawPost() {
   });
 }
 
+export function useUpdateRawPost() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<RawPost> }) => {
+      const { data, error } = await supabase
+        .from('raw_posts')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['raw-posts'] });
+      toast({ title: 'Post Updated', description: 'Raw post updated successfully.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useResetPostForReprocessing() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (postId: string) => {
+      const { data, error } = await supabase
+        .from('raw_posts')
+        .update({ is_processed: false })
+        .eq('id', postId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['raw-posts'] });
+      toast({ title: 'Post Reset', description: 'Post marked for reprocessing.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Admin Listings Hook (shows all including invalid)
 export function useAdminListings(limit = 100) {
   const { isAdmin } = useAuth();

@@ -5,7 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useRawPosts, useAdminListings } from '@/hooks/useAdminData';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useRawPosts, useAdminListings, useUpdateRawPost, useResetPostForReprocessing, RawPost } from '@/hooks/useAdminData';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,14 +24,24 @@ import {
   Clock,
   RefreshCw,
   Zap,
+  Edit,
+  RotateCcw,
+  Eye,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+
+interface FailedPost {
+  id: string;
+  reason: string;
+  content_preview: string;
+}
 
 interface ProcessingResult {
   success: boolean;
   processed: number;
   listings_created: number;
   failed: number;
+  failed_posts?: FailedPost[];
   message: string;
 }
 
@@ -38,10 +51,15 @@ export default function ProcessPosts() {
   
   const { data: rawPosts = [], isLoading: loadingPosts, refetch: refetchPosts } = useRawPosts(undefined, 200);
   const { data: listings = [], isLoading: loadingListings, refetch: refetchListings } = useAdminListings(50);
+  const updateRawPost = useUpdateRawPost();
+  const resetPostForReprocessing = useResetPostForReprocessing();
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ProcessingResult | null>(null);
+  const [editingPost, setEditingPost] = useState<RawPost | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [viewingPost, setViewingPost] = useState<RawPost | null>(null);
 
   const unprocessedPosts = rawPosts.filter((p) => !p.is_processed);
   const processedPosts = rawPosts.filter((p) => p.is_processed);
@@ -102,6 +120,33 @@ export default function ProcessPosts() {
   const handleRefresh = () => {
     refetchPosts();
     refetchListings();
+  };
+
+  const handleEditPost = (post: RawPost) => {
+    setEditingPost(post);
+    setEditContent(post.content);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPost) return;
+    
+    await updateRawPost.mutateAsync({
+      id: editingPost.id,
+      updates: { content: editContent, is_processed: false }
+    });
+    
+    setEditingPost(null);
+    setEditContent('');
+    refetchPosts();
+  };
+
+  const handleResetPost = async (postId: string) => {
+    await resetPostForReprocessing.mutateAsync(postId);
+    refetchPosts();
+  };
+
+  const handleViewPost = (post: RawPost) => {
+    setViewingPost(post);
   };
 
   return (
@@ -223,6 +268,26 @@ export default function ProcessPosts() {
                   </div>
                 )}
 
+                {/* Failed Posts from last run */}
+                {result?.failed_posts && result.failed_posts.length > 0 && (
+                  <div className="border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50 dark:bg-red-950">
+                    <h4 className="font-medium text-red-700 dark:text-red-300 flex items-center gap-2 mb-2">
+                      <XCircle className="h-4 w-4" />
+                      Failed Posts ({result.failed_posts.length})
+                    </h4>
+                    <ScrollArea className="h-[150px]">
+                      <div className="space-y-2">
+                        {result.failed_posts.map((fp) => (
+                          <div key={fp.id} className="text-sm p-2 bg-background rounded border">
+                            <p className="text-muted-foreground truncate">{fp.content_preview}...</p>
+                            <p className="text-red-600 text-xs mt-1">{fp.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
                   <Button
                     onClick={() => handleProcess(10)}
@@ -254,17 +319,91 @@ export default function ProcessPosts() {
               </CardContent>
             </Card>
 
-            {/* How it works */}
-            <Card className="bg-accent/30 border-accent">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">How AI Processing Works</CardTitle>
+            {/* Raw Posts Browser */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Raw Posts
+                </CardTitle>
+                <CardDescription>
+                  View and edit raw posts before processing
+                </CardDescription>
               </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-2">
-                <p>1. AI analyzes each post to detect real estate listings</p>
-                <p>2. Non-real-estate posts (discussions, furniture, etc.) are filtered out</p>
-                <p>3. Property details are extracted: price, type, locality, bedrooms, contact</p>
-                <p>4. Listings with 70%+ confidence are marked as valid</p>
-                <p>5. Lower confidence listings need manual review</p>
+              <CardContent>
+                <Tabs defaultValue="pending" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="pending">
+                      Pending ({unprocessedPosts.length})
+                    </TabsTrigger>
+                    <TabsTrigger value="processed">
+                      Processed ({processedPosts.length})
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="pending">
+                    <ScrollArea className="h-[300px] pr-4">
+                      {unprocessedPosts.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">No pending posts</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {unprocessedPosts.slice(0, 20).map((post) => (
+                            <div key={post.id} className="p-3 rounded-lg border bg-card">
+                              <p className="text-sm line-clamp-2 mb-2">{post.content}</p>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                                </span>
+                                <div className="flex gap-1">
+                                  <Button size="sm" variant="ghost" onClick={() => handleViewPost(post)}>
+                                    <Eye className="h-3 w-3" />
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => handleEditPost(post)}>
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </TabsContent>
+                  
+                  <TabsContent value="processed">
+                    <ScrollArea className="h-[300px] pr-4">
+                      {processedPosts.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-8">No processed posts</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {processedPosts.slice(0, 20).map((post) => (
+                            <div key={post.id} className="p-3 rounded-lg border bg-card">
+                              <p className="text-sm line-clamp-2 mb-2">{post.content}</p>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(post.created_at), { addSuffix: true })}
+                                </span>
+                                <div className="flex gap-1">
+                                  <Button size="sm" variant="ghost" onClick={() => handleViewPost(post)}>
+                                    <Eye className="h-3 w-3" />
+                                  </Button>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    onClick={() => handleResetPost(post.id)}
+                                    title="Reset for reprocessing"
+                                  >
+                                    <RotateCcw className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
@@ -292,7 +431,7 @@ export default function ProcessPosts() {
                   <p className="text-sm text-muted-foreground">Process some posts to create listings</p>
                 </div>
               ) : (
-                <ScrollArea className="h-[400px] pr-4">
+                <ScrollArea className="h-[600px] pr-4">
                   <div className="space-y-3">
                     {recentListings.map((listing) => (
                       <div
@@ -351,6 +490,96 @@ export default function ProcessPosts() {
           </Card>
         </div>
       </div>
+
+      {/* Edit Post Dialog */}
+      <Dialog open={!!editingPost} onOpenChange={() => setEditingPost(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Raw Post</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              className="min-h-[300px] font-mono text-sm"
+              placeholder="Post content..."
+            />
+            <p className="text-sm text-muted-foreground">
+              Edit the content and save to mark for reprocessing.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingPost(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={updateRawPost.isPending}>
+              {updateRawPost.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Save & Reprocess
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Post Dialog */}
+      <Dialog open={!!viewingPost} onOpenChange={() => setViewingPost(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>View Raw Post</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-muted rounded-lg">
+              <pre className="whitespace-pre-wrap text-sm">{viewingPost?.content}</pre>
+            </div>
+            {viewingPost?.images && viewingPost.images.length > 0 && (
+              <div>
+                <h4 className="font-medium mb-2">Images ({viewingPost.images.length})</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {viewingPost.images.slice(0, 6).map((img, idx) => (
+                    <a 
+                      key={idx} 
+                      href={img.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="aspect-square bg-muted rounded overflow-hidden"
+                    >
+                      <img 
+                        src={img.url} 
+                        alt={img.alt || `Image ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = '/placeholder.svg';
+                        }}
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex gap-4 text-sm text-muted-foreground">
+              {viewingPost?.author_name && <span>Author: {viewingPost.author_name}</span>}
+              {viewingPost?.posted_at && (
+                <span>Posted: {new Date(viewingPost.posted_at).toLocaleDateString()}</span>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingPost(null)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              if (viewingPost) {
+                handleEditPost(viewingPost);
+                setViewingPost(null);
+              }
+            }}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Post
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
