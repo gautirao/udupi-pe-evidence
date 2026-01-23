@@ -1,8 +1,13 @@
+// Valid ISO 4217 currency codes we support
+const VALID_CURRENCIES = new Set(['INR', 'USD', 'EUR', 'GBP', 'AED', 'SGD']);
+
 /**
  * Format price with Indian numbering system (lakhs, crores)
  */
 export function formatPrice(price: number, unit?: string | null): string {
-  const currency = unit || 'INR';
+  // Normalize currency - default to INR for invalid/unknown units
+  const rawCurrency = unit?.toUpperCase()?.trim() || 'INR';
+  const currency = VALID_CURRENCIES.has(rawCurrency) ? rawCurrency : 'INR';
   
   if (currency === 'INR') {
     if (price >= 10000000) {
