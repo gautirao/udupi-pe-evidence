@@ -23,13 +23,50 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// Words to remove from locality names for better geocoding results
+const NOISE_WORDS = [
+  'highway', 'road', 'rd', 'street', 'st', 'lane', 'ln', 'avenue', 'ave',
+  'junction', 'jn', 'jnc', 'circle', 'square', 'cross', 'crossing',
+  'beach', 'temple', 'church', 'mosque', 'school', 'college', 'hospital',
+  'near', 'opp', 'opposite', 'behind', 'beside', 'next to', 'above', 'below',
+  'main', 'bypass', 'nh', 'sh', 'mh', // national/state/municipal highway
+  'east', 'west', 'north', 'south',
+]
+
+// Simplify locality string for better geocoding
+function simplifyLocality(locality: string): string {
+  let simplified = locality.toLowerCase()
+  
+  // Remove noise words (case insensitive, word boundaries)
+  for (const word of NOISE_WORDS) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi')
+    simplified = simplified.replace(regex, '')
+  }
+  
+  // Remove extra punctuation and dashes
+  simplified = simplified
+    .replace(/[-–—]/g, ' ')  // Replace dashes with spaces
+    .replace(/[()[\]{}]/g, '') // Remove brackets
+    .replace(/\s+/g, ' ')      // Collapse multiple spaces
+    .replace(/^\s*,\s*/, '')   // Remove leading comma
+    .replace(/\s*,\s*$/, '')   // Remove trailing comma
+    .replace(/,\s*,/g, ',')    // Remove empty comma segments
+    .trim()
+  
+  // If we stripped too much, return just the first meaningful part
+  const parts = simplified.split(',').map(p => p.trim()).filter(p => p.length > 2)
+  
+  return parts.length > 0 ? parts.join(', ') : locality.trim()
+}
+
 async function geocodeLocality(
   supabase: any,
   locality: string
-): Promise<GeocodedLocation | null> {
-  const normalizedLocality = locality.trim().toLowerCase()
+): Promise<{ location: GeocodedLocation; simplified?: string } | null> {
+  const originalLocality = locality.trim()
+  const normalizedLocality = originalLocality.toLowerCase()
   
-  // Check cache first
+  // Check cache first (try original)
   const { data: cached, error: cacheError } = await supabase
     .from('geocode_cache')
     .select('latitude, longitude, display_name')
@@ -39,14 +76,49 @@ async function geocodeLocality(
   
   if (!cacheError && cached) {
     return {
-      latitude: cached.latitude,
-      longitude: cached.longitude,
-      display_name: cached.display_name
+      location: {
+        latitude: cached.latitude,
+        longitude: cached.longitude,
+        display_name: cached.display_name
+      }
     }
   }
   
-  // Call Nominatim API
-  const searchQuery = `${locality}, Karnataka, India`
+  // Simplify locality for better geocoding
+  const simplifiedLocality = simplifyLocality(originalLocality)
+  const wasSimplified = simplifiedLocality.toLowerCase() !== normalizedLocality
+  
+  // Check cache for simplified version too
+  if (wasSimplified) {
+    const { data: simplifiedCached } = await supabase
+      .from('geocode_cache')
+      .select('latitude, longitude, display_name')
+      .ilike('locality', simplifiedLocality.toLowerCase())
+      .limit(1)
+      .maybeSingle()
+    
+    if (simplifiedCached) {
+      // Cache the original locality too for future lookups
+      await supabase.from('geocode_cache').insert({
+        locality: normalizedLocality,
+        latitude: simplifiedCached.latitude,
+        longitude: simplifiedCached.longitude,
+        display_name: simplifiedCached.display_name
+      }).catch(() => {})
+      
+      return {
+        location: {
+          latitude: simplifiedCached.latitude,
+          longitude: simplifiedCached.longitude,
+          display_name: simplifiedCached.display_name
+        },
+        simplified: simplifiedLocality
+      }
+    }
+  }
+  
+  // Call Nominatim API with simplified locality
+  const searchQuery = `${wasSimplified ? simplifiedLocality : originalLocality}, Karnataka, India`
   const nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
     `q=${encodeURIComponent(searchQuery)}` +
     `&format=json&limit=1&countrycodes=in`
@@ -66,7 +138,7 @@ async function geocodeLocality(
     const longitude = parseFloat(result.lon)
     const display_name = result.display_name
     
-    // Cache the result
+    // Cache the result with original locality
     await supabase.from('geocode_cache').insert({
       locality: normalizedLocality,
       latitude,
@@ -74,7 +146,10 @@ async function geocodeLocality(
       display_name
     }).catch(() => {}) // Ignore duplicate key errors
     
-    return { latitude, longitude, display_name }
+    return { 
+      location: { latitude, longitude, display_name },
+      simplified: wasSimplified ? simplifiedLocality : undefined
+    }
   } catch {
     return null
   }
@@ -159,9 +234,10 @@ Deno.serve(async (req) => {
           
           sendLog('info', `Processing ${i + 1}/${listings.length}`, listing.locality)
           
-          const location = await geocodeLocality(supabase, listing.locality)
+          const result = await geocodeLocality(supabase, listing.locality)
           
-          if (location) {
+          if (result) {
+            const { location, simplified } = result
             const { error: updateError } = await supabase
               .from('property_listings')
               .update({
@@ -174,7 +250,8 @@ Deno.serve(async (req) => {
               sendLog('error', `Failed to update ${listing.locality}`, updateError.message)
               failedCount++
             } else {
-              sendLog('success', `✓ Geocoded ${listing.locality}`, `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`)
+              const simplifiedNote = simplified ? ` (simplified: ${simplified})` : ''
+              sendLog('success', `✓ Geocoded ${listing.locality}${simplifiedNote}`, `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`)
               geocodedCount++
             }
           } else {
@@ -212,9 +289,10 @@ Deno.serve(async (req) => {
 
   for (let i = 0; i < listings.length; i++) {
     const listing = listings[i]
-    const location = await geocodeLocality(supabase, listing.locality)
+    const result = await geocodeLocality(supabase, listing.locality)
     
-    if (location) {
+    if (result) {
+      const { location } = result
       const { error: updateError } = await supabase
         .from('property_listings')
         .update({
