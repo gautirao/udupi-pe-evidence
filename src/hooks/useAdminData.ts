@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState, useCallback } from 'react';
 
 // Types
 export interface FacebookGroup {
@@ -312,4 +313,96 @@ export function useAdminListings(limit = 100) {
     },
     enabled: isAdmin,
   });
+}
+
+// Geocode missing coordinates hook with streaming
+interface GeocodeLogEvent {
+  type: 'info' | 'success' | 'warning' | 'error' | 'done';
+  message?: string;
+  details?: string;
+  timestamp?: string;
+  processed?: number;
+  geocoded?: number;
+  failed?: number;
+}
+
+export function useGeocodeMissing() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [logs, setLogs] = useState<GeocodeLogEvent[]>([]);
+  const [progress, setProgress] = useState<{ processed: number; geocoded: number; failed: number } | null>(null);
+
+  const geocodeMissing = useCallback(async (batchSize = 20) => {
+    setIsProcessing(true);
+    setLogs([]);
+    setProgress(null);
+
+    try {
+      const response = await supabase.functions.invoke('geocode-missing', {
+        body: { batch_size: batchSize, stream: true },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      // Handle streaming response
+      const reader = response.data.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event: GeocodeLogEvent = JSON.parse(line.slice(6));
+              if (event.type === 'done') {
+                setProgress({
+                  processed: event.processed || 0,
+                  geocoded: event.geocoded || 0,
+                  failed: event.failed || 0,
+                });
+              } else {
+                setLogs(prev => [...prev.slice(-99), event]);
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['admin-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['property-listings'] });
+      
+      toast({
+        title: 'Geocoding Complete',
+        description: 'Listings have been updated with coordinates.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: 'Geocoding Failed',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [queryClient, toast]);
+
+  const reset = useCallback(() => {
+    setLogs([]);
+    setProgress(null);
+  }, []);
+
+  return { geocodeMissing, isProcessing, logs, progress, reset };
 }

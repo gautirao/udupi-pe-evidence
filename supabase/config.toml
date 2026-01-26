@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.parse-posts]
 verify_jwt = false
+
+[functions.geocode-missing]
+verify_jwt = false
