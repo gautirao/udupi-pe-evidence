@@ -2,22 +2,29 @@ import { useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { usePropertyListings, PropertyFilters, PropertyListing } from '@/hooks/usePropertyListings';
+import { PropertyDetailModal } from '@/components/map/PropertyDetailModal';
+import { usePropertyListings, usePropertyImages, PropertyFilters, PropertyListing } from '@/hooks/usePropertyListings';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
 export default function Index() {
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
+  const [detailListing, setDetailListing] = useState<PropertyListing | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
   const { data: listings = [], isLoading, error } = usePropertyListings(filters);
+  const { data: images = [] } = usePropertyImages(detailListing?.raw_post_id ?? null);
 
   const listingsWithCoords = listings.filter((l) => l.latitude && l.longitude);
+
+  const handleViewDetails = (listing: PropertyListing) => {
+    setDetailListing(listing);
+  };
 
   return (
     <AppLayout>
@@ -86,7 +93,7 @@ export default function Index() {
             </Card>
           </div>
 
-          {/* Selected Listing Detail */}
+          {/* Selected Listing Preview Card */}
           {selectedListing && (
             <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg">
               <CardContent className="p-4">
@@ -132,14 +139,31 @@ export default function Index() {
                   )}
                 </div>
 
-                <p className="text-xs text-muted-foreground mt-3 pt-3 border-t">
-                  Posted {formatRelativeDate(selectedListing.created_at)}
-                </p>
+                <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                  <p className="text-xs text-muted-foreground">
+                    Posted {formatRelativeDate(selectedListing.created_at)}
+                  </p>
+                  <Button 
+                    size="sm" 
+                    onClick={() => handleViewDetails(selectedListing)}
+                    className="gap-1.5"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    View Details
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
         </div>
       </div>
+
+      {/* Property Detail Modal */}
+      <PropertyDetailModal
+        listing={detailListing}
+        images={images}
+        onClose={() => setDetailListing(null)}
+      />
     </AppLayout>
   );
 }

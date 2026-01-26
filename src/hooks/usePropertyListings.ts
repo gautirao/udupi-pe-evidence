@@ -4,6 +4,13 @@ import { useToast } from '@/hooks/use-toast';
 
 export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'other';
 
+export interface PropertyImage {
+  url: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface PropertyListing {
   id: string;
   property_type: PropertyType;
@@ -27,6 +34,7 @@ export interface PropertyListing {
   is_duplicate: boolean;
   created_at: string;
   updated_at: string;
+  raw_post_id: string | null;
 }
 
 export interface PropertyFilters {
@@ -157,5 +165,27 @@ export function useUpdateListing() {
         variant: 'destructive',
       });
     },
+  });
+}
+
+export function usePropertyImages(rawPostId: string | null) {
+  return useQuery({
+    queryKey: ['property-images', rawPostId],
+    queryFn: async () => {
+      if (!rawPostId) return [];
+      
+      const { data, error } = await supabase
+        .from('raw_posts')
+        .select('images')
+        .eq('id', rawPostId)
+        .single();
+
+      if (error) throw error;
+      
+      // Parse images from JSONB - need to cast through unknown due to Json type
+      const images = (data?.images as unknown) as PropertyImage[] | null;
+      return Array.isArray(images) ? images : [];
+    },
+    enabled: !!rawPostId,
   });
 }
