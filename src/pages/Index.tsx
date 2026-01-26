@@ -3,7 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { PropertyDetailModal } from '@/components/map/PropertyDetailModal';
-import { usePropertyListings, usePropertyImages, PropertyFilters, PropertyListing } from '@/hooks/usePropertyListings';
+import { usePropertyListings, usePropertyImages, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,16 +13,15 @@ import { cn } from '@/lib/utils';
 
 export default function Index() {
   const [filters, setFilters] = useState<PropertyFilters>({});
-  const [selectedListing, setSelectedListing] = useState<PropertyListing | null>(null);
-  const [detailListing, setDetailListing] = useState<PropertyListing | null>(null);
+  const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
+  const [detailListing, setDetailListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
   const { data: listings = [], isLoading, error } = usePropertyListings(filters);
-  const { data: images = [] } = usePropertyImages(detailListing?.raw_post_id ?? null);
 
   const listingsWithCoords = listings.filter((l) => l.latitude && l.longitude);
 
-  const handleViewDetails = (listing: PropertyListing) => {
+  const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     setDetailListing(listing);
   };
 
@@ -95,7 +94,20 @@ export default function Index() {
 
           {/* Selected Listing Preview Card */}
           {selectedListing && (
-            <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg">
+            <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg overflow-hidden">
+              {/* Thumbnail image */}
+              {selectedListing.images && selectedListing.images.length > 0 && (
+                <div className="h-32 bg-muted">
+                  <img 
+                    src={selectedListing.images[0].url} 
+                    alt="Property" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
               <CardContent className="p-4">
                 <div className="flex justify-between items-start mb-3">
                   <Badge variant="secondary" className="capitalize">
@@ -161,7 +173,7 @@ export default function Index() {
       {/* Property Detail Modal */}
       <PropertyDetailModal
         listing={detailListing}
-        images={images}
+        images={detailListing?.images || []}
         onClose={() => setDetailListing(null)}
       />
     </AppLayout>
