@@ -61,10 +61,12 @@ function simplifyLocality(locality: string): string {
 
 async function geocodeLocality(
   supabase: any,
-  locality: string
+  locality: string,
+  listingId: string
 ): Promise<{ location: GeocodedLocation; simplified?: string } | null> {
   const originalLocality = locality.trim()
   const normalizedLocality = originalLocality.toLowerCase()
+  const logPrefix = `[geocode ${listingId.slice(0,8)}]`
   
   // Check cache first (try original)
   const { data: cached, error: cacheError } = await supabase
@@ -75,6 +77,7 @@ async function geocodeLocality(
     .maybeSingle()
   
   if (!cacheError && cached) {
+    console.log(`${logPrefix} Cache hit for "${normalizedLocality}"`)
     return {
       location: {
         latitude: cached.latitude,
@@ -98,13 +101,18 @@ async function geocodeLocality(
       .maybeSingle()
     
     if (simplifiedCached) {
+      console.log(`${logPrefix} Cache hit (simplified) for "${simplifiedLocality}"`)
       // Cache the original locality too for future lookups
-      await supabase.from('geocode_cache').insert({
-        locality: normalizedLocality,
-        latitude: simplifiedCached.latitude,
-        longitude: simplifiedCached.longitude,
-        display_name: simplifiedCached.display_name
-      }).catch(() => {})
+      try {
+        await supabase.from('geocode_cache').insert({
+          locality: normalizedLocality,
+          latitude: simplifiedCached.latitude,
+          longitude: simplifiedCached.longitude,
+          display_name: simplifiedCached.display_name
+        })
+      } catch {
+        // Ignore duplicate key errors
+      }
       
       return {
         location: {
@@ -117,42 +125,82 @@ async function geocodeLocality(
     }
   }
   
-  // Call Nominatim API with simplified locality
-  const searchQuery = `${wasSimplified ? simplifiedLocality : originalLocality}, Karnataka, India`
-  const nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
-    `q=${encodeURIComponent(searchQuery)}` +
-    `&format=json&limit=1&countrycodes=in`
+  // Try geocoding with progressively simpler search queries
+  const searchLocality = wasSimplified ? simplifiedLocality : originalLocality
+  const parts = searchLocality.split(',').map(p => p.trim()).filter(p => p.length > 2)
   
-  try {
-    const response = await fetch(nominatimUrl, {
-      headers: { 'User-Agent': 'UdupiPropertyTracker/1.0 (property listing aggregator)' }
-    })
-    
-    if (!response.ok) return null
-    
-    const results = await response.json()
-    if (!results || results.length === 0) return null
-    
-    const result = results[0]
-    const latitude = parseFloat(result.lat)
-    const longitude = parseFloat(result.lon)
-    const display_name = result.display_name
-    
-    // Cache the result with original locality
-    await supabase.from('geocode_cache').insert({
-      locality: normalizedLocality,
-      latitude,
-      longitude,
-      display_name
-    }).catch(() => {}) // Ignore duplicate key errors
-    
-    return { 
-      location: { latitude, longitude, display_name },
-      simplified: wasSimplified ? simplifiedLocality : undefined
-    }
-  } catch {
-    return null
+  // Build search variations: full string first, then progressively simpler
+  const searchVariations: string[] = []
+  
+  // Try full simplified string first
+  searchVariations.push(searchLocality)
+  
+  // If multiple parts, try just the first part (main locality) + district
+  if (parts.length >= 2) {
+    searchVariations.push(`${parts[0]}, ${parts[parts.length - 1]}`)
   }
+  
+  // Try just the main locality part
+  if (parts.length >= 1) {
+    searchVariations.push(parts[0])
+  }
+  
+  for (const searchTerm of searchVariations) {
+    const searchQuery = `${searchTerm}, Karnataka, India`
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?` +
+      `q=${encodeURIComponent(searchQuery)}` +
+      `&format=json&limit=1&countrycodes=in`
+    
+    console.log(`${logPrefix} Trying: "${searchQuery}"`)
+    
+    try {
+      const response = await fetch(nominatimUrl, {
+        headers: { 'User-Agent': 'UdupiPropertyTracker/1.0 (property listing aggregator)' }
+      })
+      
+      if (!response.ok) {
+        console.log(`${logPrefix} HTTP error for "${searchTerm}": ${response.status}`)
+        continue
+      }
+      
+      const results = await response.json()
+      if (!results || results.length === 0) {
+        console.log(`${logPrefix} No results for "${searchTerm}"`)
+        continue
+      }
+      
+      const result = results[0]
+      const latitude = parseFloat(result.lat)
+      const longitude = parseFloat(result.lon)
+      const display_name = result.display_name
+      
+      console.log(`${logPrefix} SUCCESS with "${searchTerm}": ${latitude.toFixed(4)}, ${longitude.toFixed(4)} - returning result`)
+      
+      // Cache the result with original locality (ignore duplicate key errors)
+      try {
+        await supabase.from('geocode_cache').insert({
+          locality: normalizedLocality,
+          latitude,
+          longitude,
+          display_name
+        })
+      } catch {
+        // Ignore cache insert errors (likely duplicate key)
+      }
+      
+      return { 
+        location: { latitude, longitude, display_name },
+        simplified: searchTerm !== originalLocality ? searchTerm : undefined
+      }
+    } catch (err) {
+      console.log(`${logPrefix} Error for "${searchTerm}": ${err}`)
+      continue
+    }
+  }
+  
+  // All variations failed
+  console.log(`${logPrefix} ALL FAILED for "${originalLocality}"`)
+  return null
 }
 
 Deno.serve(async (req) => {
@@ -234,7 +282,7 @@ Deno.serve(async (req) => {
           
           sendLog('info', `Processing ${i + 1}/${listings.length}`, listing.locality)
           
-          const result = await geocodeLocality(supabase, listing.locality)
+          const result = await geocodeLocality(supabase, listing.locality, listing.id)
           
           if (result) {
             const { location, simplified } = result
@@ -289,7 +337,7 @@ Deno.serve(async (req) => {
 
   for (let i = 0; i < listings.length; i++) {
     const listing = listings[i]
-    const result = await geocodeLocality(supabase, listing.locality)
+    const result = await geocodeLocality(supabase, listing.locality, listing.id)
     
     if (result) {
       const { location } = result
