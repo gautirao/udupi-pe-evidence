@@ -338,17 +338,31 @@ export function useGeocodeMissing() {
     setLogs([]);
     setProgress(null);
 
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
     try {
-      const response = await supabase.functions.invoke('geocode-missing', {
-        body: { batch_size: batchSize, stream: true },
+      // Use raw fetch for streaming - supabase.functions.invoke doesn't support streams
+      const response = await fetch(`${supabaseUrl}/functions/v1/geocode-missing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ batch_size: batchSize, stream: true }),
       });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('No response body');
       }
 
       // Handle streaming response
-      const reader = response.data.getReader();
+      const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
 
