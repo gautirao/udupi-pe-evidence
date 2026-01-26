@@ -46,6 +46,7 @@ export function usePropertyListings(filters?: PropertyFilters) {
         .from('property_listings')
         .select('*')
         .eq('is_valid', true)
+        .eq('is_duplicate', false)
         .order('created_at', { ascending: false });
 
       if (filters?.propertyTypes && filters.propertyTypes.length > 0) {
