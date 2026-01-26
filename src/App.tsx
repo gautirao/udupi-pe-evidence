@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import ListingDetail from "./pages/ListingDetail";
 import FacebookGroups from "./pages/admin/FacebookGroups";
 import FeedRuns from "./pages/admin/FeedRuns";
 import ManualPost from "./pages/admin/ManualPost";
@@ -32,6 +33,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/listing/:id"
+              element={
+                <ProtectedRoute>
+                  <ListingDetail />
                 </ProtectedRoute>
               }
             />

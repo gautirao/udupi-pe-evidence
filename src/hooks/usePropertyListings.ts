@@ -14,6 +14,7 @@ export interface PropertyImage {
 export interface PropertyListing {
   id: string;
   property_type: PropertyType;
+  title: string | null;
   locality: string | null;
   price: number | null;
   price_unit: string | null;
