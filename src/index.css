@@ -153,6 +153,45 @@
 
   .custom-marker-cluster {
     @apply bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center font-semibold shadow-lg border-2 border-primary-foreground/30;
+    animation: cluster-pulse 2s ease-in-out infinite;
+  }
+
+  .custom-marker-cluster-small {
+    @apply text-sm;
+  }
+
+  .custom-marker-cluster-medium {
+    @apply text-base;
+  }
+
+  .custom-marker-cluster-large {
+    @apply text-lg;
+  }
+
+  @keyframes cluster-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+
+  .property-popup .leaflet-popup-content-wrapper {
+    @apply p-0 overflow-hidden;
+  }
+
+  .property-popup .leaflet-popup-content {
+    @apply m-0 p-4;
+  }
+
+  /* Override markercluster default styles */
+  .marker-cluster-small,
+  .marker-cluster-medium,
+  .marker-cluster-large {
+    background: transparent !important;
+  }
+
+  .marker-cluster-small div,
+  .marker-cluster-medium div,
+  .marker-cluster-large div {
+    background: transparent !important;
   }
 
   .marker-land {
