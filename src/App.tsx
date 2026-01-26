@@ -12,6 +12,7 @@ import FacebookGroups from "./pages/admin/FacebookGroups";
 import FeedRuns from "./pages/admin/FeedRuns";
 import ManualPost from "./pages/admin/ManualPost";
 import Listings from "./pages/admin/Listings";
+import Duplicates from "./pages/admin/Duplicates";
 import ChromeExtensionSetup from "./pages/admin/ChromeExtensionSetup";
 import ProcessPosts from "./pages/admin/ProcessPosts";
 
@@ -80,6 +81,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <ProcessPosts />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/duplicates"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Duplicates />
                 </ProtectedRoute>
               }
             />
