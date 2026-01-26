@@ -165,6 +165,77 @@ For valid real estate posts, extract:
 - description: brief summary of the property (max 200 chars)
 - confidence_score: 0-100 how confident you are this is a real estate listing`
 
+// Check for duplicate listings based on key attributes
+async function checkForDuplicate(
+  supabase: any,
+  parsed: ParsedProperty,
+  normalizedType: string
+): Promise<{ isDuplicate: boolean; matchedId: string | null; matchReason: string | null }> {
+  // Strategy 1: Exact phone match (strongest signal)
+  if (parsed.contact_phone) {
+    const normalizedPhone = parsed.contact_phone.replace(/\D/g, '').slice(-10) // Last 10 digits
+    const { data: phoneMatches } = await supabase
+      .from('property_listings')
+      .select('id, locality, property_type')
+      .ilike('contact_phone', `%${normalizedPhone}%`)
+      .eq('property_type', normalizedType)
+      .limit(1)
+    
+    if (phoneMatches && phoneMatches.length > 0) {
+      return { 
+        isDuplicate: true, 
+        matchedId: phoneMatches[0].id, 
+        matchReason: `phone match in ${phoneMatches[0].locality || 'unknown location'}`
+      }
+    }
+  }
+  
+  // Strategy 2: Same locality + property type + similar price (within 10%)
+  if (parsed.locality && parsed.price) {
+    const priceLow = parsed.price * 0.9
+    const priceHigh = parsed.price * 1.1
+    
+    const { data: priceMatches } = await supabase
+      .from('property_listings')
+      .select('id, price, contact_phone')
+      .eq('property_type', normalizedType)
+      .ilike('locality', `%${parsed.locality.trim()}%`)
+      .gte('price', priceLow)
+      .lte('price', priceHigh)
+      .limit(1)
+    
+    if (priceMatches && priceMatches.length > 0) {
+      return { 
+        isDuplicate: true, 
+        matchedId: priceMatches[0].id, 
+        matchReason: `same locality/type/price (₹${Math.round(priceMatches[0].price)})`
+      }
+    }
+  }
+  
+  // Strategy 3: Same locality + bedrooms + bathrooms (for residential)
+  if (parsed.locality && parsed.bedrooms && ['house', 'apartment'].includes(normalizedType)) {
+    const { data: specMatches } = await supabase
+      .from('property_listings')
+      .select('id, price')
+      .eq('property_type', normalizedType)
+      .ilike('locality', `%${parsed.locality.trim()}%`)
+      .eq('bedrooms', parsed.bedrooms)
+      .eq('bathrooms', parsed.bathrooms || 0)
+      .limit(1)
+    
+    if (specMatches && specMatches.length > 0) {
+      return { 
+        isDuplicate: true, 
+        matchedId: specMatches[0].id, 
+        matchReason: `same specs (${parsed.bedrooms}BHK in ${parsed.locality})`
+      }
+    }
+  }
+  
+  return { isDuplicate: false, matchedId: null, matchReason: null }
+}
+
 async function geocodeLocality(
   supabase: any,
   locality: string
@@ -416,6 +487,9 @@ Deno.serve(async (req) => {
                 sendLog('info', `Normalized type`, `"${parsed.property_type}" → "${normalizedType}"`)
               }
 
+              // Check for duplicates before inserting
+              const duplicateCheck = await checkForDuplicate(supabase, parsed, normalizedType)
+              
               const { error: insertError } = await supabase
                 .from('property_listings')
                 .insert({
@@ -437,6 +511,7 @@ Deno.serve(async (req) => {
                   description: parsed.description,
                   confidence_score: parsed.confidence_score,
                   is_valid: parsed.confidence_score >= 70,
+                  is_duplicate: duplicateCheck.isDuplicate,
                   parsed_data: parsed
                 })
 
@@ -446,8 +521,13 @@ Deno.serve(async (req) => {
                 postsFailed++
               } else {
                 listingsCreated++
-                sendLog('success', `Created listing`, 
-                  `${normalizedType} in ${parsed.locality || 'unknown location'}${parsed.price ? ` - ₹${parsed.price}` : ''}`)
+                if (duplicateCheck.isDuplicate) {
+                  sendLog('warning', `Created listing (DUPLICATE)`, 
+                    `${normalizedType} - ${duplicateCheck.matchReason}`)
+                } else {
+                  sendLog('success', `Created listing`, 
+                    `${normalizedType} in ${parsed.locality || 'unknown location'}${parsed.price ? ` - ₹${parsed.price}` : ''}`)
+                }
               }
             } else {
               const reason = parsed.is_real_estate ? `Low confidence (${parsed.confidence_score}%)` : 'Not real estate'
@@ -593,6 +673,9 @@ Deno.serve(async (req) => {
 
         const normalizedType = normalizePropertyType(parsed.property_type)
 
+        // Check for duplicates before inserting
+        const duplicateCheck = await checkForDuplicate(supabase, parsed, normalizedType)
+
         const { error: insertError } = await supabase
           .from('property_listings')
           .insert({
@@ -614,6 +697,7 @@ Deno.serve(async (req) => {
             description: parsed.description,
             confidence_score: parsed.confidence_score,
             is_valid: parsed.confidence_score >= 70,
+            is_duplicate: duplicateCheck.isDuplicate,
             parsed_data: parsed
           })
 
@@ -622,6 +706,9 @@ Deno.serve(async (req) => {
           postsFailed++
         } else {
           listingsCreated++
+          if (duplicateCheck.isDuplicate) {
+            console.log(`[parse-posts] Created duplicate listing: ${duplicateCheck.matchReason}`)
+          }
         }
       }
 
