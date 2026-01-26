@@ -74,6 +74,16 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
   const bgColor = propertyConfig[listing.property_type].color;
   const firstImage = listing.images?.[0]?.url;
   
+  // Generate a title from available data
+  const titleParts = [label];
+  if (listing.land_area) {
+    titleParts.push(`${listing.land_area} ${listing.land_area_unit || 'sq ft'}`);
+  }
+  if (listing.locality) {
+    titleParts.push(`in ${listing.locality}`);
+  }
+  const title = titleParts.join(' ');
+  
   let html = `
     <div style="min-width: 260px; max-width: 320px; font-family: system-ui, sans-serif;">
   `;
@@ -91,6 +101,13 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
       </div>
     `;
   }
+  
+  // Title
+  html += `
+    <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 8px 0; color: #1e293b; line-height: 1.3;">
+      ${title}
+    </h3>
+  `;
   
   html += `
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">

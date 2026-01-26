@@ -182,7 +182,7 @@ export function PropertyDetailModal({ listing, images, onClose }: PropertyDetail
                   <p className="font-medium">{listing.locality}</p>
                   {listing.latitude && listing.longitude && (
                     <a
-                      href={`https://www.google.com/maps?q=${listing.latitude},${listing.longitude}`}
+                      href={`https://www.google.com/maps/search/${listing.latitude},${listing.longitude}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-primary hover:underline inline-flex items-center gap-1"
