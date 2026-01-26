@@ -5,9 +5,14 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
-import { PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
+import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
 import { Card } from '@/components/ui/card';
+
+// Extended listing with images for map display
+export interface PropertyListingWithImages extends PropertyListing {
+  images?: PropertyImage[];
+}
 
 // Fix default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -64,12 +69,30 @@ const createMarkerIcon = (propertyType: PropertyType) => {
 };
 
 // Create popup content
-const createPopupContent = (listing: PropertyListing): string => {
-  const { label, bgClass } = propertyConfig[listing.property_type];
+const createPopupContent = (listing: PropertyListingWithImages): string => {
+  const { label } = propertyConfig[listing.property_type];
   const bgColor = propertyConfig[listing.property_type].color;
+  const firstImage = listing.images?.[0]?.url;
   
   let html = `
-    <div style="min-width: 220px; max-width: 300px; font-family: system-ui, sans-serif;">
+    <div style="min-width: 260px; max-width: 320px; font-family: system-ui, sans-serif;">
+  `;
+  
+  // Thumbnail image at the top
+  if (firstImage) {
+    html += `
+      <div style="margin: -10px -10px 10px -10px; border-radius: 8px 8px 0 0; overflow: hidden; height: 120px; background: #f1f5f9;">
+        <img 
+          src="${firstImage}" 
+          alt="Property" 
+          style="width: 100%; height: 100%; object-fit: cover;"
+          onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8;\\'>No image</div>';"
+        />
+      </div>
+    `;
+  }
+  
+  html += `
       <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
         <span style="
           background-color: ${bgColor};
@@ -216,9 +239,9 @@ const createPopupContent = (listing: PropertyListing): string => {
 };
 
 interface PropertyMapProps {
-  listings: PropertyListing[];
-  selectedListing?: PropertyListing | null;
-  onSelectListing?: (listing: PropertyListing | null) => void;
+  listings: PropertyListingWithImages[];
+  selectedListing?: PropertyListingWithImages | null;
+  onSelectListing?: (listing: PropertyListingWithImages | null) => void;
 }
 
 function MapController({ selectedListing }: { selectedListing?: PropertyListing | null }) {
@@ -240,8 +263,8 @@ function MarkerClusterLayer({
   listings, 
   onSelectListing 
 }: { 
-  listings: PropertyListing[]; 
-  onSelectListing?: (listing: PropertyListing | null) => void;
+  listings: PropertyListingWithImages[]; 
+  onSelectListing?: (listing: PropertyListingWithImages | null) => void;
 }) {
   const map = useMap();
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);

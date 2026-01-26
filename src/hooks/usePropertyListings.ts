@@ -46,13 +46,19 @@ export interface PropertyFilters {
   dateTo?: Date;
 }
 
+export interface PropertyListingWithImages extends PropertyListing {
+  raw_posts?: {
+    images: PropertyImage[] | null;
+  } | null;
+}
+
 export function usePropertyListings(filters?: PropertyFilters) {
   return useQuery({
     queryKey: ['property-listings', filters],
     queryFn: async () => {
       let query = supabase
         .from('property_listings')
-        .select('*')
+        .select('*, raw_posts(images)')
         .eq('is_valid', true)
         .eq('is_duplicate', false)
         .order('created_at', { ascending: false });
@@ -84,7 +90,16 @@ export function usePropertyListings(filters?: PropertyFilters) {
       const { data, error } = await query;
 
       if (error) throw error;
-      return data as PropertyListing[];
+      
+      // Transform to include images at the listing level
+      return (data as unknown as PropertyListingWithImages[]).map(listing => {
+        const rawImages = listing.raw_posts?.images;
+        const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
+        return {
+          ...listing,
+          images,
+        };
+      }) as (PropertyListing & { images: PropertyImage[] })[];
     },
   });
 }
