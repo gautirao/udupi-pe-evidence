@@ -36,6 +36,80 @@ interface LogEvent {
   timestamp: string
 }
 
+// Exponential backoff retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 5,
+  baseDelayMs: 1000,
+  maxDelayMs: 32000,
+  retryableStatuses: [429, 500, 502, 503, 504]
+}
+
+// Sleep helper
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Exponential backoff retry wrapper for AI API calls
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  onRetry?: (attempt: number, delay: number, status: number) => void
+): Promise<Response> {
+  let lastError: Error | null = null
+  let lastStatus = 0
+  
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options)
+      
+      // If successful or non-retryable error, return immediately
+      if (response.ok || !RETRY_CONFIG.retryableStatuses.includes(response.status)) {
+        return response
+      }
+      
+      lastStatus = response.status
+      
+      // Check if we've exhausted retries
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        return response
+      }
+      
+      // Calculate delay with exponential backoff and jitter
+      const exponentialDelay = RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt)
+      const jitter = Math.random() * 0.3 * exponentialDelay // 0-30% jitter
+      const delay = Math.min(exponentialDelay + jitter, RETRY_CONFIG.maxDelayMs)
+      
+      // Notify caller about retry
+      if (onRetry) {
+        onRetry(attempt + 1, Math.round(delay), response.status)
+      }
+      
+      await sleep(delay)
+      
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Unknown fetch error')
+      
+      // Check if we've exhausted retries
+      if (attempt === RETRY_CONFIG.maxRetries) {
+        throw lastError
+      }
+      
+      // Calculate delay for network errors
+      const exponentialDelay = RETRY_CONFIG.baseDelayMs * Math.pow(2, attempt)
+      const delay = Math.min(exponentialDelay, RETRY_CONFIG.maxDelayMs)
+      
+      if (onRetry) {
+        onRetry(attempt + 1, Math.round(delay), 0)
+      }
+      
+      await sleep(delay)
+    }
+  }
+  
+  // This shouldn't be reached, but just in case
+  throw lastError || new Error(`Failed after ${RETRY_CONFIG.maxRetries} retries with status ${lastStatus}`)
+}
+
 // Normalize property type synonyms to enum values
 function normalizePropertyType(type: string): 'house' | 'apartment' | 'land' | 'commercial' | 'other' {
   const normalized = type.toLowerCase().trim()
@@ -244,54 +318,60 @@ Deno.serve(async (req) => {
           try {
             sendLog('ai', `Processing post ${i + 1}/${rawPosts.length}`, `"${contentPreview}..."`)
 
-            const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'google/gemini-3-flash-preview',
-                messages: [
-                  { role: 'system', content: SYSTEM_PROMPT },
-                  { role: 'user', content: `Analyze this Facebook post and determine if it's a real estate listing. If it is, extract the property details.\n\nPost content:\n${post.content}` }
-                ],
-                tools: [{
-                  type: 'function',
-                  function: {
-                    name: 'parse_property',
-                    description: 'Parse and classify a property listing from a social media post',
-                    parameters: {
-                      type: 'object',
-                      properties: {
-                        is_real_estate: { type: 'boolean', description: 'Whether this post is a real estate listing' },
-                        property_type: { type: 'string', enum: ['house', 'apartment', 'land', 'commercial', 'other'] },
-                        price: { type: 'number', nullable: true },
-                        price_unit: { type: 'string', default: 'INR' },
-                        locality: { type: 'string', nullable: true },
-                        bedrooms: { type: 'number', nullable: true },
-                        bathrooms: { type: 'number', nullable: true },
-                        land_area: { type: 'number', nullable: true },
-                        land_area_unit: { type: 'string', nullable: true },
-                        built_area: { type: 'number', nullable: true },
-                        built_area_unit: { type: 'string', nullable: true },
-                        contact_phone: { type: 'string', nullable: true },
-                        contact_info: { type: 'string', nullable: true },
-                        description: { type: 'string', nullable: true },
-                        confidence_score: { type: 'number', minimum: 0, maximum: 100 }
-                      },
-                      required: ['is_real_estate', 'property_type', 'confidence_score'],
-                      additionalProperties: false
+            const aiResponse = await fetchWithRetry(
+              'https://ai.gateway.lovable.dev/v1/chat/completions',
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'google/gemini-3-flash-preview',
+                  messages: [
+                    { role: 'system', content: SYSTEM_PROMPT },
+                    { role: 'user', content: `Analyze this Facebook post and determine if it's a real estate listing. If it is, extract the property details.\n\nPost content:\n${post.content}` }
+                  ],
+                  tools: [{
+                    type: 'function',
+                    function: {
+                      name: 'parse_property',
+                      description: 'Parse and classify a property listing from a social media post',
+                      parameters: {
+                        type: 'object',
+                        properties: {
+                          is_real_estate: { type: 'boolean', description: 'Whether this post is a real estate listing' },
+                          property_type: { type: 'string', enum: ['house', 'apartment', 'land', 'commercial', 'other'] },
+                          price: { type: 'number', nullable: true },
+                          price_unit: { type: 'string', default: 'INR' },
+                          locality: { type: 'string', nullable: true },
+                          bedrooms: { type: 'number', nullable: true },
+                          bathrooms: { type: 'number', nullable: true },
+                          land_area: { type: 'number', nullable: true },
+                          land_area_unit: { type: 'string', nullable: true },
+                          built_area: { type: 'number', nullable: true },
+                          built_area_unit: { type: 'string', nullable: true },
+                          contact_phone: { type: 'string', nullable: true },
+                          contact_info: { type: 'string', nullable: true },
+                          description: { type: 'string', nullable: true },
+                          confidence_score: { type: 'number', minimum: 0, maximum: 100 }
+                        },
+                        required: ['is_real_estate', 'property_type', 'confidence_score'],
+                        additionalProperties: false
+                      }
                     }
-                  }
-                }],
-                tool_choice: { type: 'function', function: { name: 'parse_property' } }
-              })
-            })
+                  }],
+                  tool_choice: { type: 'function', function: { name: 'parse_property' } }
+                })
+              },
+              (attempt, delay, status) => {
+                sendLog('warning', `Rate limited (${status}), retry ${attempt}/${RETRY_CONFIG.maxRetries}`, `waiting ${(delay / 1000).toFixed(1)}s`)
+              }
+            )
 
             if (!aiResponse.ok) {
               const errorText = await aiResponse.text()
-              const reason = `AI API error: ${aiResponse.status}`
+              const reason = `AI API error: ${aiResponse.status}${aiResponse.status === 429 ? ' (rate limit exhausted)' : ''}`
               sendLog('error', `Failed: ${reason}`, errorText.substring(0, 150))
               failedPosts.push({ id: post.id, reason, content_preview: contentPreview })
               postsFailed++
@@ -429,54 +509,60 @@ Deno.serve(async (req) => {
     try {
       const contentPreview = post.content.substring(0, 100).replace(/\n/g, ' ')
       
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-3-flash-preview',
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: `Analyze this Facebook post and determine if it's a real estate listing. If it is, extract the property details.\n\nPost content:\n${post.content}` }
-          ],
-          tools: [{
-            type: 'function',
-            function: {
-              name: 'parse_property',
-              description: 'Parse and classify a property listing from a social media post',
-              parameters: {
-                type: 'object',
-                properties: {
-                  is_real_estate: { type: 'boolean' },
-                  property_type: { type: 'string', enum: ['house', 'apartment', 'land', 'commercial', 'other'] },
-                  price: { type: 'number', nullable: true },
-                  price_unit: { type: 'string', default: 'INR' },
-                  locality: { type: 'string', nullable: true },
-                  bedrooms: { type: 'number', nullable: true },
-                  bathrooms: { type: 'number', nullable: true },
-                  land_area: { type: 'number', nullable: true },
-                  land_area_unit: { type: 'string', nullable: true },
-                  built_area: { type: 'number', nullable: true },
-                  built_area_unit: { type: 'string', nullable: true },
-                  contact_phone: { type: 'string', nullable: true },
-                  contact_info: { type: 'string', nullable: true },
-                  description: { type: 'string', nullable: true },
-                  confidence_score: { type: 'number', minimum: 0, maximum: 100 }
-                },
-                required: ['is_real_estate', 'property_type', 'confidence_score'],
-                additionalProperties: false
+      const aiResponse = await fetchWithRetry(
+        'https://ai.gateway.lovable.dev/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-3-flash-preview',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: `Analyze this Facebook post and determine if it's a real estate listing. If it is, extract the property details.\n\nPost content:\n${post.content}` }
+            ],
+            tools: [{
+              type: 'function',
+              function: {
+                name: 'parse_property',
+                description: 'Parse and classify a property listing from a social media post',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    is_real_estate: { type: 'boolean' },
+                    property_type: { type: 'string', enum: ['house', 'apartment', 'land', 'commercial', 'other'] },
+                    price: { type: 'number', nullable: true },
+                    price_unit: { type: 'string', default: 'INR' },
+                    locality: { type: 'string', nullable: true },
+                    bedrooms: { type: 'number', nullable: true },
+                    bathrooms: { type: 'number', nullable: true },
+                    land_area: { type: 'number', nullable: true },
+                    land_area_unit: { type: 'string', nullable: true },
+                    built_area: { type: 'number', nullable: true },
+                    built_area_unit: { type: 'string', nullable: true },
+                    contact_phone: { type: 'string', nullable: true },
+                    contact_info: { type: 'string', nullable: true },
+                    description: { type: 'string', nullable: true },
+                    confidence_score: { type: 'number', minimum: 0, maximum: 100 }
+                  },
+                  required: ['is_real_estate', 'property_type', 'confidence_score'],
+                  additionalProperties: false
+                }
               }
-            }
-          }],
-          tool_choice: { type: 'function', function: { name: 'parse_property' } }
-        })
-      })
+            }],
+            tool_choice: { type: 'function', function: { name: 'parse_property' } }
+          })
+        },
+        (attempt, delay, status) => {
+          console.log(`[parse-posts] Rate limited (${status}), retry ${attempt}/${RETRY_CONFIG.maxRetries}, waiting ${delay}ms`)
+        }
+      )
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text()
-        failedPosts.push({ id: post.id, reason: `AI error: ${aiResponse.status}`, content_preview: contentPreview })
+        failedPosts.push({ id: post.id, reason: `AI error: ${aiResponse.status}${aiResponse.status === 429 ? ' (rate limit exhausted)' : ''}`, content_preview: contentPreview })
         postsFailed++
         continue
       }
