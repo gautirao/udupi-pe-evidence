@@ -74,15 +74,17 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
   const bgColor = propertyConfig[listing.property_type].color;
   const firstImage = listing.images?.[0]?.url;
   
-  // Generate a title from available data
-  const titleParts = [label];
-  if (listing.land_area) {
-    titleParts.push(`${listing.land_area} ${listing.land_area_unit || 'sq ft'}`);
-  }
-  if (listing.locality) {
-    titleParts.push(`in ${listing.locality}`);
-  }
-  const title = titleParts.join(' ');
+  // Use the title from the listing, or generate one from available data
+  const title = listing.title || (() => {
+    const titleParts = [label];
+    if (listing.land_area) {
+      titleParts.push(`${listing.land_area} ${listing.land_area_unit || 'sq ft'}`);
+    }
+    if (listing.locality) {
+      titleParts.push(`in ${listing.locality}`);
+    }
+    return titleParts.join(' ');
+  })();
   
   let html = `
     <div style="min-width: 260px; max-width: 320px; font-family: system-ui, sans-serif;">

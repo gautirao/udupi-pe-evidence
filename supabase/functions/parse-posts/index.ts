@@ -8,6 +8,7 @@ const corsHeaders = {
 interface ParsedProperty {
   is_real_estate: boolean
   property_type: 'house' | 'apartment' | 'land' | 'commercial' | 'other'
+  title: string | null
   price: number | null
   price_unit: string
   locality: string | null
@@ -151,6 +152,7 @@ DO NOT classify as real estate:
 
 For valid real estate posts, extract:
 - property_type: house, apartment, land, commercial, or other
+- title: A concise, compelling title for the listing (e.g., "3BHK Villa in Manipal with Sea View", "15 Cents Land for Sale near Udupi Bus Stand"). Max 80 chars.
 - price: numeric value only (null if not mentioned)
 - price_unit: INR, USD, etc. (default: INR)
 - locality: neighborhood, area, or city name
@@ -413,6 +415,7 @@ Deno.serve(async (req) => {
                         properties: {
                           is_real_estate: { type: 'boolean', description: 'Whether this post is a real estate listing' },
                           property_type: { type: 'string', enum: ['house', 'apartment', 'land', 'commercial', 'other'] },
+                          title: { type: 'string', nullable: true, description: 'A concise, compelling title for the listing (max 80 chars)' },
                           price: { type: 'number', nullable: true },
                           price_unit: { type: 'string', default: 'INR' },
                           locality: { type: 'string', nullable: true },
@@ -495,6 +498,7 @@ Deno.serve(async (req) => {
                 .insert({
                   raw_post_id: post.id,
                   property_type: normalizedType,
+                  title: parsed.title,
                   price: parsed.price,
                   price_unit: parsed.price_unit || 'INR',
                   locality: parsed.locality,
@@ -613,6 +617,7 @@ Deno.serve(async (req) => {
                   properties: {
                     is_real_estate: { type: 'boolean' },
                     property_type: { type: 'string', enum: ['house', 'apartment', 'land', 'commercial', 'other'] },
+                    title: { type: 'string', nullable: true, description: 'A concise, compelling title for the listing (max 80 chars)' },
                     price: { type: 'number', nullable: true },
                     price_unit: { type: 'string', default: 'INR' },
                     locality: { type: 'string', nullable: true },
@@ -681,6 +686,7 @@ Deno.serve(async (req) => {
           .insert({
             raw_post_id: post.id,
             property_type: normalizedType,
+            title: parsed.title,
             price: parsed.price,
             price_unit: parsed.price_unit || 'INR',
             locality: parsed.locality,

@@ -179,6 +179,7 @@ export type Database = {
           price_unit: string | null
           property_type: Database["public"]["Enums"]["property_type"]
           raw_post_id: string | null
+          title: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -206,6 +207,7 @@ export type Database = {
           price_unit?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           raw_post_id?: string | null
+          title?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -233,6 +235,7 @@ export type Database = {
           price_unit?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           raw_post_id?: string | null
+          title?: string | null
           updated_at?: string
           updated_by?: string | null
         }

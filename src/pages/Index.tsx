@@ -1,9 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { PropertyDetailModal } from '@/components/map/PropertyDetailModal';
-import { usePropertyListings, usePropertyImages, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,9 +12,9 @@ import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
 export default function Index() {
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
-  const [detailListing, setDetailListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [showFilters, setShowFilters] = useState(true);
 
   const { data: listings = [], isLoading, error } = usePropertyListings(filters);
@@ -22,7 +22,7 @@ export default function Index() {
   const listingsWithCoords = listings.filter((l) => l.latitude && l.longitude);
 
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
-    setDetailListing(listing);
+    navigate(`/listing/${listing.id}`);
   };
 
   return (
@@ -169,13 +169,6 @@ export default function Index() {
           )}
         </div>
       </div>
-
-      {/* Property Detail Modal */}
-      <PropertyDetailModal
-        listing={detailListing}
-        images={detailListing?.images || []}
-        onClose={() => setDetailListing(null)}
-      />
     </AppLayout>
   );
 }
