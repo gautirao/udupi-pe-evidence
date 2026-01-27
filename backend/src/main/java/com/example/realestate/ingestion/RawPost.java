@@ -41,6 +41,9 @@ public class RawPost {
     @Column(name = "is_processed", nullable = false)
     private boolean isProcessed = false;
 
+    @Column(name = "processing_started_at")
+    private OffsetDateTime processingStartedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -110,6 +113,14 @@ public class RawPost {
 
     public void setProcessed(boolean processed) {
         isProcessed = processed;
+    }
+
+    public OffsetDateTime getProcessingStartedAt() {
+        return processingStartedAt;
+    }
+
+    public void setProcessingStartedAt(OffsetDateTime processingStartedAt) {
+        this.processingStartedAt = processingStartedAt;
     }
 
     public OffsetDateTime getCreatedAt() {

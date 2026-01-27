@@ -11,14 +11,21 @@ import java.util.UUID;
 @Repository
 public interface RawPostRepository extends JpaRepository<RawPost, UUID> {
 
-    @Query(value = "SELECT * FROM public.raw_posts WHERE is_processed = false "
+    @Query(value = "SELECT * FROM public.raw_posts "
+            + "WHERE is_processed = false AND processing_started_at IS NULL "
             + "ORDER BY created_at ASC LIMIT :limit", nativeQuery = true)
     List<RawPost> findUnprocessed(int limit);
 
-    @Query(value = "SELECT * FROM public.raw_posts WHERE is_processed = false "
-            + "AND feed_run_id = :feedRunId ORDER BY created_at ASC LIMIT :limit",
-            nativeQuery = true)
+    @Query(value = "SELECT * FROM public.raw_posts "
+            + "WHERE is_processed = false AND processing_started_at IS NULL "
+            + "AND feed_run_id = :feedRunId "
+            + "ORDER BY created_at ASC LIMIT :limit", nativeQuery = true)
     List<RawPost> findUnprocessedByFeedRunId(UUID feedRunId, int limit);
+
+    @Modifying
+    @Query(value = "UPDATE public.raw_posts SET processing_started_at = now() WHERE id = :id",
+            nativeQuery = true)
+    void markProcessing(UUID id);
 
     @Modifying
     @Query("UPDATE RawPost r SET r.isProcessed = true WHERE r.id = :id")

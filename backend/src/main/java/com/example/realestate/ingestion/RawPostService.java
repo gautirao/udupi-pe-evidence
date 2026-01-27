@@ -24,6 +24,11 @@ public class RawPostService {
     }
 
     @Transactional
+    public void markProcessing(UUID postId) {
+        rawPostRepository.markProcessing(postId);
+    }
+
+    @Transactional
     public void markProcessed(UUID postId) {
         rawPostRepository.markProcessed(postId);
     }
