@@ -1,14 +1,16 @@
 package com.example.realestate.ai;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.math.BigDecimal;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
+/**
+ * Strict mapping of the AI tool-call response.
+ * No unknown properties are tolerated — malformed responses will throw.
+ */
 public record ClassificationResult(
-        @JsonProperty("is_real_estate") boolean isRealEstate,
-        @JsonProperty("property_type") String propertyType,
+        @JsonProperty(value = "is_real_estate", required = true) boolean isRealEstate,
+        @JsonProperty(value = "property_type", required = true) PropertyType propertyType,
         @JsonProperty("price") BigDecimal price,
         @JsonProperty("price_unit") String priceUnit,
         @JsonProperty("locality") String locality,
@@ -21,6 +23,6 @@ public record ClassificationResult(
         @JsonProperty("contact_phone") String contactPhone,
         @JsonProperty("contact_info") String contactInfo,
         @JsonProperty("description") String description,
-        @JsonProperty("confidence_score") int confidenceScore
+        @JsonProperty(value = "confidence_score", required = true) int confidenceScore
 ) {
 }

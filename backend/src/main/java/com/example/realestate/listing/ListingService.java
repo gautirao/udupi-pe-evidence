@@ -2,6 +2,7 @@ package com.example.realestate.listing;
 
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.PromptRegistry;
+import com.example.realestate.ai.PropertyType;
 import com.example.realestate.ingestion.RawPost;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -55,20 +56,20 @@ public class ListingService {
     }
 
     /**
-     * Maps AI property type to the DB enum values.
+     * Maps AI PropertyType enum to the DB enum string values.
      * The DB enum is: 'land', 'house', 'commercial', 'other'.
-     * The AI can return 'apartment' which is not in the enum, so we map it to 'house'.
+     * The AI can return APARTMENT which is not in the DB enum, so we map it to 'house'.
      */
-    private String mapPropertyType(String aiPropertyType) {
-        if (aiPropertyType == null) {
+    private String mapPropertyType(PropertyType propertyType) {
+        if (propertyType == null) {
             return "other";
         }
-        return switch (aiPropertyType.toLowerCase()) {
-            case "house" -> "house";
-            case "apartment" -> "house"; // DB enum lacks 'apartment'; map to 'house'
-            case "land" -> "land";
-            case "commercial" -> "commercial";
-            default -> "other";
+        return switch (propertyType) {
+            case HOUSE -> "house";
+            case APARTMENT -> "house"; // DB enum lacks 'apartment'; map to 'house'
+            case LAND -> "land";
+            case COMMERCIAL -> "commercial";
+            case OTHER -> "other";
         };
     }
 

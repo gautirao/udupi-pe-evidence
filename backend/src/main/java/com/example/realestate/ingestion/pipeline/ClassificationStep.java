@@ -9,7 +9,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Calls the AI classification service to determine if a post is a real estate listing.
- * Input: normalized text. Output: ClassificationResult from AI.
+ * Input: normalized text (unused — classification reads from post.content directly).
+ * Output: ClassificationResult from AI.
  */
 @Component
 public class ClassificationStep implements PipelineStep<String, ClassificationResult> {
@@ -30,7 +31,7 @@ public class ClassificationStep implements PipelineStep<String, ClassificationRe
     @Override
     public ClassificationResult process(RawPost post, String normalizedText) {
         log.info("Starting AI classification postId={} step={}", post.getId(), name());
-        ClassificationResult result = classificationService.classify(post.getId(), normalizedText);
+        ClassificationResult result = classificationService.classify(post);
         log.info("AI classification done postId={} step={} isRealEstate={} confidence={}",
                 post.getId(), name(), result.isRealEstate(), result.confidenceScore());
         return result;

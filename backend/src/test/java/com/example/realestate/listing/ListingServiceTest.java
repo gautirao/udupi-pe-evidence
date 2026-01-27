@@ -1,6 +1,7 @@
 package com.example.realestate.listing;
 
 import com.example.realestate.ai.ClassificationResult;
+import com.example.realestate.ai.PropertyType;
 import com.example.realestate.ingestion.RawPost;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +15,6 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,7 +40,7 @@ class ListingServiceTest {
     @Test
     void createFromClassification_confidence70_isValidTrue() {
         ClassificationResult result = new ClassificationResult(
-                true, "house", new BigDecimal("5000000"), "INR",
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
                 "Udupi", 3, 2, new BigDecimal("1200"), "sqft",
                 new BigDecimal("1800"), "sqft", "9876543210", "John",
                 "3BHK house", 70
@@ -58,7 +58,7 @@ class ListingServiceTest {
     @Test
     void createFromClassification_confidence50_isValidFalse() {
         ClassificationResult result = new ClassificationResult(
-                true, "land", new BigDecimal("1000000"), "INR",
+                true, PropertyType.LAND, new BigDecimal("1000000"), "INR",
                 "Manipal", null, null, new BigDecimal("2400"), "sqft",
                 null, null, null, null, "Land for sale", 50
         );
@@ -75,7 +75,7 @@ class ListingServiceTest {
     @Test
     void createFromClassification_apartmentMappedToHouse() {
         ClassificationResult result = new ClassificationResult(
-                true, "apartment", new BigDecimal("3000000"), "INR",
+                true, PropertyType.APARTMENT, new BigDecimal("3000000"), "INR",
                 "Mangalore", 2, 1, null, null,
                 new BigDecimal("900"), "sqft", null, null,
                 "2BHK apartment", 85
@@ -92,7 +92,7 @@ class ListingServiceTest {
     @Test
     void createFromClassification_nullPriceUnit_defaultsToINR() {
         ClassificationResult result = new ClassificationResult(
-                true, "land", null, null,
+                true, PropertyType.LAND, null, null,
                 "Udupi", null, null, null, null,
                 null, null, null, null, "Land", 60
         );
@@ -108,7 +108,7 @@ class ListingServiceTest {
     @Test
     void createFromClassification_parsedDataIncludesModelAndVersion() {
         ClassificationResult result = new ClassificationResult(
-                true, "house", null, "INR",
+                true, PropertyType.HOUSE, null, "INR",
                 "Udupi", null, null, null, null,
                 null, null, null, null, "House", 75
         );
