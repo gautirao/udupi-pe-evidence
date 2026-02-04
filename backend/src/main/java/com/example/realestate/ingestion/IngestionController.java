@@ -1,5 +1,7 @@
 package com.example.realestate.ingestion;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -12,7 +14,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * Ingestion API endpoint.
@@ -26,9 +27,23 @@ public class IngestionController {
     private static final Logger log = LoggerFactory.getLogger(IngestionController.class);
 
     private final RawPostService rawPostService;
+    private final ObjectMapper objectMapper;
 
-    public IngestionController(RawPostService rawPostService) {
+    public IngestionController(RawPostService rawPostService, ObjectMapper objectMapper) {
         this.rawPostService = rawPostService;
+        this.objectMapper = objectMapper;
+    }
+
+    private String toJsonArray(List<String> images) {
+        if (images == null || images.isEmpty()) {
+            return "[]";
+        }
+        try {
+            return objectMapper.writeValueAsString(images);
+        } catch (JsonProcessingException e) {
+            log.warn("Failed to serialize images, using empty array", e);
+            return "[]";
+        }
     }
 
     @PostMapping("/raw-post")
@@ -43,9 +58,7 @@ public class IngestionController {
         rawPost.setPostedAt(request.postedAt());
         rawPost.setCreatedAt(OffsetDateTime.now());
 
-        if (request.images() != null && !request.images().isEmpty()) {
-            rawPost.setImages(request.images().toString());
-        }
+        rawPost.setImages(toJsonArray(request.images()));
 
         RawPost saved = rawPostService.save(rawPost);
 
@@ -71,9 +84,7 @@ public class IngestionController {
                 rawPost.setAuthorName(post.author());
                 rawPost.setPostedAt(post.postedAt());
                 rawPost.setCreatedAt(OffsetDateTime.now());
-                if (post.images() != null && !post.images().isEmpty()) {
-                    rawPost.setImages(post.images().toString());
-                }
+                rawPost.setImages(toJsonArray(post.images()));
                 rawPostService.save(rawPost);
                 imported++;
             } catch (Exception e) {
