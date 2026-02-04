@@ -1,5 +1,13 @@
 package com.example.realestate.ingestion;
 
+import com.example.realestate.ai.AiClientPort;
+import com.example.realestate.ai.ClassificationResult;
+import com.example.realestate.ai.ClassificationService;
+import com.example.realestate.ai.PropertyType;
+import com.example.realestate.listing.Listing;
+import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.listing.ListingService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -10,6 +18,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -18,13 +28,23 @@ class IngestionJobRunnerTest {
     @Mock
     private RawPostRepository rawPostRepository;
 
+    @Mock
+    private ListingRepository listingRepository;
+
+    @Mock
+    private AiClientPort aiClient;
+
     private RawPostService rawPostService;
+    private ClassificationService classificationService;
+    private ListingService listingService;
     private IngestionJobRunner jobRunner;
 
     @BeforeEach
     void setUp() {
         rawPostService = new RawPostService(rawPostRepository);
-        jobRunner = new IngestionJobRunner(rawPostService, 10);
+        classificationService = new ClassificationService(aiClient);
+        listingService = new ListingService(listingRepository, rawPostRepository, new ObjectMapper());
+        jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingService, 10);
     }
 
     private RawPost makePost(String content) {
@@ -35,6 +55,22 @@ class IngestionJobRunnerTest {
         return post;
     }
 
+    private ClassificationResult makeRealEstateResult(int confidence) {
+        return new ClassificationResult(
+                true, PropertyType.HOUSE, null, "INR",
+                "Udupi", null, null, null, null,
+                null, null, null, null, "Test listing", confidence
+        );
+    }
+
+    private ClassificationResult makeNotRealEstateResult() {
+        return new ClassificationResult(
+                false, PropertyType.OTHER, null, null,
+                null, null, null, null, null,
+                null, null, null, null, null, 20
+        );
+    }
+
     @Test
     void pollUnprocessedPosts_noPosts_doesNothing() {
         when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of());
@@ -42,32 +78,75 @@ class IngestionJobRunnerTest {
         jobRunner.pollUnprocessedPosts();
 
         verify(rawPostRepository, never()).markProcessing(any());
+        verify(aiClient, never()).classify(any(), any());
     }
 
     @Test
-    void pollUnprocessedPosts_withPosts_marksEachAsProcessing() {
-        RawPost post1 = makePost("House for sale in Udupi");
-        RawPost post2 = makePost("Land near Manipal");
+    void pollUnprocessedPosts_withRealEstatePost_createsListing() {
+        RawPost post = makePost("House for sale in Udupi");
+        ClassificationResult result = makeRealEstateResult(85);
 
-        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post1, post2));
+        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post));
+        when(aiClient.classify(eq(post.getId()), eq(post.getContent()))).thenReturn(result);
+        when(aiClient.getModel()).thenReturn("test-model");
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any(Listing.class))).thenAnswer(inv -> inv.getArgument(0));
 
         jobRunner.pollUnprocessedPosts();
 
-        verify(rawPostRepository).markProcessing(post1.getId());
-        verify(rawPostRepository).markProcessing(post2.getId());
-        // Must NOT call markProcessed — skeleton only marks as processing
-        verify(rawPostRepository, never()).markProcessed(any());
+        verify(rawPostRepository).markProcessing(post.getId());
+        verify(aiClient).classify(post.getId(), post.getContent());
+        verify(listingRepository).save(any(Listing.class));
+        verify(rawPostRepository).markProcessed(post.getId());
     }
 
     @Test
-    void pollUnprocessedPosts_singlePost_marksAsProcessing() {
-        RawPost post = makePost("Commercial space available");
+    void pollUnprocessedPosts_withNonRealEstatePost_noListingCreated() {
+        RawPost post = makePost("Selling furniture");
+        ClassificationResult result = makeNotRealEstateResult();
+
+        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post));
+        when(aiClient.classify(eq(post.getId()), eq(post.getContent()))).thenReturn(result);
+        when(aiClient.getModel()).thenReturn("test-model");
+
+        jobRunner.pollUnprocessedPosts();
+
+        verify(rawPostRepository).markProcessing(post.getId());
+        verify(aiClient).classify(post.getId(), post.getContent());
+        verify(listingRepository, never()).save(any());
+        verify(rawPostRepository).markProcessed(post.getId());
+    }
+
+    @Test
+    void pollUnprocessedPosts_emptyContent_skipsClassification() {
+        RawPost post = makePost("");
 
         when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post));
 
         jobRunner.pollUnprocessedPosts();
 
         verify(rawPostRepository).markProcessing(post.getId());
-        verify(rawPostRepository, never()).markProcessed(any());
+        verify(aiClient, never()).classify(any(), any());
+        verify(rawPostRepository).markProcessed(post.getId());
+    }
+
+    @Test
+    void pollUnprocessedPosts_multiplePosts_processesAll() {
+        RawPost post1 = makePost("House for sale");
+        RawPost post2 = makePost("Land available");
+        ClassificationResult result = makeRealEstateResult(80);
+
+        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post1, post2));
+        when(aiClient.classify(any(), any())).thenReturn(result);
+        when(aiClient.getModel()).thenReturn("test-model");
+        when(listingRepository.existsByRawPostId(any())).thenReturn(false);
+        when(listingRepository.save(any(Listing.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        jobRunner.pollUnprocessedPosts();
+
+        verify(rawPostRepository).markProcessing(post1.getId());
+        verify(rawPostRepository).markProcessing(post2.getId());
+        verify(aiClient, times(2)).classify(any(), any());
+        verify(listingRepository, times(2)).save(any(Listing.class));
     }
 }
