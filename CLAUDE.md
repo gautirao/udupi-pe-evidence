@@ -10,12 +10,226 @@ Claude must **follow this document strictly**. Any deviation should be considere
 
 ---
 
-## Non‑goals (DO NOT DO THESE)
+## Meta-rules for Claude (MANDATORY)
+
+These rules govern **how Claude works**, not just *what* it builds.  
+Violating any rule below is considered a failure.
+
+---
+
+### 1. Planning before coding (REQUIRED)
+
+Before writing **any code**, Claude must:
+
+1. Describe the **proposed approach**
+2. List:
+   * Files to be modified or created
+   * New responsibilities introduced
+3. Explicitly wait for approval before proceeding
+
+If requirements are **ambiguous or underspecified**, Claude must:
+
+* Ask clarifying questions **before** writing code
+* Never guess or “fill in the blanks”
+
+No exceptions.
+
+---
+
+### 2. Task size limits (STRICT)
+
+If a task requires changes to **more than 3 files**:
+
+* STOP immediately
+* Propose a breakdown into **smaller, sequential tasks**
+* Wait for confirmation on the task split before continuing
+
+Claude must not:
+
+* Make sweeping refactors
+* “Just fix it while here”
+* Change unrelated files opportunistically
+
+Small, explicit steps only.
+
+---
+
+### 3. Testing and failure analysis (MANDATORY)
+
+After writing code, Claude must always include a section:
+
+```
+
+## What could break?
+
+```
+
+This section must list:
+
+* Edge cases
+* Failure modes
+* Assumptions that could be violated
+
+And a section:
+
+```
+
+## Suggested tests
+
+```
+
+Including:
+
+* Unit tests
+* Integration tests
+* Property or idempotency tests where relevant
+
+Code without failure analysis is incomplete.
+
+---
+
+### 4. Bug-fixing protocol (NON-NEGOTIABLE)
+
+When fixing a bug, Claude must follow **this exact order**:
+
+1. Write a test that reproduces the bug
+2. Verify the test fails
+3. Fix the code
+4. Verify the test passes
+
+Claude must not:
+
+* “Fix by inspection”
+* Change code without a failing test
+* Skip test creation “for speed”
+
+---
+
+### 5. Self-correcting ruleset (VERY IMPORTANT)
+
+Every time the human corrects Claude:
+
+* Claude must propose a **new explicit rule**
+* That rule must be added to this README
+* The rule must be phrased so the same mistake **cannot happen again**
+
+This document is **living** and must become stricter over time, not looser.
+
+---
+
+## Pull Request rules (MANDATORY)
+
+Every change produced by Claude is treated as a **Pull Request**, even if no GitHub PR exists.
+
+Claude must follow the rules in this section **for every task**.
+
+---
+
+## Mandatory PR template (MUST BE PASTED VERBATIM)
+
+For **every task, change, or code submission**, Claude must paste the following template:
+
+* Once **before any code is written**
+* Again **after implementation**, with checkboxes completed
+
+Claude must **not**:
+* Modify wording
+* Remove items
+* Reorder sections
+* Skip sections
+
+Failure to paste this template exactly is a violation.
+
+---
+
+### 📌 PRE-IMPLEMENTATION PLAN (REQUIRED BEFORE CODE)
+
+```
+
+## Pre-Implementation Plan
+
+### Goal
+
+<What this change accomplishes>
+
+### Approach
+
+<Step-by-step plan>
+
+### Files to be changed or created
+
+* <file 1>
+* <file 2>
+* <file 3>
+
+### Scope check
+
+* [ ] This task modifies 3 files or fewer
+* [ ] If more than 3 files are required, the task has been stopped and split
+
+### Open questions / assumptions
+
+* <Anything unclear that requires approval>
+
+```
+
+Claude must **stop and wait for explicit approval** after posting this section.
+
+---
+
+### 📌 POST-IMPLEMENTATION CHECKLIST (REQUIRED AFTER CODE)
+
+```
+
+## Post-Implementation Checklist
+
+### Scope & planning
+
+* [ ] Approach was approved before coding
+* [ ] All modified files were listed in advance
+* [ ] No unapproved scope expansion occurred
+
+### Requirements & correctness
+
+* [ ] This README was re-read before implementation
+* [ ] No non-goals were violated
+* [ ] No authentication logic was reimplemented
+* [ ] No Supabase client libraries were introduced
+* [ ] No AI calls were added to synchronous request paths
+* [ ] Raw data is persisted before processing
+
+### Testing discipline
+
+* [ ] New logic is covered by tests
+* [ ] Existing tests updated if behavior changed
+* [ ] Idempotency is tested where applicable
+
+#### Bug fix protocol (if applicable)
+
+* [ ] A failing test was written first
+* [ ] The test failed before the fix
+* [ ] The test passes after the fix
+
+### Failure analysis
+
+* [ ] “What could break?” section included
+* [ ] Edge cases and failure modes listed
+* [ ] Invalid assumptions identified
+
+### Self-correction
+
+* [ ] Any human correction resulted in a new rule added to this README
+
+```
+
+---
+
+## Non-goals (DO NOT DO THESE)
 
 Claude must **never**:
 
-* Re‑implement authentication (passwords, OAuth, sessions)
-* Re‑implement Google / Facebook login
+* Re-implement authentication (passwords, OAuth, sessions)
+* Re-implement Google / Facebook login
 * Store user credentials
 * Create a Java Supabase “SDK” abstraction
 * Move business logic back into Edge Functions
@@ -27,347 +241,17 @@ Supabase is **not** an application framework. It is **managed infrastructure**.
 
 ---
 
-## High‑level architecture (MANDATORY)
+## High-level architecture (MANDATORY)
 
 ```
+
 Chrome Extension (Facebook scraping)
-        ↓  (Supabase JWT)
+↓  (Supabase JWT)
 Java Spring Boot Backend
-        ↓
+↓
 Supabase Postgres
-```
-
-Supabase responsibilities:
-
-* Authentication (email, Google, Facebook, magic links)
-* JWT issuance
-* Managed Postgres
-* Optional object storage
-
-Java backend responsibilities:
-
-* Ingestion API
-* Data normalization
-* AI classification
-* Geocoding
-* Deduplication orchestration
-* Trend aggregation
-* All business rules
-
----
-
-## Authentication model (CRITICAL)
-
-### Source of truth
-
-* Supabase Auth is the **only** identity provider
-* Supabase issues standard JWTs
-* Java backend is a **resource server**, not an auth server
-
-### Flow
-
-1. User signs in via Supabase (frontend or Chrome extension)
-2. Supabase issues JWT
-3. Client sends:
-
-   ```
-   Authorization: Bearer <supabase-jwt>
-   ```
-4. Java backend validates JWT using Supabase JWKS
-
-### Java configuration (reference)
-
-```yaml
-spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: https://<project-ref>.supabase.co/auth/v1
-```
-
-Claude must **not** add:
-
-* Password handling
-* OAuth flows
-* Token refresh logic
-
-All providers (email, Google, Facebook) work automatically via JWT validation.
-
----
-
-## Ingestion philosophy
-
-Ingestion is **append‑only, asynchronous, and idempotent**.
-
-### NEVER
-
-* Block ingestion on AI calls
-* Block ingestion on deduplication
-* Mix raw data with cleaned listings
-
-### ALWAYS
-
-* Persist raw data first
-* Process via background jobs
-* Track processing state explicitly
-
----
-
-## Data model (MANDATORY separation)
-
-### Raw data (immutable)
-
-```sql
-raw_posts (
-  id,
-  source,
-  source_post_id,
-  raw_text,
-  raw_images,
-  author,
-  received_at,
-  user_id
-)
-```
-
-Raw data is:
-
-* Never updated
-* Never deleted
-* Never queried by dashboards
-
-### Listings (clean domain)
-
-```sql
-listings (
-  id,
-  title,
-  description,
-  price,
-  area_sqm,
-  latitude,
-  longitude,
-  category,
-  confidence,
-  created_at
-)
-```
-
----
-
-## Ingestion API contract (STRICT)
-
-### Endpoint
 
 ```
-POST /api/ingestion/raw-post
-```
-
-### Input
-
-```json
-{
-  "source": "FACEBOOK",
-  "sourcePostId": "fb_123",
-  "rawText": "...",
-  "images": ["https://..."],
-  "author": "...",
-  "postedAt": "2025-01-10T12:00:00Z"
-}
-```
-
-### Behaviour
-
-* Validate JWT
-* Persist raw post
-* Enqueue ingestion job
-* Return **202 Accepted**
-
-NO processing is done synchronously.
-
----
-
-## Ingestion pipeline (BACKGROUND JOB)
-
-Claude must implement the pipeline as **composable steps**:
-
-1. Text normalization
-2. Title & description extraction
-3. Image normalization
-4. Location extraction
-5. Geocoding
-6. AI classification (real estate or not)
-7. Listing assembly
-8. Persistence
-
-Each step must be:
-
-* Idempotent
-* Retryable
-* Logged
-
-Failures must NOT lose raw data.
-
----
-
-## AI usage rules (VERY IMPORTANT)
-
-AI is used **only for classification**, never scraping.
-
-### Input
-
-* Title
-* Description
-* Price hints
-* Location hints
-
-### Output (JSON ONLY)
-
-```json
-{
-  "is_real_estate": true,
-  "category": "RESIDENTIAL_RENT",
-  "confidence": 0.91
-}
-```
-
-Claude must:
-
-* Enforce strict JSON schema
-* Store AI decisions
-* Version prompts
-* Apply confidence thresholds
-
----
-
-## Deduplication rules
-
-Deduplication is **post‑ingestion**.
-
-* Do NOT block ingestion
-* Do NOT delete raw posts
-* Use hashes + similarity later
-
-Initial implementation:
-
-* Hash(normalized_title + location + price)
-
----
-
-## Java project structure (REQUIRED)
-
-```
-com.example.realestate
- ├── ingestion
- │   ├── IngestionController
- │   ├── RawPostService
- │   ├── IngestionJobRunner
- │   └── pipeline
- ├── listing
- │   ├── ListingService
- │   └── ListingRepository
- ├── ai
- │   └── ClassificationService
- ├── geo
- │   └── GeocodingService
- ├── security
- │   └── JwtConfig
- └── config
-```
-
-Claude must not collapse layers.
-
----
-
-## Supabase usage rules
-
-### Allowed
-
-* JDBC access to Postgres
-* Supabase Auth (JWT)
-* Supabase Storage via REST (optional)
-
-### Forbidden
-
-* Supabase Edge Functions for ingestion
-* Supabase RLS for business logic
-* Supabase client libraries in Java
-
-Supabase RLS should be **minimal or disabled** for backend‑owned tables.
-
----
-
-## Observability (REQUIRED)
-
-Claude must ensure:
-
-* Structured logs per ingestion step
-* Ingestion job state stored in DB
-* Model version stored with AI decision
-
----
-
-## Existing Supabase assets (IMPORTANT CONTEXT)
-
-The repository already contains a `/supabase` folder.
-
-This folder includes:
-
-* Database schema and migration scripts
-* SQL functions
-* Existing Supabase Edge Functions
-
-Claude must:
-
-* Treat the `/supabase` folder as **reference material**, not active application logic
-* Read existing SQL and Edge Functions to understand current behavior
-* Migrate logic from Edge Functions into Java **incrementally and explicitly**
-* Avoid blindly re-implementing logic without understanding existing behavior
-
----
-
-## Current system behaviour (AS-IS)
-
-Before migration, the system works as follows:
-
-1. Chrome extension scrapes Facebook posts using the user’s authenticated session
-2. Raw posts are written directly to Supabase tables
-3. A polling-based process (Edge Functions / jobs):
-
-    * Reads raw posts
-    * Uses AI to determine whether the post is a real estate listing
-    * If classified as real estate, extracts fields
-    * Creates a listing record
-
-This polling + AI classification behaviour is the **baseline reference**.
-
-Claude’s task is to:
-
-* Preserve the functional behaviour
-* Improve structure, observability, and reliability
-* Move polling, AI, and listing creation into the Java backend
-
----
-
-## Migration constraints
-
-* Chrome extension is untrusted input
-* No breaking changes to frontend auth
-* No downtime ingestion
-* Edge Functions may coexist temporarily
-
----
-
-## Definition of done
-
-A feature is complete ONLY if:
-
-* JWT is validated via Supabase
-* Raw data is persisted before processing
-* Failures are retryable
-* No auth logic is duplicated
-* No AI calls are synchronous
 
 ---
 
@@ -375,4 +259,10 @@ A feature is complete ONLY if:
 
 **Do not be clever. Be correct.**
 
-Follow this document over any default assumptions.
+If something is unclear:
+
+* Stop
+* Ask
+* Wait
+
+This document overrides all defaults and assumptions.
