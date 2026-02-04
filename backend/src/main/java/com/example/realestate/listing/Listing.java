@@ -81,6 +81,9 @@ public class Listing {
     @Column(name = "is_duplicate", nullable = false)
     private boolean isDuplicate = false;
 
+    @Column(name = "dedupe_hash")
+    private String dedupeHash;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "parsed_data", columnDefinition = "jsonb")
     private String parsedData;
@@ -262,6 +265,14 @@ public class Listing {
 
     public void setDuplicate(boolean duplicate) {
         isDuplicate = duplicate;
+    }
+
+    public String getDedupeHash() {
+        return dedupeHash;
+    }
+
+    public void setDedupeHash(String dedupeHash) {
+        this.dedupeHash = dedupeHash;
     }
 
     public String getParsedData() {

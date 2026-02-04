@@ -15,6 +15,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Objects;
 
 @Service
@@ -111,14 +116,24 @@ public class ListingService {
             }
         }
 
+        // Compute dedupe hash and check for duplicates
+        String dedupeHash = computeDedupeHash(result.description(), result.locality(), result.price());
+        listing.setDedupeHash(dedupeHash);
+
+        if (dedupeHash != null && listingRepository.existsByDedupeHash(dedupeHash)) {
+            listing.setDuplicate(true);
+            log.info("Duplicate detected: hash={} description={} locality={} price={}",
+                    dedupeHash, result.description(), result.locality(), result.price());
+        }
+
         Listing saved = listingRepository.save(listing);
 
         // Mark raw post as processed — same transaction as the listing insert
         rawPostRepository.markProcessed(post.getId());
 
-        log.info("Created listing listingId={} rawPostId={} propertyType={} confidence={} isValid={}",
+        log.info("Created listing listingId={} rawPostId={} propertyType={} confidence={} isValid={} isDuplicate={}",
                 saved.getId(), post.getId(), saved.getPropertyType(),
-                saved.getConfidenceScore(), saved.isValid());
+                saved.getConfidenceScore(), saved.isValid(), saved.isDuplicate());
 
         return saved;
     }
@@ -151,5 +166,38 @@ public class ListingService {
             log.warn("Failed to serialize parsed_data, storing empty object", e);
             return "{}";
         }
+    }
+
+    /**
+     * Compute dedupe hash from normalized (description + locality + price).
+     * Returns SHA-256 hex string, or null if all components are empty.
+     */
+    String computeDedupeHash(String description, String locality, BigDecimal price) {
+        String normalizedDesc = normalizeString(description);
+        String normalizedLocality = normalizeString(locality);
+        String normalizedPrice = price != null ? price.toPlainString() : "";
+
+        // If all components are empty, no meaningful hash
+        if (normalizedDesc.isEmpty() && normalizedLocality.isEmpty() && normalizedPrice.isEmpty()) {
+            return null;
+        }
+
+        String input = normalizedDesc + "|" + normalizedLocality + "|" + normalizedPrice;
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(hashBytes);
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 is guaranteed to be available
+            throw new RuntimeException("SHA-256 not available", e);
+        }
+    }
+
+    private String normalizeString(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim().toLowerCase();
     }
 }

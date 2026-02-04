@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     boolean existsByRawPostId(UUID rawPostId);
+
+    boolean existsByDedupeHash(String dedupeHash);
 }

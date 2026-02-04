@@ -373,4 +373,160 @@ class ListingServiceTest {
         assertThat(listing.getConfidenceScore()).isEqualTo(85);
         verify(listingRepository).save(any());
     }
+
+    // --- Deduplication tests ---
+
+    @Test
+    void createFrom_sameDescriptionLocalityPrice_flagsAsDuplicate() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "3BHK house for sale", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        // Simulate existing listing with same hash
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(true);
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        when(listingRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.isDuplicate()).isTrue();
+        assertThat(listing.getDedupeHash()).isNotNull();
+    }
+
+    @Test
+    void createFrom_noDuplicateHash_notFlaggedAsDuplicate() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, new BigDecimal("2000000"), "INR",
+                "Manipal", null, null, new BigDecimal("2400"), "sqft",
+                null, null, null, null, "Land for sale", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.isDuplicate()).isFalse();
+        assertThat(listing.getDedupeHash()).isNotNull();
+    }
+
+    @Test
+    void createFrom_differentDescription_notFlaggedAsDuplicate() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", null, null, null, null,
+                null, null, null, null, "Different description", 70
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.isDuplicate()).isFalse();
+    }
+
+    @Test
+    void createFrom_differentLocality_notFlaggedAsDuplicate() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Mangalore", null, null, null, null,
+                null, null, null, null, "3BHK house for sale", 70
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.isDuplicate()).isFalse();
+    }
+
+    @Test
+    void createFrom_differentPrice_notFlaggedAsDuplicate() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("6000000"), "INR",
+                "Udupi", null, null, null, null,
+                null, null, null, null, "3BHK house for sale", 70
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.isDuplicate()).isFalse();
+    }
+
+    @Test
+    void createFrom_rerunIdempotent_existingRawPostIdPreventsCreation() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", null, null, null, null,
+                null, null, null, null, "House", 80
+        );
+
+        // Listing already exists for this raw_post_id
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(true);
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNull();
+        verify(listingRepository, never()).save(any());
+        verify(listingRepository, never()).existsByDedupeHash(any());
+    }
+
+    @Test
+    void createFrom_nullDescriptionLocalityPrice_noHashComputed() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.OTHER, null, "INR",
+                null, null, null, null, null,
+                null, null, null, null, null, 60
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getDedupeHash()).isNull();
+        assertThat(listing.isDuplicate()).isFalse();
+        verify(listingRepository, never()).existsByDedupeHash(any());
+    }
+
+    @Test
+    void computeDedupeHash_normalizesCaseAndWhitespace() {
+        String hash1 = listingService.computeDedupeHash("  House FOR Sale  ", "  UDUPI  ", new BigDecimal("5000000"));
+        String hash2 = listingService.computeDedupeHash("house for sale", "udupi", new BigDecimal("5000000"));
+
+        assertThat(hash1).isEqualTo(hash2);
+    }
+
+    @Test
+    void computeDedupeHash_differentInputsProduceDifferentHashes() {
+        String hash1 = listingService.computeDedupeHash("House A", "Udupi", new BigDecimal("5000000"));
+        String hash2 = listingService.computeDedupeHash("House B", "Udupi", new BigDecimal("5000000"));
+
+        assertThat(hash1).isNotEqualTo(hash2);
+    }
 }
