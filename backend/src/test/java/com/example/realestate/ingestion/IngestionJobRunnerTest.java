@@ -4,6 +4,7 @@ import com.example.realestate.ai.AiClientPort;
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.ClassificationService;
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.listing.ListingService;
@@ -34,6 +35,9 @@ class IngestionJobRunnerTest {
     @Mock
     private AiClientPort aiClient;
 
+    @Mock
+    private GeocodingPort geocodingPort;
+
     private RawPostService rawPostService;
     private ClassificationService classificationService;
     private ListingService listingService;
@@ -43,7 +47,7 @@ class IngestionJobRunnerTest {
     void setUp() {
         rawPostService = new RawPostService(rawPostRepository);
         classificationService = new ClassificationService(aiClient);
-        listingService = new ListingService(listingRepository, rawPostRepository, new ObjectMapper());
+        listingService = new ListingService(listingRepository, rawPostRepository, geocodingPort, new ObjectMapper());
         jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingService, 10);
     }
 

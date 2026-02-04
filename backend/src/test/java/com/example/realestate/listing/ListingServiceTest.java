@@ -2,6 +2,8 @@ package com.example.realestate.listing;
 
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.geo.GeocodingPort;
+import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
 import com.example.realestate.ingestion.RawPostRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -28,11 +30,14 @@ class ListingServiceTest {
     @Mock
     private RawPostRepository rawPostRepository;
 
+    @Mock
+    private GeocodingPort geocodingPort;
+
     private ListingService listingService;
 
     @BeforeEach
     void setUp() {
-        listingService = new ListingService(listingRepository, rawPostRepository, new ObjectMapper());
+        listingService = new ListingService(listingRepository, rawPostRepository, geocodingPort, new ObjectMapper());
     }
 
     private RawPost makePost() {
@@ -259,5 +264,113 @@ class ListingServiceTest {
 
         assertThat(listing).isNotNull();
         assertThat(listing.isValid()).isFalse();
+    }
+
+    // --- Geocoding tests ---
+
+    @Test
+    void createFrom_withLocality_callsGeocodingAndPersistsCoordinates() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "House in Udupi", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(geocodingPort.geocode("Udupi")).thenReturn(
+                new GeocodingService.GeoResult(13.3409, 74.7421, "Udupi, Karnataka"));
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        when(listingRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getLatitude()).isEqualTo(13.3409);
+        assertThat(listing.getLongitude()).isEqualTo(74.7421);
+        verify(geocodingPort).geocode("Udupi");
+    }
+
+    @Test
+    void createFrom_geocodingReturnsNull_leavesLatLngNull() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, null, "INR",
+                "Unknown Place", null, null, null, null,
+                null, null, null, null, "Land somewhere", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(geocodingPort.geocode("Unknown Place")).thenReturn(null);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getLatitude()).isNull();
+        assertThat(listing.getLongitude()).isNull();
+        assertThat(listing.getLocality()).isEqualTo("Unknown Place");
+        verify(geocodingPort).geocode("Unknown Place");
+    }
+
+    @Test
+    void createFrom_nullLocality_doesNotCallGeocoding() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, null, "INR",
+                null, null, null, null, null,
+                null, null, null, null, "House", 70
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getLatitude()).isNull();
+        assertThat(listing.getLongitude()).isNull();
+        verify(geocodingPort, never()).geocode(any());
+    }
+
+    @Test
+    void createFrom_blankLocality_doesNotCallGeocoding() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, null, "INR",
+                "   ", null, null, null, null,
+                null, null, null, null, "House", 70
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        verify(geocodingPort, never()).geocode(any());
+    }
+
+    @Test
+    void createFrom_geocodingThrowsException_leavesLatLngNullButCreatesListing() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.COMMERCIAL, new BigDecimal("10000000"), "INR",
+                "Mangalore", null, null, null, null,
+                null, null, null, null, "Commercial space", 85
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(geocodingPort.geocode("Mangalore")).thenThrow(new RuntimeException("Geocoding API timeout"));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getLatitude()).isNull();
+        assertThat(listing.getLongitude()).isNull();
+        assertThat(listing.getLocality()).isEqualTo("Mangalore");
+        assertThat(listing.getConfidenceScore()).isEqualTo(85);
+        verify(listingRepository).save(any());
     }
 }

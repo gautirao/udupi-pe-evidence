@@ -3,6 +3,8 @@ package com.example.realestate.listing;
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.PromptRegistry;
 import com.example.realestate.ai.PropertyType;
+import com.example.realestate.geo.GeocodingPort;
+import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
 import com.example.realestate.ingestion.RawPostRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -24,14 +26,17 @@ public class ListingService {
 
     private final ListingRepository listingRepository;
     private final RawPostRepository rawPostRepository;
+    private final GeocodingPort geocodingPort;
     private final ObjectMapper objectMapper;
 
     public ListingService(
             ListingRepository listingRepository,
             RawPostRepository rawPostRepository,
+            GeocodingPort geocodingPort,
             ObjectMapper objectMapper) {
         this.listingRepository = listingRepository;
         this.rawPostRepository = rawPostRepository;
+        this.geocodingPort = geocodingPort;
         this.objectMapper = objectMapper;
     }
 
@@ -87,6 +92,24 @@ public class ListingService {
         listing.setConfidenceScore(result.confidenceScore());
         listing.setValid(result.confidenceScore() >= MIN_CONFIDENCE_FOR_VALID);
         listing.setParsedData(buildParsedData(result, model));
+
+        // Geocode if locality is present
+        if (result.locality() != null && !result.locality().isBlank()) {
+            try {
+                GeocodingService.GeoResult geoResult = geocodingPort.geocode(result.locality());
+                if (geoResult != null) {
+                    listing.setLatitude(geoResult.latitude());
+                    listing.setLongitude(geoResult.longitude());
+                    log.debug("Geocoded locality={} to lat={} lng={}",
+                            result.locality(), geoResult.latitude(), geoResult.longitude());
+                } else {
+                    log.debug("Geocoding returned null for locality={}", result.locality());
+                }
+            } catch (Exception e) {
+                log.warn("Geocoding failed for locality={}: {}", result.locality(), e.getMessage());
+                // Leave lat/lng null - listing still created
+            }
+        }
 
         Listing saved = listingRepository.save(listing);
 

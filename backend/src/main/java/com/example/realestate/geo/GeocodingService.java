@@ -5,13 +5,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Stub for future geocoding implementation.
- * The geocode_cache table exists in the database but is not yet populated
- * by the current system. This service will be implemented when geocoding
- * is added to the ingestion pipeline.
+ * Geocoding service implementation.
+ * Currently a stub that returns null; actual API integration (e.g., Google Maps,
+ * Nominatim) will be added in a future PR.
  */
 @Service
-public class GeocodingService {
+public class GeocodingService implements GeocodingPort {
 
     private static final Logger log = LoggerFactory.getLogger(GeocodingService.class);
 
