@@ -16,12 +16,14 @@ import static org.mockito.Mockito.*;
 class IngestionJobRunnerTest {
 
     @Mock
-    private RawPostService rawPostService;
+    private RawPostRepository rawPostRepository;
 
+    private RawPostService rawPostService;
     private IngestionJobRunner jobRunner;
 
     @BeforeEach
     void setUp() {
+        rawPostService = new RawPostService(rawPostRepository);
         jobRunner = new IngestionJobRunner(rawPostService, 10);
     }
 
@@ -35,11 +37,11 @@ class IngestionJobRunnerTest {
 
     @Test
     void pollUnprocessedPosts_noPosts_doesNothing() {
-        when(rawPostService.findUnprocessed(10)).thenReturn(List.of());
+        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of());
 
         jobRunner.pollUnprocessedPosts();
 
-        verify(rawPostService, never()).markProcessing(any());
+        verify(rawPostRepository, never()).markProcessing(any());
     }
 
     @Test
@@ -47,25 +49,25 @@ class IngestionJobRunnerTest {
         RawPost post1 = makePost("House for sale in Udupi");
         RawPost post2 = makePost("Land near Manipal");
 
-        when(rawPostService.findUnprocessed(10)).thenReturn(List.of(post1, post2));
+        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post1, post2));
 
         jobRunner.pollUnprocessedPosts();
 
-        verify(rawPostService).markProcessing(post1.getId());
-        verify(rawPostService).markProcessing(post2.getId());
+        verify(rawPostRepository).markProcessing(post1.getId());
+        verify(rawPostRepository).markProcessing(post2.getId());
         // Must NOT call markProcessed — skeleton only marks as processing
-        verify(rawPostService, never()).markProcessed(any());
+        verify(rawPostRepository, never()).markProcessed(any());
     }
 
     @Test
     void pollUnprocessedPosts_singlePost_marksAsProcessing() {
         RawPost post = makePost("Commercial space available");
 
-        when(rawPostService.findUnprocessed(10)).thenReturn(List.of(post));
+        when(rawPostRepository.findUnprocessed(10)).thenReturn(List.of(post));
 
         jobRunner.pollUnprocessedPosts();
 
-        verify(rawPostService).markProcessing(post.getId());
-        verify(rawPostService, never()).markProcessed(any());
+        verify(rawPostRepository).markProcessing(post.getId());
+        verify(rawPostRepository, never()).markProcessed(any());
     }
 }

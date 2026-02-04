@@ -17,9 +17,9 @@ public class ClassificationService {
 
     private static final Logger log = LoggerFactory.getLogger(ClassificationService.class);
 
-    private final AiClient aiClient;
+    private final AiClientPort aiClient;
 
-    public ClassificationService(AiClient aiClient) {
+    public ClassificationService(AiClientPort aiClient) {
         this.aiClient = aiClient;
     }
 

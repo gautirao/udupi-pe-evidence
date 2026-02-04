@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class ClassificationServiceTest {
 
     @Mock
-    private AiClient aiClient;
+    private AiClientPort aiClient;
 
     private ClassificationService service;
 

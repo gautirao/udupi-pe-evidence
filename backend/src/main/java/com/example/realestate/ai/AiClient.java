@@ -24,7 +24,7 @@ import java.util.UUID;
  * and parses the tool-call response into a strict ClassificationResult.
  */
 @Component
-public class AiClient {
+public class AiClient implements AiClientPort {
 
     private static final Logger log = LoggerFactory.getLogger(AiClient.class);
 

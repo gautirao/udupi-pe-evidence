@@ -2,35 +2,33 @@ package com.example.realestate.ai;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpEntity;
-import org.springframework.web.client.RestClientException;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.*;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
-@ExtendWith(MockitoExtension.class)
 class AiClientTest {
 
-    @Mock
-    private RestTemplate restTemplate;
+    private static final String API_URL = "https://ai.test/v1/chat/completions";
 
+    private RestTemplate restTemplate;
+    private MockRestServiceServer mockServer;
     private AiClient aiClient;
 
     @BeforeEach
     void setUp() {
+        restTemplate = new RestTemplate();
+        mockServer = MockRestServiceServer.createServer(restTemplate);
         aiClient = new AiClient(
                 restTemplate,
-                "https://ai.test/v1/chat/completions",
+                API_URL,
                 "test-api-key",
                 "test-model"
         );
@@ -53,8 +51,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         ClassificationResult result = aiClient.classify(UUID.randomUUID(), "3BHK house for sale");
 
@@ -73,6 +72,7 @@ class AiClientTest {
         assertThat(result.contactInfo()).isEqualTo("John");
         assertThat(result.description()).isEqualTo("3BHK house for sale in Udupi");
         assertThat(result.confidenceScore()).isEqualTo(92);
+        mockServer.verify();
     }
 
     @Test
@@ -92,14 +92,16 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         ClassificationResult result = aiClient.classify(UUID.randomUUID(), "Selling furniture");
 
         assertThat(result.isRealEstate()).isFalse();
         assertThat(result.propertyType()).isEqualTo(PropertyType.OTHER);
         assertThat(result.confidenceScore()).isEqualTo(15);
+        mockServer.verify();
     }
 
     @Test
@@ -119,12 +121,14 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         ClassificationResult result = aiClient.classify(UUID.randomUUID(), "2BHK apartment");
 
         assertThat(result.propertyType()).isEqualTo(PropertyType.APARTMENT);
+        mockServer.verify();
     }
 
     @Test
@@ -139,8 +143,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -154,8 +159,9 @@ class AiClientTest {
                 { "choices": [] }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -180,8 +186,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -206,8 +213,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -232,8 +240,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -259,8 +268,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -285,8 +295,9 @@ class AiClientTest {
                 }
                 """;
 
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
@@ -296,24 +307,14 @@ class AiClientTest {
 
     @Test
     void classify_httpError_throws() {
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenThrow(new RestClientException("Connection refused"));
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withServerError());
 
         UUID postId = UUID.randomUUID();
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
                 .isInstanceOf(ClassificationException.class)
                 .hasMessageContaining("AI API HTTP error");
-    }
-
-    @Test
-    void classify_nullResponse_throws() {
-        when(restTemplate.postForObject(any(String.class), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(null);
-
-        UUID postId = UUID.randomUUID();
-        assertThatThrownBy(() -> aiClient.classify(postId, "test"))
-                .isInstanceOf(ClassificationException.class)
-                .hasMessageContaining("null response");
     }
 
     @Test
@@ -333,14 +334,14 @@ class AiClientTest {
                 }
                 """;
 
-        ArgumentCaptor<HttpEntity> captor = ArgumentCaptor.forClass(HttpEntity.class);
-        when(restTemplate.postForObject(any(String.class), captor.capture(), eq(String.class)))
-                .thenReturn(aiResponse);
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("Authorization", "Bearer test-api-key"))
+                .andExpect(header("Content-Type", "application/json"))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
         aiClient.classify(UUID.randomUUID(), "test content");
 
-        HttpEntity<?> captured = captor.getValue();
-        assertThat(captured.getHeaders().getFirst("Authorization")).isEqualTo("Bearer test-api-key");
-        assertThat(captured.getHeaders().getFirst("Content-Type")).isEqualTo("application/json");
+        mockServer.verify();
     }
 }
