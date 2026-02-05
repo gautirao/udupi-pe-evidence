@@ -943,4 +943,64 @@ class ListingServiceTest {
         assertThat(listing.isDuplicate()).isTrue();
         assertThat(listing.getRepostCount()).isEqualTo(3);
     }
+
+    @Test
+    void createFrom_idempotencyGuard_doesNotInflateRepostCount() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "Reposted house", 80
+        );
+
+        // Listing already exists for this raw post — idempotency guard triggers
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(true);
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNull();
+        verify(listingRepository, never()).countByDedupeHash(any());
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void createFrom_firstOccurrence_doesNotCallCountByDedupeHash() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, new BigDecimal("3000000"), "INR",
+                "Manipal", null, null, null, null,
+                null, null, null, null, "Fresh land listing", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getRepostCount()).isEqualTo(0);
+        verify(listingRepository, never()).countByDedupeHash(any());
+    }
+
+    @Test
+    void createFrom_duplicateWithHighCount_repostCountMatchesPriorCount() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "Heavily reposted house", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(true);
+        when(listingRepository.countByDedupeHash(any())).thenReturn(99L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getRepostCount()).isEqualTo(99);
+        assertThat(listing.isDuplicate()).isTrue();
+    }
 }
