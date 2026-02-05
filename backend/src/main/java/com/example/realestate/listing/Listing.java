@@ -30,8 +30,19 @@ public class Listing {
     @Column(name = "locality")
     private String locality;
 
+    /**
+     * @deprecated Use {@link #pricePaise} instead. This field will be removed in a future version.
+     */
+    @Deprecated
     @Column(name = "price")
     private BigDecimal price;
+
+    /**
+     * Price in paise (1/100 of a rupee). This is the source of truth for price.
+     * For display, convert to rupees using {@link PriceParser#paiseToRupees(Long)}.
+     */
+    @Column(name = "price_paise")
+    private Long pricePaise;
 
     @Column(name = "price_unit")
     private String priceUnit = "INR";
@@ -137,6 +148,14 @@ public class Listing {
 
     public void setPrice(BigDecimal price) {
         this.price = price;
+    }
+
+    public Long getPricePaise() {
+        return pricePaise;
+    }
+
+    public void setPricePaise(Long pricePaise) {
+        this.pricePaise = pricePaise;
     }
 
     public String getPriceUnit() {
