@@ -80,6 +80,12 @@ public class Listing {
     @Column(name = "longitude")
     private Double longitude;
 
+    @Column(name = "area_key")
+    private String areaKey;
+
+    @Column(name = "area_label")
+    private String areaLabel;
+
     @Column(name = "confidence_score")
     private int confidenceScore = 0;
 
@@ -252,6 +258,22 @@ public class Listing {
 
     public void setLongitude(Double longitude) {
         this.longitude = longitude;
+    }
+
+    public String getAreaKey() {
+        return areaKey;
+    }
+
+    public void setAreaKey(String areaKey) {
+        this.areaKey = areaKey;
+    }
+
+    public String getAreaLabel() {
+        return areaLabel;
+    }
+
+    public void setAreaLabel(String areaLabel) {
+        this.areaLabel = areaLabel;
     }
 
     public int getConfidenceScore() {

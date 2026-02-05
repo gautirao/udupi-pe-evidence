@@ -14,7 +14,28 @@ public class GeocodingService implements GeocodingPort {
 
     private static final Logger log = LoggerFactory.getLogger(GeocodingService.class);
 
-    public record GeoResult(double latitude, double longitude, String displayName) {
+    /**
+     * Result of a geocoding operation, including coordinates and structured address components.
+     * Address components are nullable and may not all be populated depending on the geocoding provider.
+     *
+     * @param latitude     the latitude coordinate
+     * @param longitude    the longitude coordinate
+     * @param displayName  human-readable address string from the geocoder
+     * @param country      country name (e.g., "India")
+     * @param region       state/province/region (e.g., "Karnataka")
+     * @param city         city/district (e.g., "Udupi")
+     * @param locality     locality/village/area (e.g., "Ambalpady")
+     * @param neighborhood sub-locality or neighborhood (fallback for locality)
+     */
+    public record GeoResult(
+            double latitude,
+            double longitude,
+            String displayName,
+            String country,
+            String region,
+            String city,
+            String locality,
+            String neighborhood) {
     }
 
     /**
