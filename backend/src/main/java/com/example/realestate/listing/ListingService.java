@@ -105,14 +105,17 @@ public class ListingService {
                 if (geoResult != null) {
                     listing.setLatitude(geoResult.latitude());
                     listing.setLongitude(geoResult.longitude());
-                    log.debug("Geocoded locality={} to lat={} lng={}",
-                            result.locality(), geoResult.latitude(), geoResult.longitude());
+                    listing.setAreaKey(computeAreaKey(geoResult));
+                    listing.setAreaLabel(computeAreaLabel(geoResult));
+                    log.debug("Geocoded locality={} to lat={} lng={} areaKey={} areaLabel={}",
+                            result.locality(), geoResult.latitude(), geoResult.longitude(),
+                            listing.getAreaKey(), listing.getAreaLabel());
                 } else {
                     log.debug("Geocoding returned null for locality={}", result.locality());
                 }
             } catch (Exception e) {
                 log.warn("Geocoding failed for locality={}: {}", result.locality(), e.getMessage());
-                // Leave lat/lng null - listing still created
+                // Leave lat/lng/areaKey/areaLabel null - listing still created
             }
         }
 
@@ -199,5 +202,83 @@ public class ListingService {
             return "";
         }
         return value.trim().toLowerCase();
+    }
+
+    /**
+     * Compute a deterministic area_key from geocode result components.
+     * Format: country|region|city|locality (lowercase, trimmed, spaces->-, punctuation removed)
+     * Fallback: if locality is null, use neighborhood; if neighborhood is null, use city.
+     *
+     * @return normalized area_key, or null if insufficient components
+     */
+    String computeAreaKey(GeocodingService.GeoResult geoResult) {
+        if (geoResult == null) {
+            return null;
+        }
+
+        String country = normalizeAreaComponent(geoResult.country());
+        String region = normalizeAreaComponent(geoResult.region());
+        String city = normalizeAreaComponent(geoResult.city());
+
+        // Locality fallback chain: locality -> neighborhood -> city
+        String locality = normalizeAreaComponent(geoResult.locality());
+        if (locality.isEmpty()) {
+            locality = normalizeAreaComponent(geoResult.neighborhood());
+        }
+        if (locality.isEmpty()) {
+            locality = city; // final fallback to city
+        }
+
+        // Require at least country and city for a meaningful area_key
+        if (country.isEmpty() || city.isEmpty()) {
+            return null;
+        }
+
+        return String.join("|", country, region, city, locality);
+    }
+
+    /**
+     * Compute a human-readable area label for display.
+     * Format: "Locality, City" or just "City" if locality not available.
+     *
+     * @return display label, or null if no city available
+     */
+    String computeAreaLabel(GeocodingService.GeoResult geoResult) {
+        if (geoResult == null) {
+            return null;
+        }
+
+        String city = geoResult.city();
+        if (city == null || city.isBlank()) {
+            return null;
+        }
+
+        // Locality fallback chain: locality -> neighborhood -> null
+        String locality = geoResult.locality();
+        if (locality == null || locality.isBlank()) {
+            locality = geoResult.neighborhood();
+        }
+
+        if (locality != null && !locality.isBlank()) {
+            return locality.trim() + ", " + city.trim();
+        }
+        return city.trim();
+    }
+
+    /**
+     * Normalize a single area component for use in area_key:
+     * - lowercase
+     * - trim whitespace
+     * - replace spaces with hyphens
+     * - remove punctuation (keep only alphanumeric and hyphens)
+     */
+    private String normalizeAreaComponent(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.trim()
+                .toLowerCase()
+                .replaceAll("\\s+", "-")
+                .replaceAll("[^a-z0-9\\-]", "");
     }
 }

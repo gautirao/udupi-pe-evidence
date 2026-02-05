@@ -279,7 +279,8 @@ class ListingServiceTest {
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
         when(geocodingPort.geocode("Udupi")).thenReturn(
-                new GeocodingService.GeoResult(13.3409, 74.7421, "Udupi, Karnataka"));
+                new GeocodingService.GeoResult(13.3409, 74.7421, "Udupi, Karnataka, India",
+                        "India", "Karnataka", "Udupi", null, null));
         ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
         when(listingRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -528,5 +529,214 @@ class ListingServiceTest {
         String hash2 = listingService.computeDedupeHash("House B", "Udupi", new BigDecimal("5000000"));
 
         assertThat(hash1).isNotEqualTo(hash2);
+    }
+
+    // --- Area key and area label tests ---
+
+    @Test
+    void createFrom_geocodingSuccess_setsAreaKeyAndAreaLabel() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Ambalpady", 3, 2, null, null,
+                null, null, null, null, "House in Ambalpady", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(geocodingPort.geocode("Ambalpady")).thenReturn(
+                new GeocodingService.GeoResult(13.35, 74.75, "Ambalpady, Udupi, Karnataka, India",
+                        "India", "Karnataka", "Udupi", "Ambalpady", null));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing.getAreaKey()).isEqualTo("india|karnataka|udupi|ambalpady");
+        assertThat(listing.getAreaLabel()).isEqualTo("Ambalpady, Udupi");
+    }
+
+    @Test
+    void createFrom_geocodingReturnsNull_areaKeyAndLabelNull() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, null, "INR",
+                "Unknown", null, null, null, null,
+                null, null, null, null, "Land", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(geocodingPort.geocode("Unknown")).thenReturn(null);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing.getAreaKey()).isNull();
+        assertThat(listing.getAreaLabel()).isNull();
+    }
+
+    @Test
+    void createFrom_geocodingThrows_areaKeyAndLabelNull() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, null, "INR",
+                "Mangalore", null, null, null, null,
+                null, null, null, null, "House", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(geocodingPort.geocode("Mangalore")).thenThrow(new RuntimeException("API error"));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing.getAreaKey()).isNull();
+        assertThat(listing.getAreaLabel()).isNull();
+        // Listing is still created
+        assertThat(listing.getLocality()).isEqualTo("Mangalore");
+    }
+
+    @Test
+    void computeAreaKey_fullComponents_returnsNormalizedKey() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Udupi", "Ambalpady", null);
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isEqualTo("india|karnataka|udupi|ambalpady");
+    }
+
+    @Test
+    void computeAreaKey_localityNull_fallsBackToNeighborhood() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Udupi", null, "Manipal");
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isEqualTo("india|karnataka|udupi|manipal");
+    }
+
+    @Test
+    void computeAreaKey_localityAndNeighborhoodNull_fallsBackToCity() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Udupi", null, null);
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isEqualTo("india|karnataka|udupi|udupi");
+    }
+
+    @Test
+    void computeAreaKey_normalizesSpacesToHyphens() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Tamil Nadu", "Chennai", "Anna Nagar East", null);
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isEqualTo("india|tamil-nadu|chennai|anna-nagar-east");
+    }
+
+    @Test
+    void computeAreaKey_removesPunctuation() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Bengaluru", "M.G. Road", null);
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isEqualTo("india|karnataka|bengaluru|mg-road");
+    }
+
+    @Test
+    void computeAreaKey_nullGeoResult_returnsNull() {
+        String areaKey = listingService.computeAreaKey(null);
+
+        assertThat(areaKey).isNull();
+    }
+
+    @Test
+    void computeAreaKey_missingCountry_returnsNull() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                null, "Karnataka", "Udupi", "Ambalpady", null);
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isNull();
+    }
+
+    @Test
+    void computeAreaKey_missingCity_returnsNull() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", null, "Ambalpady", null);
+
+        String areaKey = listingService.computeAreaKey(geoResult);
+
+        assertThat(areaKey).isNull();
+    }
+
+    @Test
+    void computeAreaLabel_withLocality_returnsLocalityCommaCity() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Udupi", "Ambalpady", null);
+
+        String areaLabel = listingService.computeAreaLabel(geoResult);
+
+        assertThat(areaLabel).isEqualTo("Ambalpady, Udupi");
+    }
+
+    @Test
+    void computeAreaLabel_localityNull_fallsBackToNeighborhood() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Udupi", null, "Manipal");
+
+        String areaLabel = listingService.computeAreaLabel(geoResult);
+
+        assertThat(areaLabel).isEqualTo("Manipal, Udupi");
+    }
+
+    @Test
+    void computeAreaLabel_localityAndNeighborhoodNull_returnsCityOnly() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "Udupi", null, null);
+
+        String areaLabel = listingService.computeAreaLabel(geoResult);
+
+        assertThat(areaLabel).isEqualTo("Udupi");
+    }
+
+    @Test
+    void computeAreaLabel_nullGeoResult_returnsNull() {
+        String areaLabel = listingService.computeAreaLabel(null);
+
+        assertThat(areaLabel).isNull();
+    }
+
+    @Test
+    void computeAreaLabel_nullCity_returnsNull() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", null, "Ambalpady", null);
+
+        String areaLabel = listingService.computeAreaLabel(geoResult);
+
+        assertThat(areaLabel).isNull();
+    }
+
+    @Test
+    void computeAreaLabel_trimsWhitespace() {
+        GeocodingService.GeoResult geoResult = new GeocodingService.GeoResult(
+                13.35, 74.75, "Display",
+                "India", "Karnataka", "  Udupi  ", "  Ambalpady  ", null);
+
+        String areaLabel = listingService.computeAreaLabel(geoResult);
+
+        assertThat(areaLabel).isEqualTo("Ambalpady, Udupi");
     }
 }
