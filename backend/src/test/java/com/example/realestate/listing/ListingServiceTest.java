@@ -739,4 +739,150 @@ class ListingServiceTest {
 
         assertThat(areaLabel).isEqualTo("Ambalpady, Udupi");
     }
+
+    // --- Lifecycle signals: listing age and freshness ---
+
+    @Test
+    void createFrom_newListing_listingAgeDaysIsZero() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "House for sale", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getListingAgeDays()).isEqualTo(0);
+    }
+
+    @Test
+    void createFrom_newListing_isFreshTrue() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, new BigDecimal("2000000"), "INR",
+                "Manipal", null, null, null, null,
+                null, null, null, null, "Land for sale", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.isFresh()).isTrue();
+    }
+
+    // --- Lifecycle signals: repost counting ---
+
+    @Test
+    void createFrom_firstOccurrence_repostCountIsZero() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "Unique house listing", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getRepostCount()).isEqualTo(0);
+        assertThat(listing.isDuplicate()).isFalse();
+    }
+
+    @Test
+    void createFrom_secondOccurrence_repostCountIsOne() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "Reposted house", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(true);
+        when(listingRepository.countByDedupeHash(any())).thenReturn(1L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getRepostCount()).isEqualTo(1);
+        assertThat(listing.isDuplicate()).isTrue();
+    }
+
+    @Test
+    void createFrom_thirdOccurrence_repostCountIsTwo() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                null, null, null, null, "Reposted house again", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(true);
+        when(listingRepository.countByDedupeHash(any())).thenReturn(2L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getRepostCount()).isEqualTo(2);
+        assertThat(listing.isDuplicate()).isTrue();
+    }
+
+    @Test
+    void createFrom_nullDedupeHash_repostCountIsZero() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.OTHER, null, "INR",
+                null, null, null, null, null,
+                null, null, null, null, null, 60
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getRepostCount()).isEqualTo(0);
+        assertThat(listing.isDuplicate()).isFalse();
+        verify(listingRepository, never()).countByDedupeHash(any());
+    }
+
+    @Test
+    void createFrom_repostDoesNotBreakExistingDuplicateFlag() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", null, null, null, null,
+                null, null, null, null, "Repost test", 85
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(true);
+        when(listingRepository.countByDedupeHash(any())).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        // Both isDuplicate and repostCount are set correctly
+        assertThat(listing.isDuplicate()).isTrue();
+        assertThat(listing.getRepostCount()).isEqualTo(3);
+        // Age and freshness are still set
+        assertThat(listing.getListingAgeDays()).isEqualTo(0);
+        assertThat(listing.isFresh()).isTrue();
+    }
 }
