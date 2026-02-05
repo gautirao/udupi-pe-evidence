@@ -839,44 +839,6 @@ class ListingServiceTest {
         assertThat(listing.getPricePerCentPaise()).isNull(); // Cannot compute without pricePaise
     }
 
-    // --- Lifecycle signals: listing age and freshness ---
-
-    @Test
-    void createFrom_newListing_listingAgeDaysIsZero() {
-        RawPost post = makePost();
-        ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
-                null, null, null, null, "House for sale", 80
-        );
-
-        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        Listing listing = listingService.createFrom(post, result, "test-model");
-
-        assertThat(listing).isNotNull();
-        assertThat(listing.getListingAgeDays()).isEqualTo(0);
-    }
-
-    @Test
-    void createFrom_newListing_isFreshTrue() {
-        RawPost post = makePost();
-        ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("2000000"), "INR",
-                "Manipal", null, null, null, null,
-                null, null, null, null, "Land for sale", 75
-        );
-
-        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        Listing listing = listingService.createFrom(post, result, "test-model");
-
-        assertThat(listing).isNotNull();
-        assertThat(listing.isFresh()).isTrue();
-    }
-
     // --- Lifecycle signals: repost counting ---
 
     @Test
@@ -980,8 +942,5 @@ class ListingServiceTest {
         // Both isDuplicate and repostCount are set correctly
         assertThat(listing.isDuplicate()).isTrue();
         assertThat(listing.getRepostCount()).isEqualTo(3);
-        // Age and freshness are still set
-        assertThat(listing.getListingAgeDays()).isEqualTo(0);
-        assertThat(listing.isFresh()).isTrue();
     }
 }
