@@ -133,12 +133,6 @@ public class Listing {
     @Column(name = "repost_count", nullable = false)
     private int repostCount = 0;
 
-    @Column(name = "listing_age_days", nullable = false)
-    private int listingAgeDays = 0;
-
-    @Column(name = "is_fresh", nullable = false)
-    private boolean isFresh = true;
-
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "parsed_data", columnDefinition = "jsonb")
     private String parsedData;
@@ -392,22 +386,6 @@ public class Listing {
 
     public void setRepostCount(int repostCount) {
         this.repostCount = repostCount;
-    }
-
-    public int getListingAgeDays() {
-        return listingAgeDays;
-    }
-
-    public void setListingAgeDays(int listingAgeDays) {
-        this.listingAgeDays = listingAgeDays;
-    }
-
-    public boolean isFresh() {
-        return isFresh;
-    }
-
-    public void setFresh(boolean fresh) {
-        isFresh = fresh;
     }
 
     public String getParsedData() {

@@ -132,10 +132,6 @@ public class ListingService {
             }
         }
 
-        // Lifecycle signals: age and freshness (correct at creation time)
-        listing.setListingAgeDays(0);
-        listing.setFresh(true);
-
         // Compute dedupe hash and check for duplicates / repost count
         String dedupeHash = computeDedupeHash(result.description(), result.locality(), result.price());
         listing.setDedupeHash(dedupeHash);
