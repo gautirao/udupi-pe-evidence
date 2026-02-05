@@ -132,14 +132,20 @@ public class ListingService {
             }
         }
 
-        // Compute dedupe hash and check for duplicates
+        // Lifecycle signals: age and freshness (correct at creation time)
+        listing.setListingAgeDays(0);
+        listing.setFresh(true);
+
+        // Compute dedupe hash and check for duplicates / repost count
         String dedupeHash = computeDedupeHash(result.description(), result.locality(), result.price());
         listing.setDedupeHash(dedupeHash);
 
         if (dedupeHash != null && listingRepository.existsByDedupeHash(dedupeHash)) {
             listing.setDuplicate(true);
-            log.info("Duplicate detected: hash={} description={} locality={} price={}",
-                    dedupeHash, result.description(), result.locality(), result.price());
+            long priorCount = listingRepository.countByDedupeHash(dedupeHash);
+            listing.setRepostCount((int) priorCount);
+            log.info("Duplicate detected: hash={} repostCount={} description={} locality={} price={}",
+                    dedupeHash, priorCount, result.description(), result.locality(), result.price());
         }
 
         Listing saved = listingRepository.save(listing);
