@@ -53,6 +53,20 @@ public class Listing {
     @Column(name = "land_area_unit")
     private String landAreaUnit;
 
+    /**
+     * Land area normalized to cents (1 cent = 435.6 sqft, 1 sqm = 10.7639104167 sqft).
+     * Computed during listing assembly from landArea and landAreaUnit.
+     */
+    @Column(name = "area_cent")
+    private BigDecimal areaCent;
+
+    /**
+     * Price per cent in paise. Computed as pricePaise / areaCent.
+     * Used for area-level price comparisons.
+     */
+    @Column(name = "price_per_cent_paise")
+    private Long pricePerCentPaise;
+
     @Column(name = "built_area")
     private BigDecimal builtArea;
 
@@ -224,6 +238,22 @@ public class Listing {
 
     public void setLandAreaUnit(String landAreaUnit) {
         this.landAreaUnit = landAreaUnit;
+    }
+
+    public BigDecimal getAreaCent() {
+        return areaCent;
+    }
+
+    public void setAreaCent(BigDecimal areaCent) {
+        this.areaCent = areaCent;
+    }
+
+    public Long getPricePerCentPaise() {
+        return pricePerCentPaise;
+    }
+
+    public void setPricePerCentPaise(Long pricePerCentPaise) {
+        this.pricePerCentPaise = pricePerCentPaise;
     }
 
     public BigDecimal getBuiltArea() {
