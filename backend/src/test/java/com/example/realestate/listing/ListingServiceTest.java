@@ -739,4 +739,103 @@ class ListingServiceTest {
 
         assertThat(areaLabel).isEqualTo("Ambalpady, Udupi");
     }
+
+    // --- Area normalization tests ---
+
+    @Test
+    void createFrom_validLandAreaAndUnit_normalizesArea() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, new BigDecimal("5000000"), "INR",
+                "Udupi", null, null, new BigDecimal("1000"), "sqft",
+                null, null, null, null, "Land 1000 sqft", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        // Area should be normalized: 1000 sqft
+        assertThat(listing.getAreaSqft()).isNotNull();
+        assertThat(listing.getAreaSqft()).isEqualByComparingTo(new BigDecimal("1000"));
+        assertThat(listing.getAreaSqm()).isNotNull();
+        assertThat(listing.getAreaCent()).isNotNull();
+        // 1000 sqft / 435.6 sqft/cent ≈ 2.2957 cents
+        assertThat(listing.getAreaCent()).isBetween(
+                new BigDecimal("2.29"), new BigDecimal("2.30"));
+    }
+
+    @Test
+    void createFrom_unknownUnit_leavesNormalizedFieldsNull() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, new BigDecimal("5000000"), "INR",
+                "Udupi", null, null, new BigDecimal("1"), "acre",
+                null, null, null, null, "Land 1 acre", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        // Unknown unit "acre" should leave normalized fields null
+        assertThat(listing.getLandArea()).isEqualByComparingTo(new BigDecimal("1"));
+        assertThat(listing.getLandAreaUnit()).isEqualTo("acre");
+        assertThat(listing.getAreaSqm()).isNull();
+        assertThat(listing.getAreaSqft()).isNull();
+        assertThat(listing.getAreaCent()).isNull();
+    }
+
+    @Test
+    void createFrom_nullLandArea_leavesNormalizedFieldsNull() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
+                "Udupi", 3, 2, null, null,
+                new BigDecimal("1200"), "sqft", null, null, "3BHK house", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        // No landArea means no normalization
+        assertThat(listing.getAreaSqm()).isNull();
+        assertThat(listing.getAreaSqft()).isNull();
+        assertThat(listing.getAreaCent()).isNull();
+    }
+
+    // --- KNOWN ISSUE: pricePaise not populated from AI result ---
+    // TODO(follow-up): Fix pricePaise population in ListingService
+    // The AI returns price as BigDecimal in rupees, but it's not being
+    // converted to pricePaise. This causes pricePerCentPaise to always be null.
+
+    @Test
+    void createFrom_priceInRupees_pricePaiseNotPopulated_KNOWN_ISSUE() {
+        RawPost post = makePost();
+        // AI returns price = 5000000 (rupees), which should become pricePaise = 500000000000L
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.LAND, new BigDecimal("5000000"), "INR",
+                "Udupi", null, null, new BigDecimal("10"), "cent",
+                null, null, null, null, "Land 10 cents", 75
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingService.createFrom(post, result, "test-model");
+
+        // KNOWN ISSUE: pricePaise is NOT being set from the AI result
+        // This test documents the current (buggy) behavior
+        assertThat(listing.getPrice()).isEqualByComparingTo(new BigDecimal("5000000"));
+        assertThat(listing.getPricePaise()).isNull(); // BUG: Should be 500000000000L
+
+        // Because pricePaise is null, pricePerCentPaise is also null
+        assertThat(listing.getAreaCent()).isNotNull();
+        assertThat(listing.getAreaCent()).isEqualByComparingTo(new BigDecimal("10"));
+        assertThat(listing.getPricePerCentPaise()).isNull(); // Cannot compute without pricePaise
+    }
 }

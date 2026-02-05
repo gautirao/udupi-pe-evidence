@@ -89,6 +89,19 @@ public class ListingService {
         listing.setBathrooms(result.bathrooms());
         listing.setLandArea(result.landArea());
         listing.setLandAreaUnit(result.landAreaUnit());
+
+        // Normalize land area and compute price per cent
+        AreaNormalizer.NormalizedArea normalizedArea = AreaNormalizer.normalize(
+                result.landArea(), result.landAreaUnit());
+        listing.setAreaSqm(normalizedArea.areaSqm());
+        listing.setAreaSqft(normalizedArea.areaSqft());
+        listing.setAreaCent(normalizedArea.areaCent());
+
+        // Compute price per cent if we have both price and area
+        Long pricePerCentPaise = AreaNormalizer.computePricePerCentPaise(
+                listing.getPricePaise(), normalizedArea.areaCent());
+        listing.setPricePerCentPaise(pricePerCentPaise);
+
         listing.setBuiltArea(result.builtArea());
         listing.setBuiltAreaUnit(result.builtAreaUnit());
         listing.setContactPhone(result.contactPhone());

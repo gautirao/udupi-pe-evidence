@@ -59,6 +59,35 @@ public class Listing {
     @Column(name = "built_area_unit")
     private String builtAreaUnit;
 
+    /**
+     * Normalized land area in square meters (canonical unit).
+     * Computed from landArea + landAreaUnit via {@link AreaNormalizer}.
+     */
+    @Column(name = "area_sqm", precision = 19, scale = 6)
+    private BigDecimal areaSqm;
+
+    /**
+     * Normalized land area in square feet (derived).
+     * Computed from landArea + landAreaUnit via {@link AreaNormalizer}.
+     */
+    @Column(name = "area_sqft", precision = 19, scale = 6)
+    private BigDecimal areaSqft;
+
+    /**
+     * Normalized land area in cents (derived).
+     * Computed from landArea + landAreaUnit via {@link AreaNormalizer}.
+     * 1 cent = 435.6 sq ft.
+     */
+    @Column(name = "area_cent", precision = 19, scale = 6)
+    private BigDecimal areaCent;
+
+    /**
+     * Price per cent in paise. Computed as pricePaise / areaCent.
+     * Only populated when both pricePaise and areaCent are valid and positive.
+     */
+    @Column(name = "price_per_cent_paise")
+    private Long pricePerCentPaise;
+
     @Column(name = "bedrooms")
     private Integer bedrooms;
 
@@ -202,6 +231,38 @@ public class Listing {
 
     public void setBuiltAreaUnit(String builtAreaUnit) {
         this.builtAreaUnit = builtAreaUnit;
+    }
+
+    public BigDecimal getAreaSqm() {
+        return areaSqm;
+    }
+
+    public void setAreaSqm(BigDecimal areaSqm) {
+        this.areaSqm = areaSqm;
+    }
+
+    public BigDecimal getAreaSqft() {
+        return areaSqft;
+    }
+
+    public void setAreaSqft(BigDecimal areaSqft) {
+        this.areaSqft = areaSqft;
+    }
+
+    public BigDecimal getAreaCent() {
+        return areaCent;
+    }
+
+    public void setAreaCent(BigDecimal areaCent) {
+        this.areaCent = areaCent;
+    }
+
+    public Long getPricePerCentPaise() {
+        return pricePerCentPaise;
+    }
+
+    public void setPricePerCentPaise(Long pricePerCentPaise) {
+        this.pricePerCentPaise = pricePerCentPaise;
     }
 
     public Integer getBedrooms() {
