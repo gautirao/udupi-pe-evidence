@@ -140,6 +140,18 @@ Claude must **not**:
 
 Failure to paste this template exactly is a violation.
 
+### Token-limit continuation rule (MANDATORY)
+
+If Claude hits a token limit mid-task, it must:
+1. Stop immediately
+2. Output a CHECKPOINT section containing:
+   - Completed steps
+   - Remaining steps
+   - Next file and method to modify
+3. Wait for explicit "Resume from last checkpoint" before continuing
+
+Claude must not re-run completed steps after resuming.
+
 ---
 
 ### 📌 PRE-IMPLEMENTATION PLAN (REQUIRED BEFORE CODE)
