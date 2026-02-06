@@ -261,3 +261,4 @@ CREATE POLICY "Admins can manage geocode cache"
 
 -- Enable realtime for property_listings
 ALTER PUBLICATION supabase_realtime ADD TABLE public.property_listings;
+ALTER TYPE public.property_type ADD VALUE IF NOT EXISTS 'apartment';

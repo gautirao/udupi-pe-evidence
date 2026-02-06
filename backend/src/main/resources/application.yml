@@ -1,0 +1,46 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${SUPABASE_DB_HOST}:${SUPABASE_DB_PORT:6543}/${SUPABASE_DB_NAME:postgres}?prepareThreshold=0
+    username: ${SUPABASE_DB_USER}
+    password: ${SUPABASE_DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      data-source-properties:
+        ssl: true
+        sslmode: require
+
+  flyway:
+    enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://${SUPABASE_PROJECT_REF}.supabase.co/auth/v1
+
+app:
+  ai:
+    api-url: ${AI_API_URL:https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
+    api-key: ${AI_API_KEY}
+    model: ${AI_MODEL:gemini-2.0-flash}
+
+  ingestion:
+    batch-size: ${INGESTION_BATCH_SIZE:10}
+    poll-interval-ms: ${INGESTION_POLL_INTERVAL_MS:30000}
+
+server:
+  port: ${SERVER_PORT:8085}
+
+logging:
+  level:
+    com.example.realestate: DEBUG
