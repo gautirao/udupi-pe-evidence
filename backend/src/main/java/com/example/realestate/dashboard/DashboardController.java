@@ -2,6 +2,8 @@ package com.example.realestate.dashboard;
 
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -18,6 +20,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -203,6 +206,86 @@ public class DashboardController {
             BigDecimal cityMedianPricePerCentRupees,
             BigDecimal priceIndex,
             OffsetDateTime updatedAt
+    ) {
+    }
+
+    // ==================== Opportunity Finder ====================
+
+    @GetMapping("/opportunities")
+    public ResponseEntity<?> getOpportunities(
+            @RequestParam(name = "areaKey", required = false) String areaKey,
+            @RequestParam(name = "threshold", defaultValue = "0.80") double threshold,
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            @RequestParam(name = "freshDays", defaultValue = "14") int freshDays) {
+
+        if (threshold < 0.1 || threshold > 1.0) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "threshold must be between 0.1 and 1.0"));
+        }
+
+        int effectiveLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
+
+        log.info("Fetching opportunities areaKey={} threshold={} limit={} freshDays={}",
+                areaKey, threshold, effectiveLimit, freshDays);
+
+        List<OpportunityProjection> data = listingRepository.findOpportunities(
+                areaKey, threshold, freshDays, effectiveLimit);
+
+        List<OpportunityResponse> response = data.stream()
+                .map(this::toOpportunityResponse)
+                .toList();
+
+        log.debug("Returning {} opportunities", response.size());
+        return ResponseEntity.ok(response);
+    }
+
+    private OpportunityResponse toOpportunityResponse(OpportunityProjection p) {
+        return new OpportunityResponse(
+                p.getId(),
+                computeTitle(p.getPropertyType(), p.getLocality(), p.getAreaLabel()),
+                p.getPropertyType(),
+                paiseToRupees(p.getPricePaise()),
+                paiseToRupees(p.getPricePerCentPaise()),
+                p.getAreaCent(),
+                p.getAreaKey(),
+                p.getAreaLabel(),
+                p.getLatitude(),
+                p.getLongitude(),
+                p.getCreatedAt(),
+                paiseToRupees(p.getMedianPricePerCentPaise()),
+                p.getUndervaluationScore()
+        );
+    }
+
+    private String computeTitle(String propertyType, String locality, String areaLabel) {
+        String location = locality != null ? locality : areaLabel;
+        if (location == null) {
+            return null;
+        }
+        if (propertyType == null || propertyType.isEmpty()) {
+            return "Property in " + location;
+        }
+        return propertyType.substring(0, 1).toUpperCase() + propertyType.substring(1) + " in " + location;
+    }
+
+    /**
+     * Response DTO for opportunity finder endpoint.
+     * Prices are in rupees (converted from paise stored in DB).
+     */
+    public record OpportunityResponse(
+            UUID id,
+            String title,
+            String propertyType,
+            BigDecimal priceRupees,
+            BigDecimal pricePerCentRupees,
+            BigDecimal areaCent,
+            String areaKey,
+            String areaLabel,
+            Double lat,
+            Double lng,
+            OffsetDateTime createdAt,
+            BigDecimal areaMedianPricePerCentRupees,
+            Double undervaluationScore
     ) {
     }
 }

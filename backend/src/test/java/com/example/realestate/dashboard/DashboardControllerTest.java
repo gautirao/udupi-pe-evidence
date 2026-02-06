@@ -2,6 +2,8 @@ package com.example.realestate.dashboard;
 
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -583,6 +585,168 @@ class DashboardControllerTest {
                 any(), any(), any(), eq(200));
     }
 
+    // ==================== Opportunity Finder Tests ====================
+
+    @Test
+    void getOpportunities_withoutAuth_returnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_invalidThresholdTooLow_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/dashboard/opportunities")
+                        .param("threshold", "0.05"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("threshold must be between 0.1 and 1.0"));
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_invalidThresholdTooHigh_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/dashboard/opportunities")
+                        .param("threshold", "1.5"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("threshold must be between 0.1 and 1.0"));
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_defaultParameters_passedToRepository() throws Exception {
+        when(listingRepository.findOpportunities(null, 0.80, 14, 50))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        verify(listingRepository).findOpportunities(null, 0.80, 14, 50);
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_capsLimitAt200() throws Exception {
+        when(listingRepository.findOpportunities(null, 0.80, 14, 200))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/opportunities")
+                        .param("limit", "999"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findOpportunities(null, 0.80, 14, 200);
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_withAreaKeyFilter() throws Exception {
+        when(listingRepository.findOpportunities("IN|KA|Manipal|Eshwar Nagar", 0.80, 14, 50))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/opportunities")
+                        .param("areaKey", "IN|KA|Manipal|Eshwar Nagar"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findOpportunities("IN|KA|Manipal|Eshwar Nagar", 0.80, 14, 50);
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_returnsMappedResponseWithCorrectFields() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        OffsetDateTime createdAt = OffsetDateTime.now();
+
+        OpportunityProjection projection = createOpportunityProjection(
+                listingId, "land", "Manipal", "Manipal, Karnataka",
+                5000000L, 300000L, new BigDecimal("10.5"),
+                "IN|KA|Udupi|Manipal", 13.35, 74.79,
+                createdAt, 500000L, 0.4);
+
+        when(listingRepository.findOpportunities(null, 0.80, 14, 50))
+                .thenReturn(List.of(projection));
+
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(listingId.toString()))
+                .andExpect(jsonPath("$[0].title").value("Land in Manipal"))
+                .andExpect(jsonPath("$[0].propertyType").value("land"))
+                .andExpect(jsonPath("$[0].priceRupees").value(50000.00))
+                .andExpect(jsonPath("$[0].pricePerCentRupees").value(3000.00))
+                .andExpect(jsonPath("$[0].areaCent").value(10.5))
+                .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
+                .andExpect(jsonPath("$[0].areaLabel").value("Manipal, Karnataka"))
+                .andExpect(jsonPath("$[0].lat").value(13.35))
+                .andExpect(jsonPath("$[0].lng").value(74.79))
+                .andExpect(jsonPath("$[0].areaMedianPricePerCentRupees").value(5000.00))
+                .andExpect(jsonPath("$[0].undervaluationScore").value(0.4));
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_sortPreserved_undervaluationScoreDesc() throws Exception {
+        OpportunityProjection highScore = createOpportunityProjection(
+                UUID.randomUUID(), "land", "A-Town", "A", 100L, 100L,
+                BigDecimal.ONE, "area-a", null, null,
+                OffsetDateTime.now(), 500L, 0.8);
+        OpportunityProjection lowScore = createOpportunityProjection(
+                UUID.randomUUID(), "house", "B-Town", "B", 100L, 100L,
+                BigDecimal.ONE, "area-b", null, null,
+                OffsetDateTime.now(), 500L, 0.3);
+
+        when(listingRepository.findOpportunities(null, 0.80, 14, 50))
+                .thenReturn(List.of(highScore, lowScore));
+
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].undervaluationScore").value(0.8))
+                .andExpect(jsonPath("$[1].undervaluationScore").value(0.3));
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_emptyResult_whenNoMatches() throws Exception {
+        when(listingRepository.findOpportunities(null, 0.80, 14, 50))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_titleFallsBackToAreaLabel_whenLocalityNull() throws Exception {
+        OpportunityProjection projection = createOpportunityProjection(
+                UUID.randomUUID(), "house", null, "Udupi, Karnataka",
+                100L, 100L, BigDecimal.ONE, "area-x",
+                null, null, OffsetDateTime.now(), 500L, 0.5);
+
+        when(listingRepository.findOpportunities(null, 0.80, 14, 50))
+                .thenReturn(List.of(projection));
+
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").value("House in Udupi, Karnataka"));
+    }
+
+    @Test
+    @WithMockUser
+    void getOpportunities_titleNull_whenLocalityAndAreaLabelBothNull() throws Exception {
+        OpportunityProjection projection = createOpportunityProjection(
+                UUID.randomUUID(), "house", null, null,
+                100L, 100L, BigDecimal.ONE, "area-x",
+                null, null, OffsetDateTime.now(), 500L, 0.5);
+
+        when(listingRepository.findOpportunities(null, 0.80, 14, 50))
+                .thenReturn(List.of(projection));
+
+        mockMvc.perform(get("/api/dashboard/opportunities"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].title").isEmpty());
+    }
+
     // ==================== Helper Methods ====================
 
     private AreaPriceWeekly createWeeklyData(
@@ -620,5 +784,28 @@ class DashboardControllerTest {
         listing.setDuplicate(false);
         listing.setCreatedAt(OffsetDateTime.now());
         return listing;
+    }
+
+    private OpportunityProjection createOpportunityProjection(
+            UUID id, String propertyType, String locality, String areaLabel,
+            Long pricePaise, Long pricePerCentPaise, BigDecimal areaCent,
+            String areaKey, Double lat, Double lng,
+            OffsetDateTime createdAt, Long medianPricePerCentPaise,
+            double undervaluationScore) {
+        OpportunityProjection p = mock(OpportunityProjection.class);
+        when(p.getId()).thenReturn(id);
+        when(p.getPropertyType()).thenReturn(propertyType);
+        when(p.getLocality()).thenReturn(locality);
+        when(p.getAreaLabel()).thenReturn(areaLabel);
+        when(p.getPricePaise()).thenReturn(pricePaise);
+        when(p.getPricePerCentPaise()).thenReturn(pricePerCentPaise);
+        when(p.getAreaCent()).thenReturn(areaCent);
+        when(p.getAreaKey()).thenReturn(areaKey);
+        when(p.getLatitude()).thenReturn(lat);
+        when(p.getLongitude()).thenReturn(lng);
+        when(p.getCreatedAt()).thenReturn(createdAt);
+        when(p.getMedianPricePerCentPaise()).thenReturn(medianPricePerCentPaise);
+        when(p.getUndervaluationScore()).thenReturn(undervaluationScore);
+        return p;
     }
 }
