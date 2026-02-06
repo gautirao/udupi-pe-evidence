@@ -2,11 +2,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export type PropertyType = 'land' | 'house' | 'commercial' | 'other';
+export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'other';
+
+export interface PropertyImage {
+  url: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
 
 export interface PropertyListing {
   id: string;
   property_type: PropertyType;
+  title: string | null;
   locality: string | null;
   price: number | null;
   price_unit: string | null;
@@ -27,6 +35,7 @@ export interface PropertyListing {
   is_duplicate: boolean;
   created_at: string;
   updated_at: string;
+  raw_post_id: string | null;
 }
 
 export interface PropertyFilters {
@@ -38,14 +47,21 @@ export interface PropertyFilters {
   dateTo?: Date;
 }
 
+export interface PropertyListingWithImages extends PropertyListing {
+  raw_posts?: {
+    images: PropertyImage[] | null;
+  } | null;
+}
+
 export function usePropertyListings(filters?: PropertyFilters) {
   return useQuery({
     queryKey: ['property-listings', filters],
     queryFn: async () => {
       let query = supabase
         .from('property_listings')
-        .select('*')
+        .select('*, raw_posts(images)')
         .eq('is_valid', true)
+        .eq('is_duplicate', false)
         .order('created_at', { ascending: false });
 
       if (filters?.propertyTypes && filters.propertyTypes.length > 0) {
@@ -75,7 +91,16 @@ export function usePropertyListings(filters?: PropertyFilters) {
       const { data, error } = await query;
 
       if (error) throw error;
-      return data as PropertyListing[];
+      
+      // Transform to include images at the listing level
+      return (data as unknown as PropertyListingWithImages[]).map(listing => {
+        const rawImages = listing.raw_posts?.images;
+        const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
+        return {
+          ...listing,
+          images,
+        };
+      }) as (PropertyListing & { images: PropertyImage[] })[];
     },
   });
 }
@@ -156,5 +181,27 @@ export function useUpdateListing() {
         variant: 'destructive',
       });
     },
+  });
+}
+
+export function usePropertyImages(rawPostId: string | null) {
+  return useQuery({
+    queryKey: ['property-images', rawPostId],
+    queryFn: async () => {
+      if (!rawPostId) return [];
+      
+      const { data, error } = await supabase
+        .from('raw_posts')
+        .select('images')
+        .eq('id', rawPostId)
+        .single();
+
+      if (error) throw error;
+      
+      // Parse images from JSONB - need to cast through unknown due to Json type
+      const images = (data?.images as unknown) as PropertyImage[] | null;
+      return Array.isArray(images) ? images : [];
+    },
+    enabled: !!rawPostId,
   });
 }

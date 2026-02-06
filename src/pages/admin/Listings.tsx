@@ -29,7 +29,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { useAdminListings } from '@/hooks/useAdminData';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useAdminListings, useGeocodeMissing } from '@/hooks/useAdminData';
 import { useUpdateListing, PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
 import {
@@ -41,12 +42,14 @@ import {
   XCircle,
   Filter,
   Image as ImageIcon,
+  Globe,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const propertyTypeColors: Record<PropertyType, string> = {
   land: 'bg-green-500/10 text-green-600',
   house: 'bg-orange-500/10 text-orange-600',
+  apartment: 'bg-violet-500/10 text-violet-600',
   commercial: 'bg-blue-500/10 text-blue-600',
   other: 'bg-gray-500/10 text-gray-600',
 };
@@ -61,8 +64,10 @@ const confidenceColor = (score: number | null) => {
 export default function Listings() {
   const { data: listings = [], isLoading } = useAdminListings(200);
   const updateListing = useUpdateListing();
+  const { geocodeMissing, isProcessing: isGeocoding, logs: geocodeLogs, progress: geocodeProgress, reset: resetGeocode } = useGeocodeMissing();
 
   const [editingListing, setEditingListing] = useState<PropertyListing | null>(null);
+  const [showGeocodeDialog, setShowGeocodeDialog] = useState(false);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterValidity, setFilterValidity] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,6 +139,13 @@ export default function Listings() {
     valid: listings.filter((l) => l.is_valid).length,
     withCoords: listings.filter((l) => l.latitude && l.longitude).length,
     lowConfidence: listings.filter((l) => (l.confidence_score || 0) < 50).length,
+    missingCoords: listings.filter((l) => l.locality && (!l.latitude || !l.longitude)).length,
+  };
+
+  const handleStartGeocode = () => {
+    setShowGeocodeDialog(true);
+    resetGeocode();
+    geocodeMissing(20);
   };
 
   return (
@@ -147,6 +159,13 @@ export default function Listings() {
             </h1>
             <p className="text-muted-foreground">Review and correct extracted listings</p>
           </div>
+          {stats.missingCoords > 0 && (
+            <Button onClick={handleStartGeocode} disabled={isGeocoding}>
+              {isGeocoding && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Globe className="h-4 w-4 mr-2" />
+              Geocode Missing ({stats.missingCoords})
+            </Button>
+          )}
         </div>
 
         {/* Stats */}
@@ -196,6 +215,7 @@ export default function Listings() {
                   <SelectItem value="all">All Types</SelectItem>
                   <SelectItem value="land">Land</SelectItem>
                   <SelectItem value="house">House</SelectItem>
+                  <SelectItem value="apartment">Apartment</SelectItem>
                   <SelectItem value="commercial">Commercial</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
@@ -344,6 +364,7 @@ export default function Listings() {
                   <SelectContent>
                     <SelectItem value="land">Land</SelectItem>
                     <SelectItem value="house">House</SelectItem>
+                    <SelectItem value="apartment">Apartment</SelectItem>
                     <SelectItem value="commercial">Commercial</SelectItem>
                     <SelectItem value="other">Other</SelectItem>
                   </SelectContent>
@@ -411,6 +432,73 @@ export default function Listings() {
               <Button onClick={handleSave} disabled={updateListing.isPending}>
                 {updateListing.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Geocode Dialog */}
+        <Dialog open={showGeocodeDialog} onOpenChange={setShowGeocodeDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-primary" />
+                Geocoding Listings
+              </DialogTitle>
+              <DialogDescription>
+                Fetching coordinates for listings with missing lat/lng
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {geocodeProgress && (
+                <div className="grid grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{geocodeProgress.processed}</div>
+                    <div className="text-sm text-muted-foreground">Processed</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{geocodeProgress.geocoded}</div>
+                    <div className="text-sm text-muted-foreground">Geocoded</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">{geocodeProgress.failed}</div>
+                    <div className="text-sm text-muted-foreground">Failed</div>
+                  </div>
+                </div>
+              )}
+
+              <ScrollArea className="h-48 rounded border p-3 bg-muted/50">
+                <div className="space-y-1 font-mono text-xs">
+                  {geocodeLogs.length === 0 && isGeocoding && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Starting geocoding...
+                    </div>
+                  )}
+                  {geocodeLogs.map((log, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        'flex items-start gap-2',
+                        log.type === 'success' && 'text-green-600',
+                        log.type === 'warning' && 'text-yellow-600',
+                        log.type === 'error' && 'text-red-600',
+                        log.type === 'info' && 'text-muted-foreground'
+                      )}
+                    >
+                      <span className="shrink-0">{log.type === 'success' ? '✓' : log.type === 'error' ? '✗' : log.type === 'warning' ? '⚠' : '○'}</span>
+                      <span>{log.message}</span>
+                      {log.details && <span className="text-muted-foreground">— {log.details}</span>}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowGeocodeDialog(false)}>
+                {isGeocoding ? 'Close' : 'Done'}
               </Button>
             </DialogFooter>
           </DialogContent>

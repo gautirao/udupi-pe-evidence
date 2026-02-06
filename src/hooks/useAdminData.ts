@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState, useCallback } from 'react';
 
 // Types
 export interface FacebookGroup {
@@ -242,6 +243,58 @@ export function useCreateRawPost() {
   });
 }
 
+export function useUpdateRawPost() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<RawPost> }) => {
+      const { data, error } = await supabase
+        .from('raw_posts')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['raw-posts'] });
+      toast({ title: 'Post Updated', description: 'Raw post updated successfully.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+export function useResetPostForReprocessing() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (postId: string) => {
+      const { data, error } = await supabase
+        .from('raw_posts')
+        .update({ is_processed: false })
+        .eq('id', postId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['raw-posts'] });
+      toast({ title: 'Post Reset', description: 'Post marked for reprocessing.' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
 // Admin Listings Hook (shows all including invalid)
 export function useAdminListings(limit = 100) {
   const { isAdmin } = useAuth();
@@ -260,4 +313,110 @@ export function useAdminListings(limit = 100) {
     },
     enabled: isAdmin,
   });
+}
+
+// Geocode missing coordinates hook with streaming
+interface GeocodeLogEvent {
+  type: 'info' | 'success' | 'warning' | 'error' | 'done';
+  message?: string;
+  details?: string;
+  timestamp?: string;
+  processed?: number;
+  geocoded?: number;
+  failed?: number;
+}
+
+export function useGeocodeMissing() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [logs, setLogs] = useState<GeocodeLogEvent[]>([]);
+  const [progress, setProgress] = useState<{ processed: number; geocoded: number; failed: number } | null>(null);
+
+  const geocodeMissing = useCallback(async (batchSize = 20) => {
+    setIsProcessing(true);
+    setLogs([]);
+    setProgress(null);
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+    try {
+      // Use raw fetch for streaming - supabase.functions.invoke doesn't support streams
+      const response = await fetch(`${supabaseUrl}/functions/v1/geocode-missing`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+        body: JSON.stringify({ batch_size: batchSize, stream: true }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('No response body');
+      }
+
+      // Handle streaming response
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event: GeocodeLogEvent = JSON.parse(line.slice(6));
+              if (event.type === 'done') {
+                setProgress({
+                  processed: event.processed || 0,
+                  geocoded: event.geocoded || 0,
+                  failed: event.failed || 0,
+                });
+              } else {
+                setLogs(prev => [...prev.slice(-99), event]);
+              }
+            } catch {
+              // Skip malformed JSON
+            }
+          }
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['admin-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['property-listings'] });
+      
+      toast({
+        title: 'Geocoding Complete',
+        description: 'Listings have been updated with coordinates.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      toast({
+        title: 'Geocoding Failed',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [queryClient, toast]);
+
+  const reset = useCallback(() => {
+    setLogs([]);
+    setProgress(null);
+  }, []);
+
+  return { geocodeMissing, isProcessing, logs, progress, reset };
 }

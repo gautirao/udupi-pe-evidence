@@ -4,12 +4,14 @@ import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -30,15 +32,18 @@ public class DashboardController {
     private static final BigDecimal PAISE_TO_RUPEES = new BigDecimal("100");
     private static final int DEFAULT_WEEKS = 52;
     private static final int MAX_WEEKS = 520; // ~10 years
-    private static final int DEFAULT_MAP_LIMIT = 200;
+    private static final int MAX_LIMIT = 200;
     private static final int MAX_MAP_LIMIT = 500;
 
     private final AreaPriceWeeklyRepository areaPriceWeeklyRepository;
+    private final AreaInsightsDao areaInsightsDao;
     private final ListingRepository listingRepository;
 
     public DashboardController(AreaPriceWeeklyRepository areaPriceWeeklyRepository,
+                               AreaInsightsDao areaInsightsDao,
                                ListingRepository listingRepository) {
         this.areaPriceWeeklyRepository = areaPriceWeeklyRepository;
+        this.areaInsightsDao = areaInsightsDao;
         this.listingRepository = listingRepository;
     }
 
@@ -132,6 +137,39 @@ public class DashboardController {
                 listing.getCreatedAt());
     }
 
+    // ==================== Area Insights Endpoint ====================
+
+    @GetMapping("/areas/insights")
+    public ResponseEntity<List<AreaInsightsResponse>> getAreaInsights(
+            @RequestParam(name = "sort", defaultValue = "median_desc") String sort,
+            @RequestParam(name = "limit", defaultValue = "50") int limit,
+            @RequestParam(name = "minCount", defaultValue = "5") int minCount) {
+
+        if (!AreaInsightsDao.isValidSort(sort)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown sort: " + sort);
+        }
+
+        int effectiveLimit = Math.min(Math.max(limit, 1), MAX_LIMIT);
+        int effectiveMinCount = Math.max(minCount, 0);
+
+        log.info("Fetching area insights sort={} limit={} minCount={}", sort, effectiveLimit, effectiveMinCount);
+
+        List<AreaInsightsResponse> response = areaInsightsDao.findInsights(sort, effectiveLimit, effectiveMinCount)
+                .stream()
+                .map(row -> new AreaInsightsResponse(
+                        row.areaKey(),
+                        row.listingCount(),
+                        paiseToRupees(row.medianPricePerCentPaise()),
+                        paiseToRupees(row.cityMedianPricePerCentPaise()),
+                        row.priceIndex(),
+                        row.updatedAt()
+                ))
+                .toList();
+
+        log.debug("Returning {} area insights", response.size());
+        return ResponseEntity.ok(response);
+    }
+
     /**
      * Response DTO for price history endpoint.
      * Prices are in rupees (converted from paise stored in DB).
@@ -155,6 +193,16 @@ public class DashboardController {
             Double latitude,
             Double longitude,
             OffsetDateTime createdAt
+    ) {
+    }
+
+    public record AreaInsightsResponse(
+            String areaKey,
+            int listingCount,
+            BigDecimal medianPricePerCentRupees,
+            BigDecimal cityMedianPricePerCentRupees,
+            BigDecimal priceIndex,
+            OffsetDateTime updatedAt
     ) {
     }
 }

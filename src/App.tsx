@@ -8,10 +8,12 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import ListingDetail from "./pages/ListingDetail";
 import FacebookGroups from "./pages/admin/FacebookGroups";
 import FeedRuns from "./pages/admin/FeedRuns";
 import ManualPost from "./pages/admin/ManualPost";
 import Listings from "./pages/admin/Listings";
+import Duplicates from "./pages/admin/Duplicates";
 import ChromeExtensionSetup from "./pages/admin/ChromeExtensionSetup";
 import ProcessPosts from "./pages/admin/ProcessPosts";
 
@@ -31,6 +33,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Index />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/listing/:id"
+              element={
+                <ProtectedRoute>
+                  <ListingDetail />
                 </ProtectedRoute>
               }
             />
@@ -80,6 +90,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <ProcessPosts />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/duplicates"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Duplicates />
                 </ProtectedRoute>
               }
             />
