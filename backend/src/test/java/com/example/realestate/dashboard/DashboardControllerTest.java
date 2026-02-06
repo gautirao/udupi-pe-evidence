@@ -12,6 +12,7 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -47,6 +48,11 @@ class DashboardControllerTest {
         public AreaPriceWeeklyRepository areaPriceWeeklyRepository() {
             return mock(AreaPriceWeeklyRepository.class);
         }
+
+        @Bean
+        public AreaInsightsDao areaInsightsDao() {
+            return mock(AreaInsightsDao.class);
+        }
     }
 
     @Autowired
@@ -55,9 +61,13 @@ class DashboardControllerTest {
     @Autowired
     private AreaPriceWeeklyRepository areaPriceWeeklyRepository;
 
+    @Autowired
+    private AreaInsightsDao areaInsightsDao;
+
     @BeforeEach
     void setUp() {
         reset(areaPriceWeeklyRepository);
+        reset(areaInsightsDao);
     }
 
     // ==================== Authentication Tests ====================
@@ -215,6 +225,156 @@ class DashboardControllerTest {
         mockMvc.perform(get("/api/dashboard/areas/nonexistent-area/price-history"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // ==================== Area Insights: Authentication Tests ====================
+
+    @Test
+    void getInsights_withoutAuth_returnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/dashboard/areas/insights"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ==================== Area Insights: Sort Validation ====================
+
+    @Test
+    @WithMockUser
+    void getInsights_unknownSort_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/dashboard/areas/insights")
+                        .param("sort", "bogus"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ==================== Area Insights: Sorting ====================
+
+    @Test
+    @WithMockUser
+    void getInsights_defaultSort_isMedianDesc() throws Exception {
+        when(areaInsightsDao.findInsights("median_desc", 50, 5)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/areas/insights"))
+                .andExpect(status().isOk());
+
+        verify(areaInsightsDao).findInsights("median_desc", 50, 5);
+    }
+
+    @Test
+    @WithMockUser
+    void getInsights_medianAsc_passesCorrectSort() throws Exception {
+        when(areaInsightsDao.findInsights("median_asc", 50, 5)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/areas/insights")
+                        .param("sort", "median_asc"))
+                .andExpect(status().isOk());
+
+        verify(areaInsightsDao).findInsights("median_asc", 50, 5);
+    }
+
+    @Test
+    @WithMockUser
+    void getInsights_activityDesc_passesCorrectSort() throws Exception {
+        when(areaInsightsDao.findInsights("activity_desc", 50, 5)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/areas/insights")
+                        .param("sort", "activity_desc"))
+                .andExpect(status().isOk());
+
+        verify(areaInsightsDao).findInsights("activity_desc", 50, 5);
+    }
+
+    @Test
+    @WithMockUser
+    void getInsights_responsePreservesOrder() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<AreaInsightsDao.AreaInsightRow> mockData = List.of(
+                new AreaInsightsDao.AreaInsightRow("area-a", 20, 900000L, 800000L, new BigDecimal("1.1250"), now),
+                new AreaInsightsDao.AreaInsightRow("area-b", 15, 700000L, 800000L, new BigDecimal("0.8750"), now),
+                new AreaInsightsDao.AreaInsightRow("area-c", 10, 500000L, 800000L, new BigDecimal("0.6250"), now)
+        );
+        when(areaInsightsDao.findInsights("median_desc", 50, 5)).thenReturn(mockData);
+
+        mockMvc.perform(get("/api/dashboard/areas/insights"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(3))
+                .andExpect(jsonPath("$[0].areaKey").value("area-a"))
+                .andExpect(jsonPath("$[1].areaKey").value("area-b"))
+                .andExpect(jsonPath("$[2].areaKey").value("area-c"));
+    }
+
+    // ==================== Area Insights: Paise to Rupees Conversion ====================
+
+    @Test
+    @WithMockUser
+    void getInsights_convertsPaiseToRupeesCorrectly() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<AreaInsightsDao.AreaInsightRow> mockData = List.of(
+                new AreaInsightsDao.AreaInsightRow("test-area", 10, 500000L, 300000L, new BigDecimal("1.6667"), now)
+        );
+        when(areaInsightsDao.findInsights("median_desc", 50, 5)).thenReturn(mockData);
+
+        mockMvc.perform(get("/api/dashboard/areas/insights"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].medianPricePerCentRupees").value(5000.00))
+                .andExpect(jsonPath("$[0].cityMedianPricePerCentRupees").value(3000.00))
+                .andExpect(jsonPath("$[0].priceIndex").value(1.6667));
+    }
+
+    @Test
+    @WithMockUser
+    void getInsights_handlesNullPrices() throws Exception {
+        OffsetDateTime now = OffsetDateTime.now();
+        List<AreaInsightsDao.AreaInsightRow> mockData = List.of(
+                new AreaInsightsDao.AreaInsightRow("null-area", 5, null, null, null, now)
+        );
+        when(areaInsightsDao.findInsights("median_desc", 50, 5)).thenReturn(mockData);
+
+        mockMvc.perform(get("/api/dashboard/areas/insights"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].areaKey").value("null-area"))
+                .andExpect(jsonPath("$[0].listingCount").value(5))
+                .andExpect(jsonPath("$[0].medianPricePerCentRupees").isEmpty())
+                .andExpect(jsonPath("$[0].cityMedianPricePerCentRupees").isEmpty())
+                .andExpect(jsonPath("$[0].priceIndex").isEmpty());
+    }
+
+    // ==================== Area Insights: minCount Filter ====================
+
+    @Test
+    @WithMockUser
+    void getInsights_passesMinCountToDao() throws Exception {
+        when(areaInsightsDao.findInsights("median_desc", 50, 10)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/areas/insights")
+                        .param("minCount", "10"))
+                .andExpect(status().isOk());
+
+        verify(areaInsightsDao).findInsights("median_desc", 50, 10);
+    }
+
+    @Test
+    @WithMockUser
+    void getInsights_minCountFlooredAtZero() throws Exception {
+        when(areaInsightsDao.findInsights("median_desc", 50, 0)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/areas/insights")
+                        .param("minCount", "-5"))
+                .andExpect(status().isOk());
+
+        verify(areaInsightsDao).findInsights("median_desc", 50, 0);
+    }
+
+    // ==================== Area Insights: Limit ====================
+
+    @Test
+    @WithMockUser
+    void getInsights_limitCappedAt200() throws Exception {
+        when(areaInsightsDao.findInsights("median_desc", 200, 5)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/areas/insights")
+                        .param("limit", "999"))
+                .andExpect(status().isOk());
+
+        verify(areaInsightsDao).findInsights("median_desc", 200, 5);
     }
 
     // ==================== Helper Methods ====================
