@@ -1,5 +1,7 @@
 package com.example.realestate.dashboard;
 
+import com.example.realestate.listing.Listing;
+import com.example.realestate.listing.ListingRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,12 +20,13 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * Integration tests for the Dashboard API price history endpoint.
+ * Integration tests for the Dashboard API endpoints.
  * Tests authentication, ordering, and paise-to-rupees conversion.
  */
 @WebMvcTest(
@@ -53,6 +56,11 @@ class DashboardControllerTest {
         public AreaInsightsDao areaInsightsDao() {
             return mock(AreaInsightsDao.class);
         }
+
+        @Bean
+        public ListingRepository listingRepository() {
+            return mock(ListingRepository.class);
+        }
     }
 
     @Autowired
@@ -64,10 +72,12 @@ class DashboardControllerTest {
     @Autowired
     private AreaInsightsDao areaInsightsDao;
 
+    @Autowired
+    private ListingRepository listingRepository;
+
     @BeforeEach
     void setUp() {
-        reset(areaPriceWeeklyRepository);
-        reset(areaInsightsDao);
+        reset(areaPriceWeeklyRepository, areaInsightsDao, listingRepository);
     }
 
     // ==================== Authentication Tests ====================
@@ -377,6 +387,202 @@ class DashboardControllerTest {
         verify(areaInsightsDao).findInsights("median_desc", 200, 5);
     }
 
+    // ==================== Map Listings: Auth Tests ====================
+
+    @Test
+    void getMapListings_withoutAuth_returnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ==================== Map Listings: Bbox Validation Tests ====================
+
+    @Test
+    @WithMockUser
+    void getMapListings_minLatGreaterThanMaxLat_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "12.0").param("minLng", "74.0")
+                        .param("maxLat", "10.0").param("maxLng", "75.0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser
+    void getMapListings_minLngGreaterThanMaxLng_returnsBadRequest() throws Exception {
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "76.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ==================== Map Listings: Happy Path ====================
+
+    @Test
+    @WithMockUser
+    void getMapListings_returnsListingsWithPaiseToRupeesConversion() throws Exception {
+        Listing listing = createListing(
+                10.5, 74.5, "IN|KA|Udupi|Manipal", "Manipal, Udupi",
+                "3 cent plot in Manipal", 1500000L, 500000L);
+
+        when(listingRepository.findInBoundingBox(
+                eq(10.0), eq(74.0), eq(11.0), eq(75.0),
+                isNull(), isNull(), any(), eq(200)))
+                .thenReturn(List.of(listing));
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].title").value("3 cent plot in Manipal"))
+                .andExpect(jsonPath("$[0].priceRupees").value(15000.00))
+                .andExpect(jsonPath("$[0].pricePerCentRupees").value(5000.00))
+                .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
+                .andExpect(jsonPath("$[0].areaLabel").value("Manipal, Udupi"))
+                .andExpect(jsonPath("$[0].latitude").value(10.5))
+                .andExpect(jsonPath("$[0].longitude").value(74.5));
+    }
+
+    // ==================== Map Listings: Price Filter Tests ====================
+
+    @Test
+    @WithMockUser
+    void getMapListings_priceFilterConvertsRupeesToPaise() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                eq(10.0), eq(74.0), eq(11.0), eq(75.0),
+                eq(300000L), eq(700000L), any(), eq(200)))
+                .thenReturn(List.of());
+
+        // minPpc=3000 rupees = 300000 paise, maxPpc=7000 rupees = 700000 paise
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0")
+                        .param("minPpc", "3000").param("maxPpc", "7000"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                eq(10.0), eq(74.0), eq(11.0), eq(75.0),
+                eq(300000L), eq(700000L), any(), eq(200));
+    }
+
+    @Test
+    @WithMockUser
+    void getMapListings_noPriceFilter_passesNullPpcParams() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), any(), anyInt()))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                eq(10.0), eq(74.0), eq(11.0), eq(75.0),
+                isNull(), isNull(), any(), eq(200));
+    }
+
+    // ==================== Map Listings: FreshDays Tests ====================
+
+    @Test
+    @WithMockUser
+    void getMapListings_freshDaysZero_passesNullCreatedAfter() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0")
+                        .param("freshDays", "0"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), isNull(), anyInt());
+    }
+
+    @Test
+    @WithMockUser
+    void getMapListings_negativeFreshDays_passesNullCreatedAfter() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), isNull(), anyInt()))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0")
+                        .param("freshDays", "-5"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), isNull(), anyInt());
+    }
+
+    @Test
+    @WithMockUser
+    void getMapListings_defaultFreshDays_passesNonNullCreatedAfter() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), argThat(t -> t != null), anyInt()))
+                .thenReturn(List.of());
+
+        // Default freshDays=7, so createdAfter should be non-null
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                isNull(), isNull(), argThat(t -> t != null), anyInt());
+    }
+
+    // ==================== Map Listings: Limit Tests ====================
+
+    @Test
+    @WithMockUser
+    void getMapListings_limitCappedAt500() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(), any(), any(), eq(500)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0")
+                        .param("limit", "999"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(), any(), any(), eq(500));
+    }
+
+    @Test
+    @WithMockUser
+    void getMapListings_defaultLimitIs200() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(), any(), any(), eq(200)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(), any(), any(), eq(200));
+    }
+
     // ==================== Helper Methods ====================
 
     private AreaPriceWeekly createWeeklyData(
@@ -397,5 +603,22 @@ class DashboardControllerTest {
         entity.setCreatedAt(OffsetDateTime.now());
         entity.setUpdatedAt(OffsetDateTime.now());
         return entity;
+    }
+
+    private Listing createListing(
+            double lat, double lng, String areaKey, String areaLabel,
+            String description, Long pricePaise, Long pricePerCentPaise) {
+        Listing listing = new Listing();
+        listing.setId(UUID.randomUUID());
+        listing.setLatitude(lat);
+        listing.setLongitude(lng);
+        listing.setAreaKey(areaKey);
+        listing.setAreaLabel(areaLabel);
+        listing.setDescription(description);
+        listing.setPricePaise(pricePaise);
+        listing.setPricePerCentPaise(pricePerCentPaise);
+        listing.setDuplicate(false);
+        listing.setCreatedAt(OffsetDateTime.now());
+        return listing;
     }
 }
