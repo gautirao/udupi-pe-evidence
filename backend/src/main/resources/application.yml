@@ -11,7 +11,8 @@ spring:
         sslmode: require
 
   flyway:
-    enabled: false
+    enabled: true
+    baseline-on-migrate: true
 
   jpa:
     hibernate:
@@ -37,6 +38,15 @@ app:
   ingestion:
     batch-size: ${INGESTION_BATCH_SIZE:10}
     poll-interval-ms: ${INGESTION_POLL_INTERVAL_MS:30000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
 
 server:
   port: ${SERVER_PORT:8085}
