@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+backend/target/*
+
+# Lockfiles (npm only — prevent Cloudflare from auto-selecting bun)
+bun.lockb
