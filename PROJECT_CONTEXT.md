@@ -141,10 +141,18 @@ Prod:
 
 ---
 
+## MVP Specification
+
+- Authoritative MVP spec: `docs/MVP_SPEC.md`
+- Sprint plan: `docs/SPRINT_01_PLAN.md`
+- All implementation must reference the spec. Do not duplicate spec content here.
+
+---
+
 ## AI assistant rules
 
 - Treat this file as authoritative
 - Prefer minimal diffs
 - Update this file when new facts are discovered
 
-Last updated: YYYY-MM-DD
+Last updated: 2026-02-10
