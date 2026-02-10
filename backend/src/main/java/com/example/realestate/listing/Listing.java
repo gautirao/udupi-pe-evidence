@@ -30,6 +30,9 @@ public class Listing {
     @Column(name = "status", nullable = false, columnDefinition = "public.listing_status")
     private String status = ListingStatus.SCRAPED.toDbValue();
 
+    @Column(name = "title")
+    private String title;
+
     @Column(name = "locality")
     private String locality;
 
@@ -140,6 +143,28 @@ public class Listing {
     @Column(name = "parsed_data", columnDefinition = "jsonb")
     private String parsedData;
 
+    // --- Dealer workflow fields ---
+
+    @Column(name = "address_confirmed", nullable = false)
+    private boolean addressConfirmed = false;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
+    @Column(name = "submitted_at")
+    private OffsetDateTime submittedAt;
+
+    @Column(name = "reviewed_at")
+    private OffsetDateTime reviewedAt;
+
+    @Column(name = "reviewed_by")
+    private UUID reviewedBy;
+
+    @Column(name = "created_by")
+    private UUID createdBy;
+
+    // --- Metadata ---
+
     @Column(name = "updated_by")
     private UUID updatedBy;
 
@@ -181,6 +206,14 @@ public class Listing {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
     }
 
     public String getLocality() {
@@ -405,6 +438,54 @@ public class Listing {
 
     public void setParsedData(String parsedData) {
         this.parsedData = parsedData;
+    }
+
+    public boolean isAddressConfirmed() {
+        return addressConfirmed;
+    }
+
+    public void setAddressConfirmed(boolean addressConfirmed) {
+        this.addressConfirmed = addressConfirmed;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public OffsetDateTime getSubmittedAt() {
+        return submittedAt;
+    }
+
+    public void setSubmittedAt(OffsetDateTime submittedAt) {
+        this.submittedAt = submittedAt;
+    }
+
+    public OffsetDateTime getReviewedAt() {
+        return reviewedAt;
+    }
+
+    public void setReviewedAt(OffsetDateTime reviewedAt) {
+        this.reviewedAt = reviewedAt;
+    }
+
+    public UUID getReviewedBy() {
+        return reviewedBy;
+    }
+
+    public void setReviewedBy(UUID reviewedBy) {
+        this.reviewedBy = reviewedBy;
+    }
+
+    public UUID getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(UUID createdBy) {
+        this.createdBy = createdBy;
     }
 
     public UUID getUpdatedBy() {
