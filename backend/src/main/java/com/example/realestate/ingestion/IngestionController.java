@@ -71,6 +71,73 @@ public class IngestionController {
         ));
     }
 
+    /**
+     * Edge-function-compatible endpoint for Chrome extension.
+     * Matches the payload contract of supabase/functions/ingest-posts.
+     * Auth: permitAll (mirrors edge function verify_jwt=false).
+     */
+    @PostMapping("/ingest-posts")
+    public ResponseEntity<Map<String, Object>> ingestPostsCompat(@RequestBody ExtensionIngestRequest request) {
+        if (request.posts() == null || request.posts().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No posts provided"));
+        }
+
+        String sourceUrl = truncate(request.source_url(), 2000);
+        log.info("Received extension ingest request postCount={} sourceUrl={}",
+                request.posts().size(), sourceUrl);
+
+        int imported = 0;
+        for (ExtensionPost post : request.posts()) {
+            try {
+                String content = post.content() != null ? post.content().trim() : "";
+                if (content.length() <= 10) {
+                    log.debug("Skipping post with short content length={}", content.length());
+                    continue;
+                }
+
+                RawPost rawPost = new RawPost();
+                rawPost.setContent(truncate(content, 10000));
+                rawPost.setExternalPostId(truncate(post.external_post_id(), 255));
+                rawPost.setAuthorName(truncate(post.author_name(), 255));
+                rawPost.setPostedAt(post.posted_at());
+                rawPost.setSourceUrl(sourceUrl);
+                rawPost.setCreatedAt(OffsetDateTime.now());
+
+                // Preserve images as-is in JSONB (edge function format: [{url, alt, width, height}])
+                if (post.images() != null && !post.images().isEmpty()) {
+                    try {
+                        rawPost.setImages(objectMapper.writeValueAsString(post.images()));
+                    } catch (JsonProcessingException e) {
+                        log.warn("Failed to serialize images for post, using empty array", e);
+                        rawPost.setImages("[]");
+                    }
+                } else {
+                    rawPost.setImages("[]");
+                }
+
+                rawPostService.save(rawPost);
+                imported++;
+            } catch (Exception e) {
+                log.error("Failed to persist extension post externalPostId={}",
+                        post.external_post_id(), e);
+            }
+        }
+
+        log.info("Extension ingest complete imported={} total={}", imported, request.posts().size());
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of(
+                "success", true,
+                "imported", imported,
+                "feed_run_id", "null",
+                "message", String.format("Successfully imported %d posts", imported)
+        ));
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) return null;
+        return value.length() > maxLength ? value.substring(0, maxLength) : value;
+    }
+
     @PostMapping("/bulk")
     public ResponseEntity<Map<String, Object>> ingestBulk(@RequestBody BulkIngestRequest request) {
         log.info("Received bulk ingestion request postCount={}", request.posts().size());
@@ -112,5 +179,22 @@ public class IngestionController {
     }
 
     public record BulkIngestRequest(List<IngestRequest> posts) {
+    }
+
+    // Edge-function-compatible DTOs (snake_case to match Chrome extension payload)
+    public record ExtensionIngestRequest(
+            List<ExtensionPost> posts,
+            String source_url,
+            String group_name
+    ) {
+    }
+
+    public record ExtensionPost(
+            String content,
+            String author_name,
+            OffsetDateTime posted_at,
+            String external_post_id,
+            List<Object> images
+    ) {
     }
 }

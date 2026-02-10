@@ -42,7 +42,9 @@ class IngestionControllerIntegrationTest {
         public SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
             return http
                     .csrf(AbstractHttpConfigurer::disable)
-                    .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                    .authorizeHttpRequests(auth -> auth
+                            .requestMatchers("/api/ingestion/ingest-posts").permitAll()
+                            .anyRequest().authenticated())
                     .build();
         }
 
@@ -345,6 +347,134 @@ class IngestionControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
         );
+    }
+
+    // ==================== Extension Compat Endpoint Tests ====================
+
+    @Test
+    void ingestPostsCompat_withoutAuth_returns202() throws Exception {
+        // This endpoint is permitAll — no auth required
+        when(rawPostRepository.save(any(RawPost.class))).thenAnswer(inv -> {
+            RawPost p = inv.getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+
+        String requestBody = """
+            {
+                "posts": [
+                    {"content": "3 BHK house for sale in Manipal, 2400 sqft, price 85 lakhs", "author_name": "Test User", "external_post_id": "ext_001", "posted_at": "2026-02-04T10:00:00Z", "images": []},
+                    {"content": "Beautiful 2 BHK apartment near beach, fully furnished", "author_name": "Agent", "external_post_id": "ext_002", "posted_at": "2026-02-04T11:00:00Z", "images": []}
+                ],
+                "source_url": "https://facebook.com/groups/udupi-realestate",
+                "group_name": "Udupi Real Estate"
+            }
+            """;
+
+        mockMvc.perform(post("/api/ingestion/ingest-posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.imported").value(2))
+                .andExpect(jsonPath("$.feed_run_id").value("null"))
+                .andExpect(jsonPath("$.message").value("Successfully imported 2 posts"));
+
+        verify(rawPostRepository, times(2)).save(any(RawPost.class));
+    }
+
+    @Test
+    void ingestPostsCompat_filtersShortContent_returns202() throws Exception {
+        when(rawPostRepository.save(any(RawPost.class))).thenAnswer(inv -> {
+            RawPost p = inv.getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+
+        String requestBody = """
+            {
+                "posts": [
+                    {"content": "Short", "author_name": "A", "external_post_id": "short_001"},
+                    {"content": "This is a valid post with enough content to pass the filter", "author_name": "B", "external_post_id": "valid_001"}
+                ],
+                "source_url": "https://facebook.com/groups/test"
+            }
+            """;
+
+        mockMvc.perform(post("/api/ingestion/ingest-posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.imported").value(1));
+
+        verify(rawPostRepository, times(1)).save(any(RawPost.class));
+    }
+
+    @Test
+    void ingestPostsCompat_emptyPosts_returns400() throws Exception {
+        String requestBody = """
+            {
+                "posts": [],
+                "source_url": "https://facebook.com/groups/test"
+            }
+            """;
+
+        mockMvc.perform(post("/api/ingestion/ingest-posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("No posts provided"));
+
+        verify(rawPostRepository, never()).save(any(RawPost.class));
+    }
+
+    @Test
+    void ingestPostsCompat_nullPosts_returns400() throws Exception {
+        String requestBody = """
+            {
+                "source_url": "https://facebook.com/groups/test"
+            }
+            """;
+
+        mockMvc.perform(post("/api/ingestion/ingest-posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("No posts provided"));
+    }
+
+    @Test
+    void ingestPostsCompat_withImages_preservesJsonFormat() throws Exception {
+        when(rawPostRepository.save(any(RawPost.class))).thenAnswer(inv -> {
+            RawPost p = inv.getArgument(0);
+            p.setId(UUID.randomUUID());
+            return p;
+        });
+
+        String requestBody = """
+            {
+                "posts": [
+                    {
+                        "content": "Beautiful property with sea view, 3 BHK fully furnished",
+                        "author_name": "Agent",
+                        "external_post_id": "img_001",
+                        "images": [
+                            {"url": "https://example.com/img1.jpg", "alt": "Front view"},
+                            {"url": "https://example.com/img2.jpg", "alt": "Kitchen"}
+                        ]
+                    }
+                ],
+                "source_url": "https://facebook.com/groups/test"
+            }
+            """;
+
+        mockMvc.perform(post("/api/ingestion/ingest-posts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.imported").value(1));
+
+        verify(rawPostRepository, times(1)).save(any(RawPost.class));
     }
 
     // ==================== Content-Type Tests ====================
