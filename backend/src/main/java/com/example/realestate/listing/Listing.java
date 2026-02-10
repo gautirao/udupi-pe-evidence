@@ -27,6 +27,9 @@ public class Listing {
     @Column(name = "property_type", nullable = false, columnDefinition = "public.property_type")
     private String propertyType = "other";
 
+    @Column(name = "status", nullable = false, columnDefinition = "public.listing_status")
+    private String status = ListingStatus.SCRAPED.toDbValue();
+
     @Column(name = "locality")
     private String locality;
 
@@ -170,6 +173,14 @@ public class Listing {
 
     public void setPropertyType(String propertyType) {
         this.propertyType = propertyType;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public String getLocality() {
