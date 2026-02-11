@@ -22,6 +22,10 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     List<Listing> findByCreatedByOrderByCreatedAtDesc(UUID createdBy);
 
+    @Query(value = "SELECT COUNT(*) FROM public.listing_images WHERE listing_id = :listingId",
+            nativeQuery = true)
+    long countImagesByListingId(@Param("listingId") UUID listingId);
+
     @Query(value = "SELECT role::text FROM public.user_roles WHERE user_id = :userId LIMIT 1",
             nativeQuery = true)
     Optional<String> findUserRole(@Param("userId") UUID userId);
