@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -18,6 +19,12 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
     boolean existsByDedupeHash(String dedupeHash);
 
     long countByDedupeHash(String dedupeHash);
+
+    List<Listing> findByCreatedByOrderByCreatedAtDesc(UUID createdBy);
+
+    @Query(value = "SELECT role::text FROM public.user_roles WHERE user_id = :userId LIMIT 1",
+            nativeQuery = true)
+    Optional<String> findUserRole(@Param("userId") UUID userId);
 
     @Query(value = """
             SELECT * FROM public.property_listings
