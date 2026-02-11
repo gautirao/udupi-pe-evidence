@@ -98,6 +98,24 @@ public class ListingController {
         }
     }
 
+    @PostMapping("/{id}/submit")
+    public ResponseEntity<?> submit(JwtAuthenticationToken auth, @PathVariable UUID id) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        try {
+            Listing submitted = listingService.submitListing(id, caller.userId(), caller.isAdmin());
+            log.info("POST /api/listings/{}/submit -> 200 status=PENDING_REVIEW", id);
+            return ResponseEntity.ok(toResponse(submitted));
+        } catch (ListingService.ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingService.ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (ListingService.ListingValidationException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("errors", e.getErrors()));
+        }
+    }
+
     // ===== Auth helpers =====
 
     private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {

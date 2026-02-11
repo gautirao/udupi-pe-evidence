@@ -20,8 +20,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -407,6 +409,120 @@ public class ListingService {
         return listing;
     }
 
+    // ===== Submission + validation =====
+
+    private static final Set<String> SUBMITTABLE_STATUSES = Set.of(
+            ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
+
+    private static final Set<String> SUBMITTABLE_PROPERTY_TYPES = Set.of(
+            "land", "house", "apartment");
+
+    private static final int MIN_IMAGES = 3;
+
+    /**
+     * Submit a listing for review. Validates all required fields and transitions
+     * status from DRAFT/REJECTED to PENDING_REVIEW.
+     *
+     * @throws ListingNotFoundException  if listing not found or not owned
+     * @throws ListingStatusException    if current status does not allow submission
+     * @throws ListingValidationException if validation rules fail (422)
+     */
+    @Transactional
+    public Listing submitListing(UUID listingId, UUID userId, boolean isAdmin) {
+        Listing listing = findOwnedListing(listingId, userId, isAdmin);
+
+        if (!SUBMITTABLE_STATUSES.contains(listing.getStatus())) {
+            throw new ListingStatusException(
+                    "Cannot submit listing with status " + listing.getStatus());
+        }
+
+        List<Map<String, String>> errors = validateForSubmission(listing);
+        if (!errors.isEmpty()) {
+            throw new ListingValidationException(errors);
+        }
+
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setSubmittedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Submitted listing listingId={} by userId={} status=PENDING_REVIEW",
+                listingId, userId);
+        return saved;
+    }
+
+    private List<Map<String, String>> validateForSubmission(Listing listing) {
+        List<Map<String, String>> errors = new ArrayList<>();
+
+        // Always-required: price > 0
+        if (listing.getPrice() == null || listing.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            errors.add(Map.of("field", "price", "message", "Price must be greater than 0"));
+        }
+
+        // Always-required: property_type in allowed set
+        String propertyType = listing.getPropertyType();
+        if (propertyType == null || !SUBMITTABLE_PROPERTY_TYPES.contains(propertyType)) {
+            if ("commercial".equals(propertyType)) {
+                errors.add(Map.of("field", "property_type",
+                        "message", "Commercial submission not supported yet"));
+            } else {
+                errors.add(Map.of("field", "property_type",
+                        "message", "Property type must be one of: land, house, apartment"));
+            }
+        }
+
+        // Always-required: locality non-empty
+        if (listing.getLocality() == null || listing.getLocality().isBlank()) {
+            errors.add(Map.of("field", "locality", "message", "Locality is required"));
+        }
+
+        // Always-required: address_confirmed = true
+        if (!listing.isAddressConfirmed()) {
+            errors.add(Map.of("field", "address_confirmed",
+                    "message", "Address must be confirmed before submission"));
+        }
+
+        // Always-required: >= 3 images
+        long imageCount = listingRepository.countImagesByListingId(listing.getId());
+        if (imageCount < MIN_IMAGES) {
+            errors.add(Map.of("field", "images",
+                    "message", "At least " + MIN_IMAGES + " images required (found " + imageCount + ")"));
+        }
+
+        // Property-type-specific validation (only if type is valid)
+        if (propertyType != null && SUBMITTABLE_PROPERTY_TYPES.contains(propertyType)) {
+            switch (propertyType) {
+                case "land" -> {
+                    if (listing.getLandArea() == null) {
+                        errors.add(Map.of("field", "land_area",
+                                "message", "Land area is required for land listings"));
+                    }
+                    if (listing.getLandAreaUnit() == null || listing.getLandAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "land_area_unit",
+                                "message", "Land area unit is required for land listings"));
+                    }
+                }
+                case "apartment" -> {
+                    if (listing.getBedrooms() == null) {
+                        errors.add(Map.of("field", "bedrooms",
+                                "message", "Bedrooms is required for apartment listings"));
+                    }
+                    if (listing.getBuiltArea() == null) {
+                        errors.add(Map.of("field", "built_area",
+                                "message", "Built area is required for apartment listings"));
+                    }
+                    if (listing.getBuiltAreaUnit() == null || listing.getBuiltAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "built_area_unit",
+                                "message", "Built area unit is required for apartment listings"));
+                    }
+                }
+                // house: no additional required fields
+            }
+        }
+
+        return errors;
+    }
+
     // ===== Dealer CRUD exceptions =====
 
     public static class ListingNotFoundException extends RuntimeException {
@@ -418,6 +534,19 @@ public class ListingService {
     public static class ListingStatusException extends RuntimeException {
         public ListingStatusException(String message) {
             super(message);
+        }
+    }
+
+    public static class ListingValidationException extends RuntimeException {
+        private final List<Map<String, String>> errors;
+
+        public ListingValidationException(List<Map<String, String>> errors) {
+            super("Listing validation failed");
+            this.errors = errors;
+        }
+
+        public List<Map<String, String>> getErrors() {
+            return errors;
         }
     }
 }
