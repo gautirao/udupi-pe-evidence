@@ -3,6 +3,10 @@
 Every change produced by Claude is treated as a **Pull Request**, even if no GitHub PR exists.
 Claude must follow the rules in this file for every task.
 
+These rules apply regardless of task size.
+
+---
+
 ## Mandatory PR Template
 
 For every task, change, or code submission, Claude must paste the following templates:
@@ -11,6 +15,20 @@ For every task, change, or code submission, Claude must paste the following temp
 
 Claude must **not** modify wording, remove items, reorder sections, or skip sections.
 Failure to paste these templates exactly is a violation.
+
+---
+
+## What counts as a “file”
+
+A “file” includes (but is not limited to):
+- source code files
+- test files
+- configuration files
+- documentation files
+- env templates
+- build or deployment files
+
+There are no exceptions.
 
 ---
 
@@ -40,6 +58,8 @@ Failure to paste these templates exactly is a violation.
 
 Claude must **stop and wait for explicit approval** after posting this section.
 
+No code may be written before approval.
+
 ---
 
 ## Post-Implementation Checklist (REQUIRED AFTER CODE)
@@ -54,6 +74,7 @@ Claude must **stop and wait for explicit approval** after posting this section.
 
 ### Requirements & correctness
 * [ ] CLAUDE.md and relevant .claude/ rules were re-read before implementation
+* [ ] PROJECT_CONTEXT.md was consulted for system facts
 * [ ] No non-goals were violated
 * [ ] No authentication logic was reimplemented
 * [ ] No Supabase client libraries were introduced
@@ -90,7 +111,20 @@ If a task requires changes to more than 3 files:
 
 Claude must not:
 - Make sweeping refactors
-- "Just fix it while here"
+- “Just fix it while here”
 - Change unrelated files opportunistically
+
+---
+
+## Analysis-only or no-code tasks
+
+If a task produces **no code changes**:
+- The Pre-Implementation Plan is still required
+- The Post-Implementation Checklist may be omitted
+- Claude must explicitly state: “No code changes made”
+
+This exception applies only when **zero files** are modified.
+
+---
 
 Small, explicit steps only.

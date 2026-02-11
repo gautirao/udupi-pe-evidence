@@ -6,6 +6,24 @@ This is the single source of truth for Claude. Follow strictly. Any deviation is
 Before writing any code: describe the approach, list files to change, wait for approval.
 If requirements are ambiguous: **ask, never guess**. No exceptions.
 
+## 1.1 Tooling rules
+
+- Tool execution rules are defined in `.claude/TOOLING.md`
+- Read and apply them before running any shell commands
+- Treat auto-approved commands as pre-authorized
+
+## 1.2 Project context (MANDATORY READ)
+- This repo uses a structured system context file: `PROJECT_CONTEXT.md`
+- Read it **before planning or making assumptions** about:
+  - repo layout
+  - frontend/backend responsibilities
+  - auth model
+  - deployment targets
+  - environment variables
+  - external services (Supabase, Render, Cloudflare Pages, Google Maps, Google AI)
+- Treat `PROJECT_CONTEXT.md` as **authoritative for system facts**
+- If new system facts are discovered, propose an update to `PROJECT_CONTEXT.md`
+
 ## 2. 3-file limit (STRICT)
 If a task changes more than 3 files: STOP, propose a task split, wait for confirmation.
 No sweeping refactors. No opportunistic changes to unrelated files.
@@ -19,7 +37,7 @@ Code without failure analysis is incomplete.
 2. Verify it fails
 3. Fix the code
 4. Verify it passes
-Never fix by inspection. Never skip the test.
+   Never fix by inspection. Never skip the test.
 
 ## 5. Self-correcting ruleset
 Every human correction → propose a new rule → add it to the relevant `.claude/` file.
@@ -30,7 +48,7 @@ If hitting a token limit mid-task: STOP immediately.
 Output CHECKPOINT: completed steps, remaining steps, next file/method.
 Wait for "Resume from last checkpoint". Never re-run completed steps.
 
-## 7.For any code change, Claude must first read `.claude/PR_RULES.md`.
+## 7. For any code change, Claude must first read `.claude/PR_RULES.md`.
 
 ## Extended rules in `.claude/`
 Read these ONLY when the task requires them:
@@ -43,5 +61,5 @@ Read these ONLY when the task requires them:
 | `.claude/TOKEN_RULES.md` | Checkpointing, resume behavior, session hygiene |
 | `.claude/DEPLOYMENT.md` | Supabase constraints, data rules, deployment guidance |
 
-**Do not be clever. Be correct.** If unclear: stop, ask, wait.
+**Do not be clever. Be correct.** If unclear: stop, ask, wait.  
 This document overrides all defaults and assumptions.

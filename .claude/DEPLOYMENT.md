@@ -1,22 +1,101 @@
 # Deployment Rules
 
-## Supabase Usage Constraints
-- Supabase is managed infrastructure: Auth, Postgres, Storage only
-- No Supabase client libraries for Java (they do not exist)
-- Do not create Java Supabase SDK abstractions
-- Do not move business logic back into Edge Functions
-- Supabase is NOT an application framework
+This document defines **deployment invariants**.
+These rules constrain *where* and *how* the system is deployed.
+Concrete values (URLs, keys) live in `PROJECT_CONTEXT.md`.
 
-## Java Spring Boot Responsibilities
-All ingestion, processing, and business logic runs in the Spring Boot backend.
-The backend connects to Supabase Postgres directly (not through Supabase client libraries).
+---
 
-## Data Rules
+## Deployment Targets (Invariant)
+
+- **Frontend** must be deployed on **Cloudflare Pages**
+- **Backend** must be deployed as a **Render service**
+- No alternative deployment platforms without explicit approval
+
+Local development is allowed but must mirror production assumptions.
+
+---
+
+## Supabase Usage Constraints (Invariant)
+
+Supabase is managed infrastructure only.
+
+Allowed:
+- Auth
+- Postgres
+- Storage
+
+Forbidden:
+- Supabase client libraries for Java
+- Java Supabase SDK abstractions
+- Business logic in Edge Functions
+- Treating Supabase as an application framework
+
+Violations are architectural bugs.
+
+---
+
+## Java Spring Boot Responsibilities (Invariant)
+
+- All ingestion, processing, and business logic runs in the Spring Boot backend
+- Backend connects directly to Supabase Postgres
+- Backend is the sole authority for:
+    - data access
+    - authorization
+    - processing
+    - AI invocation
+
+Frontend is never trusted.
+
+---
+
+## Environment Configuration Rules
+
+- No hardcoded URLs, secrets, or credentials
+- All environment-specific values must come from env vars
+- Frontend must use `VITE_`-prefixed variables only
+- Local and production environments must be explicitly supported
+
+If an env var is required, the app must fail fast with a clear error.
+
+---
+
+## CORS and Auth (Critical)
+
+Backend must:
+- Allow requests from the frontend deployment origin(s)
+- Allow `Authorization` headers
+- Correctly handle preflight (`OPTIONS`) requests
+- Validate Supabase JWTs on all protected endpoints
+
+CORS misconfiguration is a deployment failure.
+
+---
+
+## Data Rules (Invariant)
+
 - Raw data must be persisted before any processing
-- Do not query raw scraped data directly for dashboards
-- Process and transform data into clean tables for dashboard consumption
+- Raw scraped data must NOT be queried directly for dashboards
+- Dashboards must use processed, clean, purpose-built tables
+
+Data correctness outweighs convenience.
+
+---
 
 ## Migration Philosophy
-- Database migrations should be versioned (Flyway)
-- Each migration should be idempotent where possible
-- Test migrations against a copy before applying to production
+
+- Database migrations must be versioned (Flyway)
+- Migrations should be idempotent where possible
+- Migrations must be tested against a copy before production rollout
+- No manual schema changes in production
+
+---
+
+## Enforcement
+
+If a deployment decision conflicts with this document:
+- STOP
+- Call out the conflict explicitly
+- Wait for human direction
+
+Deployment rules override speed, convenience, and experimentation.
