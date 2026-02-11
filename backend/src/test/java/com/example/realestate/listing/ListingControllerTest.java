@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -249,6 +250,175 @@ class ListingControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Cannot delete listing with status LIVE"));
+    }
+
+    // ==================== Submit: happy path -> 200 ====================
+
+    @Test
+    void submit_happyPath_returns200WithPendingReview() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "land", "Plot",
+                "Manipal", new BigDecimal("5000000"), "Nice plot");
+        submitted.setSubmittedAt(OffsetDateTime.now());
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("PENDING_REVIEW"));
+
+        verify(listingService).submitListing(LISTING_ID, DEALER_ID, false);
+    }
+
+    // ==================== Submit: REJECTED -> PENDING_REVIEW ====================
+
+    @Test
+    void submit_rejectedListing_returns200() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "house", "House",
+                "Udupi", new BigDecimal("8000000"), "Resubmitted");
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PENDING_REVIEW"));
+    }
+
+    // ==================== Submit: missing land_area -> 422 ====================
+
+    @Test
+    void submit_missingLandArea_returns422() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingValidationException(List.of(
+                        Map.of("field", "land_area",
+                                "message", "Land area is required for land listings"))));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("land_area"));
+    }
+
+    // ==================== Submit: missing bedrooms -> 422 ====================
+
+    @Test
+    void submit_missingBedrooms_returns422() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingValidationException(List.of(
+                        Map.of("field", "bedrooms",
+                                "message", "Bedrooms is required for apartment listings"))));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("bedrooms"));
+    }
+
+    // ==================== Submit: too few images -> 422 ====================
+
+    @Test
+    void submit_tooFewImages_returns422() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingValidationException(List.of(
+                        Map.of("field", "images",
+                                "message", "At least 3 images required (found 1)"))));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("images"))
+                .andExpect(jsonPath("$.errors[0].message").value("At least 3 images required (found 1)"));
+    }
+
+    // ==================== Submit: address not confirmed -> 422 ====================
+
+    @Test
+    void submit_addressNotConfirmed_returns422() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingValidationException(List.of(
+                        Map.of("field", "address_confirmed",
+                                "message", "Address must be confirmed before submission"))));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("address_confirmed"));
+    }
+
+    // ==================== Submit: other dealer's listing -> 404 ====================
+
+    @Test
+    void submit_otherDealerListing_returns404() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== Submit: commercial type -> 422 ====================
+
+    @Test
+    void submit_commercialType_returns422() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingValidationException(List.of(
+                        Map.of("field", "property_type",
+                                "message", "Commercial submission not supported yet"))));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors[0].field").value("property_type"))
+                .andExpect(jsonPath("$.errors[0].message").value("Commercial submission not supported yet"));
+    }
+
+    // ==================== Submit: wrong status -> 400 ====================
+
+    @Test
+    void submit_wrongStatus_returns400() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingStatusException(
+                        "Cannot submit listing with status LIVE"));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Cannot submit listing with status LIVE"));
+    }
+
+    // ==================== Submit: multiple errors -> 422 with all ====================
+
+    @Test
+    void submit_multipleErrors_returnsAllErrors() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingService.ListingValidationException(List.of(
+                        Map.of("field", "price", "message", "Price must be greater than 0"),
+                        Map.of("field", "address_confirmed",
+                                "message", "Address must be confirmed before submission"),
+                        Map.of("field", "images",
+                                "message", "At least 3 images required (found 0)"))));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.errors.length()").value(3))
+                .andExpect(jsonPath("$.errors[0].field").value("price"))
+                .andExpect(jsonPath("$.errors[1].field").value("address_confirmed"))
+                .andExpect(jsonPath("$.errors[2].field").value("images"));
     }
 
     // ==================== Helper ====================
