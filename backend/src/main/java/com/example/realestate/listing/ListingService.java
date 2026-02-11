@@ -19,8 +19,13 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.OffsetDateTime;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class ListingService {
@@ -295,5 +300,124 @@ public class ListingService {
                 .toLowerCase()
                 .replaceAll("\\s+", "-")
                 .replaceAll("[^a-z0-9\\-]", "");
+    }
+
+    // ===== Dealer CRUD operations =====
+
+    private static final Set<String> UPDATABLE_STATUSES = Set.of(
+            ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
+
+    /**
+     * Look up the app_role for a user. Returns empty if user has no role row.
+     */
+    public Optional<String> getUserRole(UUID userId) {
+        return listingRepository.findUserRole(userId);
+    }
+
+    /**
+     * Create a new dealer-owned listing with status DRAFT.
+     */
+    @Transactional
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description) {
+        Listing listing = new Listing();
+        listing.setCreatedBy(createdBy);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setPropertyType(propertyType != null ? propertyType : "other");
+        listing.setTitle(title);
+        listing.setLocality(locality);
+        listing.setPrice(price);
+        listing.setDescription(description);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        listing.setCreatedAt(now);
+        listing.setUpdatedAt(now);
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Created draft listing listingId={} createdBy={}", saved.getId(), createdBy);
+        return saved;
+    }
+
+    /**
+     * Return listings owned by the given user, newest first.
+     */
+    public List<Listing> getListingsByOwner(UUID createdBy) {
+        return listingRepository.findByCreatedByOrderByCreatedAtDesc(createdBy);
+    }
+
+    /**
+     * Update a listing. Enforces ownership (unless admin) and status constraints.
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingStatusException   if status does not allow updates
+     */
+    @Transactional
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description) {
+        Listing listing = findOwnedListing(listingId, userId, isAdmin);
+
+        if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
+            throw new ListingStatusException("Cannot update listing with status " + listing.getStatus());
+        }
+
+        if (propertyType != null) listing.setPropertyType(propertyType);
+        if (title != null) listing.setTitle(title);
+        if (locality != null) listing.setLocality(locality);
+        if (price != null) listing.setPrice(price);
+        if (description != null) listing.setDescription(description);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Updated listing listingId={} by userId={}", listingId, userId);
+        return saved;
+    }
+
+    /**
+     * Delete a listing. Only DRAFT status allowed. Enforces ownership unless admin.
+     *
+     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingStatusException   if status is not DRAFT
+     */
+    @Transactional
+    public void deleteListing(UUID listingId, UUID userId, boolean isAdmin) {
+        Listing listing = findOwnedListing(listingId, userId, isAdmin);
+
+        if (!ListingStatus.DRAFT.toDbValue().equals(listing.getStatus())) {
+            throw new ListingStatusException("Cannot delete listing with status " + listing.getStatus());
+        }
+
+        listingRepository.delete(listing);
+        log.info("Deleted listing listingId={} by userId={}", listingId, userId);
+    }
+
+    /**
+     * Find a listing that the user owns (or any listing if admin).
+     * Returns 404-equivalent if not found or not owned.
+     */
+    private Listing findOwnedListing(UUID listingId, UUID userId, boolean isAdmin) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (!isAdmin && !userId.equals(listing.getCreatedBy())) {
+            // Return same exception as not-found to avoid leaking existence
+            throw new ListingNotFoundException(listingId);
+        }
+        return listing;
+    }
+
+    // ===== Dealer CRUD exceptions =====
+
+    public static class ListingNotFoundException extends RuntimeException {
+        public ListingNotFoundException(UUID id) {
+            super("Listing not found: " + id);
+        }
+    }
+
+    public static class ListingStatusException extends RuntimeException {
+        public ListingStatusException(String message) {
+            super(message);
+        }
     }
 }

@@ -1,0 +1,168 @@
+package com.example.realestate.listing;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Dealer listing CRUD endpoints.
+ * All endpoints require DEALER or ADMIN role (looked up from user_roles table).
+ * Dealers can only operate on their own listings; admins can operate on any.
+ */
+@RestController
+@RequestMapping("/api/listings")
+public class ListingController {
+
+    private static final Logger log = LoggerFactory.getLogger(ListingController.class);
+    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
+
+    private final ListingService listingService;
+
+    public ListingController(ListingService listingService) {
+        this.listingService = listingService;
+    }
+
+    @PostMapping
+    public ResponseEntity<?> create(JwtAuthenticationToken auth, @RequestBody CreateRequest req) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        Listing saved = listingService.createDraft(
+                caller.userId(), req.propertyType(), req.title(),
+                req.locality(), req.price(), req.description());
+
+        log.info("POST /api/listings -> 201 listingId={} createdBy={}", saved.getId(), caller.userId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
+    }
+
+    @GetMapping("/mine")
+    public ResponseEntity<?> mine(JwtAuthenticationToken auth) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        List<Listing> listings = listingService.getListingsByOwner(caller.userId());
+
+        List<ListingResponse> response = listings.stream().map(this::toResponse).toList();
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> update(JwtAuthenticationToken auth,
+                                    @PathVariable UUID id,
+                                    @RequestBody UpdateRequest req) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        try {
+            Listing updated = listingService.updateListing(
+                    id, caller.userId(), caller.isAdmin(),
+                    req.propertyType(), req.title(), req.locality(),
+                    req.price(), req.description());
+            return ResponseEntity.ok(toResponse(updated));
+        } catch (ListingService.ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingService.ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(JwtAuthenticationToken auth, @PathVariable UUID id) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        try {
+            listingService.deleteListing(id, caller.userId(), caller.isAdmin());
+            return ResponseEntity.noContent().build();
+        } catch (ListingService.ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingService.ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ===== Auth helpers =====
+
+    private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
+        UUID userId = UUID.fromString(auth.getToken().getSubject());
+        String role = listingService.getUserRole(userId).orElse(null);
+        if (role == null || !ALLOWED_ROLES.contains(role)) {
+            return null;
+        }
+        return new CallerInfo(userId, role, "admin".equals(role));
+    }
+
+    private record CallerInfo(UUID userId, String role, boolean isAdmin) {}
+
+    // ===== Response helpers =====
+
+    private static ResponseEntity<Map<String, String>> forbidden() {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "Requires dealer or admin role"));
+    }
+
+    private static ResponseEntity<Map<String, String>> notFound() {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Listing not found"));
+    }
+
+    private ListingResponse toResponse(Listing l) {
+        return new ListingResponse(
+                l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
+                l.getLocality(), l.getPrice(), l.getDescription(),
+                l.getLatitude(), l.getLongitude(),
+                l.isAddressConfirmed(), l.getRejectionReason(),
+                l.getCreatedAt(), l.getUpdatedAt());
+    }
+
+    // ===== DTOs =====
+
+    public record CreateRequest(
+            String propertyType,
+            String title,
+            String locality,
+            BigDecimal price,
+            String description
+    ) {}
+
+    public record UpdateRequest(
+            String propertyType,
+            String title,
+            String locality,
+            BigDecimal price,
+            String description
+    ) {}
+
+    public record ListingResponse(
+            UUID id,
+            String status,
+            String propertyType,
+            String title,
+            String locality,
+            BigDecimal price,
+            String description,
+            Double latitude,
+            Double longitude,
+            boolean addressConfirmed,
+            String rejectionReason,
+            OffsetDateTime createdAt,
+            OffsetDateTime updatedAt
+    ) {}
+}
