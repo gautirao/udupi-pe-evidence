@@ -19,8 +19,15 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class ListingService {
@@ -295,5 +302,332 @@ public class ListingService {
                 .toLowerCase()
                 .replaceAll("\\s+", "-")
                 .replaceAll("[^a-z0-9\\-]", "");
+    }
+
+    // ===== Dealer CRUD operations =====
+
+    private static final Set<String> UPDATABLE_STATUSES = Set.of(
+            ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
+
+    /**
+     * Look up the app_role for a user. Returns empty if user has no role row.
+     */
+    public Optional<String> getUserRole(UUID userId) {
+        return listingRepository.findUserRole(userId);
+    }
+
+    /**
+     * Create a new dealer-owned listing with status DRAFT.
+     */
+    @Transactional
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description) {
+        Listing listing = new Listing();
+        listing.setCreatedBy(createdBy);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setPropertyType(propertyType != null ? propertyType : "other");
+        listing.setTitle(title);
+        listing.setLocality(locality);
+        listing.setPrice(price);
+        listing.setDescription(description);
+
+        OffsetDateTime now = OffsetDateTime.now();
+        listing.setCreatedAt(now);
+        listing.setUpdatedAt(now);
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Created draft listing listingId={} createdBy={}", saved.getId(), createdBy);
+        return saved;
+    }
+
+    /**
+     * Return listings owned by the given user, newest first.
+     */
+    public List<Listing> getListingsByOwner(UUID createdBy) {
+        return listingRepository.findByCreatedByOrderByCreatedAtDesc(createdBy);
+    }
+
+    /**
+     * Update a listing. Enforces ownership (unless admin) and status constraints.
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingStatusException   if status does not allow updates
+     */
+    @Transactional
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description) {
+        Listing listing = findOwnedListing(listingId, userId, isAdmin);
+
+        if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
+            throw new ListingStatusException("Cannot update listing with status " + listing.getStatus());
+        }
+
+        if (propertyType != null) listing.setPropertyType(propertyType);
+        if (title != null) listing.setTitle(title);
+        if (locality != null) listing.setLocality(locality);
+        if (price != null) listing.setPrice(price);
+        if (description != null) listing.setDescription(description);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Updated listing listingId={} by userId={}", listingId, userId);
+        return saved;
+    }
+
+    /**
+     * Delete a listing. Only DRAFT status allowed. Enforces ownership unless admin.
+     *
+     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingStatusException   if status is not DRAFT
+     */
+    @Transactional
+    public void deleteListing(UUID listingId, UUID userId, boolean isAdmin) {
+        Listing listing = findOwnedListing(listingId, userId, isAdmin);
+
+        if (!ListingStatus.DRAFT.toDbValue().equals(listing.getStatus())) {
+            throw new ListingStatusException("Cannot delete listing with status " + listing.getStatus());
+        }
+
+        listingRepository.delete(listing);
+        log.info("Deleted listing listingId={} by userId={}", listingId, userId);
+    }
+
+    /**
+     * Find a listing that the user owns (or any listing if admin).
+     * Returns 404-equivalent if not found or not owned.
+     */
+    private Listing findOwnedListing(UUID listingId, UUID userId, boolean isAdmin) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (!isAdmin && !userId.equals(listing.getCreatedBy())) {
+            // Return same exception as not-found to avoid leaking existence
+            throw new ListingNotFoundException(listingId);
+        }
+        return listing;
+    }
+
+    // ===== Submission + validation =====
+
+    private static final Set<String> SUBMITTABLE_STATUSES = Set.of(
+            ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
+
+    private static final Set<String> SUBMITTABLE_PROPERTY_TYPES = Set.of(
+            "land", "house", "apartment");
+
+    private static final int MIN_IMAGES = 3;
+
+    /**
+     * Submit a listing for review. Validates all required fields and transitions
+     * status from DRAFT/REJECTED to PENDING_REVIEW.
+     *
+     * @throws ListingNotFoundException  if listing not found or not owned
+     * @throws ListingStatusException    if current status does not allow submission
+     * @throws ListingValidationException if validation rules fail (422)
+     */
+    @Transactional
+    public Listing submitListing(UUID listingId, UUID userId, boolean isAdmin) {
+        Listing listing = findOwnedListing(listingId, userId, isAdmin);
+
+        if (!SUBMITTABLE_STATUSES.contains(listing.getStatus())) {
+            throw new ListingStatusException(
+                    "Cannot submit listing with status " + listing.getStatus());
+        }
+
+        List<Map<String, String>> errors = validateForSubmission(listing);
+        if (!errors.isEmpty()) {
+            throw new ListingValidationException(errors);
+        }
+
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setSubmittedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Submitted listing listingId={} by userId={} status=PENDING_REVIEW",
+                listingId, userId);
+        return saved;
+    }
+
+    private List<Map<String, String>> validateForSubmission(Listing listing) {
+        List<Map<String, String>> errors = new ArrayList<>();
+
+        // Always-required: price > 0
+        if (listing.getPrice() == null || listing.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            errors.add(Map.of("field", "price", "message", "Price must be greater than 0"));
+        }
+
+        // Always-required: property_type in allowed set
+        String propertyType = listing.getPropertyType();
+        if (propertyType == null || !SUBMITTABLE_PROPERTY_TYPES.contains(propertyType)) {
+            if ("commercial".equals(propertyType)) {
+                errors.add(Map.of("field", "property_type",
+                        "message", "Commercial submission not supported yet"));
+            } else {
+                errors.add(Map.of("field", "property_type",
+                        "message", "Property type must be one of: land, house, apartment"));
+            }
+        }
+
+        // Always-required: locality non-empty
+        if (listing.getLocality() == null || listing.getLocality().isBlank()) {
+            errors.add(Map.of("field", "locality", "message", "Locality is required"));
+        }
+
+        // Always-required: address_confirmed = true
+        if (!listing.isAddressConfirmed()) {
+            errors.add(Map.of("field", "address_confirmed",
+                    "message", "Address must be confirmed before submission"));
+        }
+
+        // Always-required: >= 3 images
+        long imageCount = listingRepository.countImagesByListingId(listing.getId());
+        if (imageCount < MIN_IMAGES) {
+            errors.add(Map.of("field", "images",
+                    "message", "At least " + MIN_IMAGES + " images required (found " + imageCount + ")"));
+        }
+
+        // Property-type-specific validation (only if type is valid)
+        if (propertyType != null && SUBMITTABLE_PROPERTY_TYPES.contains(propertyType)) {
+            switch (propertyType) {
+                case "land" -> {
+                    if (listing.getLandArea() == null) {
+                        errors.add(Map.of("field", "land_area",
+                                "message", "Land area is required for land listings"));
+                    }
+                    if (listing.getLandAreaUnit() == null || listing.getLandAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "land_area_unit",
+                                "message", "Land area unit is required for land listings"));
+                    }
+                }
+                case "apartment" -> {
+                    if (listing.getBedrooms() == null) {
+                        errors.add(Map.of("field", "bedrooms",
+                                "message", "Bedrooms is required for apartment listings"));
+                    }
+                    if (listing.getBuiltArea() == null) {
+                        errors.add(Map.of("field", "built_area",
+                                "message", "Built area is required for apartment listings"));
+                    }
+                    if (listing.getBuiltAreaUnit() == null || listing.getBuiltAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "built_area_unit",
+                                "message", "Built area unit is required for apartment listings"));
+                    }
+                }
+                // house: no additional required fields
+            }
+        }
+
+        return errors;
+    }
+
+    // ===== Admin approval / rejection =====
+
+    /**
+     * Admin approves a listing: PENDING_REVIEW -> LIVE.
+     * Creates a notification for the listing owner.
+     *
+     * @throws ListingNotFoundException if listing not found
+     * @throws ListingStatusException   if status is not PENDING_REVIEW
+     */
+    @Transactional
+    public Listing approveListing(UUID listingId, UUID adminUserId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (!ListingStatus.PENDING_REVIEW.toDbValue().equals(listing.getStatus())) {
+            throw new ListingStatusException(
+                    "Cannot approve listing with status " + listing.getStatus());
+        }
+
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setReviewedAt(OffsetDateTime.now());
+        listing.setReviewedBy(adminUserId);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+
+        if (listing.getCreatedBy() != null) {
+            String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+            listingRepository.insertNotification(
+                    listing.getCreatedBy(),
+                    "listing_approved",
+                    "Listing approved",
+                    "Your listing '" + title + "' has been approved and is now live.",
+                    "{\"listing_id\":\"" + listingId + "\"}");
+        }
+
+        log.info("Approved listing listingId={} by adminId={} status=LIVE", listingId, adminUserId);
+        return saved;
+    }
+
+    /**
+     * Admin rejects a listing: PENDING_REVIEW -> REJECTED.
+     * Creates a notification for the listing owner.
+     *
+     * @throws ListingNotFoundException if listing not found
+     * @throws ListingStatusException   if status is not PENDING_REVIEW
+     */
+    @Transactional
+    public Listing rejectListing(UUID listingId, UUID adminUserId, String rejectionReason) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (!ListingStatus.PENDING_REVIEW.toDbValue().equals(listing.getStatus())) {
+            throw new ListingStatusException(
+                    "Cannot reject listing with status " + listing.getStatus());
+        }
+
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setRejectionReason(rejectionReason);
+        listing.setReviewedAt(OffsetDateTime.now());
+        listing.setReviewedBy(adminUserId);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+
+        if (listing.getCreatedBy() != null) {
+            String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+            String safeReason = rejectionReason.replace("\"", "\\\"");
+            listingRepository.insertNotification(
+                    listing.getCreatedBy(),
+                    "listing_rejected",
+                    "Listing rejected",
+                    "Your listing '" + title + "' was rejected. Reason: " + rejectionReason,
+                    "{\"listing_id\":\"" + listingId + "\",\"reason\":\"" + safeReason + "\"}");
+        }
+
+        log.info("Rejected listing listingId={} by adminId={} reason='{}'",
+                listingId, adminUserId, rejectionReason);
+        return saved;
+    }
+
+    // ===== Dealer CRUD exceptions =====
+
+    public static class ListingNotFoundException extends RuntimeException {
+        public ListingNotFoundException(UUID id) {
+            super("Listing not found: " + id);
+        }
+    }
+
+    public static class ListingStatusException extends RuntimeException {
+        public ListingStatusException(String message) {
+            super(message);
+        }
+    }
+
+    public static class ListingValidationException extends RuntimeException {
+        private final List<Map<String, String>> errors;
+
+        public ListingValidationException(List<Map<String, String>> errors) {
+            super("Listing validation failed");
+            this.errors = errors;
+        }
+
+        public List<Map<String, String>> getErrors() {
+            return errors;
+        }
     }
 }
