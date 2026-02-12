@@ -17,6 +17,7 @@ import Duplicates from "./pages/admin/Duplicates";
 import ChromeExtensionSetup from "./pages/admin/ChromeExtensionSetup";
 import ProcessPosts from "./pages/admin/ProcessPosts";
 import PendingListings from "./pages/admin/PendingListings";
+import NewListing from "./pages/dealer/NewListing";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,15 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ListingDetail />
+                </ProtectedRoute>
+              }
+            />
+            {/* Dealer Routes */}
+            <Route
+              path="/dealer/listings/new"
+              element={
+                <ProtectedRoute>
+                  <NewListing />
                 </ProtectedRoute>
               }
             />
