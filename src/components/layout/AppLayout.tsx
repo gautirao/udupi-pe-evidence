@@ -32,6 +32,7 @@ import {
   Copy,
   ClipboardList,
 } from 'lucide-react';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
 
 interface AppLayoutProps {
@@ -162,6 +163,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               Admin
             </div>
           )}
+
+          {/* Notifications */}
+          <NotificationBell />
 
           {/* User menu */}
           <DropdownMenu>
