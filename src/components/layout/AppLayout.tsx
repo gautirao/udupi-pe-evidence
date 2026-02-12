@@ -30,6 +30,7 @@ import {
   Chrome,
   Sparkles,
   Copy,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,6 +48,7 @@ const adminNavigation = [
   { name: 'Manual Posts', href: '/admin/posts', icon: FileText },
   { name: 'Process Posts', href: '/admin/process', icon: Sparkles },
   { name: 'Listings', href: '/admin/listings', icon: Home },
+  { name: 'Pending Approval', href: '/admin/listings/pending', icon: ClipboardList },
   { name: 'Duplicates', href: '/admin/duplicates', icon: Copy },
   { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
 ];
