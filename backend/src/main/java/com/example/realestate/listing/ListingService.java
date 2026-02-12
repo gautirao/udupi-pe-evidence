@@ -523,6 +523,87 @@ public class ListingService {
         return errors;
     }
 
+    // ===== Admin approval / rejection =====
+
+    /**
+     * Admin approves a listing: PENDING_REVIEW -> LIVE.
+     * Creates a notification for the listing owner.
+     *
+     * @throws ListingNotFoundException if listing not found
+     * @throws ListingStatusException   if status is not PENDING_REVIEW
+     */
+    @Transactional
+    public Listing approveListing(UUID listingId, UUID adminUserId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (!ListingStatus.PENDING_REVIEW.toDbValue().equals(listing.getStatus())) {
+            throw new ListingStatusException(
+                    "Cannot approve listing with status " + listing.getStatus());
+        }
+
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setReviewedAt(OffsetDateTime.now());
+        listing.setReviewedBy(adminUserId);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+
+        if (listing.getCreatedBy() != null) {
+            String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+            listingRepository.insertNotification(
+                    listing.getCreatedBy(),
+                    "listing_approved",
+                    "Listing approved",
+                    "Your listing '" + title + "' has been approved and is now live.",
+                    "{\"listing_id\":\"" + listingId + "\"}");
+        }
+
+        log.info("Approved listing listingId={} by adminId={} status=LIVE", listingId, adminUserId);
+        return saved;
+    }
+
+    /**
+     * Admin rejects a listing: PENDING_REVIEW -> REJECTED.
+     * Creates a notification for the listing owner.
+     *
+     * @throws ListingNotFoundException if listing not found
+     * @throws ListingStatusException   if status is not PENDING_REVIEW
+     */
+    @Transactional
+    public Listing rejectListing(UUID listingId, UUID adminUserId, String rejectionReason) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (!ListingStatus.PENDING_REVIEW.toDbValue().equals(listing.getStatus())) {
+            throw new ListingStatusException(
+                    "Cannot reject listing with status " + listing.getStatus());
+        }
+
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setRejectionReason(rejectionReason);
+        listing.setReviewedAt(OffsetDateTime.now());
+        listing.setReviewedBy(adminUserId);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+
+        if (listing.getCreatedBy() != null) {
+            String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+            String safeReason = rejectionReason.replace("\"", "\\\"");
+            listingRepository.insertNotification(
+                    listing.getCreatedBy(),
+                    "listing_rejected",
+                    "Listing rejected",
+                    "Your listing '" + title + "' was rejected. Reason: " + rejectionReason,
+                    "{\"listing_id\":\"" + listingId + "\",\"reason\":\"" + safeReason + "\"}");
+        }
+
+        log.info("Rejected listing listingId={} by adminId={} reason='{}'",
+                listingId, adminUserId, rejectionReason);
+        return saved;
+    }
+
     // ===== Dealer CRUD exceptions =====
 
     public static class ListingNotFoundException extends RuntimeException {
