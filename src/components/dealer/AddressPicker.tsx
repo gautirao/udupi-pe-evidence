@@ -2,7 +2,13 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { searchNominatim, reverseGeocode, type NominatimResult } from '@/lib/geocode';
+import {
+  searchNominatim,
+  reverseGeocode,
+  parseAddress,
+  type NominatimResult,
+  type ParsedAddress,
+} from '@/lib/geocode';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -21,20 +27,26 @@ L.Icon.Default.mergeOptions({
 
 const UDUPI_CENTER: L.LatLngExpression = [13.3409, 74.7421];
 const DEFAULT_ZOOM = 13;
-const SEARCH_DEBOUNCE_MS = 500;
+const SEARCH_DEBOUNCE_MS = 400;
 
-export interface AddressConfirmation {
-  latitude: number;
-  longitude: number;
-  locality: string;
-  addressConfirmed: boolean;
+/** Normalized address output emitted by AddressPicker. */
+export interface AddressPickerValue {
+  address_line1: string;
+  address_line2?: string;
+  city?: string;
+  county?: string;
+  postcode?: string;
+  country?: string;
+  lat: number;
+  lng: number;
+  address_confirmed: boolean;
 }
 
 export interface AddressPickerProps {
   initialLatitude?: number | null;
   initialLongitude?: number | null;
   initialLocality?: string | null;
-  onConfirm: (address: AddressConfirmation) => void;
+  onConfirm: (address: AddressPickerValue) => void;
 }
 
 /** Fly the map to a given position when it changes. */
@@ -46,6 +58,25 @@ function MapFlyTo({ position }: { position: L.LatLngExpression | null }) {
     }
   }, [position, map]);
   return null;
+}
+
+function buildOutput(
+  lat: number,
+  lng: number,
+  parsed: ParsedAddress,
+  confirmed: boolean,
+): AddressPickerValue {
+  return {
+    address_line1: parsed.address_line1,
+    address_line2: parsed.address_line2,
+    city: parsed.city,
+    county: parsed.county,
+    postcode: parsed.postcode,
+    country: parsed.country,
+    lat,
+    lng,
+    address_confirmed: confirmed,
+  };
 }
 
 export function AddressPicker({
@@ -71,6 +102,10 @@ export function AddressPicker({
   );
   const [displayName, setDisplayName] = useState(initialLocality ?? '');
   const [confirmed, setConfirmed] = useState(false);
+  const [dragged, setDragged] = useState(false);
+
+  // Keep the latest parsed address for confirm-after-drag
+  const parsedRef = useRef<ParsedAddress>({ address_line1: '' });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -89,8 +124,7 @@ export function AddressPicker({
   // --- search with debounce ---
   const handleSearchChange = useCallback((value: string) => {
     setQuery(value);
-    setConfirmed(false);
-
+    // Typing alone never confirms
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (!value.trim()) {
@@ -113,53 +147,57 @@ export function AddressPicker({
     }, SEARCH_DEBOUNCE_MS);
   }, []);
 
-  // --- pick a search result ---
-  const handleSelectResult = useCallback((result: NominatimResult) => {
-    const pos: L.LatLngTuple = [result.lat, result.lon];
-    setPinPosition(pos);
-    setDisplayName(result.display_name);
-    setQuery(result.display_name);
-    setShowResults(false);
-    setConfirmed(false);
-  }, []);
+  // --- pick a search result → auto-confirm ---
+  const handleSelectResult = useCallback(
+    (result: NominatimResult) => {
+      const pos: L.LatLngTuple = [result.lat, result.lon];
+      const parsed = parseAddress(result.address);
+      parsedRef.current = parsed;
 
-  // --- marker drag end ---
-  const handleMarkerDragEnd = useCallback(
-    async (e: L.DragEndEvent) => {
-      const latlng = (e.target as L.Marker).getLatLng();
-      const pos: L.LatLngTuple = [latlng.lat, latlng.lng];
       setPinPosition(pos);
-      setConfirmed(false);
+      setDisplayName(result.display_name);
+      setQuery(result.display_name);
+      setShowResults(false);
+      setDragged(false);
+      setConfirmed(true);
 
-      try {
-        const rev = await reverseGeocode(latlng.lat, latlng.lng);
-        if (rev) {
-          setDisplayName(rev.display_name);
-          setQuery(rev.display_name);
-        }
-      } catch {
-        // keep existing display name on reverse-geocode failure
-      }
+      onConfirm(buildOutput(result.lat, result.lon, parsed, true));
     },
-    [],
+    [onConfirm],
   );
 
-  // --- confirm ---
-  const handleConfirm = useCallback(() => {
+  // --- marker drag end → unconfirm, require explicit confirm ---
+  const handleMarkerDragEnd = useCallback(async (e: L.DragEndEvent) => {
+    const latlng = (e.target as L.Marker).getLatLng();
+    const pos: L.LatLngTuple = [latlng.lat, latlng.lng];
+    setPinPosition(pos);
+    setConfirmed(false);
+    setDragged(true);
+
+    try {
+      const rev = await reverseGeocode(latlng.lat, latlng.lng);
+      if (rev) {
+        const parsed = parseAddress(rev.address);
+        parsedRef.current = parsed;
+        setDisplayName(rev.display_name);
+        setQuery(rev.display_name);
+      }
+    } catch {
+      // keep existing display name on failure
+    }
+  }, []);
+
+  // --- explicit confirm after drag ---
+  const handleConfirmClick = useCallback(() => {
     if (!pinPosition) return;
     setConfirmed(true);
-    onConfirm({
-      latitude: pinPosition[0],
-      longitude: pinPosition[1],
-      locality: displayName,
-      addressConfirmed: true,
-    });
-  }, [pinPosition, displayName, onConfirm]);
+    setDragged(false);
+    onConfirm(
+      buildOutput(pinPosition[0], pinPosition[1], parsedRef.current, true),
+    );
+  }, [pinPosition, onConfirm]);
 
-  // Marker event handlers ref for react-leaflet
-  const markerEventHandlers = {
-    dragend: handleMarkerDragEnd,
-  };
+  const markerEventHandlers = { dragend: handleMarkerDragEnd };
 
   return (
     <div className="space-y-3">
@@ -181,16 +219,16 @@ export function AddressPicker({
           )}
         </div>
 
-        {/* Results dropdown */}
+        {/* Results dropdown — py-3 for mobile touch targets */}
         {showResults && results.length > 0 && (
-          <ul className="absolute z-[1100] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+          <ul className="absolute z-[1100] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-56 overflow-y-auto">
             {results.map((r, i) => (
               <li
                 key={`${r.lat}-${r.lon}-${i}`}
-                className="px-3 py-2 text-sm cursor-pointer hover:bg-accent truncate"
+                className="px-3 py-3 text-sm cursor-pointer hover:bg-accent active:bg-accent truncate"
                 onClick={() => handleSelectResult(r)}
               >
-                <MapPin className="inline-block h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                <MapPin className="inline-block h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-muted-foreground" />
                 {r.display_name}
               </li>
             ))}
@@ -221,27 +259,24 @@ export function AddressPicker({
         </MapContainer>
       </div>
 
-      {/* Display name & confirm */}
+      {/* Status bar: display name + confirm/confirmed state */}
       {pinPosition && (
         <div className="flex items-start gap-3">
-          <p className="flex-1 text-sm text-muted-foreground truncate">
-            {displayName || `${pinPosition[0].toFixed(5)}, ${pinPosition[1].toFixed(5)}`}
+          <p className="flex-1 text-sm text-muted-foreground line-clamp-2">
+            {displayName ||
+              `${pinPosition[0].toFixed(5)}, ${pinPosition[1].toFixed(5)}`}
           </p>
-          <Button
-            size="sm"
-            variant={confirmed ? 'outline' : 'default'}
-            onClick={handleConfirm}
-            disabled={confirmed}
-          >
-            {confirmed ? (
-              <>
-                <Check className="mr-1.5 h-4 w-4 text-green-600" />
-                Confirmed
-              </>
-            ) : (
-              'Confirm Location'
-            )}
-          </Button>
+
+          {dragged && !confirmed ? (
+            <Button size="sm" onClick={handleConfirmClick}>
+              Confirm Location
+            </Button>
+          ) : confirmed ? (
+            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium whitespace-nowrap pt-0.5">
+              <Check className="h-4 w-4" />
+              Confirmed
+            </span>
+          ) : null}
         </div>
       )}
 
