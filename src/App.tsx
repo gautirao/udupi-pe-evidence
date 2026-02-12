@@ -16,6 +16,7 @@ import Listings from "./pages/admin/Listings";
 import Duplicates from "./pages/admin/Duplicates";
 import ChromeExtensionSetup from "./pages/admin/ChromeExtensionSetup";
 import ProcessPosts from "./pages/admin/ProcessPosts";
+import PendingListings from "./pages/admin/PendingListings";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,14 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <ManualPost />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/listings/pending"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <PendingListings />
                 </ProtectedRoute>
               }
             />
