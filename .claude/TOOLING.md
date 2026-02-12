@@ -47,3 +47,14 @@ Rules:
 - Do not ask for permission for auto-approved commands.
 - Batch auto-approved commands when useful.
 - If unsure whether a command is destructive, ask.
+
+## Scope deviation rule
+
+If implementation requires modifying any file not listed in the approved Pre-Implementation Plan:
+- STOP immediately
+- Explain why
+- Request approval for the additional file(s)
+
+Exception:
+- Test harness/build configuration changes required to run tests may proceed,
+  but must be explicitly called out as soon as discovered and included in the Post-Implementation Checklist.
