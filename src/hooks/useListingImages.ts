@@ -18,11 +18,14 @@ export interface ListingImage {
   createdAt: string;
 }
 
-interface UploadProgress {
+export interface UploadProgress {
   fileName: string;
   progress: number; // 0-100
-  status: 'uploading' | 'registering' | 'done' | 'error';
+  status: 'uploading' | 'registering' | 'done' | 'error' | 'finalize_failed';
   error?: string;
+  file?: File;          // retained for retryUpload
+  storagePath?: string; // retained for retryFinalize
+  url?: string;         // retained for retryFinalize
 }
 
 function getFileExtension(name: string): string {
@@ -100,7 +103,7 @@ export function useListingImages(listingId: string | undefined) {
       // Step 1: Upload bytes to Supabase Storage
       setUploads((prev) => ({
         ...prev,
-        [uploadKey]: { fileName: file.name, progress: 30, status: 'uploading' },
+        [uploadKey]: { fileName: file.name, progress: 30, status: 'uploading', file },
       }));
 
       const { error: storageError } = await supabase.storage
@@ -110,7 +113,7 @@ export function useListingImages(listingId: string | undefined) {
       if (storageError) {
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: storageError.message },
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: storageError.message, file },
         }));
         toast({ title: 'Upload failed', description: storageError.message, variant: 'destructive' });
         return;
@@ -169,20 +172,109 @@ export function useListingImages(listingId: string | undefined) {
           return;
         }
 
-        // 400/404 = best-effort delete orphan from Storage
-        if (status === 400 || status === 404) {
-          await supabase.storage.from(BUCKET).remove([storagePath]);
-        }
-
+        // Keep storagePath/url for retry — orphan cleanup handles eventual removal (section 5)
         const message = apiErr?.message ?? 'Failed to register image metadata.';
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message },
+          [uploadKey]: {
+            fileName: file.name,
+            progress: 0,
+            status: 'finalize_failed',
+            error: message,
+            storagePath,
+            url: publicUrl,
+          },
         }));
-        toast({ title: 'Image registration failed', description: message, variant: 'destructive' });
+        toast({ title: 'Finalize failed', description: 'Image uploaded but registration failed. You can retry.', variant: 'destructive' });
       }
     },
     [listingId, imageCount, queryClient, queryKey, toast],
+  );
+
+  // Retry a failed storage upload using the stored File reference
+  const retryUpload = useCallback(
+    (uploadKey: string) => {
+      const entry = uploads[uploadKey];
+      if (!entry?.file) return;
+      // Remove old entry and re-run full upload
+      setUploads((prev) => {
+        const next = { ...prev };
+        delete next[uploadKey];
+        return next;
+      });
+      uploadImage(entry.file);
+    },
+    [uploads, uploadImage],
+  );
+
+  // Retry only the metadata POST for a file that uploaded to Storage but failed registration
+  const retryFinalize = useCallback(
+    async (uploadKey: string) => {
+      const entry = uploads[uploadKey];
+      if (!entry?.storagePath || !entry?.url || !listingId) return;
+
+      setUploads((prev) => ({
+        ...prev,
+        [uploadKey]: { ...prev[uploadKey], progress: 70, status: 'registering', error: undefined },
+      }));
+
+      try {
+        await api.post(`/api/listings/${listingId}/images`, {
+          storagePath: entry.storagePath,
+          url: entry.url,
+        });
+
+        setUploads((prev) => ({
+          ...prev,
+          [uploadKey]: { ...prev[uploadKey], progress: 100, status: 'done' },
+        }));
+        queryClient.invalidateQueries({ queryKey });
+        setTimeout(() => {
+          setUploads((prev) => {
+            const next = { ...prev };
+            delete next[uploadKey];
+            return next;
+          });
+        }, 1500);
+      } catch (err) {
+        const apiErr = err instanceof ApiError ? err : null;
+        // 409 = already registered, treat as success
+        if (apiErr?.status === 409) {
+          setUploads((prev) => ({
+            ...prev,
+            [uploadKey]: { ...prev[uploadKey], progress: 100, status: 'done' },
+          }));
+          queryClient.invalidateQueries({ queryKey });
+          setTimeout(() => {
+            setUploads((prev) => {
+              const next = { ...prev };
+              delete next[uploadKey];
+              return next;
+            });
+          }, 1500);
+          return;
+        }
+        const message = apiErr?.message ?? 'Finalize retry failed.';
+        setUploads((prev) => ({
+          ...prev,
+          [uploadKey]: { ...prev[uploadKey], progress: 0, status: 'finalize_failed', error: message },
+        }));
+        toast({ title: 'Finalize failed', description: message, variant: 'destructive' });
+      }
+    },
+    [uploads, listingId, queryClient, queryKey, toast],
+  );
+
+  // Dismiss a failed upload entry from the progress list
+  const dismissUpload = useCallback(
+    (uploadKey: string) => {
+      setUploads((prev) => {
+        const next = { ...prev };
+        delete next[uploadKey];
+        return next;
+      });
+    },
+    [],
   );
 
   // Delete image
@@ -224,6 +316,9 @@ export function useListingImages(listingId: string | undefined) {
     remainingSlots,
     maxImages: MAX_IMAGES,
     uploadImage,
+    retryUpload,
+    retryFinalize,
+    dismissUpload,
     deleteImage: deleteMutation.mutate,
     isDeleting: deleteMutation.isPending,
     reorderImages: reorderMutation.mutate,

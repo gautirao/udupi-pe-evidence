@@ -2,7 +2,7 @@ import { useRef, useState, useCallback, type DragEvent } from 'react';
 import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Upload, X, GripVertical, ImageOff, Loader2 } from 'lucide-react';
+import { Upload, X, GripVertical, ImageOff, Loader2, RotateCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ImageUploaderProps {
@@ -22,6 +22,9 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
     remainingSlots,
     maxImages,
     uploadImage,
+    retryUpload,
+    retryFinalize,
+    dismissUpload,
     deleteImage,
     isDeleting,
     reorderImages,
@@ -228,14 +231,61 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
                   className="h-2"
                 />
               </div>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">
-                {upload.status === 'uploading' && 'Uploading...'}
-                {upload.status === 'registering' && 'Saving...'}
-                {upload.status === 'done' && 'Done'}
-                {upload.status === 'error' && (
-                  <span className="text-destructive">Failed</span>
+              <div className="flex items-center gap-1.5 whitespace-nowrap">
+                {upload.status === 'uploading' && (
+                  <span className="text-xs text-muted-foreground">Uploading...</span>
                 )}
-              </span>
+                {upload.status === 'registering' && (
+                  <span className="text-xs text-muted-foreground">Saving...</span>
+                )}
+                {upload.status === 'done' && (
+                  <span className="text-xs text-muted-foreground">Done</span>
+                )}
+                {upload.status === 'error' && (
+                  <>
+                    <span className="text-xs text-destructive">Upload failed</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => retryUpload(key)}
+                    >
+                      <RotateCw className="mr-1 h-3 w-3" />
+                      Retry
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => dismissUpload(key)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+                {upload.status === 'finalize_failed' && (
+                  <>
+                    <span className="text-xs text-destructive">Finalize failed</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => retryFinalize(key)}
+                    >
+                      <RotateCw className="mr-1 h-3 w-3" />
+                      Retry finalize
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => dismissUpload(key)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
