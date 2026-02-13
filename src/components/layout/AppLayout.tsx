@@ -41,6 +41,7 @@ interface AppLayoutProps {
 
 const navigation = [
   { name: 'Map', href: '/', icon: MapPin },
+  { name: 'Insights', href: '/insights', icon: BarChart3 },
 ];
 
 const adminNavigation = [

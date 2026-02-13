@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import ListingDetail from "./pages/ListingDetail";
+import Insights from "./pages/Insights";
 import FacebookGroups from "./pages/admin/FacebookGroups";
 import FeedRuns from "./pages/admin/FeedRuns";
 import ManualPost from "./pages/admin/ManualPost";
@@ -43,6 +44,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <ListingDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/insights"
+              element={
+                <ProtectedRoute>
+                  <Insights />
                 </ProtectedRoute>
               }
             />
