@@ -27,12 +27,19 @@ function parseListingId(metadata: string | null): string | null {
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { data: notifications = [], isLoading } = useNotifications();
+  const { data: notifications = [], isLoading, isError, refetch } = useNotifications();
   const { data: unreadData } = useUnreadCount();
   const markAsRead = useMarkAsRead();
 
   const unreadCount = unreadData?.count ?? 0;
-  const displayNotifications = notifications.slice(0, 10);
+  const displayNotifications = notifications.slice(0, 20);
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (nextOpen) {
+      refetch();
+    }
+  }
 
   function handleClick(notification: NotificationResponse) {
     if (!notification.isRead) {
@@ -46,7 +53,7 @@ export function NotificationBell() {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative h-9 w-9">
           <Bell className="h-5 w-5" />
@@ -65,6 +72,10 @@ export function NotificationBell() {
         {isLoading ? (
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
             Loading...
+          </div>
+        ) : isError ? (
+          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            Unable to load notifications
           </div>
         ) : displayNotifications.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
