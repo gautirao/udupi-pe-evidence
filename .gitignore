@@ -30,7 +30,12 @@ bun.lockb
 
 # Secrets (SEC-1 remediation)
 .env
+.env_*
+.env.*
 *.env
+*.env.*
 backend/.env
+backend/.env_*
+backend/.env.*
 backend/*.env
 .claude/settings.local.json
