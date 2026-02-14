@@ -14,6 +14,23 @@ export interface PropertyListingWithImages extends PropertyListing {
   images?: PropertyImage[];
 }
 
+/**
+ * Escape HTML special characters to prevent XSS attacks.
+ * Addresses SEC-3: Stored XSS vulnerability from Code Review Sprint.
+ *
+ * @param str - String that may contain user-controlled data
+ * @returns Escaped string safe for HTML interpolation
+ */
+const escapeHtml = (str: string | null | undefined): string => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 // Fix default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -94,9 +111,9 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
   if (firstImage) {
     html += `
       <div style="margin: -10px -10px 10px -10px; border-radius: 8px 8px 0 0; overflow: hidden; height: 120px; background: #f1f5f9;">
-        <img 
-          src="${firstImage}" 
-          alt="Property" 
+        <img
+          src="${escapeHtml(firstImage)}"
+          alt="Property"
           style="width: 100%; height: 100%; object-fit: cover;"
           onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8;\\'>No image</div>';"
         />
@@ -107,7 +124,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
   // Title
   html += `
     <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 8px 0; color: #1e293b; line-height: 1.3;">
-      ${title}
+      ${escapeHtml(title)}
     </h3>
   `;
   
@@ -157,7 +174,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
           <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
           <circle cx="12" cy="10" r="3"/>
         </svg>
-        <span>${listing.locality}</span>
+        <span>${escapeHtml(listing.locality)}</span>
       </div>
     `;
   }
@@ -173,7 +190,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
           <path d="m13.5 4.5 2 2"/>
           <path d="m4.5 13.5 2 2"/>
         </svg>
-        <span>Land: ${listing.land_area} ${listing.land_area_unit || 'sq ft'}</span>
+        <span>Land: ${listing.land_area} ${escapeHtml(listing.land_area_unit || 'sq ft')}</span>
       </div>
     `;
   }
@@ -187,7 +204,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
           <path d="M3 9h18"/>
           <path d="M9 21V9"/>
         </svg>
-        <span>Built: ${listing.built_area} ${listing.built_area_unit || 'sq ft'}</span>
+        <span>Built: ${listing.built_area} ${escapeHtml(listing.built_area_unit || 'sq ft')}</span>
       </div>
     `;
   }
@@ -216,8 +233,8 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
         </svg>
-        <a href="tel:${listing.contact_phone}" style="color: inherit; text-decoration: none;">
-          ${listing.contact_phone}
+        <a href="tel:${escapeHtml(listing.contact_phone)}" style="color: inherit; text-decoration: none;">
+          ${escapeHtml(listing.contact_phone)}
         </a>
       </div>
     `;
@@ -227,12 +244,12 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
   
   // Description snippet
   if (listing.description) {
-    const shortDesc = listing.description.length > 100 
-      ? listing.description.substring(0, 100) + '...' 
+    const shortDesc = listing.description.length > 100
+      ? listing.description.substring(0, 100) + '...'
       : listing.description;
     html += `
       <p style="font-size: 12px; color: #94a3b8; margin: 10px 0 0 0; line-height: 1.4; border-top: 1px solid #e2e8f0; padding-top: 8px;">
-        ${shortDesc}
+        ${escapeHtml(shortDesc)}
       </p>
     `;
   }

@@ -54,3 +54,10 @@ server:
 logging:
   level:
     com.example.realestate: DEBUG
+
+# CORS Configuration (SEC-2 remediation)
+cors:
+  allowed-origins:
+    - http://localhost:5173  # Vite dev server
+    - http://localhost:3000  # Alternative dev port
+# Production: Override with environment variable CORS_ALLOWED_ORIGINS=https://your-production-domain.com

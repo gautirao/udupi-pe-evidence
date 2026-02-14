@@ -551,12 +551,21 @@ public class ListingService {
 
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+            ObjectNode metadata = objectMapper.createObjectNode();
+            metadata.put("listing_id", listingId.toString());
+            String metadataJson;
+            try {
+                metadataJson = objectMapper.writeValueAsString(metadata);
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize notification metadata for listingId={}", listingId, e);
+                throw new IllegalStateException("Notification metadata serialization failed", e);
+            }
             listingRepository.insertNotification(
                     listing.getCreatedBy(),
                     "listing_approved",
                     "Listing approved",
                     "Your listing '" + title + "' has been approved and is now live.",
-                    "{\"listing_id\":\"" + listingId + "\"}");
+                    metadataJson);
         }
 
         log.info("Approved listing listingId={} by adminId={} status=LIVE", listingId, adminUserId);
@@ -590,13 +599,22 @@ public class ListingService {
 
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
-            String safeReason = rejectionReason.replace("\"", "\\\"");
+            ObjectNode metadata = objectMapper.createObjectNode();
+            metadata.put("listing_id", listingId.toString());
+            metadata.put("reason", rejectionReason);
+            String metadataJson;
+            try {
+                metadataJson = objectMapper.writeValueAsString(metadata);
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize notification metadata for listingId={}", listingId, e);
+                throw new IllegalStateException("Notification metadata serialization failed", e);
+            }
             listingRepository.insertNotification(
                     listing.getCreatedBy(),
                     "listing_rejected",
                     "Listing rejected",
                     "Your listing '" + title + "' was rejected. Reason: " + rejectionReason,
-                    "{\"listing_id\":\"" + listingId + "\",\"reason\":\"" + safeReason + "\"}");
+                    metadataJson);
         }
 
         log.info("Rejected listing listingId={} by adminId={} reason='{}'",
