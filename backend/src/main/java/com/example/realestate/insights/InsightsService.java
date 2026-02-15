@@ -77,33 +77,23 @@ public class InsightsService {
      * If user has saved areas, returns recommendations filtered to those areas.
      * If no saved areas, returns general recommendations (all areas).
      * No AI calls. No randomness.
+     * Uses batch query to eliminate N+1 pattern (2 queries total instead of 1+N).
      */
     public List<OpportunityProjection> getRecommendations(UUID userId) {
         List<SavedArea> savedAreas = savedAreaRepository.findByUserIdOrderByCreatedAtDesc(userId);
 
         if (savedAreas.isEmpty()) {
-            // General recommendations across all areas
-            return listingRepository.findOpportunities(
+            // General recommendations across all areas (null = no area filter)
+            return listingRepository.findOpportunitiesByAreaKeys(
                     null, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, RECOMMENDATION_LIMIT);
         }
 
-        // Recommendations per saved area, merged and limited
-        List<OpportunityProjection> results = new ArrayList<>();
-        for (SavedArea area : savedAreas) {
-            List<OpportunityProjection> areaResults = listingRepository.findOpportunities(
-                    area.getAreaKey(), RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, RECOMMENDATION_LIMIT);
-            results.addAll(areaResults);
-        }
+        // Batch fetch opportunities for all saved areas in a single query
+        List<String> areaKeys = savedAreas.stream()
+                .map(SavedArea::getAreaKey)
+                .toList();
 
-        // Sort by undervaluation score DESC, limit to top N
-        results.sort((a, b) -> {
-            Double scoreA = a.getUndervaluationScore() != null ? a.getUndervaluationScore() : 0.0;
-            Double scoreB = b.getUndervaluationScore() != null ? b.getUndervaluationScore() : 0.0;
-            return Double.compare(scoreB, scoreA);
-        });
-
-        return results.size() > RECOMMENDATION_LIMIT
-                ? results.subList(0, RECOMMENDATION_LIMIT)
-                : results;
+        return listingRepository.findOpportunitiesByAreaKeys(
+                areaKeys, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, RECOMMENDATION_LIMIT);
     }
 }
