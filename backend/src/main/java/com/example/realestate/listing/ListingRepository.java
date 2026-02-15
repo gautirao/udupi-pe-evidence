@@ -1,5 +1,7 @@
 package com.example.realestate.listing;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -21,7 +23,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     long countByDedupeHash(String dedupeHash);
 
-    List<Listing> findByCreatedByOrderByCreatedAtDesc(UUID createdBy);
+    Page<Listing> findByCreatedByOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
 
     @Query(value = "SELECT COUNT(*) FROM public.listing_images WHERE listing_id = :listingId",
             nativeQuery = true)
@@ -53,9 +55,21 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND (CAST(:maxPpc AS bigint) IS NULL OR price_per_cent_paise <= :maxPpc)
               AND (CAST(:createdAfter AS timestamptz) IS NULL OR created_at >= :createdAfter)
             ORDER BY created_at DESC
-            LIMIT :limit
-            """, nativeQuery = true)
-    List<Listing> findInBoundingBox(
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM public.property_listings
+            WHERE latitude BETWEEN :minLat AND :maxLat
+              AND longitude BETWEEN :minLng AND :maxLng
+              AND is_duplicate = false
+              AND latitude IS NOT NULL
+              AND longitude IS NOT NULL
+              AND area_key IS NOT NULL
+              AND (CAST(:minPpc AS bigint) IS NULL OR price_per_cent_paise >= :minPpc)
+              AND (CAST(:maxPpc AS bigint) IS NULL OR price_per_cent_paise <= :maxPpc)
+              AND (CAST(:createdAfter AS timestamptz) IS NULL OR created_at >= :createdAfter)
+            """,
+            nativeQuery = true)
+    Page<Listing> findInBoundingBox(
             @Param("minLat") double minLat,
             @Param("minLng") double minLng,
             @Param("maxLat") double maxLat,
@@ -63,7 +77,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("minPpc") Long minPpc,
             @Param("maxPpc") Long maxPpc,
             @Param("createdAfter") OffsetDateTime createdAfter,
-            @Param("limit") int limit);
+            Pageable pageable);
 
     /**
      * Projection interface for opportunity finder query results.

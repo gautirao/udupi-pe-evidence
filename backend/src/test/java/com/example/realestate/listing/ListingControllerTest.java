@@ -6,6 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -98,16 +101,17 @@ class ListingControllerTest {
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
-        when(listingService.getListingsByOwner(DEALER_ID)).thenReturn(List.of(listing));
+        Page<Listing> page = new PageImpl<>(List.of(listing));
+        when(listingService.getListingsByOwner(eq(DEALER_ID), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(LISTING_ID.toString()))
-                .andExpect(jsonPath("$[0].status").value("DRAFT"));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.content[0].status").value("DRAFT"));
 
-        verify(listingService).getListingsByOwner(DEALER_ID);
+        verify(listingService).getListingsByOwner(eq(DEALER_ID), any(Pageable.class));
     }
 
     // ==================== Test 3: PUT -> 200 ====================

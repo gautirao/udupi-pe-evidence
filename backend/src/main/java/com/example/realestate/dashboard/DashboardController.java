@@ -6,6 +6,10 @@ import com.example.realestate.listing.ListingRepository.OpportunityProjection;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,7 +40,6 @@ public class DashboardController {
     private static final int DEFAULT_WEEKS = 52;
     private static final int MAX_WEEKS = 520; // ~10 years
     private static final int MAX_LIMIT = 200;
-    private static final int MAX_MAP_LIMIT = 500;
 
     private final AreaPriceWeeklyRepository areaPriceWeeklyRepository;
     private final AreaInsightsDao areaInsightsDao;
@@ -96,13 +99,11 @@ public class DashboardController {
             @RequestParam(required = false) BigDecimal minPpc,
             @RequestParam(required = false) BigDecimal maxPpc,
             @RequestParam(name = "freshDays", defaultValue = "7") int freshDays,
-            @RequestParam(name = "limit", defaultValue = "200") int limit) {
+            @PageableDefault(size = 200, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
         if (minLat > maxLat || minLng > maxLng) {
             return ResponseEntity.badRequest().body("Invalid bounding box: min must be <= max");
         }
-
-        int effectiveLimit = Math.min(Math.max(limit, 1), MAX_MAP_LIMIT);
 
         Long minPpcPaise = minPpc != null ? minPpc.multiply(PAISE_TO_RUPEES).longValue() : null;
         Long maxPpcPaise = maxPpc != null ? maxPpc.multiply(PAISE_TO_RUPEES).longValue() : null;
@@ -111,19 +112,19 @@ public class DashboardController {
                 ? OffsetDateTime.now().minusDays(freshDays)
                 : null;
 
-        log.info("Map listings query bbox=[{},{} -> {},{}] ppc=[{},{}] freshDays={} limit={}",
-                minLat, minLng, maxLat, maxLng, minPpcPaise, maxPpcPaise, freshDays, effectiveLimit);
+        log.info("Map listings query bbox=[{},{} -> {},{}] ppc=[{},{}] freshDays={} page={} size={}",
+                minLat, minLng, maxLat, maxLng, minPpcPaise, maxPpcPaise, freshDays,
+                pageable.getPageNumber(), pageable.getPageSize());
 
-        List<Listing> listings = listingRepository.findInBoundingBox(
+        Page<Listing> listings = listingRepository.findInBoundingBox(
                 minLat, minLng, maxLat, maxLng,
                 minPpcPaise, maxPpcPaise,
-                createdAfter, effectiveLimit);
+                createdAfter, pageable);
 
-        List<MapListingResponse> response = listings.stream()
-                .map(this::toMapListingResponse)
-                .toList();
+        Page<MapListingResponse> response = listings.map(this::toMapListingResponse);
 
-        log.debug("Returning {} map listings", response.size());
+        log.debug("Returning {} map listings (page {} of {})",
+                response.getNumberOfElements(), response.getNumber() + 1, response.getTotalPages());
         return ResponseEntity.ok(response);
     }
 

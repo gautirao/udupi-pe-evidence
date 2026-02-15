@@ -2,6 +2,10 @@ package com.example.realestate.listing;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -53,13 +57,15 @@ public class ListingController {
     }
 
     @GetMapping("/mine")
-    public ResponseEntity<?> mine(JwtAuthenticationToken auth) {
+    public ResponseEntity<?> mine(
+            JwtAuthenticationToken auth,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         CallerInfo caller = resolveCallerOrForbid(auth);
         if (caller == null) return forbidden();
 
-        List<Listing> listings = listingService.getListingsByOwner(caller.userId());
+        Page<Listing> listings = listingService.getListingsByOwner(caller.userId(), pageable);
 
-        List<ListingResponse> response = listings.stream().map(this::toResponse).toList();
+        Page<ListingResponse> response = listings.map(this::toResponse);
         return ResponseEntity.ok(response);
     }
 

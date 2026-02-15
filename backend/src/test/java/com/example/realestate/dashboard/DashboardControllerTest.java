@@ -10,6 +10,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -430,21 +433,21 @@ class DashboardControllerTest {
 
         when(listingRepository.findInBoundingBox(
                 eq(10.0), eq(74.0), eq(11.0), eq(75.0),
-                isNull(), isNull(), any(), eq(200)))
-                .thenReturn(List.of(listing));
+                isNull(), isNull(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(listing)));
 
         mockMvc.perform(get("/api/dashboard/map/listings")
                         .param("minLat", "10.0").param("minLng", "74.0")
                         .param("maxLat", "11.0").param("maxLng", "75.0"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].title").value("3 cent plot in Manipal"))
-                .andExpect(jsonPath("$[0].priceRupees").value(15000.00))
-                .andExpect(jsonPath("$[0].pricePerCentRupees").value(5000.00))
-                .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
-                .andExpect(jsonPath("$[0].areaLabel").value("Manipal, Udupi"))
-                .andExpect(jsonPath("$[0].latitude").value(10.5))
-                .andExpect(jsonPath("$[0].longitude").value(74.5));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("3 cent plot in Manipal"))
+                .andExpect(jsonPath("$.content[0].priceRupees").value(15000.00))
+                .andExpect(jsonPath("$.content[0].pricePerCentRupees").value(5000.00))
+                .andExpect(jsonPath("$.content[0].areaKey").value("IN|KA|Udupi|Manipal"))
+                .andExpect(jsonPath("$.content[0].areaLabel").value("Manipal, Udupi"))
+                .andExpect(jsonPath("$.content[0].latitude").value(10.5))
+                .andExpect(jsonPath("$.content[0].longitude").value(74.5));
     }
 
     // ==================== Map Listings: Price Filter Tests ====================
@@ -454,8 +457,8 @@ class DashboardControllerTest {
     void getMapListings_priceFilterConvertsRupeesToPaise() throws Exception {
         when(listingRepository.findInBoundingBox(
                 eq(10.0), eq(74.0), eq(11.0), eq(75.0),
-                eq(300000L), eq(700000L), any(), eq(200)))
-                .thenReturn(List.of());
+                eq(300000L), eq(700000L), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         // minPpc=3000 rupees = 300000 paise, maxPpc=7000 rupees = 700000 paise
         mockMvc.perform(get("/api/dashboard/map/listings")
@@ -466,7 +469,7 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 eq(10.0), eq(74.0), eq(11.0), eq(75.0),
-                eq(300000L), eq(700000L), any(), eq(200));
+                eq(300000L), eq(700000L), any(), any(Pageable.class));
     }
 
     @Test
@@ -474,8 +477,8 @@ class DashboardControllerTest {
     void getMapListings_noPriceFilter_passesNullPpcParams() throws Exception {
         when(listingRepository.findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), any(), anyInt()))
-                .thenReturn(List.of());
+                isNull(), isNull(), any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/dashboard/map/listings")
                         .param("minLat", "10.0").param("minLng", "74.0")
@@ -484,7 +487,7 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 eq(10.0), eq(74.0), eq(11.0), eq(75.0),
-                isNull(), isNull(), any(), eq(200));
+                isNull(), isNull(), any(), any(Pageable.class));
     }
 
     // ==================== Map Listings: FreshDays Tests ====================
@@ -494,8 +497,8 @@ class DashboardControllerTest {
     void getMapListings_freshDaysZero_passesNullCreatedAfter() throws Exception {
         when(listingRepository.findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), isNull(), anyInt()))
-                .thenReturn(List.of());
+                isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/dashboard/map/listings")
                         .param("minLat", "10.0").param("minLng", "74.0")
@@ -505,7 +508,7 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), isNull(), anyInt());
+                isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
@@ -513,8 +516,8 @@ class DashboardControllerTest {
     void getMapListings_negativeFreshDays_passesNullCreatedAfter() throws Exception {
         when(listingRepository.findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), isNull(), anyInt()))
-                .thenReturn(List.of());
+                isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/dashboard/map/listings")
                         .param("minLat", "10.0").param("minLng", "74.0")
@@ -524,7 +527,7 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), isNull(), anyInt());
+                isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
@@ -532,8 +535,8 @@ class DashboardControllerTest {
     void getMapListings_defaultFreshDays_passesNonNullCreatedAfter() throws Exception {
         when(listingRepository.findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), argThat(t -> t != null), anyInt()))
-                .thenReturn(List.of());
+                isNull(), isNull(), argThat(t -> t != null), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         // Default freshDays=7, so createdAfter should be non-null
         mockMvc.perform(get("/api/dashboard/map/listings")
@@ -543,37 +546,18 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                isNull(), isNull(), argThat(t -> t != null), anyInt());
+                isNull(), isNull(), argThat(t -> t != null), any(Pageable.class));
     }
 
-    // ==================== Map Listings: Limit Tests ====================
+    // ==================== Map Listings: Pagination Tests ====================
 
     @Test
     @WithMockUser
-    void getMapListings_limitCappedAt500() throws Exception {
+    void getMapListings_defaultPageSizeIs200() throws Exception {
         when(listingRepository.findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                any(), any(), any(), eq(500)))
-                .thenReturn(List.of());
-
-        mockMvc.perform(get("/api/dashboard/map/listings")
-                        .param("minLat", "10.0").param("minLng", "74.0")
-                        .param("maxLat", "11.0").param("maxLng", "75.0")
-                        .param("limit", "999"))
-                .andExpect(status().isOk());
-
-        verify(listingRepository).findInBoundingBox(
-                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                any(), any(), any(), eq(500));
-    }
-
-    @Test
-    @WithMockUser
-    void getMapListings_defaultLimitIs200() throws Exception {
-        when(listingRepository.findInBoundingBox(
-                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                any(), any(), any(), eq(200)))
-                .thenReturn(List.of());
+                any(), any(), any(), argThat(p -> p.getPageSize() == 200)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/dashboard/map/listings")
                         .param("minLat", "10.0").param("minLng", "74.0")
@@ -582,7 +566,26 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                any(), any(), any(), eq(200));
+                any(), any(), any(), argThat(p -> p.getPageSize() == 200));
+    }
+
+    @Test
+    @WithMockUser
+    void getMapListings_customPageSize() throws Exception {
+        when(listingRepository.findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(), any(), any(), argThat(p -> p.getPageSize() == 50)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/map/listings")
+                        .param("minLat", "10.0").param("minLng", "74.0")
+                        .param("maxLat", "11.0").param("maxLng", "75.0")
+                        .param("size", "50"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findInBoundingBox(
+                anyDouble(), anyDouble(), anyDouble(), anyDouble(),
+                any(), any(), any(), argThat(p -> p.getPageSize() == 50));
     }
 
     // ==================== Opportunity Finder Tests ====================
