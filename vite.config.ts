@@ -28,8 +28,16 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks: (id: string) => {
-          // React core — loaded on every page
-          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+          // React core + React-coupled libraries that call createContext at init time.
+          // react-leaflet and @react-leaflet MUST be in this chunk — splitting them
+          // into vendor-leaflet causes "Cannot read properties of undefined (reading
+          // 'createContext')" because React isn't guaranteed to be initialized first.
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/react-leaflet/") ||
+            id.includes("node_modules/@react-leaflet/")
+          ) {
             return "vendor-react";
           }
           // React ecosystem helpers that are route-agnostic
@@ -43,11 +51,9 @@ export default defineConfig(({ mode }) => ({
           if (id.includes("node_modules/recharts/") || id.includes("node_modules/d3-")) {
             return "vendor-recharts";
           }
-          // Leaflet map libraries — only loaded on the main map view
+          // Leaflet core (pure JS, no React dependency) — safe to split
           if (
             id.includes("node_modules/leaflet/") ||
-            id.includes("node_modules/react-leaflet/") ||
-            id.includes("node_modules/@react-leaflet/") ||
             id.includes("node_modules/leaflet.markercluster/")
           ) {
             return "vendor-leaflet";
