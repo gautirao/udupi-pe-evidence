@@ -6,10 +6,11 @@ import com.example.realestate.dashboard.AreaPriceWeeklyRepository;
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,7 +20,6 @@ public class InsightsService {
     private static final int DEFAULT_WEEKS = 52;
     private static final double RECOMMENDATION_THRESHOLD = 0.8;
     private static final int RECOMMENDATION_FRESH_DAYS = 30;
-    private static final int RECOMMENDATION_LIMIT = 20;
 
     private final AreaInsightsDao areaInsightsDao;
     private final AreaPriceWeeklyRepository areaPriceWeeklyRepository;
@@ -56,12 +56,12 @@ public class InsightsService {
 
     /**
      * New LIVE listings in user's saved areas within the last N days.
-     * Returns empty list if user has no saved areas.
+     * Returns an empty page if user has no saved areas.
      */
-    public List<Listing> getNewListings(UUID userId, int days) {
+    public Page<Listing> getNewListings(UUID userId, int days, Pageable pageable) {
         List<SavedArea> savedAreas = savedAreaRepository.findByUserIdOrderByCreatedAtDesc(userId);
         if (savedAreas.isEmpty()) {
-            return List.of();
+            return Page.empty(pageable);
         }
 
         List<String> areaKeys = savedAreas.stream()
@@ -69,7 +69,7 @@ public class InsightsService {
                 .toList();
 
         OffsetDateTime cutoff = OffsetDateTime.now().minusDays(days);
-        return insightsRepository.findNewListingsInAreas(areaKeys, cutoff);
+        return insightsRepository.findNewListingsInAreas(areaKeys, cutoff, pageable);
     }
 
     /**
@@ -79,13 +79,13 @@ public class InsightsService {
      * No AI calls. No randomness.
      * Uses batch query to eliminate N+1 pattern (2 queries total instead of 1+N).
      */
-    public List<OpportunityProjection> getRecommendations(UUID userId) {
+    public Page<OpportunityProjection> getRecommendations(UUID userId, Pageable pageable) {
         List<SavedArea> savedAreas = savedAreaRepository.findByUserIdOrderByCreatedAtDesc(userId);
 
         if (savedAreas.isEmpty()) {
             // General recommendations across all areas (null = no area filter)
             return listingRepository.findOpportunitiesByAreaKeys(
-                    null, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, RECOMMENDATION_LIMIT);
+                    null, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, pageable);
         }
 
         // Batch fetch opportunities for all saved areas in a single query
@@ -94,6 +94,6 @@ public class InsightsService {
                 .toList();
 
         return listingRepository.findOpportunitiesByAreaKeys(
-                areaKeys, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, RECOMMENDATION_LIMIT);
+                areaKeys, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, pageable);
     }
 }

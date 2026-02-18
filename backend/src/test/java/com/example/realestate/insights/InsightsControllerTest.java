@@ -10,6 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -116,10 +120,10 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
-    // ==================== Test 4: new-listings with saved areas -> 200 ====================
+    // ==================== Test 4: new-listings with saved areas -> 200 (Page) ====================
 
     @Test
-    void newListings_withSavedAreas_returnsListings() throws Exception {
+    void newListings_withSavedAreas_returnsPagedListings() throws Exception {
         Listing listing = new Listing();
         listing.setId(UUID.randomUUID());
         listing.setPropertyType("land");
@@ -127,33 +131,60 @@ class InsightsControllerTest {
         listing.setAreaKey("india|karnataka|udupi|manipal");
         listing.setPricePaise(5000000L);
         listing.setCreatedAt(OffsetDateTime.now());
-        when(insightsService.getNewListings(USER_ID, 7)).thenReturn(List.of(listing));
+
+        Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 20), 1);
+        when(insightsService.getNewListings(eq(USER_ID), eq(7), any(Pageable.class)))
+                .thenReturn(page);
 
         mockMvc.perform(get("/api/insights/new-listings")
                         .param("days", "7")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].propertyType").value("land"))
-                .andExpect(jsonPath("$[0].locality").value("Manipal"));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].propertyType").value("land"))
+                .andExpect(jsonPath("$.content[0].locality").value("Manipal"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
     }
 
-    // ==================== Test 5: new-listings no saved areas -> 200 [] ====================
+    // ==================== Test 5: new-listings no saved areas -> 200 empty Page ====================
 
     @Test
-    void newListings_noSavedAreas_returnsEmptyArray() throws Exception {
-        when(insightsService.getNewListings(USER_ID, 7)).thenReturn(List.of());
+    void newListings_noSavedAreas_returnsEmptyPage() throws Exception {
+        Page<Listing> emptyPage = Page.empty(PageRequest.of(0, 20));
+        when(insightsService.getNewListings(eq(USER_ID), eq(7), any(Pageable.class)))
+                .thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/insights/new-listings")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
-    // ==================== Test 6: recommendations -> 200 ====================
+    // ==================== Test 6: new-listings pagination params forwarded ====================
 
     @Test
-    void recommendations_returnsResults() throws Exception {
+    void newListings_paginationParams_areForwardedToService() throws Exception {
+        Page<Listing> emptyPage = Page.empty(PageRequest.of(0, 10));
+        when(insightsService.getNewListings(eq(USER_ID), eq(7), any(Pageable.class)))
+                .thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/insights/new-listings")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        // Verify service was called with a Pageable (pagination params forwarded)
+        verify(insightsService).getNewListings(eq(USER_ID), eq(7), argThat(p ->
+                p.getPageSize() == 10 && p.getPageNumber() == 0));
+    }
+
+    // ==================== Test 7: recommendations -> 200 (Page) ====================
+
+    @Test
+    void recommendations_returnsPagedResults() throws Exception {
         OpportunityProjection proj = mock(OpportunityProjection.class);
         when(proj.getId()).thenReturn(UUID.randomUUID());
         when(proj.getPropertyType()).thenReturn("land");
@@ -162,33 +193,61 @@ class InsightsControllerTest {
         when(proj.getPricePaise()).thenReturn(5000000L);
         when(proj.getUndervaluationScore()).thenReturn(0.25);
         when(proj.getMedianPricePerCentPaise()).thenReturn(600000L);
-        when(insightsService.getRecommendations(USER_ID)).thenReturn(List.of(proj));
+
+        Page<OpportunityProjection> page = new PageImpl<>(List.of(proj), PageRequest.of(0, 20), 1);
+        when(insightsService.getRecommendations(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(page);
 
         mockMvc.perform(get("/api/insights/recommendations")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].propertyType").value("land"))
-                .andExpect(jsonPath("$[0].undervaluationScore").value(0.25));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].propertyType").value("land"))
+                .andExpect(jsonPath("$.content[0].undervaluationScore").value(0.25))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
     }
 
-    // ==================== Test 7: recommendations no saved areas -> 200 (general) ====================
+    // ==================== Test 8: recommendations no saved areas -> 200 (general, paged) ====================
 
     @Test
-    void recommendations_noSavedAreas_returnsGeneralResults() throws Exception {
+    void recommendations_noSavedAreas_returnsGeneralPagedResults() throws Exception {
         OpportunityProjection proj = mock(OpportunityProjection.class);
         when(proj.getId()).thenReturn(UUID.randomUUID());
         when(proj.getPropertyType()).thenReturn("house");
         when(proj.getUndervaluationScore()).thenReturn(0.15);
-        when(insightsService.getRecommendations(USER_ID)).thenReturn(List.of(proj));
+
+        Page<OpportunityProjection> page = new PageImpl<>(List.of(proj), PageRequest.of(0, 20), 1);
+        when(insightsService.getRecommendations(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(page);
 
         mockMvc.perform(get("/api/insights/recommendations")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
-    // ==================== Test 8: no JWT -> 403 ====================
+    // ==================== Test 9: recommendations pagination params forwarded ====================
+
+    @Test
+    void recommendations_paginationParams_areForwardedToService() throws Exception {
+        Page<OpportunityProjection> emptyPage = Page.empty(PageRequest.of(0, 10));
+        when(insightsService.getRecommendations(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/insights/recommendations")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        // Verify service was called with a Pageable reflecting size=10
+        verify(insightsService).getRecommendations(eq(USER_ID), argThat(p ->
+                p.getPageSize() == 10 && p.getPageNumber() == 0));
+    }
+
+    // ==================== Test 10: no JWT -> 403 ====================
 
     @Test
     void avgPriceByArea_withoutJwt_returns403() throws Exception {
