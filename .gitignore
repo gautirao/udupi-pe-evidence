@@ -39,3 +39,7 @@ backend/.env_*
 backend/.env.*
 backend/*.env
 .claude/settings.local.json
+
+# Playwright test output
+playwright-report/
+test-results/
