@@ -7,29 +7,13 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
+import { escapeHtml } from '@/lib/security';
 import { Card } from '@/components/ui/card';
 
 // Extended listing with images for map display
 export interface PropertyListingWithImages extends PropertyListing {
   images?: PropertyImage[];
 }
-
-/**
- * Escape HTML special characters to prevent XSS attacks.
- * Addresses SEC-3: Stored XSS vulnerability from Code Review Sprint.
- *
- * @param str - String that may contain user-controlled data
- * @returns Escaped string safe for HTML interpolation
- */
-const escapeHtml = (str: string | null | undefined): string => {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-};
 
 // Fix default marker icons in Leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -158,7 +142,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
   if (listing.price) {
     html += `
       <p style="font-size: 18px; font-weight: 700; color: #0ea5e9; margin: 0 0 10px 0;">
-        ${formatPrice(listing.price, listing.price_unit)}
+        ${escapeHtml(formatPrice(listing.price, listing.price_unit))}
       </p>
     `;
   }
@@ -190,7 +174,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
           <path d="m13.5 4.5 2 2"/>
           <path d="m4.5 13.5 2 2"/>
         </svg>
-        <span>Land: ${listing.land_area} ${escapeHtml(listing.land_area_unit || 'sq ft')}</span>
+        <span>Land: ${escapeHtml(listing.land_area)} ${escapeHtml(listing.land_area_unit || 'sq ft')}</span>
       </div>
     `;
   }
@@ -204,7 +188,7 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
           <path d="M3 9h18"/>
           <path d="M9 21V9"/>
         </svg>
-        <span>Built: ${listing.built_area} ${escapeHtml(listing.built_area_unit || 'sq ft')}</span>
+        <span>Built: ${escapeHtml(listing.built_area)} ${escapeHtml(listing.built_area_unit || 'sq ft')}</span>
       </div>
     `;
   }
@@ -221,21 +205,31 @@ const createPopupContent = (listing: PropertyListingWithImages): string => {
           <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
           <polyline points="9 22 9 12 15 12 15 22"/>
         </svg>
-        <span>${parts.join(' • ')}</span>
+        <span>${escapeHtml(parts.join(' • '))}</span>
       </div>
     `;
   }
   
-  // Contact phone
-  if (listing.contact_phone) {
+  // Contact phone — safe phone rendering, guard against javascript: URI injection in tel: href
+  const safePhone = listing.contact_phone &&
+    /^[\d\s+\-()\/.#*]+$/.test(listing.contact_phone.trim())
+    ? listing.contact_phone.trim()
+    : null;
+
+  if (safePhone) {
     html += `
-      <div style="display: flex; align-items: center; gap: 6px; color: #22c55e; font-weight: 500;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-        </svg>
-        <a href="tel:${escapeHtml(listing.contact_phone)}" style="color: inherit; text-decoration: none;">
-          ${escapeHtml(listing.contact_phone)}
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+        <span style="font-size: 11px; color: #64748b; font-weight: 500; min-width: 60px;">Contact:</span>
+        <a href="tel:${escapeHtml(safePhone)}" style="color: inherit; text-decoration: none;">
+          ${escapeHtml(safePhone)}
         </a>
+      </div>
+    `;
+  } else if (listing.contact_phone) {
+    html += `
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+        <span style="font-size: 11px; color: #64748b; font-weight: 500; min-width: 60px;">Contact:</span>
+        <span>${escapeHtml(listing.contact_phone)}</span>
       </div>
     `;
   }
