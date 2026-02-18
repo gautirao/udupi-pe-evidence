@@ -81,6 +81,9 @@ public class IngestionController {
         if (request.posts() == null || request.posts().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "No posts provided"));
         }
+        if (request.posts().size() > 50) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Too many posts. Maximum 50 posts per request."));
+        }
 
         String sourceUrl = truncate(request.source_url(), 2000);
         log.info("Received extension ingest request postCount={} sourceUrl={}",

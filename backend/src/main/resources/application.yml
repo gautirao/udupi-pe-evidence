@@ -38,6 +38,7 @@ app:
   ingestion:
     batch-size: ${INGESTION_BATCH_SIZE:10}
     poll-interval-ms: ${INGESTION_POLL_INTERVAL_MS:30000}
+    api-key: ${INGESTION_API_KEY:changeme-local-dev-only}
 
 management:
   endpoints:
@@ -50,6 +51,8 @@ management:
 
 server:
   port: ${SERVER_PORT:8085}
+  tomcat:
+    max-http-post-size: 1048576
 
 logging:
   level:

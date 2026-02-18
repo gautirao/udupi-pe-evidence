@@ -66,6 +66,13 @@
 
         <!-- Jackson for JSON processing (included via spring-boot-starter-web) -->
 
+        <!-- Bucket4j: in-memory rate limiting for ingestion API key filter -->
+        <dependency>
+            <groupId>com.bucket4j</groupId>
+            <artifactId>bucket4j-core</artifactId>
+            <version>8.10.1</version>
+        </dependency>
+
         <!-- Test dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

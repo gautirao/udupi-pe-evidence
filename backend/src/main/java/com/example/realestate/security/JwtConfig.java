@@ -7,11 +7,18 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
 public class JwtConfig {
+
+    private final IngestionApiKeyFilter ingestionApiKeyFilter;
+
+    public JwtConfig(IngestionApiKeyFilter ingestionApiKeyFilter) {
+        this.ingestionApiKeyFilter = ingestionApiKeyFilter;
+    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -19,11 +26,16 @@ public class JwtConfig {
                 .cors(Customizer.withDefaults())  // SEC-2: Enable CORS filter to use CorsConfigurationSource bean
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // Register ingestion API key filter before JWT validation so
+                // BearerTokenAuthenticationFilter never runs on this path.
+                .addFilterBefore(ingestionApiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight requests — BearerTokenAuthenticationFilter
                         // runs before CORS headers are evaluated, causing 401 on OPTIONS.
                         .requestMatchers(HttpMethod.OPTIONS).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // permitAll() here so Spring Security does not apply JWT validation;
+                        // the actual auth check is enforced by IngestionApiKeyFilter.
                         .requestMatchers("/api/ingestion/ingest-posts").permitAll()
                         .anyRequest().authenticated()
                 )

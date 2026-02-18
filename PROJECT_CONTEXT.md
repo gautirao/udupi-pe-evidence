@@ -68,6 +68,17 @@ Rules:
 - All env vars must use `VITE_` prefix
 - No hardcoded URLs
 
+### Backend (Render – required)
+
+INGESTION_API_KEY=<generate with: openssl rand -hex 32>
+
+Rules:
+- Must be set in Render dashboard before deploying
+- Used by IngestionApiKeyFilter to authenticate POST /api/ingestion/ingest-posts
+- Chrome extension must send this value as: X-Ingestion-Api-Key: <key>
+- Local dev fallback: changeme-local-dev-only (NEVER use in production)
+- Rotate quarterly or immediately on suspected compromise
+
 ---
 
 ## Authentication model
