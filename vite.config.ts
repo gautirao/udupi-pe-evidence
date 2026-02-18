@@ -24,4 +24,44 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: (id: string) => {
+          // React core — loaded on every page
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "vendor-react";
+          }
+          // React ecosystem helpers that are route-agnostic
+          if (
+            id.includes("node_modules/react-router-dom/") ||
+            id.includes("node_modules/@tanstack/react-query/")
+          ) {
+            return "vendor-react-router-query";
+          }
+          // Recharts — only loaded on /insights; keep in its own chunk
+          if (id.includes("node_modules/recharts/") || id.includes("node_modules/d3-")) {
+            return "vendor-recharts";
+          }
+          // Leaflet map libraries — only loaded on the main map view
+          if (
+            id.includes("node_modules/leaflet/") ||
+            id.includes("node_modules/react-leaflet/") ||
+            id.includes("node_modules/@react-leaflet/") ||
+            id.includes("node_modules/leaflet.markercluster/")
+          ) {
+            return "vendor-leaflet";
+          }
+          // Radix UI primitives — shared UI components
+          if (id.includes("node_modules/@radix-ui/")) {
+            return "vendor-radix";
+          }
+          // Supabase client — auth + data fetching
+          if (id.includes("node_modules/@supabase/")) {
+            return "vendor-supabase";
+          }
+        },
+      },
+    },
+  },
 }));
