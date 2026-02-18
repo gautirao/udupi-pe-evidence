@@ -56,8 +56,6 @@ logging:
     com.example.realestate: DEBUG
 
 # CORS Configuration (SEC-2 remediation)
+# Production: set CORS_ALLOWED_ORIGINS=https://your-domain.pages.dev in Render env vars
 cors:
-  allowed-origins:
-    - http://localhost:5173  # Vite dev server
-    - http://localhost:3000  # Alternative dev port
-# Production: Override with environment variable CORS_ALLOWED_ORIGINS=https://your-production-domain.com
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
