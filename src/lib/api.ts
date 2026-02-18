@@ -2,6 +2,20 @@ import { supabase } from '@/integrations/supabase/client';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
 
+/**
+ * Spring Data Page<T> wrapper returned by paginated endpoints.
+ * Matches the backend Page<T> JSON structure (e.g. GET /api/listings/mine).
+ */
+export interface PageResponse<T> {
+  content: T[];
+  totalPages: number;
+  totalElements: number;
+  size: number;
+  number: number;
+  first: boolean;
+  last: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,

@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, type PageResponse } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 // Mirrors backend CreateRequest DTO
@@ -26,6 +26,33 @@ export interface ListingResponse {
   rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Fetches the current dealer's own listings from the paginated endpoint
+ * GET /api/listings/mine — returns Page<ListingResponse>.
+ *
+ * @param page  - zero-based page number (default 0)
+ * @param size  - page size (default 20, matches backend default)
+ */
+export function useDealerMyListings(page = 0, size = 20) {
+  return useQuery({
+    queryKey: ['dealer-listings', page, size],
+    queryFn: async () => {
+      const response = await api.get<PageResponse<ListingResponse>>(
+        `/api/listings/mine?page=${page}&size=${size}`,
+      );
+      return {
+        listings: response.content,
+        totalPages: response.totalPages,
+        totalElements: response.totalElements,
+        currentPage: response.number,
+        pageSize: response.size,
+        isFirst: response.first,
+        isLast: response.last,
+      };
+    },
+  });
 }
 
 export function useCreateListing() {
