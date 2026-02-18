@@ -2,6 +2,10 @@ package com.example.realestate.notification;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -11,7 +15,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,17 +31,18 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ResponseEntity<List<NotificationResponse>> list(JwtAuthenticationToken auth) {
+    public ResponseEntity<Page<NotificationResponse>> list(
+            JwtAuthenticationToken auth,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         UUID userId = extractUserId(auth);
 
-        List<NotificationResponse> notifications = notificationRepository
-                .findTop50ByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(NotificationResponse::from)
-                .toList();
+        Page<NotificationResponse> page = notificationRepository
+                .findByUserId(userId, pageable)
+                .map(NotificationResponse::from);
 
-        log.info("GET /api/notifications -> 200 count={} userId={}", notifications.size(), userId);
-        return ResponseEntity.ok(notifications);
+        log.info("GET /api/notifications -> 200 page={} size={} total={} userId={}",
+                page.getNumber(), page.getSize(), page.getTotalElements(), userId);
+        return ResponseEntity.ok(page);
     }
 
     @PutMapping("/{id}/read")

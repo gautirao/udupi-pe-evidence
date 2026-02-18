@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -62,39 +64,42 @@ class NotificationControllerTest {
         reset(notificationRepository);
     }
 
-    // ==================== Test 1: GET notifications -> 200 with array ====================
+    // ==================== Test 1: GET notifications -> 200 with Page shape ====================
 
     @Test
     void list_returnsNotificationsForUser() throws Exception {
         Notification n = buildNotification(NOTIF_ID, USER_A, "listing_approved",
                 "Listing approved", "Your listing was approved.", false);
-        when(notificationRepository.findTop50ByUserIdOrderByCreatedAtDesc(USER_A))
-                .thenReturn(List.of(n));
+        when(notificationRepository.findByUserId(eq(USER_A), any()))
+                .thenReturn(new PageImpl<>(List.of(n), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/notifications")
                         .with(jwt().jwt(j -> j.subject(USER_A.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(NOTIF_ID.toString()))
-                .andExpect(jsonPath("$[0].type").value("listing_approved"))
-                .andExpect(jsonPath("$[0].title").value("Listing approved"))
-                .andExpect(jsonPath("$[0].message").value("Your listing was approved."))
-                .andExpect(jsonPath("$[0].isRead").value(false));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(NOTIF_ID.toString()))
+                .andExpect(jsonPath("$.content[0].type").value("listing_approved"))
+                .andExpect(jsonPath("$.content[0].title").value("Listing approved"))
+                .andExpect(jsonPath("$.content[0].message").value("Your listing was approved."))
+                .andExpect(jsonPath("$.content[0].isRead").value(false))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
 
-        verify(notificationRepository).findTop50ByUserIdOrderByCreatedAtDesc(USER_A);
+        verify(notificationRepository).findByUserId(eq(USER_A), any());
     }
 
-    // ==================== Test 2: GET notifications empty -> 200 with [] ====================
+    // ==================== Test 2: GET notifications empty -> 200 with empty Page ====================
 
     @Test
-    void list_emptyReturnsEmptyArray() throws Exception {
-        when(notificationRepository.findTop50ByUserIdOrderByCreatedAtDesc(USER_A))
-                .thenReturn(List.of());
+    void list_emptyReturnsEmptyPage() throws Exception {
+        when(notificationRepository.findByUserId(eq(USER_A), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/notifications")
                         .with(jwt().jwt(j -> j.subject(USER_A.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     // ==================== Test 3: GET notifications without JWT -> 403 ====================
