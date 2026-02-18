@@ -22,6 +22,7 @@ These commands are considered read-only and safe:
 - npm test
 - npm run build
 - npm run lint
+- afplay
 
 ### Single-approval commands (approve once per task)
 These commands modify local files but are non-destructive:
