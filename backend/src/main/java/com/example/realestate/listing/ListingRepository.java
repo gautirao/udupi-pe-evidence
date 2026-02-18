@@ -142,7 +142,10 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
      * @param freshDays Only include listings created within this many days (0 = no filter)
      * @param limit Maximum number of results to return
      * @return List of opportunities sorted by undervaluation score DESC, then created_at DESC
+     * @deprecated Use {@link #findOpportunitiesByAreaKeys(List, double, int, Pageable)} instead.
+     *             This overload will be removed in Wave 3.
      */
+    @Deprecated
     @Query(value = """
         SELECT
             l.id,
@@ -176,4 +179,60 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("threshold") double threshold,
             @Param("freshDays") int freshDays,
             @Param("limit") int limit);
+
+    /**
+     * Paginated version of {@link #findOpportunitiesByAreaKeys(List, double, int, int)}.
+     * Offset/limit are driven by the supplied {@link Pageable}; no hardcoded LIMIT.
+     * Count query is required by Spring Data for native pagination.
+     *
+     * @param areaKeys  List of area keys to filter by (null = no area filter, all areas).
+     * @param threshold Price threshold (e.g., 0.8 means listings priced below 80% of area median).
+     * @param freshDays Only include listings created within this many days (0 = no filter).
+     * @param pageable  Page size and offset; sort is fixed to undervaluationScore DESC, createdAt DESC.
+     * @return Page of opportunities sorted by undervaluation score DESC, then created_at DESC.
+     */
+    @Query(value = """
+        SELECT
+            l.id,
+            l.property_type AS "propertyType",
+            l.locality,
+            l.area_label AS "areaLabel",
+            l.price_paise AS "pricePaise",
+            l.price_per_cent_paise AS "pricePerCentPaise",
+            l.area_cent AS "areaCent",
+            l.area_key AS "areaKey",
+            l.latitude,
+            l.longitude,
+            l.created_at AS "createdAt",
+            a.median_price_per_cent_paise AS "medianPricePerCentPaise",
+            CAST((a.median_price_per_cent_paise - l.price_per_cent_paise) AS DOUBLE PRECISION)
+                / a.median_price_per_cent_paise AS "undervaluationScore"
+        FROM property_listings l
+        JOIN area_stats_latest a ON l.area_key = a.area_key
+        WHERE l.is_duplicate = false
+          AND l.area_key IS NOT NULL
+          AND l.price_per_cent_paise IS NOT NULL
+          AND a.median_price_per_cent_paise IS NOT NULL
+          AND l.price_per_cent_paise < a.median_price_per_cent_paise * :threshold
+          AND (:areaKeys IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
+          AND (:freshDays <= 0 OR l.created_at >= NOW() - (:freshDays * INTERVAL '1 day'))
+        ORDER BY "undervaluationScore" DESC, l.created_at DESC
+        """,
+        countQuery = """
+        SELECT COUNT(*) FROM property_listings l
+        JOIN area_stats_latest a ON l.area_key = a.area_key
+        WHERE l.is_duplicate = false
+          AND l.area_key IS NOT NULL
+          AND l.price_per_cent_paise IS NOT NULL
+          AND a.median_price_per_cent_paise IS NOT NULL
+          AND l.price_per_cent_paise < a.median_price_per_cent_paise * :threshold
+          AND (:areaKeys IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
+          AND (:freshDays <= 0 OR l.created_at >= NOW() - (:freshDays * INTERVAL '1 day'))
+        """,
+        nativeQuery = true)
+    Page<OpportunityProjection> findOpportunitiesByAreaKeys(
+            @Param("areaKeys") List<String> areaKeys,
+            @Param("threshold") double threshold,
+            @Param("freshDays") int freshDays,
+            Pageable pageable);
 }
