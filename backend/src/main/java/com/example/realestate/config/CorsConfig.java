@@ -31,8 +31,10 @@ public class CorsConfig {
         // Standard HTTP methods for REST API
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
 
-        // Required headers for authentication + content type
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        // Required headers for authentication + content type.
+        // Accept and DNT are sent by browsers (e.g. axios defaults + privacy settings)
+        // and must be explicitly allowed — DNT is not a CORS-safelisted header.
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "DNT"));
 
         // Allow credentials (cookies, auth headers)
         config.setAllowCredentials(true);
