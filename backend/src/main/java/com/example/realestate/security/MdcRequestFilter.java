@@ -18,8 +18,10 @@ import java.util.UUID;
  * propagates it via MDC so all log lines within a request carry the ID.
  *
  * Behaviour:
- * - If the caller sends an {@code X-Request-Id} header, that value is used as-is
- *   (pass-through / correlation with upstream callers).
+ * - If the caller sends an {@code X-Request-Id} header, it is validated: must be
+ *   36 chars max and contain only hex digits, hyphens, and alphanumeric chars
+ *   (rejects log-injection attempts via newlines/control chars). Invalid values
+ *   are silently replaced with a freshly generated UUID (CWE-117 mitigation).
  * - Otherwise a new {@code UUID.randomUUID()} is generated.
  * - The ID is placed into {@code MDC} under the key {@code "requestId"} before
  *   the filter chain executes.
@@ -37,12 +39,19 @@ public class MdcRequestFilter extends OncePerRequestFilter {
     static final String REQUEST_ID_HEADER = "X-Request-Id";
     static final String MDC_KEY = "requestId";
 
+    // UUID format: 8-4-4-4-12 hex chars + dashes = 36 chars max.
+    // Only allow chars that appear in a UUID to prevent log injection (CWE-117).
+    private static final java.util.regex.Pattern SAFE_ID = java.util.regex.Pattern.compile("[\\w\\-]{1,36}");
+
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String requestId = request.getHeader(REQUEST_ID_HEADER);
-        if (requestId == null || requestId.isBlank()) {
+        String incomingId = request.getHeader(REQUEST_ID_HEADER);
+        String requestId;
+        if (incomingId != null && !incomingId.isBlank() && SAFE_ID.matcher(incomingId).matches()) {
+            requestId = incomingId;
+        } else {
             requestId = UUID.randomUUID().toString();
         }
 

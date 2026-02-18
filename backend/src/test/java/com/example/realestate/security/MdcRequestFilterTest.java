@@ -95,7 +95,41 @@ class MdcRequestFilterTest {
                 .isEqualTo(suppliedId);
     }
 
-    // ==================== Test 3: MDC is cleared after filter completes ====================
+    // ==================== Test 3 (security): malicious X-Request-Id is rejected ====================
+
+    /**
+     * When the caller supplies an X-Request-Id containing unsafe characters (newline,
+     * control chars) or exceeding 36 chars, the filter must reject it and generate
+     * a fresh UUID instead. This prevents CWE-117 log injection.
+     */
+    @Test
+    void maliciousHeader_isReplacedWithGeneratedUuid() throws Exception {
+        // Newline injection attempt
+        String maliciousId = "legit-id\nFAKE_LOG_LINE attack-payload";
+
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(MdcRequestFilter.REQUEST_ID_HEADER, maliciousId);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        FilterChain chain = (req, res) -> {};
+
+        filter.doFilter(request, response, chain);
+
+        String responseHeader = response.getHeader(MdcRequestFilter.REQUEST_ID_HEADER);
+
+        // Must NOT echo the malicious value
+        assertThat(responseHeader)
+                .as("Malicious X-Request-Id must not be echoed")
+                .doesNotContain("\n")
+                .doesNotContain("FAKE_LOG_LINE");
+
+        // Must be a valid UUID instead
+        assertThat(UUID.fromString(responseHeader))
+                .as("Replaced ID must be a valid UUID")
+                .isNotNull();
+    }
+
+    // ==================== Test 4: MDC is cleared after filter completes ====================
 
     /**
      * After the filter chain completes normally, MDC must be clear —
