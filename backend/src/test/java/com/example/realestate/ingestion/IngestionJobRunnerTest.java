@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -38,6 +39,9 @@ class IngestionJobRunnerTest {
     @Mock
     private GeocodingPort geocodingPort;
 
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
+
     private RawPostService rawPostService;
     private ClassificationService classificationService;
     private ListingService listingService;
@@ -47,7 +51,9 @@ class IngestionJobRunnerTest {
     void setUp() {
         rawPostService = new RawPostService(rawPostRepository);
         classificationService = new ClassificationService(aiClient);
-        listingService = new ListingService(listingRepository, rawPostRepository, geocodingPort, new ObjectMapper());
+        listingService = new ListingService(
+                listingRepository, rawPostRepository, geocodingPort,
+                new ObjectMapper(), applicationEventPublisher);
         jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingService, 10);
     }
 

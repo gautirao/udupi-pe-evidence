@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -33,11 +34,16 @@ class ListingServiceTest {
     @Mock
     private GeocodingPort geocodingPort;
 
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
+
     private ListingService listingService;
 
     @BeforeEach
     void setUp() {
-        listingService = new ListingService(listingRepository, rawPostRepository, geocodingPort, new ObjectMapper());
+        listingService = new ListingService(
+                listingRepository, rawPostRepository, geocodingPort,
+                new ObjectMapper(), applicationEventPublisher);
     }
 
     private RawPost makePost() {
@@ -1002,5 +1008,65 @@ class ListingServiceTest {
         assertThat(listing).isNotNull();
         assertThat(listing.getRepostCount()).isEqualTo(99);
         assertThat(listing.isDuplicate()).isTrue();
+    }
+
+    // --- Notification decoupling tests ---
+
+    @Test
+    void approveListing_savesListingAndPublishesEvent_doesNotCallInsertNotification() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(ownerId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setTitle("Test Property");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        listingService.approveListing(listingId, adminId);
+
+        // Listing must be saved with LIVE status
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+
+        // Event must be published (notification is now async/decoupled)
+        verify(applicationEventPublisher).publishEvent(any(ListingService.ListingApprovedEvent.class));
+
+        // insertNotification must NEVER be called directly — this is the critical decoupling assertion
+        verify(listingRepository, never()).insertNotification(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void rejectListing_savesListingAndPublishesEvent_doesNotCallInsertNotification() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(ownerId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setTitle("Test Property");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        listingService.rejectListing(listingId, adminId, "Poor quality images");
+
+        // Listing must be saved with REJECTED status
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
+
+        // Event must be published (notification is now async/decoupled)
+        verify(applicationEventPublisher).publishEvent(any(ListingService.ListingRejectedEvent.class));
+
+        // insertNotification must NEVER be called directly — this is the critical decoupling assertion
+        verify(listingRepository, never()).insertNotification(any(), any(), any(), any(), any());
     }
 }

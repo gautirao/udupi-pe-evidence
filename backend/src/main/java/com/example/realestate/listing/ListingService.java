@@ -12,6 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -42,16 +43,19 @@ public class ListingService {
     private final RawPostRepository rawPostRepository;
     private final GeocodingPort geocodingPort;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public ListingService(
             ListingRepository listingRepository,
             RawPostRepository rawPostRepository,
             GeocodingPort geocodingPort,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ApplicationEventPublisher applicationEventPublisher) {
         this.listingRepository = listingRepository;
         this.rawPostRepository = rawPostRepository;
         this.geocodingPort = geocodingPort;
         this.objectMapper = objectMapper;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     /**
@@ -553,21 +557,8 @@ public class ListingService {
 
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
-            ObjectNode metadata = objectMapper.createObjectNode();
-            metadata.put("listing_id", listingId.toString());
-            String metadataJson;
-            try {
-                metadataJson = objectMapper.writeValueAsString(metadata);
-            } catch (JsonProcessingException e) {
-                log.error("Failed to serialize notification metadata for listingId={}", listingId, e);
-                throw new IllegalStateException("Notification metadata serialization failed", e);
-            }
-            listingRepository.insertNotification(
-                    listing.getCreatedBy(),
-                    "listing_approved",
-                    "Listing approved",
-                    "Your listing '" + title + "' has been approved and is now live.",
-                    metadataJson);
+            applicationEventPublisher.publishEvent(
+                    new ListingApprovedEvent(saved, listing.getCreatedBy(), title));
         }
 
         log.info("Approved listing listingId={} by adminId={} status=LIVE", listingId, adminUserId);
@@ -601,22 +592,8 @@ public class ListingService {
 
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
-            ObjectNode metadata = objectMapper.createObjectNode();
-            metadata.put("listing_id", listingId.toString());
-            metadata.put("reason", rejectionReason);
-            String metadataJson;
-            try {
-                metadataJson = objectMapper.writeValueAsString(metadata);
-            } catch (JsonProcessingException e) {
-                log.error("Failed to serialize notification metadata for listingId={}", listingId, e);
-                throw new IllegalStateException("Notification metadata serialization failed", e);
-            }
-            listingRepository.insertNotification(
-                    listing.getCreatedBy(),
-                    "listing_rejected",
-                    "Listing rejected",
-                    "Your listing '" + title + "' was rejected. Reason: " + rejectionReason,
-                    metadataJson);
+            applicationEventPublisher.publishEvent(
+                    new ListingRejectedEvent(saved, listing.getCreatedBy(), title, rejectionReason));
         }
 
         log.info("Rejected listing listingId={} by adminId={} reason='{}'",
@@ -650,4 +627,10 @@ public class ListingService {
             return errors;
         }
     }
+
+    // ===== Domain events (published after commit; consumed by NotificationEventListener) =====
+
+    public record ListingApprovedEvent(Listing listing, UUID ownerId, String title) {}
+
+    public record ListingRejectedEvent(Listing listing, UUID ownerId, String title, String reason) {}
 }
