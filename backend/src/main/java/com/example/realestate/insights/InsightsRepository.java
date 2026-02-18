@@ -17,26 +17,6 @@ public interface InsightsRepository extends JpaRepository<Listing, UUID> {
 
     /**
      * Find LIVE listings in given area keys created after a cutoff date.
-     * Used by the new-listings endpoint to show recent activity in saved areas.
-     *
-     * @deprecated Use {@link #findNewListingsInAreas(List, OffsetDateTime, Pageable)} instead.
-     *             This overload will be removed in Wave 3.
-     */
-    @Deprecated
-    @Query(value = """
-            SELECT * FROM public.property_listings
-            WHERE status = 'LIVE'
-              AND area_key IN (:areaKeys)
-              AND created_at >= :cutoff
-            ORDER BY created_at DESC
-            LIMIT 50
-            """, nativeQuery = true)
-    List<Listing> findNewListingsInAreas(
-            @Param("areaKeys") List<String> areaKeys,
-            @Param("cutoff") OffsetDateTime cutoff);
-
-    /**
-     * Paginated version of {@link #findNewListingsInAreas(List, OffsetDateTime)}.
      * Offset/limit are driven by the supplied {@link Pageable}; no hardcoded LIMIT.
      * Count query is required by Spring Data for native pagination.
      */
