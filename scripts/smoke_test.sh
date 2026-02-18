@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke Test Script — Sprint 2 (updated 2026-02-18)
+# Smoke Test Script — Sprint 3 (updated 2026-02-18)
 # Covers: local unit/build checks + production endpoint verification
 # Exit code: 0 = all pass, 1 = any failure
 #
@@ -313,31 +313,57 @@ if [ "$RUN_PROD" = true ]; then
   fi
 
   print_header "16. Production — Frontend Chunk Integrity"
-  print_test "Verify vendor-react contains react-leaflet (HOT-4 fix)"
-  # Extract vendor-react chunk filename from the HTML
-  VENDOR_REACT_FILE=$(curl -s --max-time 10 "$FRONTEND_URL" | grep -oE 'assets/vendor-react-[^"]+\.js' | head -1)
+  # Note: minification removes the literal string "react-leaflet" from chunks.
+  # Use exported symbol names (MapContainer, useMap, TileLayer) to detect presence instead.
+  HTML_CONTENT=$(curl -s --max-time 10 "$FRONTEND_URL")
+
+  print_test "Verify vendor-react contains react-leaflet exports (HOT-4 fix)"
+  VENDOR_REACT_FILE=$(echo "$HTML_CONTENT" | grep -oE 'assets/vendor-react-[^"]+\.js' | head -1)
   if [ -z "$VENDOR_REACT_FILE" ]; then
     print_fail "Could not find vendor-react chunk in HTML"
   else
-    REACT_CHUNK_HAS_LEAFLET=$(curl -s --max-time 30 "$FRONTEND_URL/$VENDOR_REACT_FILE" | grep -c "react-leaflet" || true)
+    REACT_CHUNK_CONTENT=$(curl -s --max-time 30 "$FRONTEND_URL/$VENDOR_REACT_FILE")
+    REACT_CHUNK_HAS_LEAFLET=$(echo "$REACT_CHUNK_CONTENT" | grep -cE "MapContainer|useMap|TileLayer" || true)
     if [ "$REACT_CHUNK_HAS_LEAFLET" -gt 0 ]; then
-      print_pass "vendor-react ($VENDOR_REACT_FILE) contains react-leaflet ✓"
+      print_pass "vendor-react ($VENDOR_REACT_FILE) contains react-leaflet exports (MapContainer/useMap/TileLayer) ✓"
     else
-      print_fail "vendor-react does NOT contain react-leaflet — HOT-4 fix may not be deployed"
+      print_fail "vendor-react does NOT contain react-leaflet exports — HOT-4 fix may not be deployed"
     fi
   fi
 
-  print_test "Verify vendor-leaflet does NOT contain react-leaflet"
-  VENDOR_LEAFLET_FILE=$(curl -s --max-time 10 "$FRONTEND_URL" | grep -oE 'assets/vendor-leaflet-[^"]+\.js' | head -1)
+  print_test "Verify vendor-leaflet does NOT contain react-leaflet exports"
+  VENDOR_LEAFLET_FILE=$(echo "$HTML_CONTENT" | grep -oE 'assets/vendor-leaflet-[^"]+\.js' | head -1)
   if [ -z "$VENDOR_LEAFLET_FILE" ]; then
     print_fail "Could not find vendor-leaflet chunk in HTML"
   else
-    LEAFLET_CHUNK_HAS_REACT=$(curl -s --max-time 30 "$FRONTEND_URL/$VENDOR_LEAFLET_FILE" | grep -c "react-leaflet" || true)
+    LEAFLET_CHUNK_HAS_REACT=$(curl -s --max-time 30 "$FRONTEND_URL/$VENDOR_LEAFLET_FILE" | grep -cE "MapContainer|useMap" || true)
     if [ "$LEAFLET_CHUNK_HAS_REACT" -eq 0 ]; then
-      print_pass "vendor-leaflet ($VENDOR_LEAFLET_FILE) is clean — no react-leaflet ✓"
+      print_pass "vendor-leaflet ($VENDOR_LEAFLET_FILE) is clean — no react-leaflet exports ✓"
     else
-      print_fail "vendor-leaflet contains react-leaflet — chunk split is incorrect"
+      print_fail "vendor-leaflet contains react-leaflet exports — chunk split is incorrect"
     fi
+  fi
+
+  print_header "17. Production — Ingestion Endpoint Protection (Sprint 3 PR-1)"
+  print_test "POST $BACKEND_URL/api/ingestion/ingest-posts — no API key (should 401)"
+  INGEST_NO_KEY=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+    -X POST -H "Content-Type: application/json" -d '[]' \
+    "$BACKEND_URL/api/ingestion/ingest-posts")
+  if [ "$INGEST_NO_KEY" = "401" ]; then
+    print_pass "Ingestion endpoint correctly rejects missing API key (HTTP 401)"
+  else
+    print_fail "Ingestion endpoint with no key returned HTTP $INGEST_NO_KEY (expected 401)"
+  fi
+
+  print_test "POST $BACKEND_URL/api/ingestion/ingest-posts — wrong API key (should 401)"
+  INGEST_WRONG_KEY=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+    -X POST -H "Content-Type: application/json" -H "X-Ingestion-Api-Key: wrong-key" \
+    -d '[{"sourcePostId":"smoke-test","rawText":"test"}]' \
+    "$BACKEND_URL/api/ingestion/ingest-posts")
+  if [ "$INGEST_WRONG_KEY" = "401" ]; then
+    print_pass "Ingestion endpoint correctly rejects wrong API key (HTTP 401)"
+  else
+    print_fail "Ingestion endpoint with wrong key returned HTTP $INGEST_WRONG_KEY (expected 401)"
   fi
 
 else
