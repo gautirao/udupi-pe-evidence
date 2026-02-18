@@ -2,7 +2,8 @@
 
 **Sprint**: Sprint 2 — Production Hardening
 **Generated**: 2026-02-18
-**Status**: ✅ COMPLETE — All tasks shipped, pushed to `origin/main`
+**Last updated**: 2026-02-18 (post-ship hotfixes)
+**Status**: ✅ COMPLETE + HOTFIXED — All tasks shipped and production verified
 **Final test count**: 415 backend tests passing, 23 frontend tests passing
 
 ---
@@ -59,7 +60,7 @@ Created `V13__add_hot_query_indexes.sql` with 6 P0 indexes:
 | `idx_property_listings_raw_post_id_unique` — deduplication (UNIQUE) | N/A |
 | `idx_raw_posts_unprocessed` — ingestion pipeline | N/A |
 
-Used `CREATE INDEX CONCURRENTLY` to avoid table locks.
+Originally used `CREATE INDEX CONCURRENTLY` — see hotfix HOT-2 below.
 **Commit**: `06423b9`
 
 ---
@@ -145,7 +146,7 @@ Since no existing components consumed `/api/listings/mine` or `/api/dashboard/ma
 - `vite.config.ts` — `manualChunks` splitting 6 vendor groups: react, react-router+query, recharts (lazy), leaflet, radix-ui, supabase
 
 Recharts and Leaflet are now deferred — users who never visit `/insights` or map pages never download those chunks (~390 KB combined).
-**Commit**: `3b3de16`
+**Commit**: `3b3de16` — see hotfix HOT-4 for a chunk ordering fix applied post-ship.
 
 ---
 
@@ -179,6 +180,11 @@ All endpoints accept `?page=0&size=20&sort=createdAt,desc` query params.
 | `bc431ee` | PERF | PERF-1b Wave 2: Insights repository pagination |
 | `57acebb` | PERF | PERF-1b Wave 3: Insights controller/service pagination |
 | `b535b46` | Ops  | Add afplay to TOOLING.md, archive PERF-1a checkpoint |
+| `02082de` | Docs | Sprint 2 completion report |
+| `1cd911c` | HOT  | HOT-1: Wire CORS_ALLOWED_ORIGINS env var into application.yml |
+| `94d0123` | HOT  | HOT-2: Fix V13 migration — remove CONCURRENTLY (pgBouncer incompatibility) |
+| `22c5410` | HOT  | HOT-3: Permit OPTIONS in Spring Security to fix CORS preflight 401 |
+| `b650796` | HOT  | HOT-4: Move react-leaflet into vendor-react to fix createContext crash |
 
 ---
 
@@ -218,16 +224,83 @@ Credentials to rotate:
 - Google AI API key (`AIzaSy...`)
 - Supabase anon key (if in history)
 
-#### 2. Production CORS Configuration (DEPLOYMENT — BLOCKING)
-Set in Render dashboard before deploying backend:
-```
-CORS_ALLOWED_ORIGINS=https://<your-cloudflare-pages-domain>.pages.dev
-```
+#### 2. Production CORS Configuration ✅ RESOLVED
+`CORS_ALLOWED_ORIGINS` set in Render dashboard. Three hotfixes were required to get CORS fully working — see Post-Ship Hotfixes section below.
 
 #### 3. Delete Stale `.env_lovabale`
 ```bash
 rm .env_lovabale  # If no longer needed
 ```
+
+---
+
+---
+
+## Post-Ship Hotfixes
+
+Four production bugs discovered during smoke testing on 2026-02-18, all fixed same day.
+
+### HOT-1 — CORS env var not wired (`1cd911c`)
+
+**Symptom**: CORS preflight returned `401` even after `CORS_ALLOWED_ORIGINS` was set in Render.
+**Root cause**: `application.yml` had the allowed origins hardcoded as a YAML list. The comment said to override with the env var, but no `${CORS_ALLOWED_ORIGINS}` placeholder was present — the env var was never read.
+**Fix**: Changed `application.yml` from a hardcoded list to:
+```yaml
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+```
+
+---
+
+### HOT-2 — V13 migration crash on startup (`94d0123`)
+
+**Symptom**: App crashed at startup with `SQL State 57014: canceling statement due to statement timeout`. Flyway marked V13 as failed, blocking all future deploys.
+**Root cause**: `CREATE INDEX CONCURRENTLY` is incompatible with Supabase's pgBouncer connection pooler (port 6543, transaction mode). `CONCURRENTLY` requires a persistent dedicated connection that pgBouncer cannot provide.
+**Fix**: Removed `CONCURRENTLY` from all 9 index statements in `V13__add_hot_query_indexes.sql`. The `IF NOT EXISTS` clause ensures idempotency for any indexes already created before the crash.
+**Manual step required**: Delete the failed Flyway row before redeploying:
+```sql
+DELETE FROM flyway_schema_history WHERE version = '13' AND success = false;
+```
+
+---
+
+### HOT-3 — CORS preflight still 401 after HOT-1 (`22c5410`)
+
+**Symptom**: CORS preflight OPTIONS requests returned `401` with no `Access-Control-Allow-Origin` header, even with the correct env var set.
+**Root cause**: Spring Security's `BearerTokenAuthenticationFilter` (added by `.oauth2ResourceServer()`) was intercepting OPTIONS preflight requests before the CORS filter could respond. Spring's `.cors(Customizer.withDefaults())` alone is insufficient — OPTIONS must be explicitly permitted.
+**Fix**: Added `HttpMethod.OPTIONS` to `permitAll()` in `JwtConfig.java`:
+```java
+.requestMatchers(HttpMethod.OPTIONS).permitAll()  // Must precede anyRequest().authenticated()
+```
+
+---
+
+### HOT-4 — `createContext` crash on frontend load (`b650796`)
+
+**Symptom**: `Uncaught TypeError: Cannot read properties of undefined (reading 'createContext')` in `vendor-leaflet-*.js` on page load.
+**Root cause**: The PERF-4 `manualChunks` config placed `react-leaflet` and `@react-leaflet` in the `vendor-leaflet` chunk. These libraries call `React.createContext` during module initialization. Rollup does not guarantee cross-chunk initialization order, so `vendor-leaflet` could load before `vendor-react` was fully evaluated — making React `undefined`.
+**Fix**: Moved `react-leaflet` and `@react-leaflet` into `vendor-react`. Only the pure-JS `leaflet` and `leaflet.markercluster` remain in `vendor-leaflet`.
+
+**Post-fix chunk layout:**
+| Chunk | Contents | Gzip |
+|---|---|---|
+| `vendor-react` | react, react-dom, react-leaflet, @react-leaflet | 46.7 KB |
+| `vendor-leaflet` | leaflet (pure JS), leaflet.markercluster | 51.9 KB |
+
+---
+
+## Production Smoke Test Results (2026-02-18, post all hotfixes)
+
+| Check | Result |
+|---|---|
+| Backend health (`/actuator/health`) | ✅ `{"status":"UP"}` |
+| Frontend loads (Cloudflare Pages) | ✅ HTTP 200 |
+| CORS preflight — allowed origin | ✅ HTTP 200 + `access-control-allow-origin` header |
+| CORS preflight — blocked origin | ✅ HTTP 403, no CORS headers |
+| Unauthenticated API call | ✅ HTTP 401 |
+| `vendor-react` contains `react-leaflet` | ✅ Verified at chunk level |
+| `vendor-leaflet` clean (no `react-leaflet`) | ✅ Verified at chunk level |
+| V13 indexes applied | ✅ App starts without Flyway crash |
 
 ---
 
@@ -242,6 +315,7 @@ rm .env_lovabale  # If no longer needed
 | `/api/ingestion/ingest-posts` is unauthenticated | High | Add API key or rate limiting |
 | Notification failure rolls back listing approval transaction | Medium | Use `@TransactionalEventListener(AFTER_COMMIT)` |
 | `manualChunks` uses string path matching (fragile with pnpm) | Low | Monitor on dependency updates |
+| React-wrapper libraries (e.g. future additions) must go in `vendor-react` | Medium | Document rule: never split React context users into separate chunks |
 
 ---
 
@@ -261,4 +335,4 @@ Wave 1 (PERF-1b backend + PERF-4 frontend) executed in parallel, saving signific
 
 ---
 
-**Sprint 2 status**: ✅ Shipped — `070ae4b..b535b46` pushed to `origin/main`
+**Sprint 2 status**: ✅ Shipped + production verified — `070ae4b..b650796` pushed to `origin/main`

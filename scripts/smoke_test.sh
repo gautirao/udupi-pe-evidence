@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Sprint 1 Smoke Test Script
-# Runs all critical checks to verify system health
+# Smoke Test Script — Sprint 2 (updated 2026-02-18)
+# Covers: local unit/build checks + production endpoint verification
 # Exit code: 0 = all pass, 1 = any failure
-
-set -e  # Exit on first failure
+#
+# Usage:
+#   ./scripts/smoke_test.sh                  # Local checks only
+#   ./scripts/smoke_test.sh --prod           # Local + production checks
+#   BACKEND_URL=https://... FRONTEND_URL=https://... ./scripts/smoke_test.sh --prod
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -14,6 +17,16 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
+
+# Production URLs (override via env vars or --prod flag defaults)
+BACKEND_URL="${BACKEND_URL:-https://udupi-property-explorer.onrender.com}"
+FRONTEND_URL="${FRONTEND_URL:-https://udupi-property-explorer.pages.dev}"
+
+# Parse flags
+RUN_PROD=false
+for arg in "$@"; do
+  [ "$arg" = "--prod" ] && RUN_PROD=true
+done
 
 # Track results
 FAILURES=0
@@ -231,6 +244,106 @@ if npm run lint > /tmp/eslint.log 2>&1; then
 else
   echo "⚠️  ESLint found issues"
   echo "Run 'npm run lint' for details"
+fi
+
+# ============================================================
+# PRODUCTION CHECKS (only run with --prod flag)
+# ============================================================
+
+if [ "$RUN_PROD" = true ]; then
+
+  print_header "11. Production — Backend Health"
+  print_test "GET $BACKEND_URL/actuator/health"
+  HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BACKEND_URL/actuator/health")
+  HEALTH_BODY=$(curl -s --max-time 10 "$BACKEND_URL/actuator/health" 2>/dev/null)
+  if [ "$HEALTH_STATUS" = "200" ] && echo "$HEALTH_BODY" | grep -q '"UP"'; then
+    print_pass "Backend UP — $HEALTH_BODY"
+  else
+    print_fail "Backend health check failed (HTTP $HEALTH_STATUS)"
+  fi
+
+  print_header "12. Production — Frontend Loads"
+  print_test "GET $FRONTEND_URL"
+  FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$FRONTEND_URL")
+  if [ "$FRONTEND_STATUS" = "200" ]; then
+    FRONTEND_SIZE=$(curl -s -o /dev/null -w "%{size_download}" --max-time 10 "$FRONTEND_URL")
+    print_pass "Frontend loaded (HTTP 200, ${FRONTEND_SIZE} bytes)"
+  else
+    print_fail "Frontend load failed (HTTP $FRONTEND_STATUS)"
+  fi
+
+  print_header "13. Production — CORS Preflight (Allowed Origin)"
+  print_test "OPTIONS $BACKEND_URL/api/listings from $FRONTEND_URL"
+  CORS_ALLOWED=$(curl -sv -X OPTIONS \
+    "$BACKEND_URL/api/listings" \
+    -H "Origin: $FRONTEND_URL" \
+    -H 'Access-Control-Request-Method: GET' \
+    2>&1)
+  CORS_STATUS=$(echo "$CORS_ALLOWED" | grep -oE "< HTTP/[0-9.]+ [0-9]+" | grep -oE "[0-9]+$" | head -1)
+  CORS_ORIGIN=$(echo "$CORS_ALLOWED" | grep -i "< access-control-allow-origin:" | grep -v "^$" | head -1)
+  if [ "$CORS_STATUS" = "200" ] && [ -n "$CORS_ORIGIN" ]; then
+    print_pass "CORS preflight approved — $CORS_ORIGIN"
+  else
+    print_fail "CORS preflight failed (HTTP $CORS_STATUS, no access-control-allow-origin header)"
+    echo "  Expected: HTTP 200 + access-control-allow-origin: $FRONTEND_URL"
+  fi
+
+  print_header "14. Production — CORS Preflight (Blocked Origin)"
+  print_test "OPTIONS $BACKEND_URL/api/listings from https://attacker.com"
+  CORS_BLOCKED=$(curl -sv -X OPTIONS \
+    "$BACKEND_URL/api/listings" \
+    -H 'Origin: https://attacker.com' \
+    -H 'Access-Control-Request-Method: GET' \
+    2>&1)
+  CORS_BLOCKED_STATUS=$(echo "$CORS_BLOCKED" | grep -oE "< HTTP/[0-9.]+ [0-9]+" | grep -oE "[0-9]+$" | head -1)
+  CORS_BLOCKED_ORIGIN=$(echo "$CORS_BLOCKED" | grep -i "< access-control-allow-origin:" | head -1)
+  if [ "$CORS_BLOCKED_STATUS" = "403" ] && [ -z "$CORS_BLOCKED_ORIGIN" ]; then
+    print_pass "Blocked origin correctly rejected (HTTP 403, no CORS headers)"
+  else
+    print_fail "Blocked origin not properly rejected (HTTP $CORS_BLOCKED_STATUS, origin header: '$CORS_BLOCKED_ORIGIN')"
+  fi
+
+  print_header "15. Production — Unauthenticated API (Should 401)"
+  print_test "GET $BACKEND_URL/api/listings (no auth token)"
+  UNAUTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$BACKEND_URL/api/listings")
+  if [ "$UNAUTH_STATUS" = "401" ]; then
+    print_pass "Unauthenticated request correctly rejected (HTTP 401)"
+  else
+    print_fail "Unexpected response to unauthenticated request (HTTP $UNAUTH_STATUS, expected 401)"
+  fi
+
+  print_header "16. Production — Frontend Chunk Integrity"
+  print_test "Verify vendor-react contains react-leaflet (HOT-4 fix)"
+  # Extract vendor-react chunk filename from the HTML
+  VENDOR_REACT_FILE=$(curl -s --max-time 10 "$FRONTEND_URL" | grep -oE 'assets/vendor-react-[^"]+\.js' | head -1)
+  if [ -z "$VENDOR_REACT_FILE" ]; then
+    print_fail "Could not find vendor-react chunk in HTML"
+  else
+    REACT_CHUNK_HAS_LEAFLET=$(curl -s --max-time 30 "$FRONTEND_URL/$VENDOR_REACT_FILE" | grep -c "react-leaflet" || true)
+    if [ "$REACT_CHUNK_HAS_LEAFLET" -gt 0 ]; then
+      print_pass "vendor-react ($VENDOR_REACT_FILE) contains react-leaflet ✓"
+    else
+      print_fail "vendor-react does NOT contain react-leaflet — HOT-4 fix may not be deployed"
+    fi
+  fi
+
+  print_test "Verify vendor-leaflet does NOT contain react-leaflet"
+  VENDOR_LEAFLET_FILE=$(curl -s --max-time 10 "$FRONTEND_URL" | grep -oE 'assets/vendor-leaflet-[^"]+\.js' | head -1)
+  if [ -z "$VENDOR_LEAFLET_FILE" ]; then
+    print_fail "Could not find vendor-leaflet chunk in HTML"
+  else
+    LEAFLET_CHUNK_HAS_REACT=$(curl -s --max-time 30 "$FRONTEND_URL/$VENDOR_LEAFLET_FILE" | grep -c "react-leaflet" || true)
+    if [ "$LEAFLET_CHUNK_HAS_REACT" -eq 0 ]; then
+      print_pass "vendor-leaflet ($VENDOR_LEAFLET_FILE) is clean — no react-leaflet ✓"
+    else
+      print_fail "vendor-leaflet contains react-leaflet — chunk split is incorrect"
+    fi
+  fi
+
+else
+  echo ""
+  echo -e "${YELLOW}ℹ️  Production checks skipped. Run with --prod to include them.${NC}"
+  echo "   Example: ./scripts/smoke_test.sh --prod"
 fi
 
 # Final Summary
