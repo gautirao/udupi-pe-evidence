@@ -49,6 +49,20 @@ Rules:
 - Batch auto-approved commands when useful.
 - If unsure whether a command is destructive, ask.
 
+## Audio notification rule (MANDATORY)
+
+Play a sound using `afplay` in these situations:
+
+| Event | Command |
+|-------|---------|
+| Waiting for user approval or input (pre-implementation plan posted, blocking on user) | `afplay /System/Library/Sounds/Ping.aiff` |
+| A spawned background agent has finished its task | `afplay /System/Library/Sounds/Glass.aiff` |
+
+Rules:
+- Always play the sound immediately before or after the triggering event (not delayed).
+- `afplay` is already auto-approved — no confirmation needed.
+- Do not skip this rule for speed or convenience.
+
 ## Scope deviation rule
 
 If implementation requires modifying any file not listed in the approved Pre-Implementation Plan:
