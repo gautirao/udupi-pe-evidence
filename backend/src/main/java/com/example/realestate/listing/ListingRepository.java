@@ -169,8 +169,8 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
           AND l.price_per_cent_paise IS NOT NULL
           AND a.median_price_per_cent_paise IS NOT NULL
           AND l.price_per_cent_paise < a.median_price_per_cent_paise * :threshold
-          AND (:areaKeys IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
-          AND (:freshDays <= 0 OR l.created_at >= NOW() - (:freshDays * INTERVAL '1 day'))
+          AND (CAST(:areaKeys AS text[]) IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
+          AND (:freshDays <= 0 OR l.created_at >= NOW() - (CAST(:freshDays AS integer) * INTERVAL '1 day'))
         ORDER BY "undervaluationScore" DESC, l.created_at DESC
         LIMIT :limit
         """, nativeQuery = true)
@@ -214,8 +214,8 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
           AND l.price_per_cent_paise IS NOT NULL
           AND a.median_price_per_cent_paise IS NOT NULL
           AND l.price_per_cent_paise < a.median_price_per_cent_paise * :threshold
-          AND (:areaKeys IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
-          AND (:freshDays <= 0 OR l.created_at >= NOW() - (:freshDays * INTERVAL '1 day'))
+          AND (CAST(:areaKeys AS text[]) IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
+          AND (:freshDays <= 0 OR l.created_at >= NOW() - (CAST(:freshDays AS integer) * INTERVAL '1 day'))
         ORDER BY "undervaluationScore" DESC, l.created_at DESC
         """,
         countQuery = """
@@ -226,8 +226,8 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
           AND l.price_per_cent_paise IS NOT NULL
           AND a.median_price_per_cent_paise IS NOT NULL
           AND l.price_per_cent_paise < a.median_price_per_cent_paise * :threshold
-          AND (:areaKeys IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
-          AND (:freshDays <= 0 OR l.created_at >= NOW() - (:freshDays * INTERVAL '1 day'))
+          AND (CAST(:areaKeys AS text[]) IS NULL OR l.area_key = ANY(CAST(:areaKeys AS text[])))
+          AND (:freshDays <= 0 OR l.created_at >= NOW() - (CAST(:freshDays AS integer) * INTERVAL '1 day'))
         """,
         nativeQuery = true)
     Page<OpportunityProjection> findOpportunitiesByAreaKeys(
