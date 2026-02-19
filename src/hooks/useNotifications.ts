@@ -16,12 +16,24 @@ interface UnreadCountResponse {
   count: number;
 }
 
+interface SpringPage<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
 export function useNotifications() {
   const { user } = useAuth();
 
   return useQuery({
     queryKey: ['notifications'],
-    queryFn: () => api.get<NotificationResponse[]>('/api/notifications'),
+    queryFn: async () => {
+      // Backend returns Page<Notification> — extract the content array.
+      const page = await api.get<SpringPage<NotificationResponse>>('/api/notifications');
+      return page.content;
+    },
     enabled: !!user,
     staleTime: 60_000,
   });
