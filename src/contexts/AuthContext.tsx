@@ -2,14 +2,16 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-type AppRole = 'admin' | 'user';
+export type AppRole = 'admin' | 'user' | 'dealer';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
   isAdmin: boolean;
+  isDealer: boolean;
   userRole: AppRole | null;
+  insightsAccessUntil: string | null;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -24,6 +26,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDealer, setIsDealer] = useState(false);
+  const [insightsAccessUntil, setInsightsAccessUntil] = useState<string | null>(null);
 
   const fetchUserRole = useCallback(async (userId: string) => {
     try {
@@ -37,16 +41,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Error fetching user role:', error);
         setUserRole('user');
         setIsAdmin(false);
+        setIsDealer(false);
         return;
       }
 
       const role = (data?.role as AppRole) || 'user';
       setUserRole(role);
       setIsAdmin(role === 'admin');
+      setIsDealer(role === 'dealer');
     } catch (err) {
       console.error('Error in fetchUserRole:', err);
       setUserRole('user');
       setIsAdmin(false);
+      setIsDealer(false);
+    }
+  }, []);
+
+  const fetchInsightsAccess = useCallback(async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      // insights_access_until is added by V15 migration; gracefully null until then.
+      const until = (data as unknown as Record<string, unknown>)?.insights_access_until ?? null;
+      setInsightsAccessUntil(typeof until === 'string' ? until : null);
+    } catch {
+      setInsightsAccessUntil(null);
     }
   }, []);
 
@@ -63,19 +86,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
 
-        // Defer role fetch to avoid deadlock
+        // Defer role + profile fetch to avoid Supabase client deadlock
         if (session?.user) {
           setTimeout(() => {
             fetchUserRole(session.user.id);
+            fetchInsightsAccess(session.user.id);
           }, 0);
         } else {
           setUserRole(null);
           setIsAdmin(false);
+          setIsDealer(false);
+          setInsightsAccessUntil(null);
         }
 
         if (event === 'SIGNED_OUT') {
           setUserRole(null);
           setIsAdmin(false);
+          setIsDealer(false);
+          setInsightsAccessUntil(null);
         }
       }
     );
@@ -86,7 +114,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        fetchUserRole(session.user.id).finally(() => {
+        Promise.all([
+          fetchUserRole(session.user.id),
+          fetchInsightsAccess(session.user.id),
+        ]).finally(() => {
           setIsLoading(false);
         });
       } else {
@@ -95,11 +126,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchUserRole]);
+  }, [fetchUserRole, fetchInsightsAccess]);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -129,6 +160,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setUserRole(null);
     setIsAdmin(false);
+    setIsDealer(false);
+    setInsightsAccessUntil(null);
   };
 
   return (
@@ -138,7 +171,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         isLoading,
         isAdmin,
+        isDealer,
         userRole,
+        insightsAccessUntil,
         signUp,
         signIn,
         signOut,

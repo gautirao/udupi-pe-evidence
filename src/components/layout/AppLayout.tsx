@@ -19,18 +19,20 @@ import {
 import {
   MapPin,
   BarChart3,
-  Settings,
   LogOut,
   Menu,
   Users,
   FileText,
   Home,
-  ChevronRight,
   Shield,
   Chrome,
   Sparkles,
   Copy,
   ClipboardList,
+  Building2,
+  Plus,
+  Bell,
+  Bookmark,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
@@ -39,7 +41,9 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
-const navigation = [
+// ─── Static nav arrays (defined once at module level) ───────────────────────
+
+const adminPrimaryNavigation = [
   { name: 'Map', href: '/', icon: MapPin },
   { name: 'Insights', href: '/insights', icon: BarChart3 },
 ];
@@ -55,8 +59,28 @@ const adminNavigation = [
   { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
 ];
 
+const userNavigation = [
+  { name: 'Home', href: '/', icon: Home },
+  { name: 'Insights', href: '/insights', icon: BarChart3 },
+  { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
+];
+
+const dealerNavigation = [
+  { name: 'Home', href: '/', icon: Home },
+  { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
+  { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
+];
+
+const loggedOutNavigation = [
+  { name: 'Home', href: '/', icon: Home },
+];
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, isDealer, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -65,9 +89,19 @@ export function AppLayout({ children }: AppLayoutProps) {
     .slice(0, 2)
     .toUpperCase() || 'U';
 
+  const roleLabel = isAdmin ? 'Administrator' : isDealer ? 'Dealer' : 'User';
+
+  const primaryNav = isAdmin
+    ? adminPrimaryNavigation
+    : isDealer
+    ? dealerNavigation
+    : user
+    ? userNavigation
+    : loggedOutNavigation;
+
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <div className={cn('flex', mobile ? 'flex-col gap-1' : 'items-center gap-1')}>
-      {navigation.map((item) => {
+      {primaryNav.map((item) => {
         const isActive = location.pathname === item.href;
         return (
           <Link
@@ -184,7 +218,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <div className="flex flex-col space-y-1">
                   <p className="text-sm font-medium leading-none">{user?.email}</p>
                   <p className="text-xs leading-none text-muted-foreground">
-                    {isAdmin ? 'Administrator' : 'User'}
+                    {roleLabel}
                   </p>
                 </div>
               </DropdownMenuLabel>

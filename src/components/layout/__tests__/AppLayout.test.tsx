@@ -1,0 +1,213 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { AppLayout } from '../AppLayout';
+
+// ─── Polyfills for jsdom ─────────────────────────────────
+
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+
+// ─── Mocks ──────────────────────────────────────────────
+
+// Stub out NotificationBell — we test nav rendering here, not notifications.
+vi.mock('@/components/notifications/NotificationBell', () => ({
+  NotificationBell: () => null,
+}));
+
+const mockSignOut = vi.fn();
+
+type MockAuth = {
+  user: { email: string } | null;
+  session: null;
+  isLoading: boolean;
+  isAdmin: boolean;
+  isDealer: boolean;
+  userRole: 'admin' | 'user' | 'dealer' | null;
+  insightsAccessUntil: string | null;
+  signOut: typeof mockSignOut;
+  signUp: () => Promise<{ error: null }>;
+  signIn: () => Promise<{ error: null }>;
+  refreshRole: () => Promise<void>;
+};
+
+let mockAuth: MockAuth;
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => mockAuth,
+}));
+
+// ─── Helpers ────────────────────────────────────────────
+
+function baseAuth(overrides: Partial<MockAuth> = {}): MockAuth {
+  return {
+    user: null,
+    session: null,
+    isLoading: false,
+    isAdmin: false,
+    isDealer: false,
+    userRole: null,
+    insightsAccessUntil: null,
+    signOut: mockSignOut,
+    signUp: async () => ({ error: null }),
+    signIn: async () => ({ error: null }),
+    refreshRole: async () => {},
+    ...overrides,
+  };
+}
+
+function renderLayout() {
+  return render(
+    <MemoryRouter>
+      <AppLayout>
+        <div>page content</div>
+      </AppLayout>
+    </MemoryRouter>,
+  );
+}
+
+// ─── Tests ──────────────────────────────────────────────
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockAuth = baseAuth();
+});
+
+describe('AppLayout — nav links by role', () => {
+  it('logged-out: shows only Home link, no role-specific links', () => {
+    renderLayout();
+
+    expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /notifications/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
+  });
+
+  it('user role: shows Home, Insights, My Saved Areas, Notifications — no admin/dealer links', () => {
+    mockAuth = baseAuth({
+      user: { email: 'user@test.com' },
+      userRole: 'user',
+    });
+    renderLayout();
+
+    expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /insights/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /my saved areas/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);
+
+    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /new listing/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
+  });
+
+  it('dealer role: shows Home, My Listings, New Listing, Notifications — no user/admin links', () => {
+    mockAuth = baseAuth({
+      user: { email: 'dealer@test.com' },
+      userRole: 'dealer',
+      isDealer: true,
+    });
+    renderLayout();
+
+    expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /my listings/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /new listing/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);
+
+    expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
+  });
+
+  it('admin role: shows Map, Insights and all 8 admin section links — no dealer/user links', () => {
+    mockAuth = baseAuth({
+      user: { email: 'admin@test.com' },
+      userRole: 'admin',
+      isAdmin: true,
+    });
+    renderLayout();
+
+    // Primary (admin) nav
+    expect(screen.getAllByRole('link', { name: /^map$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /insights/i }).length).toBeGreaterThan(0);
+
+    // Admin section nav
+    expect(screen.getAllByRole('link', { name: /feed runs/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /facebook groups/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /manual posts/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /process posts/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /pending approval/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /duplicates/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /chrome extension/i }).length).toBeGreaterThan(0);
+
+    // Must NOT show dealer or user-only links
+    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /new listing/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('AppLayout — admin badge', () => {
+  it('shows Admin badge for admin users', () => {
+    mockAuth = baseAuth({
+      user: { email: 'admin@test.com' },
+      userRole: 'admin',
+      isAdmin: true,
+    });
+    renderLayout();
+
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+  });
+
+  it('does not show Admin badge for regular users', () => {
+    mockAuth = baseAuth({ user: { email: 'user@test.com' }, userRole: 'user' });
+    renderLayout();
+
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+  });
+
+  it('does not show Admin badge for dealers', () => {
+    mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isDealer: true });
+    renderLayout();
+
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+  });
+});
+
+describe('AppLayout — role label in dropdown', () => {
+  it('shows "User" label for user role', async () => {
+    mockAuth = baseAuth({ user: { email: 'user@test.com' }, userRole: 'user' });
+    const user = userEvent.setup();
+    renderLayout();
+
+    // Open the avatar dropdown to expose the portal content
+    await user.click(screen.getByRole('button', { name: /^US$/i }));
+    expect(screen.getByText('User')).toBeInTheDocument();
+  });
+
+  it('shows "Dealer" label for dealer role', async () => {
+    mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isDealer: true });
+    const user = userEvent.setup();
+    renderLayout();
+
+    await user.click(screen.getByRole('button', { name: /^DE$/i }));
+    expect(screen.getByText('Dealer')).toBeInTheDocument();
+  });
+
+  it('shows "Administrator" label for admin role', async () => {
+    mockAuth = baseAuth({ user: { email: 'admin@test.com' }, userRole: 'admin', isAdmin: true });
+    const user = userEvent.setup();
+    renderLayout();
+
+    await user.click(screen.getByRole('button', { name: /^AD$/i }));
+    expect(screen.getByText('Administrator')).toBeInTheDocument();
+  });
+});
