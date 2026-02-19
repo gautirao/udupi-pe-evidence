@@ -47,6 +47,15 @@ export interface RecommendationData {
   createdAt: string | null;
 }
 
+// Spring Data Page wrapper — backend returns this for paginated endpoints.
+interface SpringPage<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}
+
 // ===== Custom Hooks =====
 
 /**
@@ -85,7 +94,9 @@ export function useNewListings(days = 7) {
   return useQuery<NewListingData[]>({
     queryKey: ['insights', 'new-listings', days],
     queryFn: async () => {
-      return api.get<NewListingData[]>(`/api/insights/new-listings?days=${days}`);
+      // Backend returns Page<NewListingResponse> — extract the content array.
+      const page = await api.get<SpringPage<NewListingData>>(`/api/insights/new-listings?days=${days}`);
+      return page.content;
     },
   });
 }
@@ -97,7 +108,9 @@ export function useRecommendations() {
   return useQuery<RecommendationData[]>({
     queryKey: ['insights', 'recommendations'],
     queryFn: async () => {
-      return api.get<RecommendationData[]>('/api/insights/recommendations');
+      // Backend returns Page<RecommendationResponse> — extract the content array.
+      const page = await api.get<SpringPage<RecommendationData>>('/api/insights/recommendations');
+      return page.content;
     },
   });
 }
