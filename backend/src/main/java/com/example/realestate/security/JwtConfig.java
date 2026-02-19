@@ -3,7 +3,6 @@ package com.example.realestate.security;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -23,7 +22,8 @@ public class JwtConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(Customizer.withDefaults())  // SEC-2: Enable CORS filter to use CorsConfigurationSource bean
+                // CORS is handled by a standalone FilterRegistrationBean in CorsConfig (runs before this chain).
+                // Do NOT add .cors() here — it would create a second CorsFilter causing duplicate headers.
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Register ingestion API key filter before JWT validation so

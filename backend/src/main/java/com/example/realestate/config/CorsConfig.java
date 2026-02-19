@@ -1,11 +1,14 @@
 package com.example.realestate.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import java.util.List;
 
@@ -42,10 +45,25 @@ public class CorsConfig {
         // Preflight response cache time (1 hour)
         config.setMaxAge(3600L);
 
-        // Apply to all API endpoints
+        // Apply to all paths — origin restriction is the security boundary, not path pattern.
+        // Using /** avoids path-matching edge cases in Spring Security's internal CorsFilter.
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/**", config);
 
         return source;
+    }
+
+    /**
+     * Register CorsFilter as a standalone servlet filter at highest precedence so it
+     * runs BEFORE Spring Security's filter chain. This guarantees OPTIONS preflight
+     * requests receive CORS headers even when Spring Security would otherwise intercept
+     * them first (e.g. JWT resource server blocking unauthenticated OPTIONS requests).
+     */
+    @Bean
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistration(CorsConfigurationSource corsConfigurationSource) {
+        FilterRegistrationBean<CorsFilter> registration = new FilterRegistrationBean<>(new CorsFilter(corsConfigurationSource));
+        // HIGHEST_PRECEDENCE + 1: runs after MdcRequestFilter (HIGHEST_PRECEDENCE) but before Spring Security (-100)
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
+        return registration;
     }
 }
