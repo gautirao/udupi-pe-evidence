@@ -52,9 +52,9 @@ public class PaymentController {
     @Transactional
     public ResponseEntity<?> grantInsightsPass(JwtAuthenticationToken auth) {
         // M13: Feature flag — must be explicitly enabled; default false in production.
+        // Return 404 (not 503) so the endpoint appears non-existent when disabled.
         if (!stubEnabled) {
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("error", "Payment processing is not available yet."));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
         }
 
         UUID userId = UUID.fromString(auth.getToken().getSubject());
