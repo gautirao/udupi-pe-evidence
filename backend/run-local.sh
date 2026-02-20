@@ -36,10 +36,11 @@ while IFS='=' read -r KEY _; do
   [[ -z "$KEY" || "$KEY" == \#* ]] && continue
   KEY="${KEY// /}"  # trim whitespace
   VALUE="${!KEY:-}"
-  # Mask sensitive values
+  # Mask sensitive values (use tr for bash 3.2 compat — macOS default)
+  KEY_UPPER="$(echo "$KEY" | tr '[:lower:]' '[:upper:]')"
   MASKED=false
   for S in "${SENSITIVE_KEYS[@]}"; do
-    if [[ "${KEY^^}" == *"$S"* ]]; then
+    if [[ "$KEY_UPPER" == *"$S"* ]]; then
       echo "    $KEY=***"
       MASKED=true
       break
