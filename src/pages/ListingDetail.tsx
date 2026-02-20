@@ -15,6 +15,7 @@ import {
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
 
 const propertyConfig: Record<PropertyType, { label: string; bgClass: string }> = {
   land: { label: 'Land', bgClass: 'bg-green-500' },
@@ -61,6 +62,7 @@ export default function ListingDetail() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
   const [copied, setCopied] = useState(false);
+  const [bookingModalOpen, setBookingModalOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -384,7 +386,7 @@ export default function ListingDetail() {
                 </Button>
                 {listing.latitude && listing.longitude && (
                   <Button variant="outline" className="w-full justify-start" asChild>
-                    <a 
+                    <a
                       href={`https://www.google.com/maps/search/${listing.latitude},${listing.longitude}`}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -396,9 +398,28 @@ export default function ListingDetail() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Request Viewing */}
+            <Card>
+              <CardContent className="p-4">
+                <Button
+                  className="w-full"
+                  onClick={() => setBookingModalOpen(true)}
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Request Viewing
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
+
+      <RequestViewingModal
+        listingId={listing.id}
+        open={bookingModalOpen}
+        onClose={() => setBookingModalOpen(false)}
+      />
     </AppLayout>
   );
 }
