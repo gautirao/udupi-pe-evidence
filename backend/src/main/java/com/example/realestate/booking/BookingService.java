@@ -125,6 +125,12 @@ public class BookingService {
 
         UUID dealerId = listing.getCreatedBy();
 
+        // Guard: SCRAPED listings have no dealer (created_by = null) — cannot accept bookings
+        if (dealerId == null) {
+            throw new BookingValidationException("listingId",
+                    "This listing cannot accept booking requests");
+        }
+
         // Self-booking prevention (M10)
         if (requesterId.equals(dealerId)) {
             throw new BookingValidationException("listingId",
