@@ -17,8 +17,10 @@ import ListingDetail from "./pages/ListingDetail";
 // Lazily loaded — Insights uses Recharts (~200 KB); load only when navigated to
 const Insights = lazy(() => import("./pages/Insights"));
 
-// Lazily loaded — Dealer route; not needed for public/admin users
+// Lazily loaded — Dealer routes; not needed for public/admin users
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NewListing = lazy(() => import("./pages/dealer/NewListing"));
+const DealerSetup = lazy(() => import("./pages/dealer/DealerSetup"));
 
 // Lazily loaded — Admin pages; never needed by non-admin users
 const FacebookGroups = lazy(() => import("./pages/admin/FacebookGroups"));
@@ -74,7 +76,24 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              {/* Onboarding */}
+              <Route
+                path="/onboarding"
+                element={
+                  <ProtectedRoute>
+                    <Onboarding />
+                  </ProtectedRoute>
+                }
+              />
               {/* Dealer Routes */}
+              <Route
+                path="/dealer/setup"
+                element={
+                  <ProtectedRoute>
+                    <DealerSetup />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/dealer/listings/new"
                 element={
