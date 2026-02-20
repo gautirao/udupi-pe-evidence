@@ -1,9 +1,9 @@
 # Browser Smoke Test Checklist — Udupi Property Explorer
 
-**Version**: Sprint 4 (post Sprint 3 PRs: PR-1..PR-4 + HOT-5)
+**Version**: Sprint 5 (post Sprint 5 PRs: PR-1..PR-4 + PR-7)
 **Target environment**: Production
-**Estimated time**: 8–10 minutes (full run) / 3–4 minutes (Quick 5-step smoke)
-**Last updated**: 2026-02-18
+**Estimated time**: 12–15 minutes (full run) / 4–5 minutes (Quick 7-step smoke)
+**Last updated**: 2026-02-20
 
 ---
 
@@ -46,17 +46,19 @@ Use these markers to record outcomes inline:
 
 ---
 
-## Quick 5-Step Smoke (Fastest Sanity Check)
+## Quick 7-Step Smoke (Fastest Sanity Check)
 
-Run this first. If all 5 pass, the app is up and not catastrophically broken.
+Run this first. If all 7 pass, the app is up and not catastrophically broken.
 
 | # | Role | Action | Expected | Result |
 |---|------|--------|----------|--------|
 | Q1 | ANY | Open https://udupi-property-explorer.pages.dev in a fresh private/incognito window | Page loads (no blank screen, no JS error banner). Home tab visible. | PASS / FAIL / WARN |
-| Q2 | ANY | Without logging in, navigate to https://udupi-property-explorer.pages.dev/dealer/new-listing | Redirected to login page. The protected URL is not accessible. | PASS / FAIL / WARN |
+| Q2 | ANY | Without logging in, navigate to https://udupi-property-explorer.pages.dev/dealer/listings/new | Redirected to login page. The protected URL is not accessible. | PASS / FAIL / WARN |
 | Q3 | ANY | Log in with `<USER_EMAIL>` / `<USER_PASSWORD>` | Login succeeds. User is redirected back to the app. No error toast. | PASS / FAIL / WARN |
-| Q4 | ANY | Open DevTools Console. Navigate through Home, Map, and Insights tabs. | Zero red CORS errors in Console. Zero failed network requests labeled "CORS" in Network tab. | PASS / FAIL / WARN |
+| Q4 | ANY | Open DevTools Console. Navigate through Home and Insights. | Zero red CORS errors in Console. Zero failed network requests labeled "CORS" in Network tab. | PASS / FAIL / WARN |
 | Q5 | ANY | Open DevTools Console and run: `fetch('https://udupi-property-explorer.onrender.com/api/ingestion/ingest-posts', {method:'POST', headers:{'Content-Type':'application/json'}, body:'[]'}).then(r => console.log('STATUS:', r.status))` | Console prints `STATUS: 401`. Backend rejects the unauthenticated ingestion request. | PASS / FAIL / WARN |
+| Q6 | ANY (logged out) | In a fresh private window, open the home page. Inspect the nav bar. | Nav shows only "Home". No "My Listings", no "My Saved Areas", no "Feed Runs" link visible. | PASS / FAIL / WARN |
+| Q7 | USER | Log in as `<USER_EMAIL>`. Open a LIVE listing and click "Request Viewing". Submit a valid request. Then immediately click "Request Viewing" on the same listing and submit again. | First request: toast "Viewing request sent". Second request: error toast indicating a conflict (duplicate active booking). Only one active booking per listing is allowed. | PASS / FAIL / WARN |
 
 If any Quick step fails, stop and treat it as a P0 incident before continuing.
 
@@ -198,13 +200,77 @@ These steps verify the security contracts established in Sprint 3 PRs.
 
 ---
 
+## Section I — Navigation by Persona
+
+Verify that role-aware navigation shows the correct links per auth state and role.
+
+**Role**: varies (see each row)
+
+| # | Role | Action | Expected | Result | Notes |
+|---|------|--------|----------|--------|-------|
+| I1 | Logged out | Open the app in a private window. Observe the header nav. | Nav shows: Home only. No "My Saved Areas", no "My Listings", no "Feed Runs", no admin links. | PASS / FAIL / WARN | |
+| I2 | USER | Log in as `<USER_EMAIL>`. Observe the header nav. | Nav shows: Home, Insights, My Saved Areas, Notifications bell. No "My Listings", no admin section links. | PASS / FAIL / WARN | |
+| I3 | DEALER | Log in as `<DEALER_EMAIL>`. Observe the header nav. | Nav shows: Home, My Listings, New Listing, Notifications bell. No "Insights", no "My Saved Areas", no admin links. | PASS / FAIL / WARN | |
+| I4 | ADMIN | Log in as `<ADMIN_EMAIL>`. Observe the header nav. | Nav shows: Map, Insights + all 8 admin section links (Feed Runs, Facebook Groups, Manual Posts, Process Posts, Listings, Pending Approval, Duplicates, Chrome Extension). Admin badge visible in header. No dealer links. | PASS / FAIL / WARN | |
+
+---
+
+## Section J — Onboarding Flow
+
+Verify the first-run intent screen shown after a new signup.
+
+**Role**: NEW USER (fresh account, not yet a dealer)
+
+| # | Role | Action | Expected | Result | Notes |
+|---|------|--------|----------|--------|-------|
+| J1 | NEW USER | Sign up with a brand-new email address. | After successful signup, redirected to `/onboarding`. Page shows "What brings you here?" with two cards: "Browse & Invest" and "List a Property". | PASS / FAIL / WARN | Use a disposable email or a fresh test account. |
+| J2 | NEW USER | On the onboarding screen, click "Start Browsing". | Redirected to `/` (map). User retains 'user' role. Nav shows: Home, Insights, My Saved Areas, Notifications. | PASS / FAIL / WARN | |
+| J3 | EXISTING DEALER | Log in as `<DEALER_EMAIL>`. Navigate directly to `/onboarding`. | Immediately redirected to `/` — onboarding is not applicable for users who already have the dealer role. | PASS / FAIL / WARN | |
+
+---
+
+## Section K — Booking Request Flow
+
+Verify the end-to-end viewing request flow between a user and a dealer.
+
+**Setup**: Have one LIVE listing owned by `<DEALER_EMAIL>`. Use a separate `<USER_EMAIL>` account to request.
+
+| # | Role | Action | Expected | Result | Notes |
+|---|------|--------|----------|--------|-------|
+| K1 | USER | Log in as `<USER_EMAIL>`. Open a LIVE listing detail page. | "Request Viewing" button visible in the sidebar. | PASS / FAIL / WARN | |
+| K2 | USER | Click "Request Viewing". | Modal opens with: Preferred Date field (calendar/input), Preferred Time Slot dropdown, optional Message textarea (500 char max). | PASS / FAIL / WARN | |
+| K3 | USER | Fill in a future date (tomorrow or later), select a time slot (e.g., 10:00-11:00), optionally add a message. Click "Send Request". | Toast: "Viewing request sent. The dealer will confirm your request shortly." Modal closes. | PASS / FAIL / WARN | |
+| K4 | USER | Click "Request Viewing" on the same listing again and submit another request with the same date/time. | Error toast shown: the server rejects the duplicate (a unique active booking already exists for this user + listing). | PASS / FAIL / WARN | Tests AC-B2 (duplicate → 409). |
+| K5 | DEALER | Log in as `<DEALER_EMAIL>`. Navigate to `/dealer/bookings`. | "Pending Requests" section shows the booking from K3 with the selected date, time slot, and message. "Confirm" and "Decline" buttons are present. | PASS / FAIL / WARN | |
+| K6 | DEALER | Click "Confirm" on the booking. | Toast: "Booking confirmed". Booking disappears from "Pending Requests" and appears in "Confirmed Bookings" section. | PASS / FAIL / WARN | |
+| K7 | DEALER | Click "Cancel" on the confirmed booking. | Toast: "Booking cancelled". Booking disappears from "Confirmed Bookings". | PASS / FAIL / WARN | |
+| K8 | DEALER | Navigate to `/dealer/bookings` with no active requests. | Both sections ("Pending Requests" and "Confirmed Bookings") show "No pending/confirmed bookings" empty state. | PASS / FAIL / WARN | |
+
+---
+
+## Section L — Insights Paywall / Trial Banner
+
+Verify the insights access gating added in Sprint 5 PR-5b/PR-6.
+
+> **Note**: Requires PR-5b (insights-backend) and PR-6 (insights-frontend) to be deployed. Mark N/A if not yet live.
+
+**Role**: USER (trial active or expired)
+
+| # | Role | Action | Expected | Result | Notes |
+|---|------|--------|----------|--------|-------|
+| L1 | USER (trial active, within 3 days of signup) | Log in as a recently-created user account. Navigate to `/insights`. | Trial banner visible at top of page: "Your trial ends in N day(s)". All charts and data are visible. | PASS / FAIL / WARN | N/A if PR-6 not deployed. |
+| L2 | USER (trial expired) | Log in as a user whose trial has expired. Navigate to `/insights`. | Charts are hidden (replaced by a paywall card). Upgrade CTA is visible. Saved areas list remains visible. | PASS / FAIL / WARN | N/A if PR-6 not deployed. |
+| L3 | USER (trial expired) | Click the "Upgrade" CTA on the paywall. | Payment stub or "Coming Soon" message is shown. No crash. | PASS / FAIL / WARN | N/A if PR-6 not deployed. |
+
+---
+
 ## Summary Scorecard
 
 Fill this in after completing all sections.
 
 | Section | Steps | Pass | Fail | Warn |
 |---------|-------|------|------|------|
-| Quick 5-step smoke | 5 | | | |
+| Quick 7-step smoke | 7 | | | |
 | A — App Load and Navigation | 5 | | | |
 | B — Authentication | 6 | | | |
 | C — Listings (create/submit/approve/reject) | 7 | | | |
@@ -213,7 +279,11 @@ Fill this in after completing all sections.
 | F — Notifications | 4 | | | |
 | G — Security | 3 | | | |
 | H — Logout | 3 | | | |
-| **Total** | **41** | | | |
+| I — Navigation by Persona | 4 | | | |
+| J — Onboarding Flow | 3 | | | |
+| K — Booking Request Flow | 8 | | | |
+| L — Insights Paywall / Trial Banner | 3 | | | |
+| **Total** | **61** | | | |
 
 **Sign-off**
 

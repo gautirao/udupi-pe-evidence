@@ -22,6 +22,7 @@ const BACKEND =
 
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
+const smokListingId = process.env.SMOKE_LISTING_ID ?? '';
 
 // ---------------------------------------------------------------------------
 // Q1 — App loads; no blank screen; Sentry error boundary not triggered
@@ -147,4 +148,160 @@ test('Q5 — unauthenticated ingestion POST returns 401 or 403', async ({ page }
     [401, 403],
     `Expected 401 or 403 from ingestion endpoint, got ${result.status}`,
   ).toContain(result.status);
+});
+
+// ---------------------------------------------------------------------------
+// Q6 — Logged-out nav: dealer-specific and admin links are not visible
+// ---------------------------------------------------------------------------
+test('Q6 — logged-out: role-specific nav links are not present', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+
+  // Wait for auth state to resolve (ProtectedRoute may briefly show loading state)
+  await page.waitForTimeout(2_000);
+
+  // Dealer-only nav links must NOT appear
+  await expect(page.getByRole('link', { name: /my listings/i })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /new listing/i })).toHaveCount(0);
+
+  // Admin-only nav links must NOT appear
+  await expect(page.getByRole('link', { name: /feed runs/i })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /facebook groups/i })).toHaveCount(0);
+
+  // Home link must be present (logged-out nav)
+  await expect(page.getByRole('link', { name: /^home$/i }).first()).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// Q7 — Booking duplicate: second request to same listing returns error
+//      Skipped if SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set
+// ---------------------------------------------------------------------------
+test('Q7 — duplicate booking request is rejected', async ({ page }) => {
+  test.skip(
+    !userEmail || !userPassword || !smokListingId,
+    'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set — skipping Q7',
+  );
+
+  // Log in
+  await page.goto('/auth');
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('#signin-email').fill(userEmail);
+  await page.locator('#signin-password').fill(userPassword);
+  await page
+    .locator('button[type="submit"]')
+    .filter({ hasText: /sign in/i })
+    .first()
+    .click();
+  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
+
+  // Navigate to the listing detail page
+  await page.goto(`/listing/${smokListingId}`);
+  await page.waitForLoadState('domcontentloaded');
+
+  // First booking request — submit directly via API from browser context
+  const firstResult = await page.evaluate(
+    async ({ backendUrl, listingId }: { backendUrl: string; listingId: string }) => {
+      // Get Supabase session token from localStorage
+      const keys = Object.keys(localStorage);
+      const authKey = keys.find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+      if (!authKey) return { status: null, error: 'No Supabase auth token in localStorage' };
+
+      let token: string | null = null;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}');
+        token = parsed?.access_token ?? null;
+      } catch {
+        return { status: null, error: 'Failed to parse auth token' };
+      }
+
+      if (!token) return { status: null, error: 'access_token is null' };
+
+      // Pick a date 2 days from now
+      const d = new Date();
+      d.setDate(d.getDate() + 2);
+      const requestedDate = d.toISOString().split('T')[0];
+
+      const body = JSON.stringify({
+        listingId,
+        requestedDate,
+        requestedTimeSlot: '10:00-11:00',
+      });
+
+      try {
+        const r = await fetch(`${backendUrl}/api/bookings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body,
+        });
+        return { status: r.status, error: null };
+      } catch (e) {
+        return { status: null, error: String(e) };
+      }
+    },
+    { backendUrl: BACKEND, listingId: smokListingId },
+  );
+
+  if (firstResult.error) {
+    throw new Error(`First booking request failed unexpectedly: ${firstResult.error}`);
+  }
+
+  // First request should succeed (201) or already exist (409 if run before — acceptable)
+  expect(
+    [201, 409],
+    `Expected 201 or 409 from first booking, got ${firstResult.status}`,
+  ).toContain(firstResult.status);
+
+  // Second request — must be rejected with 409 (duplicate active booking)
+  const secondResult = await page.evaluate(
+    async ({ backendUrl, listingId }: { backendUrl: string; listingId: string }) => {
+      const keys = Object.keys(localStorage);
+      const authKey = keys.find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
+      if (!authKey) return { status: null, error: 'No Supabase auth token' };
+
+      let token: string | null = null;
+      try {
+        const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}');
+        token = parsed?.access_token ?? null;
+      } catch {
+        return { status: null, error: 'Failed to parse auth token' };
+      }
+
+      if (!token) return { status: null, error: 'access_token is null' };
+
+      const d = new Date();
+      d.setDate(d.getDate() + 3); // different date, same listing
+      const requestedDate = d.toISOString().split('T')[0];
+
+      try {
+        const r = await fetch(`${backendUrl}/api/bookings`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            listingId,
+            requestedDate,
+            requestedTimeSlot: '11:00-12:00',
+          }),
+        });
+        return { status: r.status, error: null };
+      } catch (e) {
+        return { status: null, error: String(e) };
+      }
+    },
+    { backendUrl: BACKEND, listingId: smokListingId },
+  );
+
+  if (secondResult.error) {
+    throw new Error(`Second booking request failed unexpectedly: ${secondResult.error}`);
+  }
+
+  expect(
+    secondResult.status,
+    `Expected 409 (duplicate active booking) from second request, got ${secondResult.status}`,
+  ).toBe(409);
 });
