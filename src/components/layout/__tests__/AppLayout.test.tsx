@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import Onboarding from '../../../pages/Onboarding';
 import { AppLayout } from '../AppLayout';
 
 // ─── Polyfills for jsdom ─────────────────────────────────
@@ -209,5 +210,39 @@ describe('AppLayout — role label in dropdown', () => {
 
     await user.click(screen.getByRole('button', { name: /^AD$/i }));
     expect(screen.getByText('Administrator')).toBeInTheDocument();
+  });
+});
+
+describe('AppLayout — dealer nav link hrefs', () => {
+  it('dealer role: My Listings link points to /dealer/listings', () => {
+    mockAuth = baseAuth({
+      user: { email: 'dealer@test.com' },
+      userRole: 'dealer',
+      isDealer: true,
+    });
+    renderLayout();
+
+    const links = screen.getAllByRole('link', { name: /my listings/i });
+    expect(links[0]).toHaveAttribute('href', '/dealer/listings');
+  });
+});
+
+describe('AppLayout — onboarding redirect for dealers', () => {
+  it('dealer at /onboarding is redirected to /', () => {
+    mockAuth = baseAuth({
+      user: { email: 'dealer@test.com' },
+      userRole: 'dealer',
+      isDealer: true,
+    });
+    render(
+      <MemoryRouter initialEntries={['/onboarding']}>
+        <Routes>
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/" element={<div>home page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('home page')).toBeInTheDocument();
   });
 });

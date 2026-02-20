@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Loader2 } from "lucide-react";
@@ -23,6 +23,7 @@ const NewListing = lazy(() => import("./pages/dealer/NewListing"));
 const DealerSetup = lazy(() => import("./pages/dealer/DealerSetup"));
 const DealerDashboard = lazy(() => import("./pages/dealer/DealerDashboard"));
 const DealerListings = lazy(() => import("./pages/dealer/DealerListings"));
+const SavedAreas = lazy(() => import("./pages/SavedAreas"));
 
 // Lazily loaded — Admin pages; never needed by non-admin users
 const FacebookGroups = lazy(() => import("./pages/admin/FacebookGroups"));
@@ -120,6 +121,16 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
+              {/* User Routes */}
+              <Route
+                path="/saved-areas"
+                element={
+                  <ProtectedRoute>
+                    <SavedAreas />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/notifications" element={<Navigate to="/" replace />} />
               {/* Admin Routes */}
               <Route
                 path="/admin/groups"
