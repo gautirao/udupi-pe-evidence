@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SavedAreas } from '@/components/insights/SavedAreas';
+import { PaywallCard } from '@/components/insights/PaywallCard';
+import { TrialBanner } from '@/components/insights/TrialBanner';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +35,17 @@ export default function Insights() {
   const navigate = useNavigate();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [newListingsDays, setNewListingsDays] = useState<number>(7);
+
+  // Access gating
+  const { insightsAccessUntil } = useAuth();
+  const now = new Date();
+  const accessUntil = insightsAccessUntil ? new Date(insightsAccessUntil) : null;
+  const hasAccess = accessUntil !== null && accessUntil > now;
+  const daysRemaining = accessUntil && hasAccess
+    ? Math.ceil((accessUntil.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+  const showPaywall = !hasAccess;
+  const showTrialBanner = hasAccess && daysRemaining <= 3;
 
   // Fetch data
   const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea();
@@ -88,6 +102,11 @@ export default function Insights() {
 
           {/* Right column - Insights */}
           <div className="lg:col-span-2 space-y-6">
+            {showTrialBanner && <TrialBanner daysRemaining={daysRemaining} />}
+            {showPaywall ? (
+              <PaywallCard />
+            ) : (
+            <>
             {/* Average Price by Area */}
             <Card>
               <CardHeader>
@@ -348,6 +367,8 @@ export default function Insights() {
                 )}
               </CardContent>
             </Card>
+            </>
+            )}
           </div>
         </div>
       </div>
