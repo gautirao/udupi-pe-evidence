@@ -21,6 +21,8 @@ const Insights = lazy(() => import("./pages/Insights"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NewListing = lazy(() => import("./pages/dealer/NewListing"));
 const DealerSetup = lazy(() => import("./pages/dealer/DealerSetup"));
+const DealerDashboard = lazy(() => import("./pages/dealer/DealerDashboard"));
+const DealerListings = lazy(() => import("./pages/dealer/DealerListings"));
 
 // Lazily loaded — Admin pages; never needed by non-admin users
 const FacebookGroups = lazy(() => import("./pages/admin/FacebookGroups"));
@@ -99,6 +101,22 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <NewListing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dealer/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <DealerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dealer/listings"
+                element={
+                  <ProtectedRoute>
+                    <DealerListings />
                   </ProtectedRoute>
                 }
               />
