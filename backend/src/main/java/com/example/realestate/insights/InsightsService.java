@@ -8,6 +8,7 @@ import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.listing.ListingRepository.OpportunityProjection;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -26,17 +27,20 @@ public class InsightsService {
     private final InsightsRepository insightsRepository;
     private final ListingRepository listingRepository;
     private final SavedAreaRepository savedAreaRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     public InsightsService(AreaInsightsDao areaInsightsDao,
                            AreaPriceWeeklyRepository areaPriceWeeklyRepository,
                            InsightsRepository insightsRepository,
                            ListingRepository listingRepository,
-                           SavedAreaRepository savedAreaRepository) {
+                           SavedAreaRepository savedAreaRepository,
+                           JdbcTemplate jdbcTemplate) {
         this.areaInsightsDao = areaInsightsDao;
         this.areaPriceWeeklyRepository = areaPriceWeeklyRepository;
         this.insightsRepository = insightsRepository;
         this.listingRepository = listingRepository;
         this.savedAreaRepository = savedAreaRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     /**
@@ -95,5 +99,40 @@ public class InsightsService {
 
         return listingRepository.findOpportunitiesByAreaKeys(
                 areaKeys, RECOMMENDATION_THRESHOLD, RECOMMENDATION_FRESH_DAYS, pageable);
+    }
+
+    /**
+     * Checks that the given user has active insights access.
+     * Reads profiles.insights_access_until via the JDBC service-account connection (bypasses RLS).
+     *
+     * @throws InsightsAccessExpiredException if access is null or expired
+     */
+    public void checkInsightsAccess(UUID userId) {
+        List<OffsetDateTime> results = jdbcTemplate.query(
+                "SELECT insights_access_until FROM public.profiles WHERE user_id = ?",
+                (rs, rowNum) -> rs.getObject("insights_access_until", OffsetDateTime.class),
+                userId);
+
+        // No profile row → no access
+        OffsetDateTime accessUntil = results.isEmpty() ? null : results.get(0);
+
+        if (accessUntil == null || accessUntil.isBefore(OffsetDateTime.now())) {
+            throw new InsightsAccessExpiredException(accessUntil);
+        }
+    }
+
+    // ===== Exception =====
+
+    public static class InsightsAccessExpiredException extends RuntimeException {
+        private final OffsetDateTime expiresAt;
+
+        public InsightsAccessExpiredException(OffsetDateTime expiresAt) {
+            super("Insights access expired");
+            this.expiresAt = expiresAt;
+        }
+
+        public OffsetDateTime getExpiresAt() {
+            return expiresAt;
+        }
     }
 }

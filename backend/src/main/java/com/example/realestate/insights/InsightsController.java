@@ -10,6 +10,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,8 +37,10 @@ public class InsightsController {
     // ==================== 1. Avg price by area ====================
 
     @GetMapping("/avg-price-by-area")
-    public ResponseEntity<List<AreaPriceResponse>> avgPriceByArea(JwtAuthenticationToken auth) {
+    public ResponseEntity<?> avgPriceByArea(JwtAuthenticationToken auth) {
         UUID userId = extractUserId(auth);
+        ResponseEntity<?> denied = checkAccess(userId);
+        if (denied != null) return denied;
 
         List<AreaPriceResponse> result = insightsService.getAvgPriceByArea().stream()
                 .map(row -> new AreaPriceResponse(
@@ -58,6 +61,8 @@ public class InsightsController {
     public ResponseEntity<?> priceTrend(JwtAuthenticationToken auth,
                                          @RequestParam(name = "area_key") String areaKey) {
         UUID userId = extractUserId(auth);
+        ResponseEntity<?> denied = checkAccess(userId);
+        if (denied != null) return denied;
 
         List<PriceTrendResponse> result = insightsService.getPriceTrend(areaKey).stream()
                 .map(w -> new PriceTrendResponse(
@@ -79,11 +84,13 @@ public class InsightsController {
     // Do NOT pass a sort via Pageable (e.g., use PageRequest.of(page, size) in tests and
     // callers), otherwise Spring Data will append a conflicting ORDER BY clause.
     @GetMapping("/new-listings")
-    public ResponseEntity<Page<NewListingResponse>> newListings(
+    public ResponseEntity<?> newListings(
             JwtAuthenticationToken auth,
             @RequestParam(defaultValue = "7") int days,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         UUID userId = extractUserId(auth);
+        ResponseEntity<?> denied = checkAccess(userId);
+        if (denied != null) return denied;
 
         if (days < 1 || days > 90) {
             days = 7;
@@ -108,10 +115,12 @@ public class InsightsController {
     // created_at DESC. Do NOT pass a sort via Pageable (e.g., use PageRequest.of(page, size)
     // in tests and callers), otherwise Spring Data will append a conflicting ORDER BY clause.
     @GetMapping("/recommendations")
-    public ResponseEntity<Page<RecommendationResponse>> recommendations(
+    public ResponseEntity<?> recommendations(
             JwtAuthenticationToken auth,
             @PageableDefault(size = 20) Pageable pageable) {
         UUID userId = extractUserId(auth);
+        ResponseEntity<?> denied = checkAccess(userId);
+        if (denied != null) return denied;
 
         Page<RecommendationResponse> result = insightsService.getRecommendations(userId, pageable)
                 .map(o -> new RecommendationResponse(
@@ -127,6 +136,24 @@ public class InsightsController {
         return ResponseEntity.ok(result);
     }
 
+    // ===== Access check =====
+
+    /**
+     * Returns a 403 ResponseEntity if the user's insights access has expired or is missing.
+     * Returns null if access is valid (caller proceeds normally).
+     */
+    private ResponseEntity<?> checkAccess(UUID userId) {
+        try {
+            insightsService.checkInsightsAccess(userId);
+            return null;
+        } catch (InsightsService.InsightsAccessExpiredException e) {
+            String expiresAt = e.getExpiresAt() != null ? e.getExpiresAt().toString() : null;
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new InsightsAccessError("INSIGHTS_ACCESS_EXPIRED", expiresAt,
+                            "/api/payments/insights-pass"));
+        }
+    }
+
     // ===== Auth =====
 
     private static UUID extractUserId(JwtAuthenticationToken auth) {
@@ -134,6 +161,8 @@ public class InsightsController {
     }
 
     // ===== DTOs =====
+
+    public record InsightsAccessError(String error, String expiresAt, String upgradePath) {}
 
     public record AreaPriceResponse(String areaKey, int listingCount,
                                      Long medianPricePerCentPaise,
