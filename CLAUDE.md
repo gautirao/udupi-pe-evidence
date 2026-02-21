@@ -24,6 +24,9 @@ If requirements are ambiguous: **ask, never guess**. No exceptions.
 - Treat `PROJECT_CONTEXT.md` as **authoritative for system facts**
 - If new system facts are discovered, propose an update to `PROJECT_CONTEXT.md`
 
+## 1.3 Frontend rules (MANDATORY READ FOR FRONTEND TASKS)
+For any frontend change, Claude must read and follow `docs/FRONTEND_GUIDE.md`.
+
 ## 2. 3-file limit (STRICT)
 If a task changes more than 3 files: STOP, propose a task split, wait for confirmation.
 No sweeping refactors. No opportunistic changes to unrelated files.
@@ -49,6 +52,28 @@ Output CHECKPOINT: completed steps, remaining steps, next file/method.
 Wait for "Resume from last checkpoint". Never re-run completed steps.
 
 ## 7. For any code change, Claude must first read `.claude/PR_RULES.md`.
+
+## 8. Agent teams + tmux (CAPABILITY NOTE)
+
+Claude has full agent-team capability via `TeamCreate` / `Task` / `SendMessage`.
+Settings (`~/.claude/settings.json`) are:
+```json
+{
+"teamMateMode": "tmux",
+"CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1" }
+```
+
+With `teamMateMode: "tmux"`, each spawned teammate runs in its **own tmux pane** — output is visible live, not collected silently in background.
+
+**Rules:**
+- For any parallel multi-PR work (≥ 2 independent PRs), prefer a team over background Task agents.
+- At session start, check if Claude is running inside a tmux session:
+  ```bash
+  echo $TMUX
+  ```
+  If empty (not in tmux), prompt the user:
+  > "I work best in a tmux session so teammate agents get their own panes. Run `tmux` first, then relaunch `claude`. Want to do that now?"
+  Do NOT proceed with team spawning outside tmux — pane routing will silently fall back to foreground.
 
 ## Extended rules in `.claude/`
 Read these ONLY when the task requires them:

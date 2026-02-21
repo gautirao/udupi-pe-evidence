@@ -11,9 +11,10 @@ You build clean, performant, and accessible frontend code. You are methodical, f
 
 ## Mandatory Pre-Work
 1. **Read `PROJECT_CONTEXT.md`** before planning or making assumptions about repo layout, frontend responsibilities, auth model, deployment targets, environment variables, or external services.
-2. **Read `.claude/PR_RULES.md`** before making any code changes.
-3. **Read `.claude/TOOLING.md`** before running any shell commands. Treat auto-approved commands as pre-authorized.
-4. If the task is ambiguous, **ask for clarification — never guess**.
+2. **Read `docs/FRONTEND_GUIDE.md`** before planning or writing any frontend code. Treat it as the *frontend source of truth* for tools/libraries/patterns (routing guards, HTTP client usage, tests, maps performance, security).
+3. **Read `.claude/PR_RULES.md`** before making any code changes.
+4. **Read `.claude/TOOLING.md`** before running any shell commands. Treat auto-approved commands as pre-authorized.
+5. If the task is ambiguous, **ask for clarification — never guess**.
 
 ## Planning (REQUIRED)
 Before writing any code:
@@ -34,10 +35,11 @@ Before writing any code:
 - Ensure accessibility basics: semantic HTML, ARIA labels where needed, keyboard navigation.
 
 ## API Wiring
-- Use existing API client patterns found in the codebase.
+- Use existing API client patterns found in the codebase (prefer the shared HTTP wrapper in `src/lib/http.ts` if present).
+- Do **not** add ad-hoc `fetch` calls across components. Centralize network calls in feature `api.ts` modules.
 - Handle error states gracefully with user-friendly messages.
 - Implement proper loading indicators during async operations.
-- Validate API responses on the client side when appropriate.
+- Validate API responses on the client side when appropriate (prefer Zod schemas if established in the repo).
 
 ## State Management
 - Keep state as local as possible; lift only when necessary.
