@@ -191,4 +191,26 @@ class DealerSetupControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.field").value("phone"));
     }
+
+    // ==================== Test 9: missing profiles row -> 500 ====================
+    // Reproduces the bug: phone UPDATE returns 0 (no profiles row) but role INSERT succeeds.
+    // Before fix: code ignores return value and returns 200. After fix: returns 500.
+
+    @Test
+    void setup_missingProfileRow_returns500() throws Exception {
+        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
+                .thenReturn(List.of());
+        // First update call (INSERT user_roles): returns 1 — role granted.
+        // Second update call (UPDATE profiles SET phone): returns 0 — profile row missing.
+        when(jdbcTemplate.update(anyString(), any(Object[].class)))
+                .thenReturn(1, 0);
+
+        mockMvc.perform(post("/api/dealer/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"+919876543210","acceptedTerms":true}
+                                """))
+                .andExpect(status().isInternalServerError());
+    }
 }

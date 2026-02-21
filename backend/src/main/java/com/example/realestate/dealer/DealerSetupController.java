@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -100,10 +101,16 @@ public class DealerSetupController {
                     .body(Map.of("error", "You already have a dealer or admin role."));
         }
 
-        // Persist phone to profiles (C-1 fix: phone was validated but never stored)
-        jdbcTemplate.update(
+        // Persist phone to profiles (C-1 fix: phone was validated but never stored).
+        // C-2 fix: if no profiles row exists, roll back role grant and return 500.
+        int profileRows = jdbcTemplate.update(
                 "UPDATE public.profiles SET phone = ? WHERE user_id = ?",
                 phone, userId);
+        if (profileRows == 0) {
+            log.error("POST /api/dealer/setup -> 500 no profile row userId={}", userId);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "User profile not found — cannot complete dealer setup.");
+        }
 
         log.info("POST /api/dealer/setup -> 200 userId={} role={}", userId, DEALER_ROLE);
         return ResponseEntity.ok(Map.of("role", DEALER_ROLE));
