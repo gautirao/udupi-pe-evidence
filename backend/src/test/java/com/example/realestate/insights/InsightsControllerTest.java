@@ -254,4 +254,66 @@ class InsightsControllerTest {
         mockMvc.perform(get("/api/insights/avg-price-by-area"))
                 .andExpect(status().isForbidden());
     }
+
+    // ==================== Test 11: getAvgPrice_expiredAccess_returns403 ====================
+
+    @Test
+    void getAvgPrice_expiredAccess_returns403() throws Exception {
+        doThrow(new InsightsService.InsightsAccessExpiredException(OffsetDateTime.now().minusDays(1)))
+                .when(insightsService).checkInsightsAccess(any());
+
+        mockMvc.perform(get("/api/insights/avg-price-by-area")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    // ==================== Test 12: getAvgPrice_nullAccess_returns403 ====================
+
+    @Test
+    void getAvgPrice_nullAccess_returns403() throws Exception {
+        doThrow(new InsightsService.InsightsAccessExpiredException(null))
+                .when(insightsService).checkInsightsAccess(any());
+
+        mockMvc.perform(get("/api/insights/avg-price-by-area")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isForbidden());
+    }
+
+    // ==================== Test 13: getPriceTrend_expiredAccess_returns403 ====================
+
+    @Test
+    void getPriceTrend_expiredAccess_returns403() throws Exception {
+        doThrow(new InsightsService.InsightsAccessExpiredException(OffsetDateTime.now().minusDays(1)))
+                .when(insightsService).checkInsightsAccess(any());
+
+        mockMvc.perform(get("/api/insights/price-trend")
+                        .param("area_key", "Manipal")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isForbidden());
+    }
+
+    // ==================== Test 14: getNewListings_expiredAccess_returns403 ====================
+
+    @Test
+    void getNewListings_expiredAccess_returns403() throws Exception {
+        doThrow(new InsightsService.InsightsAccessExpiredException(OffsetDateTime.now().minusDays(1)))
+                .when(insightsService).checkInsightsAccess(any());
+
+        mockMvc.perform(get("/api/insights/new-listings")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isForbidden());
+    }
+
+    // ==================== Test 15: getRecommendations_expiredAccess_returns403 ====================
+
+    @Test
+    void getRecommendations_expiredAccess_returns403() throws Exception {
+        doThrow(new InsightsService.InsightsAccessExpiredException(OffsetDateTime.now().minusDays(1)))
+                .when(insightsService).checkInsightsAccess(any());
+
+        mockMvc.perform(get("/api/insights/recommendations")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isForbidden());
+    }
 }
