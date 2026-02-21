@@ -61,12 +61,13 @@ interface SpringPage<T> {
 /**
  * Fetch average price by area (median prices per area)
  */
-export function useAvgPriceByArea() {
+export function useAvgPriceByArea(options?: { enabled?: boolean }) {
   return useQuery<AreaPriceData[]>({
     queryKey: ['insights', 'avg-price-by-area'],
     queryFn: async () => {
       return api.get<AreaPriceData[]>('/api/insights/avg-price-by-area');
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -90,7 +91,7 @@ export function usePriceTrend(areaKey: string | null, enabled = true) {
  * Fetch new listings in user's saved areas
  * @param days - Number of days to look back (default: 7)
  */
-export function useNewListings(days = 7) {
+export function useNewListings(days = 7, options?: { enabled?: boolean }) {
   return useQuery<NewListingData[]>({
     queryKey: ['insights', 'new-listings', days],
     queryFn: async () => {
@@ -98,13 +99,14 @@ export function useNewListings(days = 7) {
       const page = await api.get<SpringPage<NewListingData>>(`/api/insights/new-listings?days=${days}`);
       return page.content;
     },
+    enabled: options?.enabled ?? true,
   });
 }
 
 /**
  * Fetch top recommendations based on user's saved areas
  */
-export function useRecommendations() {
+export function useRecommendations(options?: { enabled?: boolean }) {
   return useQuery<RecommendationData[]>({
     queryKey: ['insights', 'recommendations'],
     queryFn: async () => {
@@ -112,5 +114,6 @@ export function useRecommendations() {
       const page = await api.get<SpringPage<RecommendationData>>('/api/insights/recommendations');
       return page.content;
     },
+    enabled: options?.enabled ?? true,
   });
 }

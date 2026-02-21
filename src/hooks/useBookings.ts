@@ -76,6 +76,7 @@ export function useMyBookings() {
     queryKey: ['my-bookings'],
     queryFn: () => api.get<BookingResponse[]>('/api/bookings/mine'),
     enabled: !!user,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -84,12 +85,13 @@ export function useMyBookings() {
  * GET /api/bookings/dealer
  */
 export function useDealerBookings() {
-  const { user } = useAuth();
+  const { user, isDealer, isAdmin } = useAuth();
 
   return useQuery({
     queryKey: ['dealer-bookings'],
     queryFn: () => api.get<BookingResponse[]>('/api/bookings/dealer'),
-    enabled: !!user,
+    enabled: !!user && (isDealer || isAdmin),
+    staleTime: 5 * 60 * 1000,
   });
 }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SavedAreas } from '@/components/insights/SavedAreas';
@@ -37,26 +37,28 @@ export default function Insights() {
   const [newListingsDays, setNewListingsDays] = useState<number>(7);
 
   // Access gating
-  const { insightsAccessUntil } = useAuth();
+  const { insightsAccessUntil, isLoading: authLoading } = useAuth();
   const now = new Date();
   const accessUntil = insightsAccessUntil ? new Date(insightsAccessUntil) : null;
   const hasAccess = accessUntil !== null && accessUntil > now;
   const daysRemaining = accessUntil && hasAccess
     ? Math.ceil((accessUntil.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
     : 0;
-  const showPaywall = !hasAccess;
+  const showPaywall = !authLoading && !hasAccess;
   const showTrialBanner = hasAccess && daysRemaining <= 3;
 
   // Fetch data
-  const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea();
-  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea);
-  const { data: newListings = [], isLoading: newListingsLoading, error: newListingsError } = useNewListings(newListingsDays);
-  const { data: recommendations = [], isLoading: recommendationsLoading, error: recommendationsError } = useRecommendations();
+  const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea({ enabled: hasAccess });
+  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, hasAccess && !!selectedArea);
+  const { data: newListings = [], isLoading: newListingsLoading, error: newListingsError } = useNewListings(newListingsDays, { enabled: hasAccess });
+  const { data: recommendations = [], isLoading: recommendationsLoading, error: recommendationsError } = useRecommendations({ enabled: hasAccess });
 
-  // Set initial selected area from avg price data
-  if (!selectedArea && avgPriceData.length > 0) {
-    setSelectedArea(avgPriceData[0].areaKey);
-  }
+  // Set initial selected area from avg price data (in effect to avoid setState-during-render)
+  useEffect(() => {
+    if (!selectedArea && avgPriceData.length > 0) {
+      setSelectedArea(avgPriceData[0].areaKey);
+    }
+  }, [avgPriceData, selectedArea]);
 
   // Helper function to convert paise to rupees
   const paiseToRupees = (paise: number | null): number => {
