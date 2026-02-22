@@ -1,5 +1,7 @@
 ### Frontend Best Practices (React + Vite + TS + Supabase + Leaflet)
 
+> **Design system**: All new screens must follow `docs/DESIGN_SYSTEM.md` — the canonical guide for colors, typography, spacing, component patterns, and the four-state pattern.
+
 **Baseline tooling (required)**
 
 * TypeScript: `strict: true` + `tsc --noEmit` in CI
