@@ -216,18 +216,17 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("Booking not found"));
     }
 
-    // ==================== Test 9: PUT /confirm 400 wrong status ====================
+    // ==================== Test 9: PUT /confirm 409 wrong status (atomic path) ====================
 
     @Test
-    void confirm_wrongStatus_returns400() throws Exception {
+    void confirm_alreadyConfirmedOrWrongStatus_returns409WithConflictCode() throws Exception {
         when(bookingService.confirmBooking(eq(BOOKING_ID), eq(DEALER_ID)))
-                .thenThrow(new BookingService.BookingStatusException(
-                        "Cannot confirm a booking with status CONFIRMED"));
+                .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/confirm")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Cannot confirm a booking with status CONFIRMED"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
 
     // ==================== Test 10: PUT /cancel 200 by requester ====================
@@ -309,6 +308,47 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
 
         verify(bookingService, never()).getBookingsForDealer(any());
+    }
+
+    // ==================== Test 15: PUT /confirm 409 state conflict ====================
+
+    @Test
+    void confirm_stateConflict_returns409WithErrorCode() throws Exception {
+        when(bookingService.confirmBooking(eq(BOOKING_ID), eq(DEALER_ID)))
+                .thenThrow(new BookingService.BookingStateConflictException());
+
+        mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/confirm")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
+    }
+
+    // ==================== Test 16: PUT /decline 409 state conflict ====================
+
+    @Test
+    void decline_stateConflict_returns409WithErrorCode() throws Exception {
+        when(bookingService.declineBooking(eq(BOOKING_ID), eq(DEALER_ID), any()))
+                .thenThrow(new BookingService.BookingStateConflictException());
+
+        mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/decline")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"declineReason\":\"Not available\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
+    }
+
+    // ==================== Test 17: PUT /cancel 409 state conflict ====================
+
+    @Test
+    void cancel_stateConflict_returns409WithErrorCode() throws Exception {
+        when(bookingService.cancelBooking(eq(BOOKING_ID), eq(REQUESTER_ID)))
+                .thenThrow(new BookingService.BookingStateConflictException());
+
+        mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/cancel")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
 
     // ==================== Helper ====================

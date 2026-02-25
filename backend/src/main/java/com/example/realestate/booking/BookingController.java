@@ -84,8 +84,13 @@ public class BookingController {
             return ResponseEntity.ok(toResponse(booking));
         } catch (BookingService.BookingNotFoundException e) {
             return notFound();
-        } catch (BookingService.BookingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (BookingService.BookingStateConflictException e) {
+            // NOTE: wrong-status transitions (e.g. confirm on already-CONFIRMED) now return 409
+            // BOOKING_STATE_CONFLICT (not 400). This is intentional — the atomic UPDATE returns 0
+            // rows for both race conditions AND invalid starting states. Clients should treat
+            // 409 as "retry not useful" for state errors.
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "BOOKING_STATE_CONFLICT"));
         }
     }
 
@@ -104,11 +109,16 @@ public class BookingController {
             return ResponseEntity.ok(toResponse(booking));
         } catch (BookingService.BookingNotFoundException e) {
             return notFound();
-        } catch (BookingService.BookingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (BookingService.BookingValidationException e) {
             return ResponseEntity.badRequest()
                     .body(Map.of("field", e.getField(), "error", e.getMessage()));
+        } catch (BookingService.BookingStateConflictException e) {
+            // NOTE: wrong-status transitions (e.g. confirm on already-CONFIRMED) now return 409
+            // BOOKING_STATE_CONFLICT (not 400). This is intentional — the atomic UPDATE returns 0
+            // rows for both race conditions AND invalid starting states. Clients should treat
+            // 409 as "retry not useful" for state errors.
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "BOOKING_STATE_CONFLICT"));
         }
     }
 
@@ -124,8 +134,13 @@ public class BookingController {
             return ResponseEntity.ok(toResponse(booking));
         } catch (BookingService.BookingNotFoundException e) {
             return notFound();
-        } catch (BookingService.BookingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (BookingService.BookingStateConflictException e) {
+            // NOTE: wrong-status transitions (e.g. confirm on already-CONFIRMED) now return 409
+            // BOOKING_STATE_CONFLICT (not 400). This is intentional — the atomic UPDATE returns 0
+            // rows for both race conditions AND invalid starting states. Clients should treat
+            // 409 as "retry not useful" for state errors.
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "BOOKING_STATE_CONFLICT"));
         }
     }
 

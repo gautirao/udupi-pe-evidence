@@ -1,8 +1,14 @@
 package com.example.realestate.booking;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -12,4 +18,19 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
     List<ViewingRequest> findByRequesterIdOrderByCreatedAtDesc(UUID requesterId);
 
     List<ViewingRequest> findByDealerIdAndStatusInOrderByCreatedAtDesc(UUID dealerId, List<String> statuses);
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE ViewingRequest v SET v.status = 'CONFIRMED', v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.dealerId = :callerId")
+    int confirmAtomic(@Param("id") UUID id, @Param("expectedStatus") String expectedStatus, @Param("callerId") UUID callerId, @Param("now") OffsetDateTime now);
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE ViewingRequest v SET v.status = 'DECLINED', v.declineReason = :declineReason, v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.dealerId = :callerId")
+    int declineAtomic(@Param("id") UUID id, @Param("expectedStatus") String expectedStatus, @Param("callerId") UUID callerId, @Param("declineReason") String declineReason, @Param("now") OffsetDateTime now);
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE ViewingRequest v SET v.status = 'CANCELLED', v.cancelledBy = :cancelledBy, v.updatedAt = :now WHERE v.id = :id AND v.status IN :allowedStatuses AND (v.requesterId = :callerId OR v.dealerId = :callerId)")
+    int cancelAtomic(@Param("id") UUID id, @Param("allowedStatuses") Collection<String> allowedStatuses, @Param("callerId") UUID callerId, @Param("cancelledBy") String cancelledBy, @Param("now") OffsetDateTime now);
 }

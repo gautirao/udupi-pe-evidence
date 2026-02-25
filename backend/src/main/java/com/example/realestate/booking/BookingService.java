@@ -168,20 +168,21 @@ public class BookingService {
     /**
      * Dealer confirms a REQUESTED booking.
      * M5: verify dealer_id == callerId; return 404 (BookingNotFoundException) if not.
+     * Atomic: ownership check read → confirmAtomic → if 0 rows → BookingStateConflictException.
      */
     @Transactional
     public ViewingRequest confirmBooking(UUID bookingId, UUID callerId) {
-        ViewingRequest booking = findBookingForDealer(bookingId, callerId);
+        // Ownership check (M5) — still needs a read
+        findBookingForDealer(bookingId, callerId);
 
-        if (!STATUS_REQUESTED.equals(booking.getStatus())) {
-            throw new BookingStatusException(
-                    "Cannot confirm a booking with status " + booking.getStatus());
+        OffsetDateTime now = OffsetDateTime.now();
+        int rows = viewingRequestRepository.confirmAtomic(bookingId, STATUS_REQUESTED, callerId, now);
+        if (rows == 0) {
+            throw new BookingStateConflictException();
         }
 
-        booking.setStatus(STATUS_CONFIRMED);
-        booking.setUpdatedAt(OffsetDateTime.now());
-
-        ViewingRequest saved = viewingRequestRepository.save(booking);
+        ViewingRequest saved = viewingRequestRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
         log.info("Confirmed booking bookingId={} dealerId={}", bookingId, callerId);
         eventPublisher.publishEvent(new ViewingConfirmedEvent(saved));
         return saved;
@@ -193,6 +194,7 @@ public class BookingService {
      * Dealer declines a REQUESTED booking.
      * M5: verify dealer_id == callerId; return 404 if not.
      * M9: declineReason max 500 chars.
+     * Atomic: M9 check → ownership read → declineAtomic → if 0 rows → BookingStateConflictException.
      */
     @Transactional
     public ViewingRequest declineBooking(UUID bookingId, UUID callerId, String declineReason) {
@@ -202,18 +204,17 @@ public class BookingService {
                     "Decline reason must be " + MAX_FREE_TEXT_LENGTH + " characters or fewer");
         }
 
-        ViewingRequest booking = findBookingForDealer(bookingId, callerId);
+        // Ownership check (M5)
+        findBookingForDealer(bookingId, callerId);
 
-        if (!STATUS_REQUESTED.equals(booking.getStatus())) {
-            throw new BookingStatusException(
-                    "Cannot decline a booking with status " + booking.getStatus());
+        OffsetDateTime now = OffsetDateTime.now();
+        int rows = viewingRequestRepository.declineAtomic(bookingId, STATUS_REQUESTED, callerId, declineReason, now);
+        if (rows == 0) {
+            throw new BookingStateConflictException();
         }
 
-        booking.setStatus(STATUS_DECLINED);
-        booking.setDeclineReason(declineReason);
-        booking.setUpdatedAt(OffsetDateTime.now());
-
-        ViewingRequest saved = viewingRequestRepository.save(booking);
+        ViewingRequest saved = viewingRequestRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
         log.info("Declined booking bookingId={} dealerId={}", bookingId, callerId);
         eventPublisher.publishEvent(new ViewingDeclinedEvent(saved));
         return saved;
@@ -226,6 +227,7 @@ public class BookingService {
      * - Requester: can cancel from REQUESTED or CONFIRMED. Sets cancelledBy = 'user'.
      * - Dealer: can cancel from CONFIRMED only. Sets cancelledBy = 'dealer'.
      * M5: return 404 if callerId matches neither requester_id nor dealer_id.
+     * Atomic: ownership read → determine role → cancelAtomic → if 0 rows → BookingStateConflictException.
      */
     @Transactional
     public ViewingRequest cancelBooking(UUID bookingId, UUID callerId) {
@@ -240,25 +242,24 @@ public class BookingService {
             throw new BookingNotFoundException(bookingId);
         }
 
+        String cancelledBy;
+        Set<String> allowedStatuses;
         if (isRequester) {
-            if (!CANCELLABLE_BY_USER.contains(booking.getStatus())) {
-                throw new BookingStatusException(
-                        "Cannot cancel a booking with status " + booking.getStatus());
-            }
-            booking.setCancelledBy("user");
+            cancelledBy = "user";
+            allowedStatuses = CANCELLABLE_BY_USER;
         } else {
-            // dealer cancel
-            if (!CANCELLABLE_BY_DEALER.contains(booking.getStatus())) {
-                throw new BookingStatusException(
-                        "Dealer can only cancel a CONFIRMED booking");
-            }
-            booking.setCancelledBy("dealer");
+            cancelledBy = "dealer";
+            allowedStatuses = CANCELLABLE_BY_DEALER;
         }
 
-        booking.setStatus(STATUS_CANCELLED);
-        booking.setUpdatedAt(OffsetDateTime.now());
+        OffsetDateTime now = OffsetDateTime.now();
+        int rows = viewingRequestRepository.cancelAtomic(bookingId, allowedStatuses, callerId, cancelledBy, now);
+        if (rows == 0) {
+            throw new BookingStateConflictException();
+        }
 
-        ViewingRequest saved = viewingRequestRepository.save(booking);
+        ViewingRequest saved = viewingRequestRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
         log.info("Cancelled booking bookingId={} cancelledBy={} callerId={}",
                 bookingId, saved.getCancelledBy(), callerId);
         eventPublisher.publishEvent(new ViewingCancelledEvent(saved));
@@ -297,13 +298,7 @@ public class BookingService {
 
     public static class BookingNotFoundException extends RuntimeException {
         public BookingNotFoundException(UUID id) {
-            super("Booking not found: " + id);
-        }
-    }
-
-    public static class BookingStatusException extends RuntimeException {
-        public BookingStatusException(String message) {
-            super(message);
+            super("Booking not found");
         }
     }
 
@@ -323,6 +318,12 @@ public class BookingService {
 
         public String getField() {
             return field;
+        }
+    }
+
+    public static class BookingStateConflictException extends RuntimeException {
+        public BookingStateConflictException() {
+            super("Booking state was modified concurrently");
         }
     }
 
