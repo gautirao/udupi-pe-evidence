@@ -57,6 +57,7 @@ Play a sound using `afplay` in these situations:
 |-------|---------|
 | Waiting for user approval or input (pre-implementation plan posted, blocking on user) | `afplay /System/Library/Sounds/Ping.aiff` |
 | A spawned background agent has finished its task | `afplay /System/Library/Sounds/Glass.aiff` |
+| Foreground task completed (no further input needed from user) | `afplay /System/Library/Sounds/Glass.aiff` |
 
 Rules:
 - Always play the sound immediately before or after the triggering event (not delayed).

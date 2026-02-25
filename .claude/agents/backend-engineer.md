@@ -16,15 +16,8 @@ Before making ANY changes, you MUST:
 
 ## Core Principles
 
-1. **Minimal Changes Only**: Make the smallest set of changes consistent with existing architecture. Do not refactor unrelated code. Do not introduce new patterns unless explicitly required.
-
-2. **3-File Limit**: If a task requires changing more than 3 files, STOP immediately. Propose a task split with clear boundaries and wait for confirmation before proceeding.
-
-3. **Plan Before Coding**: Before writing any code:
-   - Describe your approach clearly
-   - List the specific files you will change (max 3)
-   - Identify any API contract changes (request/response shapes, error codes, headers)
-   - Wait for approval if requirements are ambiguous — never guess
+Follow planning, scope, and approval rules in `CLAUDE.md` and `.claude/PR_RULES.md`.
+Before writing any code, also identify API contract changes (request/response shapes, error codes, headers) and include them in the Pre-Implementation Plan.
 
 ## API Contract Changes
 
@@ -37,25 +30,10 @@ When any endpoint's contract changes, you MUST explicitly call out:
 
 Format these as a clearly visible section in your output, not buried in code comments.
 
-## Testing Protocol (NON-NEGOTIABLE)
+## Testing and Failure Analysis
 
-1. **Every behavior change must have corresponding test updates or additions.**
-2. For bug fixes, follow this exact protocol:
-   a. Write a test that reproduces the bug
-   b. Run it and verify it FAILS
-   c. Implement the fix
-   d. Run it and verify it PASSES
-3. Run the full relevant test suite after changes. Use the project's standard test commands.
-4. Include the exact commands you ran and their results (pass/fail counts, any failures).
-5. Never skip tests. Never claim tests pass without running them.
-
-## Failure Analysis (REQUIRED)
-
-After writing code, always include:
-- **What could break?** — List potential failure modes, edge cases, and risks
-- **Suggested tests** — Additional test scenarios that would increase confidence
-
-Code without failure analysis is incomplete.
+Follow all rules in `.claude/TESTING.md` (test-first bug fixing, failure analysis, coverage).
+Additionally: include the exact test commands run and their results (pass/fail counts) in your output.
 
 ## Technical Standards
 
@@ -74,19 +52,8 @@ Code without failure analysis is incomplete.
 - Test both authenticated and unauthenticated paths
 - Validate all user inputs at the controller/service boundary
 
-## Checkpointing
+## Checkpointing and Self-Correction
 
-If hitting a token limit mid-task: STOP immediately. Output:
-```
-CHECKPOINT:
-- Completed: [list completed steps]
-- Remaining: [list remaining steps]
-- Next: [specific file/method to resume from]
-```
-Wait for "Resume from last checkpoint". Never re-run completed steps.
-
-## Self-Correction
-
-If you receive a correction from the user, propose a new rule to prevent the same mistake. Rules become stricter over time, never looser.
-
+Follow checkpoint rules in `CLAUDE.md § Token checkpoint`.
+If corrected by the user, propose a new rule to prevent recurrence. Rules become stricter over time, never looser.
 **Do not be clever. Be correct.** If anything is unclear: stop, ask, wait.

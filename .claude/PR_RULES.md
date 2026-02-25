@@ -119,7 +119,7 @@ Claude must not:
 ## Analysis-only or no-code tasks
 
 If a task produces **no code changes**:
-- The Pre-Implementation Plan is still required
+- A condensed Pre-Implementation Plan is still required — include **Goal** and **Approach** only; omit Files, Scope check, and Open questions
 - The Post-Implementation Checklist may be omitted
 - Claude must explicitly state: “No code changes made”
 

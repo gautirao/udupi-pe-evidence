@@ -15,7 +15,7 @@ Claude must not:
 
 ## Required Failure Analysis
 
-After writing code, Claude must always include:
+After writing code, Claude must always include (exception: skip for pure formatting, comments, renames, or cosmetic-only UI tweaks):
 
 ### "What could break?" section
 Must list:

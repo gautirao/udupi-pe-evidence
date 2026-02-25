@@ -16,36 +16,9 @@ Local development is allowed but must mirror production assumptions.
 
 ---
 
-## Supabase Usage Constraints (Invariant)
+## Supabase and Spring Boot invariants
 
-Supabase is managed infrastructure only.
-
-Allowed:
-- Auth
-- Postgres
-- Storage
-
-Forbidden:
-- Supabase client libraries for Java
-- Java Supabase SDK abstractions
-- Business logic in Edge Functions
-- Treating Supabase as an application framework
-
-Violations are architectural bugs.
-
----
-
-## Java Spring Boot Responsibilities (Invariant)
-
-- All ingestion, processing, and business logic runs in the Spring Boot backend
-- Backend connects directly to Supabase Postgres
-- Backend is the sole authority for:
-    - data access
-    - authorization
-    - processing
-    - AI invocation
-
-Frontend is never trusted.
+See `.claude/ARCHITECTURE.md` — those rules are authoritative and not repeated here.
 
 ---
 

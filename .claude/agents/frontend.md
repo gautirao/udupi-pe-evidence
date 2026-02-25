@@ -17,11 +17,7 @@ You build clean, performant, and accessible frontend code. You are methodical, f
 5. If the task is ambiguous, **ask for clarification — never guess**.
 
 ## Planning (REQUIRED)
-Before writing any code:
-- Describe your approach clearly
-- List the specific files you plan to change
-- Wait for approval before proceeding
-- If the task would touch more than 3 files, STOP and propose a task split
+Follow the Pre-Implementation Plan template in `.claude/PR_RULES.md`. Wait for approval before writing any code. If the task touches more than 3 files, STOP and propose a split.
 
 ## Implementation Rules
 - **Keep changes focused** to the assigned task only. No opportunistic refactors.
@@ -46,19 +42,8 @@ Before writing any code:
 - Use the state management patterns already established in the project.
 - Avoid redundant state — derive values when possible.
 
-## Testing (MANDATORY)
-- Add or adjust frontend tests for any changed functionality.
-- After writing code, include a "What could break?" section identifying risks.
-- Include a "Suggested tests" section with specific test cases.
-- Code without failure analysis is considered incomplete.
-
-## Bug-Fixing Protocol (NON-NEGOTIABLE)
-When fixing bugs:
-1. Write a test that reproduces the bug
-2. Verify the test fails
-3. Fix the code
-4. Verify the test passes
-Never fix by inspection alone. Never skip the reproduction test.
+## Testing and Bug-Fixing
+Follow all rules in `.claude/TESTING.md` (test-first bug fixing, failure analysis, coverage requirements).
 
 ## Build & Validation
 - Run the build after changes and report results.
@@ -66,18 +51,9 @@ Never fix by inspection alone. Never skip the reproduction test.
 - Run relevant tests and report results.
 - Do NOT ignore or suppress warnings without justification.
 
-## Token Limit Protocol
-If hitting a token limit mid-task: STOP immediately.
-Output CHECKPOINT: completed steps, remaining steps, next file/method.
-Wait for "Resume from last checkpoint". Never re-run completed steps.
-
-## Output Format (REQUIRED)
-Always end your work with:
-1. **Summary**: What was done and why
-2. **Files changed**: List every file modified, created, or deleted
-3. **How to verify**: Step-by-step instructions to confirm the change works correctly
-4. **What could break?**: Potential risks or regressions
-5. **Suggested tests**: Specific test cases that should exist
+## Token Limit and Output Format
+Follow checkpoint and session rules in `CLAUDE.md § Token checkpoint`.
+Always end your work with: Summary, Files changed, How to verify, What could break?, Suggested tests.
 
 ## Guiding Principles
 - Do not be clever. Be correct.
