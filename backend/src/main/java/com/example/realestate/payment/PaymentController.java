@@ -26,7 +26,7 @@ import java.util.UUID;
  *        a grant sets access 30 days out so re-grant is blocked until expiry.
  *   M13: Feature flag — payments.stub.enabled must be true; default false in production.
  *   M14: Grant duration (GRANT_DAYS) is a server-side constant — never from request body.
- *   M15: Audit log on every call: userId, timestamp, previousExpiry, newExpiry.
+ *   M15: Audit log on every call: userId, timestamp, newExpiry.
  *
  * Uses JdbcTemplate with parameterized queries only. Entire operation is @Transactional.
  */
@@ -59,43 +59,46 @@ public class PaymentController {
 
         UUID userId = UUID.fromString(auth.getToken().getSubject());
 
-        // Read current expiry (JDBC service-account connection bypasses RLS)
+        // Grant 30-day access (M14: GRANT_DAYS constant, never sourced from request body)
+        OffsetDateTime newExpiry = OffsetDateTime.now().plusDays(GRANT_DAYS);
+
+        // M12: Atomic conditional UPDATE — only updates if access is not currently active.
+        // Fixes TOCTOU: concurrent requests both see null/expired, but only one succeeds.
+        int rows = jdbcTemplate.update(
+                "UPDATE public.profiles SET insights_access_until = ? " +
+                "WHERE user_id = ? AND (insights_access_until IS NULL OR insights_access_until <= NOW())",
+                newExpiry, userId);
+
+        if (rows >= 1) {
+            // M15: Audit log on every successful grant.
+            log.info("POST /api/payments/insights-pass -> 200 userId={} newExpiry={}", userId, newExpiry);
+            return ResponseEntity.ok(Map.of("insightsAccessUntil", newExpiry.toString()));
+        }
+
+        // rows == 0: follow-up SELECT to distinguish no-profile-row vs still-active.
         List<OffsetDateTime> results = jdbcTemplate.query(
                 "SELECT insights_access_until FROM public.profiles WHERE user_id = ?",
                 (rs, rowNum) -> rs.getObject("insights_access_until", OffsetDateTime.class),
                 userId);
 
-        OffsetDateTime previousExpiry = results.isEmpty() ? null : results.get(0);
-
-        // M12: Idempotency — reject if access is still active.
-        // This also satisfies the per-user rate limit (1 grant per 30-day period):
-        // a successful grant sets expiry 30 days out, making re-grant impossible until expiry.
-        if (previousExpiry != null && previousExpiry.isAfter(OffsetDateTime.now())) {
-            log.warn("POST /api/payments/insights-pass -> 409 (still active) userId={} expiresAt={}",
-                    userId, previousExpiry);
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "Insights access is still active.",
-                                 "insightsAccessUntil", previousExpiry.toString()));
-        }
-
-        // Grant 30-day access (M14: GRANT_DAYS constant, never sourced from request body)
-        OffsetDateTime newExpiry = OffsetDateTime.now().plusDays(GRANT_DAYS);
-
-        int rows = jdbcTemplate.update(
-                "UPDATE public.profiles SET insights_access_until = ? WHERE user_id = ?",
-                newExpiry, userId);
-
-        if (rows == 0) {
+        if (results.isEmpty()) {
             // Data inconsistency: profile must exist for every authenticated user.
             log.error("POST /api/payments/insights-pass -> 500 no profile row userId={}", userId);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", "User profile not found."));
         }
 
-        // M15: Audit log on every successful grant.
-        log.info("POST /api/payments/insights-pass -> 200 userId={} previousExpiry={} newExpiry={}",
-                userId, previousExpiry, newExpiry);
-
-        return ResponseEntity.ok(Map.of("insightsAccessUntil", newExpiry.toString()));
+        OffsetDateTime activeExpiry = results.get(0);
+        if (activeExpiry == null) {
+            // Null expiry means the atomic UPDATE should have matched — data inconsistency.
+            log.error("POST /api/payments/insights-pass -> 500 unexpected null expiry userId={}", userId);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "User profile not found."));
+        }
+        log.warn("POST /api/payments/insights-pass -> 409 (still active) userId={} expiresAt={}",
+                userId, activeExpiry);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Insights access is still active.",
+                             "insightsAccessUntil", activeExpiry.toString()));
     }
 }
