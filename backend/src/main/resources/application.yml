@@ -59,6 +59,11 @@ server:
   port: ${SERVER_PORT:8085}
   tomcat:
     max-http-post-size: 1048576
+  error:
+    include-message: never
+    include-stack-trace: never
+    include-exception: false
+    include-binding-errors: never
 
 logging:
   level:

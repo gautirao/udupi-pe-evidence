@@ -1,7 +1,10 @@
 package com.example.realestate.booking;
 
+import com.example.realestate.exception.RateLimiterService;
+import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +28,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -70,9 +74,16 @@ class BookingControllerTest {
     @MockitoBean
     private PlatformTransactionManager transactionManager;
 
+    @MockitoBean
+    private RateLimiterService rateLimiterService;
+
     @BeforeEach
     void setUp() {
-        reset(bookingService, transactionManager);
+        reset(bookingService, transactionManager, rateLimiterService);
+        // Default: bucket allows all requests (tryConsume returns true)
+        Bucket allowBucket = Mockito.mock(Bucket.class);
+        when(allowBucket.tryConsume(1)).thenReturn(true);
+        when(rateLimiterService.getBookingBucket(anyString())).thenReturn(allowBucket);
     }
 
     // ==================== Test 1: No JWT → 403 ====================
@@ -442,6 +453,24 @@ class BookingControllerTest {
         verify(bookingService).getBookingsForRequesterPaged(
                 eq(REQUESTER_ID),
                 argThat(p -> p.getPageNumber() == 1 && p.getPageSize() == 5));
+    }
+
+    // ==================== Test 22: POST /api/bookings rate limit exceeded → 429 ====================
+
+    @Test
+    void createBooking_rateLimitExceeded_returns429() throws Exception {
+        Bucket exhaustedBucket = Mockito.mock(Bucket.class);
+        when(exhaustedBucket.tryConsume(1)).thenReturn(false);
+        when(rateLimiterService.getBookingBucket(anyString())).thenReturn(exhaustedBucket);
+
+        mockMvc.perform(post("/api/bookings")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"listingId":"%s","requestedDate":"2026-04-01",
+                                 "requestedTimeSlot":"10:00-11:00"}
+                                """.formatted(LISTING_ID)))
+                .andExpect(status().isTooManyRequests());
     }
 
     // ==================== Helpers ====================

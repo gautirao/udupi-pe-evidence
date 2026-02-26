@@ -1,7 +1,10 @@
 package com.example.realestate.payment;
 
+import com.example.realestate.exception.RateLimiterService;
+import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
@@ -71,11 +74,18 @@ class PaymentControllerTest {
     @MockitoBean
     private PlatformTransactionManager transactionManager;
 
+    @MockitoBean
+    private RateLimiterService rateLimiterService;
+
     @BeforeEach
     void setUp() {
-        reset(jdbcTemplate, transactionManager);
+        reset(jdbcTemplate, transactionManager, rateLimiterService);
         // Restore stubEnabled=true before each test (stub-disabled test overrides inline)
         ReflectionTestUtils.setField(paymentController, "stubEnabled", true);
+        // Default: bucket allows all requests (tryConsume returns true)
+        Bucket allowBucket = Mockito.mock(Bucket.class);
+        when(allowBucket.tryConsume(1)).thenReturn(true);
+        when(rateLimiterService.getPaymentBucket(anyString())).thenReturn(allowBucket);
     }
 
     // ==================== Test 1: stub enabled, atomic UPDATE succeeds → 200 ====================
@@ -156,5 +166,18 @@ class PaymentControllerTest {
     void grantInsightsPass_unauthenticated_returns403() throws Exception {
         mockMvc.perform(post("/api/payments/insights-pass"))
                 .andExpect(status().isForbidden());
+    }
+
+    // ==================== Test 7: rate limit exceeded → 429 ====================
+
+    @Test
+    void createInsightsPass_rateLimitExceeded_returns429() throws Exception {
+        Bucket exhaustedBucket = Mockito.mock(Bucket.class);
+        when(exhaustedBucket.tryConsume(1)).thenReturn(false);
+        when(rateLimiterService.getPaymentBucket(anyString())).thenReturn(exhaustedBucket);
+
+        mockMvc.perform(post("/api/payments/insights-pass")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isTooManyRequests());
     }
 }

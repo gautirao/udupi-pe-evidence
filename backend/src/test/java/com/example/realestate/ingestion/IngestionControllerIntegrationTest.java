@@ -346,13 +346,11 @@ class IngestionControllerIntegrationTest {
             }
             """;
 
-        // Exception propagates through servlet layer
-        org.junit.jupiter.api.Assertions.assertThrows(
-                jakarta.servlet.ServletException.class,
-                () -> mockMvc.perform(post("/api/ingestion/raw-post")
+        // GlobalExceptionHandler maps uncaught RuntimeException → 500 INTERNAL_ERROR
+        mockMvc.perform(post("/api/ingestion/raw-post")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-        );
+                .andExpect(status().isInternalServerError());
     }
 
     // ==================== Extension Compat Endpoint Tests ====================

@@ -1,5 +1,6 @@
 package com.example.realestate.payment;
 
+import com.example.realestate.exception.RateLimiterService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -43,9 +45,11 @@ public class PaymentController {
     private boolean stubEnabled;
 
     private final JdbcTemplate jdbcTemplate;
+    private final RateLimiterService rateLimiterService;
 
-    public PaymentController(JdbcTemplate jdbcTemplate) {
+    public PaymentController(JdbcTemplate jdbcTemplate, RateLimiterService rateLimiterService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.rateLimiterService = rateLimiterService;
     }
 
     @PostMapping("/insights-pass")
@@ -58,6 +62,10 @@ public class PaymentController {
         }
 
         UUID userId = UUID.fromString(auth.getToken().getSubject());
+
+        if (!rateLimiterService.getPaymentBucket(userId.toString()).tryConsume(1)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED");
+        }
 
         // Grant 30-day access (M14: GRANT_DAYS constant, never sourced from request body)
         OffsetDateTime newExpiry = OffsetDateTime.now().plusDays(GRANT_DAYS);

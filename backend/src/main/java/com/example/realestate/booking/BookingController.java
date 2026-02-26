@@ -1,5 +1,6 @@
 package com.example.realestate.booking;
 
+import com.example.realestate.exception.RateLimiterService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -44,9 +45,11 @@ public class BookingController {
     private static final Set<String> BOOKING_SORT_FIELDS = Set.of("createdAt", "requestedDate");
 
     private final BookingService bookingService;
+    private final RateLimiterService rateLimiterService;
 
-    public BookingController(BookingService bookingService) {
+    public BookingController(BookingService bookingService, RateLimiterService rateLimiterService) {
         this.bookingService = bookingService;
+        this.rateLimiterService = rateLimiterService;
     }
 
     // ===== POST /api/bookings =====
@@ -56,6 +59,10 @@ public class BookingController {
                                     @RequestBody CreateBookingRequest req) {
         // M4: requesterId is always JWT.sub — never from body
         UUID requesterId = UUID.fromString(auth.getToken().getSubject());
+
+        if (!rateLimiterService.getBookingBucket(requesterId.toString()).tryConsume(1)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED");
+        }
 
         try {
             ViewingRequest booking = bookingService.createBooking(
