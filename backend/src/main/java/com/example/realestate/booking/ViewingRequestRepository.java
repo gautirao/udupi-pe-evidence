@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -39,4 +40,9 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
     @Transactional
     @Query("UPDATE ViewingRequest v SET v.status = 'CANCELLED', v.cancelledBy = :cancelledBy, v.updatedAt = :now WHERE v.id = :id AND v.status IN :allowedStatuses AND (v.requesterId = :callerId OR v.dealerId = :callerId)")
     int cancelAtomic(@Param("id") UUID id, @Param("allowedStatuses") Collection<String> allowedStatuses, @Param("callerId") UUID callerId, @Param("cancelledBy") String cancelledBy, @Param("now") OffsetDateTime now);
+
+    @Modifying(clearAutomatically = true)
+    @Transactional
+    @Query("UPDATE ViewingRequest v SET v.status = 'COMPLETED', v.updatedAt = :now WHERE v.status = 'CONFIRMED' AND v.requestedDate < :today")
+    int transitionExpiredConfirmedToCompleted(@Param("now") OffsetDateTime now, @Param("today") LocalDate today);
 }
