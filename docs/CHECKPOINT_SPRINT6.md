@@ -26,9 +26,36 @@
 
 ---
 
+## Completed Work (continued)
+
+### PR-S6-3: Frontend Paywall Tests ✅ MERGED
+- Commit: `131befc`
+- PaywallCard.test.tsx (8 tests), TrialBanner.test.tsx (6 tests), Insights.test.tsx (8 tests)
+- window.location.reload: Object.defineProperty(configurable:true) pattern (vi.spyOn doesn't work in jsdom)
+- 83 frontend tests passing
+
+### PR-S6-4: Booking Pagination + DB Index ✅ MERGED
+- Commit: `108ffe9`
+- GET /api/bookings/mine and /dealer now return Page<BookingResponse>
+- @PageableDefault(size=20, sort=createdAt, DESC); sort allowlist (createdAt, requestedDate)
+- ViewingRequestRepository: Page<> overloads added; non-paged methods kept
+- BookingService returns Page<ViewingRequest> (controller owns DTO mapping)
+- V17 migration: composite indexes (dealer_id, status, created_at DESC) and (requester_id, created_at DESC)
+- application.yml: max-page-size=100 (also caps dashboard/map at 100, was 200)
+- BREAKING: /mine and /dealer return Page object not array — frontend must update to read .content
+- 476 backend tests passing (21 booking tests)
+
+### Agent/Workflow Optimisation ✅ DONE
+- Commit: `d33c605`
+- security-reviewer: opus → haiku; output format → compact table
+- code-reviewer: sonnet → haiku; output format → compact table
+- PR_RULES.md: risk-tier pipeline (CRITICAL/MEDIUM/LOW)
+
+---
+
 ## In Progress
 
-### PR-S6-3: Frontend Paywall Tests 🔄 IN PROGRESS
+### PR-S6-3: Frontend Paywall Tests 🔄 DONE (see above)
 - **Team**: `sprint6-pr-s6-3`
 - **Status**: frontend agent is actively writing the 3 test files
 - **qa-fast preflight**: COMPLETE (35 test assertions specified)
@@ -53,7 +80,9 @@
 
 ## Not Started
 
-### PR-S6-4: Booking Pagination + DB Index 🔲
+### PR-S6-4: Booking Pagination + DB Index ✅ MERGED (see above)
+
+### PR-S6-4 (original spec, archived): 🔲
 - **Priority**: MEDIUM
 - **Files (4, limit waived):**
   1. `backend/.../booking/ViewingRequestRepository.java` — add `Page<ViewingRequest>` paginated queries
@@ -90,19 +119,12 @@
 
 ## Next Steps (resume from here)
 
-1. Wait for `frontend@sprint6-pr-s6-3` to complete and report test results
-2. Run qa validation on PR-S6-3 test files
-3. Run code-reviewer + security-reviewer in parallel on PR-S6-3
-4. Implement any review fixes
-5. Commit PR-S6-3
-6. Shut down sprint6-pr-s6-3 team → TeamDelete
-7. Start PR-S6-4 (new team: sprint6-pr-s6-4):
-   - qa-fast preflight
-   - backend-engineer: paginated repo methods + service + controller + V17 migration
-   - qa → code-reviewer + performance-analyst
-   - commit
-8. Start PR-S6-5 (depends on S6-3 committed):
-   - frontend: lazy-load Insights + PaywallCard SPA fix
+1. Start PR-S6-5 (LOW — depends on S6-3 ✅):
+   - Pipeline: frontend-engineer → code-reviewer (LOW tier, no security review needed)
+   - `src/App.tsx` — lazy-load Insights route with React.lazy + Suspense
+   - `src/components/insights/PaywallCard.tsx` — replace window.location.reload() with queryClient.invalidateQueries(['insights-access']) + navigate('/insights')
+2. Update CHECKPOINT after PR-S6-5
+3. Deferred to Sprint 7: Global @ControllerAdvice (PropertyReferenceException + catch-all), rate limiting, @Transactional service extraction, boundary test for insights_access_until==NOW()
 
 ---
 
