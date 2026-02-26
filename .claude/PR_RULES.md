@@ -127,4 +127,20 @@ This exception applies only when **zero files** are modified.
 
 ---
 
+---
+
+## Review Pipeline (Risk-Tiered)
+
+Choose the pipeline based on the PR's risk level. Apply the highest matching tier.
+
+| Tier | Applies when | Pipeline |
+|------|-------------|----------|
+| **CRITICAL** | auth, JWT, payments, RLS policies, atomicity, security config | qa-fast → engineer → qa-validate → code-reviewer → security-reviewer |
+| **MEDIUM** | new endpoints, pagination, DB migrations, service logic changes | qa-fast → engineer → code-reviewer → security-reviewer (only if touching auth/data access) |
+| **LOW** | bundle optimization, UI tweaks, test additions, cosmetic changes | engineer → code-reviewer only |
+
+**Default to MEDIUM** when in doubt. Escalate to CRITICAL if auth or money is involved.
+
+---
+
 Small, explicit steps only.
