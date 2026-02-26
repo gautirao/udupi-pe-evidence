@@ -117,14 +117,33 @@
 
 ---
 
-## Next Steps (resume from here)
+### PR-S6-5: Bundle Optimization + PaywallCard SPA Fix ✅ CLOSED (no changes needed)
+- App.tsx already lazy-loads Insights via React.lazy — no change required
+- PaywallCard SPA fix deferred: `insightsAccessUntil` lives in plain React state (AuthContext), not TanStack Query. `invalidateQueries` would be a no-op. Proper fix requires exposing a refresh function from AuthContext — carry to Sprint 7.
 
-1. Start PR-S6-5 (LOW — depends on S6-3 ✅):
-   - Pipeline: frontend-engineer → code-reviewer (LOW tier, no security review needed)
-   - `src/App.tsx` — lazy-load Insights route with React.lazy + Suspense
-   - `src/components/insights/PaywallCard.tsx` — replace window.location.reload() with queryClient.invalidateQueries(['insights-access']) + navigate('/insights')
-2. Update CHECKPOINT after PR-S6-5
-3. Deferred to Sprint 7: Global @ControllerAdvice (PropertyReferenceException + catch-all), rate limiting, @Transactional service extraction, boundary test for insights_access_until==NOW()
+---
+
+## Sprint 6 COMPLETE
+
+All deliverable PRs merged:
+- PR-S6-1 `abf5fec` — atomic booking state machine
+- PR-S6-2 `63f1d33` — PaymentController atomicity + tests
+- PR-S6-3 `131befc` — frontend paywall tests (83 frontend tests)
+- PR-S6-4 `108ffe9` — booking pagination + V17 composite indexes (476 backend tests)
+- Agent optimisation `d33c605` — haiku reviewers, terse output, risk-tier pipeline
+
+## Deferred to Sprint 7
+
+- Global `@ControllerAdvice` (PropertyReferenceException → 400, catch-all 500 handler)
+- Rate limiting on payment + booking endpoints
+- `@Transactional` on `@RestController` → future service extraction
+- Boundary test for `insights_access_until == NOW()`
+- PaywallCard SPA fix: expose `refreshAuth()` from AuthContext, call instead of `window.location.reload()`
+- Frontend: update `/api/bookings/mine` and `/dealer` consumers to handle Page<> object (read `.content`)
+
+---
+
+*Sprint 6 closed: 2026-02-26*
 
 ---
 
