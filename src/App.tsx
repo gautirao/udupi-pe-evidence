@@ -24,6 +24,7 @@ const DealerSetup = lazy(() => import("./pages/dealer/DealerSetup"));
 const DealerDashboard = lazy(() => import("./pages/dealer/DealerDashboard"));
 const DealerListings = lazy(() => import("./pages/dealer/DealerListings"));
 const DealerBookings = lazy(() => import("./pages/dealer/DealerBookings"));
+const MyBookings = lazy(() => import("./pages/MyBookings"));
 const SavedAreas = lazy(() => import("./pages/SavedAreas"));
 
 // Lazily loaded — Admin pages; never needed by non-admin users
@@ -131,6 +132,14 @@ const App = () => (
                 }
               />
               {/* User Routes */}
+              <Route
+                path="/my-bookings"
+                element={
+                  <ProtectedRoute>
+                    <MyBookings />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/saved-areas"
                 element={

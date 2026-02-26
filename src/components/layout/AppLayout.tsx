@@ -33,6 +33,7 @@ import {
   Plus,
   Bell,
   Bookmark,
+  CalendarCheck2,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
@@ -63,6 +64,7 @@ const userNavigation = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Insights', href: '/insights', icon: BarChart3 },
   { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
+  { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
