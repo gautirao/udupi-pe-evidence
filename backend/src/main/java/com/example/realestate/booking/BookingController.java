@@ -2,6 +2,10 @@ package com.example.realestate.booking;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -12,10 +16,10 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,8 +32,8 @@ import java.util.UUID;
  * - PUT  /api/bookings/:id/confirm: any authenticated user; service enforces dealer_id == JWT.sub (M5)
  * - PUT  /api/bookings/:id/decline: any authenticated user; service enforces dealer_id == JWT.sub (M5)
  * - PUT  /api/bookings/:id/cancel:  any authenticated user; service enforces participation (M5)
- * - GET  /api/bookings/mine: any authenticated user
- * - GET  /api/bookings/dealer: requires dealer or admin role (resolveCallerOrForbid)
+ * - GET  /api/bookings/mine: any authenticated user; returns Page<BookingResponse>
+ * - GET  /api/bookings/dealer: requires dealer or admin role; returns Page<BookingResponse>
  */
 @RestController
 @RequestMapping("/api/bookings")
@@ -37,6 +41,7 @@ public class BookingController {
 
     private static final Logger log = LoggerFactory.getLogger(BookingController.class);
     private static final Set<String> DEALER_ROLES = Set.of("dealer", "admin");
+    private static final Set<String> BOOKING_SORT_FIELDS = Set.of("createdAt", "requestedDate");
 
     private final BookingService bookingService;
 
@@ -147,23 +152,36 @@ public class BookingController {
     // ===== GET /api/bookings/mine =====
 
     @GetMapping("/mine")
-    public ResponseEntity<?> mine(JwtAuthenticationToken auth) {
+    public ResponseEntity<Page<BookingResponse>> mine(
+            JwtAuthenticationToken auth,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        validateSort(pageable);
         UUID requesterId = UUID.fromString(auth.getToken().getSubject());
-        List<BookingResponse> response = bookingService.getBookingsForRequester(requesterId)
-                .stream().map(this::toResponse).toList();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(bookingService.getBookingsForRequesterPaged(requesterId, pageable).map(this::toResponse));
     }
 
     // ===== GET /api/bookings/dealer =====
 
     @GetMapping("/dealer")
-    public ResponseEntity<?> dealer(JwtAuthenticationToken auth) {
+    public ResponseEntity<?> dealer(
+            JwtAuthenticationToken auth,
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        validateSort(pageable);
         CallerInfo caller = resolveCallerOrForbid(auth);
         if (caller == null) return forbidden();
 
-        List<BookingResponse> response = bookingService.getBookingsForDealer(caller.userId())
-                .stream().map(this::toResponse).toList();
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(bookingService.getBookingsForDealerPaged(caller.userId(), pageable).map(this::toResponse));
+    }
+
+    // ===== Validation helpers =====
+
+    private void validateSort(Pageable pageable) {
+        for (Sort.Order order : pageable.getSort()) {
+            if (!BOOKING_SORT_FIELDS.contains(order.getProperty())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Invalid sort field. Allowed: " + BOOKING_SORT_FIELDS);
+            }
+        }
     }
 
     // ===== Auth helpers =====

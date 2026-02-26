@@ -6,6 +6,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -21,6 +25,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -261,39 +266,45 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("Booking not found"));
     }
 
-    // ==================== Test 12: GET /mine 200 ====================
+    // ==================== Test 12: GET /mine 200 — updated to Page format ====================
 
     @Test
-    void mine_returns200WithArray() throws Exception {
-        ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+    void mine_returns200WithPage() throws Exception {
+        ViewingRequest item = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_REQUESTED);
-        when(bookingService.getBookingsForRequester(REQUESTER_ID)).thenReturn(List.of(booking));
+        Page<ViewingRequest> page = new PageImpl<>(List.of(item));
+        when(bookingService.getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class)))
+                .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/mine")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(BOOKING_ID.toString()));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(BOOKING_ID.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
 
-        verify(bookingService).getBookingsForRequester(REQUESTER_ID);
+        verify(bookingService).getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class));
     }
 
-    // ==================== Test 13: GET /dealer 200 with dealer role ====================
+    // ==================== Test 13: GET /dealer 200 with dealer role — updated to Page format ====================
 
     @Test
-    void dealer_withDealerRole_returns200WithArray() throws Exception {
+    void dealer_withDealerRole_returns200WithPage() throws Exception {
         when(bookingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+        ViewingRequest item = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_REQUESTED);
-        when(bookingService.getBookingsForDealer(DEALER_ID)).thenReturn(List.of(booking));
+        Page<ViewingRequest> page = new PageImpl<>(List.of(item));
+        when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
+                .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/dealer")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].id").value(BOOKING_ID.toString()));
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(BOOKING_ID.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1));
 
-        verify(bookingService).getBookingsForDealer(DEALER_ID);
+        verify(bookingService).getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class));
     }
 
     // ==================== Test 14: GET /dealer 403 without dealer role ====================
@@ -307,7 +318,7 @@ class BookingControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
 
-        verify(bookingService, never()).getBookingsForDealer(any());
+        verify(bookingService, never()).getBookingsForDealerPaged(any(), any());
     }
 
     // ==================== Test 15: PUT /confirm 409 state conflict ====================
@@ -351,7 +362,89 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
 
-    // ==================== Helper ====================
+    // ==================== Test 18: GET /mine — 2 items, page metadata ====================
+
+    @Test
+    void requester_getBookings_returnsPage_withPaginationMetadata() throws Exception {
+        UUID booking2Id = UUID.fromString("00000000-0000-0000-0000-000000000098");
+        ViewingRequest item1 = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_REQUESTED);
+        ViewingRequest item2 = buildBooking(booking2Id, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_CONFIRMED);
+        Page<ViewingRequest> page = new PageImpl<>(
+                List.of(item1, item2), PageRequest.of(0, 20), 2);
+        when(bookingService.getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/bookings/mine")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    // ==================== Test 19: GET /dealer — 2 items, page metadata ====================
+
+    @Test
+    void dealer_getBookings_returnsPage_withPaginationMetadata() throws Exception {
+        when(bookingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        UUID booking2Id = UUID.fromString("00000000-0000-0000-0000-000000000097");
+        ViewingRequest item1 = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_REQUESTED);
+        ViewingRequest item2 = buildBooking(booking2Id, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_CONFIRMED);
+        Page<ViewingRequest> page = new PageImpl<>(
+                List.of(item1, item2), PageRequest.of(0, 20), 2);
+        when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/bookings/dealer")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.size").value(20));
+    }
+
+    // ==================== Test 20: GET /mine — empty page ====================
+
+    @Test
+    void requester_getBookings_emptyPage_returns200() throws Exception {
+        Page<ViewingRequest> emptyPage = new PageImpl<>(
+                List.of(), PageRequest.of(0, 20), 0);
+        when(bookingService.getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class)))
+                .thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/bookings/mine")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    // ==================== Test 21: GET /mine — page and size params passed to service ====================
+
+    @Test
+    void requester_getBookings_pageParam_passedToService() throws Exception {
+        Page<ViewingRequest> page = new PageImpl<>(
+                List.of(), PageRequest.of(1, 5), 0);
+        when(bookingService.getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/bookings/mine?page=1&size=5")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        verify(bookingService).getBookingsForRequesterPaged(
+                eq(REQUESTER_ID),
+                argThat(p -> p.getPageNumber() == 1 && p.getPageSize() == 5));
+    }
+
+    // ==================== Helpers ====================
 
     private ViewingRequest buildBooking(UUID id, UUID requesterId, UUID dealerId, String status) {
         ViewingRequest b = new ViewingRequest();
@@ -366,4 +459,5 @@ class BookingControllerTest {
         b.setUpdatedAt(OffsetDateTime.now());
         return b;
     }
+
 }

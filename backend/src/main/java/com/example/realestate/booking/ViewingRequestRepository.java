@@ -1,5 +1,7 @@
 package com.example.realestate.booking;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +20,10 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
     List<ViewingRequest> findByRequesterIdOrderByCreatedAtDesc(UUID requesterId);
 
     List<ViewingRequest> findByDealerIdAndStatusInOrderByCreatedAtDesc(UUID dealerId, List<String> statuses);
+
+    Page<ViewingRequest> findByRequesterId(UUID requesterId, Pageable pageable);
+
+    Page<ViewingRequest> findByDealerIdAndStatusIn(UUID dealerId, List<String> statuses, Pageable pageable);
 
     @Modifying(clearAutomatically = true)
     @Transactional

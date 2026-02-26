@@ -554,9 +554,10 @@ class DashboardControllerTest {
     @Test
     @WithMockUser
     void getMapListings_defaultPageSizeIs200() throws Exception {
+        // Global max-page-size=100 caps the @PageableDefault(size=200) to 100 at runtime.
         when(listingRepository.findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                any(), any(), any(), argThat(p -> p.getPageSize() == 200)))
+                any(), any(), any(), argThat(p -> p.getPageSize() == 100)))
                 .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/dashboard/map/listings")
@@ -566,7 +567,7 @@ class DashboardControllerTest {
 
         verify(listingRepository).findInBoundingBox(
                 anyDouble(), anyDouble(), anyDouble(), anyDouble(),
-                any(), any(), any(), argThat(p -> p.getPageSize() == 200));
+                any(), any(), any(), argThat(p -> p.getPageSize() == 100));
     }
 
     @Test

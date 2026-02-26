@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -275,6 +277,16 @@ public class BookingService {
     public List<ViewingRequest> getBookingsForDealer(UUID dealerId) {
         return viewingRequestRepository.findByDealerIdAndStatusInOrderByCreatedAtDesc(
                 dealerId, DEALER_ACTIVE_STATUSES);
+    }
+
+    public Page<ViewingRequest> getBookingsForRequesterPaged(UUID requesterId, Pageable pageable) {
+        return viewingRequestRepository
+                .findByRequesterId(requesterId, pageable);
+    }
+
+    public Page<ViewingRequest> getBookingsForDealerPaged(UUID dealerId, Pageable pageable) {
+        return viewingRequestRepository
+                .findByDealerIdAndStatusIn(dealerId, DEALER_ACTIVE_STATUSES, pageable);
     }
 
     // ===== Private helpers =====
