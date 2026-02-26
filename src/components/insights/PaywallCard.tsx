@@ -1,26 +1,31 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 /**
  * Shown in the Insights right column when the user's trial has expired.
- * Calls POST /api/payments/insights-pass; on success reloads to refresh
- * insightsAccessUntil from AuthContext. On error, toasts a "coming soon"
- * message — the payment endpoint may not be live yet.
+ * Calls POST /api/payments/insights-pass; on success refreshes auth state
+ * in-place (SPA-safe) and navigates to /insights so the access gate re-evaluates.
+ * On error, toasts a "coming soon" message — the payment endpoint may not be live yet.
  */
 export function PaywallCard() {
   const [isPending, setIsPending] = useState(false);
   const { toast } = useToast();
+  const { refreshAuth } = useAuth();
+  const navigate = useNavigate();
 
   async function handleUpgrade() {
     setIsPending(true);
     try {
       await api.post('/api/payments/insights-pass');
-      toast({ title: 'Access extended!', description: 'Reloading...' });
-      window.location.reload();
+      toast({ title: 'Access extended!', description: 'Loading your insights...' });
+      await refreshAuth();
+      navigate('/insights');
     } catch {
       toast({
         title: 'Payment coming soon',

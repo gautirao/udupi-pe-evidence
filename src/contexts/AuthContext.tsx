@@ -16,6 +16,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshRole: () => Promise<void>;
+  refreshAuth: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,6 +79,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fetchUserRole(user.id);
     }
   }, [user?.id, fetchUserRole]);
+
+  const refreshAuth = useCallback(async () => {
+    if (!user?.id) return;
+    await Promise.all([
+      fetchUserRole(user.id),
+      fetchInsightsAccess(user.id),
+    ]);
+  }, [user?.id, fetchUserRole, fetchInsightsAccess]);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -178,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         refreshRole,
+        refreshAuth,
       }}
     >
       {children}

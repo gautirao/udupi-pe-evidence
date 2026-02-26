@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { api, PageResponse } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
@@ -67,32 +67,48 @@ export function useCreateBooking() {
 
 /**
  * Fetches the current user's own viewing requests.
- * GET /api/bookings/mine
+ * GET /api/bookings/mine — backend returns Page<BookingResponse>.
+ * Returns content array plus pagination metadata.
  */
 export function useMyBookings() {
   const { user } = useAuth();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['my-bookings'],
-    queryFn: () => api.get<BookingResponse[]>('/api/bookings/mine'),
+    queryFn: () => api.get<PageResponse<BookingResponse>>('/api/bookings/mine'),
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
+
+  return {
+    ...query,
+    data: query.data?.content ?? undefined,
+    totalPages: query.data?.totalPages ?? 0,
+    totalElements: query.data?.totalElements ?? 0,
+  };
 }
 
 /**
  * Fetches all viewing requests for the current dealer's listings.
- * GET /api/bookings/dealer
+ * GET /api/bookings/dealer — backend returns Page<BookingResponse>.
+ * Returns content array plus pagination metadata.
  */
 export function useDealerBookings() {
   const { user, isDealer, isAdmin } = useAuth();
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['dealer-bookings'],
-    queryFn: () => api.get<BookingResponse[]>('/api/bookings/dealer'),
+    queryFn: () => api.get<PageResponse<BookingResponse>>('/api/bookings/dealer'),
     enabled: !!user && (isDealer || isAdmin),
     staleTime: 5 * 60 * 1000,
   });
+
+  return {
+    ...query,
+    data: query.data?.content ?? undefined,
+    totalPages: query.data?.totalPages ?? 0,
+    totalElements: query.data?.totalElements ?? 0,
+  };
 }
 
 /**

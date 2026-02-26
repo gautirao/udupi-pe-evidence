@@ -14,6 +14,8 @@ globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserv
 // ─── Hoisted mock handles ──────────────────────────────────────
 const mockToast = vi.hoisted(() => vi.fn());
 const mockPost = vi.hoisted(() => vi.fn());
+const mockRefreshAuth = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
 
 // ─── Mocks ────────────────────────────────────────────────────
 vi.mock('@/hooks/use-toast', () => ({
@@ -24,25 +26,24 @@ vi.mock('@/lib/api', () => ({
   api: { post: mockPost },
 }));
 
-// ─── Helpers ──────────────────────────────────────────────────
-let reloadMock: ReturnType<typeof vi.fn>;
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ refreshAuth: mockRefreshAuth }),
+}));
 
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => mockNavigate,
+}));
+
+// ─── Helpers ──────────────────────────────────────────────────
 function renderCard() {
   return render(<PaywallCard />);
 }
 
 // ─── Tests ────────────────────────────────────────────────────
-// jsdom defines window.location as non-configurable; redefine it as configurable
-// in beforeEach so each test gets a fresh reload mock without vi.spyOn limitations.
 beforeEach(() => {
   vi.clearAllMocks();
   mockPost.mockResolvedValue({});
-  reloadMock = vi.fn();
-  Object.defineProperty(window, 'location', {
-    configurable: true,
-    writable: true,
-    value: { ...window.location, reload: reloadMock },
-  });
+  mockRefreshAuth.mockResolvedValue(undefined);
 });
 
 describe('PaywallCard', () => {
@@ -93,14 +94,15 @@ describe('PaywallCard', () => {
     );
   });
 
-  it('calls window.location.reload() on success', async () => {
+  it('calls refreshAuth() and navigate("/insights") on success', async () => {
     const user = userEvent.setup();
     renderCard();
 
     await user.click(screen.getByRole('button', { name: /upgrade/i }));
 
     await waitFor(() => {
-      expect(reloadMock).toHaveBeenCalledTimes(1);
+      expect(mockRefreshAuth).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/insights');
     });
   });
 
@@ -117,7 +119,8 @@ describe('PaywallCard', () => {
         expect.objectContaining({ variant: 'destructive' }),
       );
     });
-    expect(reloadMock).not.toHaveBeenCalled();
+    expect(mockRefreshAuth).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('button is re-enabled after an error (isPending resets to false)', async () => {
