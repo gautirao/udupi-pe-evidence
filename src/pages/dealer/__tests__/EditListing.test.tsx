@@ -7,6 +7,7 @@ import EditListing from '../EditListing';
 import {
   useGetListing,
   useUpdateListing,
+  useSubmitListing,
   ListingResponse,
 } from '@/hooks/useDealerListings';
 
@@ -19,6 +20,19 @@ const mockNavigate = vi.hoisted(() => vi.fn());
 vi.mock('@/hooks/useDealerListings', () => ({
   useGetListing: vi.fn(),
   useUpdateListing: vi.fn(),
+  useSubmitListing: vi.fn(),
+}));
+
+vi.mock('@/components/dealer/ImageUploader', () => ({
+  ImageUploader: () => React.createElement('div', { 'data-testid': 'image-uploader' }),
+}));
+
+vi.mock('@/components/dealer/AddressPicker', () => ({
+  AddressPicker: ({ onConfirm }: { onConfirm: (v: unknown) => void }) =>
+    React.createElement('button', {
+      'data-testid': 'address-picker-confirm',
+      onClick: () => onConfirm({ lat: 13.34, lng: 74.74, address_confirmed: true }),
+    }, 'Confirm Location'),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -94,6 +108,11 @@ beforeEach(() => {
     mutate: vi.fn(),
     isPending: false,
   } as unknown as ReturnType<typeof useUpdateListing>);
+  // Default submit mutation stub (non-pending)
+  vi.mocked(useSubmitListing).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  } as unknown as ReturnType<typeof useSubmitListing>);
 });
 
 describe('EditListing page', () => {

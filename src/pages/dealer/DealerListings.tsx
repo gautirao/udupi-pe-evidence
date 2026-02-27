@@ -109,9 +109,16 @@ export default function DealerListings() {
                   )}
                   <div className="flex gap-2">
                     {EDITABLE_STATUSES.includes(listing.status) && (
-                      <Button variant="outline" size="sm" asChild>
-                        <Link to={`/dealer/listings/${listing.id}/edit`}>Edit</Link>
-                      </Button>
+                      <>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/dealer/listings/${listing.id}/edit`}>Edit</Link>
+                        </Button>
+                        <Button size="sm" asChild>
+                          <Link to={`/dealer/listings/${listing.id}/edit`}>
+                            Submit for Review
+                          </Link>
+                        </Button>
+                      </>
                     )}
                   </div>
                 </CardContent>

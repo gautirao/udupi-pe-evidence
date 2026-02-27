@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useGetListing, useUpdateListing } from '@/hooks/useDealerListings';
+import { useGetListing, useUpdateListing, useSubmitListing } from '@/hooks/useDealerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -16,8 +17,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ImageUploader } from '@/components/dealer/ImageUploader';
+import { AddressPicker } from '@/components/dealer/AddressPicker';
+import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
@@ -29,6 +33,7 @@ const PROPERTY_TYPES = [
 type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
 
 const LOCKED_STATUSES = ['PENDING_REVIEW', 'LIVE'];
+const SUBMITTABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
 export default function EditListing() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +43,7 @@ export default function EditListing() {
 
   const { data: listing, isLoading: listingLoading, isError } = useGetListing(id ?? '');
   const updateListing = useUpdateListing(id ?? '');
+  const submitListing = useSubmitListing(id);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -171,9 +177,32 @@ export default function EditListing() {
     );
   };
 
+  const handleSubmitForReview = () => {
+    submitListing.mutate(undefined, {
+      onSuccess: () => {
+        toast({ title: 'Listing submitted for review' });
+        navigate('/dealer/listings');
+      },
+      onError: (error: Error) => {
+        const apiErr = error as ApiError;
+        const body = apiErr.body as Record<string, unknown> | undefined;
+        const message =
+          (body?.message as string | undefined) ??
+          (body?.error as string | undefined) ??
+          error.message;
+        toast({
+          title: 'Submit failed',
+          description: message,
+          variant: 'destructive',
+        });
+      },
+    });
+  };
+
   const showLandArea = propertyType === 'land';
   const showBedrooms = propertyType === 'apartment' || propertyType === 'house';
   const showBuiltArea = propertyType === 'apartment' || propertyType === 'house';
+  const isSubmittable = SUBMITTABLE_STATUSES.includes(listing.status);
 
   return (
     <AppLayout>
@@ -301,6 +330,49 @@ export default function EditListing() {
                 </div>
               )}
 
+              {/* Section A — Images (DRAFT / REJECTED only) */}
+              {isSubmittable && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">Listing Images</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Minimum 3 images required to submit for review.
+                  </p>
+                  <ImageUploader listingId={id!} />
+                </div>
+              )}
+
+              {/* Section B — Address confirmation (DRAFT / REJECTED only) */}
+              {isSubmittable && (
+                <>
+                  {!listing.addressConfirmed && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">Confirm Location</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Drag the pin to your listing's exact location, then click Confirm.
+                      </p>
+                      <AddressPicker
+                        initialLatitude={listing.latitude}
+                        initialLongitude={listing.longitude}
+                        initialLocality={listing.locality}
+                        onConfirm={(addr) => {
+                          updateListing.mutate({
+                            latitude: addr.lat,
+                            longitude: addr.lng,
+                            addressConfirmed: true,
+                          });
+                        }}
+                      />
+                    </div>
+                  )}
+                  {listing.addressConfirmed && (
+                    <div className="flex items-center gap-2 text-sm text-green-700">
+                      <Check className="h-4 w-4" />
+                      Location confirmed
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4">
                 <Button
@@ -317,6 +389,32 @@ export default function EditListing() {
                   Save Changes
                 </Button>
               </div>
+
+              {/* Section C — Submit for Review (DRAFT / REJECTED only) */}
+              {isSubmittable && (
+                <>
+                  <Separator className="my-2" />
+                  <div className="space-y-1">
+                    <Button
+                      type="button"
+                      className="w-full"
+                      variant="default"
+                      disabled={submitListing.isPending || !listing.addressConfirmed}
+                      onClick={handleSubmitForReview}
+                    >
+                      {submitListing.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Submit for Review
+                    </Button>
+                    {!listing.addressConfirmed && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        Confirm your location before submitting
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </form>
           </CardContent>
         </Card>

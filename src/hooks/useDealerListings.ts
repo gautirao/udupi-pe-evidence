@@ -24,6 +24,9 @@ export interface UpdateListingRequest {
   landArea?: number;
   bedrooms?: number;
   builtArea?: number;
+  latitude?: number;
+  longitude?: number;
+  addressConfirmed?: boolean;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -125,6 +128,26 @@ export function useUpdateListing(id: string) {
         description: error.message,
         variant: 'destructive',
       });
+    },
+  });
+}
+
+/**
+ * Submits a listing for review via POST /api/listings/{id}/submit.
+ * Backend validates address_confirmed=true, imageCount>=3, and required fields.
+ * Throws an error with `.status` and `.body` attached for 422 responses.
+ */
+export function useSubmitListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      return api.post<ListingResponse>(`/api/listings/${listingId}/submit`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['listing', listingId] });
     },
   });
 }
