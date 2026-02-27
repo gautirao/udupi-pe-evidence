@@ -9,6 +9,9 @@ interface CreateListingRequest {
   locality?: string;
   price?: number;
   description?: string;
+  landArea?: number;
+  bedrooms?: number;
+  builtArea?: number;
 }
 
 // Mirrors backend UpdateRequest DTO

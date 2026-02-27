@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { addDays, format } from 'date-fns';
-import { Calendar } from 'lucide-react';
+import { AlertCircle, Calendar, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCreateBooking, TIME_SLOTS } from '@/hooks/useBookings';
 import {
@@ -144,6 +144,13 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
               </p>
             </div>
 
+            {createBooking.isError && (
+              <div className="flex items-center gap-2 text-destructive text-sm">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                Failed to send request. Please try again.
+              </div>
+            )}
+
             <div className="flex gap-2 pt-2">
               <Button
                 type="button"
@@ -159,6 +166,7 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
                 className="flex-1"
                 disabled={!requestedDate || !requestedTimeSlot || createBooking.isPending}
               >
+                {createBooking.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {createBooking.isPending ? 'Sending...' : 'Send Request'}
               </Button>
             </div>

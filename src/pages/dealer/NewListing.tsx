@@ -74,12 +74,17 @@ export default function NewListing() {
       return;
     }
 
+    const landAreaNum = landArea ? parseFloat(landArea) : undefined;
+    const bedroomsNum = bedrooms ? parseInt(bedrooms, 10) : undefined;
+
     createListing.mutate(
       {
         propertyType,
         title: title.trim() || undefined,
         price: priceNum,
         description: description.trim() || undefined,
+        landArea: landAreaNum && !isNaN(landAreaNum) ? landAreaNum : undefined,
+        bedrooms: bedroomsNum && !isNaN(bedroomsNum) ? bedroomsNum : undefined,
       },
       {
         onSuccess: (data) => {

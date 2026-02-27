@@ -17,12 +17,12 @@ import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
 
-const propertyConfig: Record<PropertyType, { label: string; bgClass: string }> = {
-  land: { label: 'Land', bgClass: 'bg-green-500' },
-  house: { label: 'House', bgClass: 'bg-orange-500' },
-  apartment: { label: 'Apartment', bgClass: 'bg-violet-500' },
-  commercial: { label: 'Commercial', bgClass: 'bg-blue-500' },
-  other: { label: 'Other', bgClass: 'bg-gray-500' },
+const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
+  land: { label: 'Land', badgeClass: 'bg-green-100 text-green-800 border-0' },
+  house: { label: 'House', badgeClass: 'bg-blue-100 text-blue-800 border-0' },
+  apartment: { label: 'Apartment', badgeClass: 'bg-violet-100 text-violet-800 border-0' },
+  commercial: { label: 'Commercial', badgeClass: 'bg-orange-100 text-orange-800 border-0' },
+  other: { label: 'Other', badgeClass: 'bg-gray-100 text-gray-600 border-0' },
 };
 
 function useListingById(id: string | undefined) {
@@ -100,7 +100,7 @@ export default function ListingDetail() {
     );
   }
 
-  const { label, bgClass } = propertyConfig[listing.property_type];
+  const { label, badgeClass } = propertyConfig[listing.property_type];
   const images = listing.images || [];
   const hasImages = images.length > 0;
 
@@ -240,7 +240,7 @@ export default function ListingDetail() {
             {/* Title & Badges */}
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <Badge className={`${bgClass} text-white`}>{label}</Badge>
+                <Badge className={badgeClass}>{label}</Badge>
                 {listing.confidence_score && listing.confidence_score < 70 && (
                   <Badge variant="outline" className="text-yellow-600 border-yellow-400">
                     Low confidence
