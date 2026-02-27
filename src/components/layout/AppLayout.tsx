@@ -14,6 +14,8 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetHeader,
+  SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet';
 import {
@@ -72,6 +74,7 @@ const dealerNavigation = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
   { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
+  { name: 'Bookings', href: '/dealer/bookings', icon: CalendarCheck2 },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
@@ -104,7 +107,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
     <div className={cn('flex', mobile ? 'flex-col gap-1' : 'items-center gap-1')}>
       {primaryNav.map((item) => {
-        const isActive = location.pathname === item.href;
+        const isActive = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href);
         return (
           <Link
             key={item.name}
@@ -131,7 +134,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           )}
           {adminNavigation.map((item) => {
-            const isActive = location.pathname === item.href;
+            const isActive = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href);
             return (
               <Link
                 key={item.name}
@@ -167,6 +170,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-4">
+              <SheetHeader>
+                <SheetTitle className="sr-only">Navigation</SheetTitle>
+              </SheetHeader>
               <div className="flex items-center gap-2 mb-6">
                 <div className="p-2 rounded-lg bg-primary/10">
                   <MapPin className="h-5 w-5 text-primary" />
