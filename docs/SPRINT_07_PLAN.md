@@ -2,14 +2,35 @@
 
 **Sprint**: Sprint 7
 **Date**: 2026-02-26
-**Status**: DRAFT
-**Focus**: Close Sprint 6 hardening carry-overs, complete the booking lifecycle (COMPLETED state, decline reason UI), deliver the dealer Edit Listing page, and run overdue UI design reviews.
+**Status**: COMPLETE ✅ (2026-02-27)
+**Focus**: Stability + UX polish + Abuse protection. P1: global error handling, rate limiting, PaywallCard SPA fix, booking pagination consumers. P2: boundary test, booking lifecycle, Edit Listing, UI reviews.
 
 ---
 
 ## 0. Sprint Goal
 
-> All Sprint 6 hardening items resolved. Booking lifecycle fully implemented end-to-end. Dealers can edit their listings. All existing screens reviewed against the design system.
+> P1 items shipped: consistent error shapes, per-user rate limits, PaywallCard SPA-safe refresh, booking list paginated UI. P2 items as capacity allows.
+
+## PR Status Tracker
+
+| PR | Name | Priority | Status |
+|----|------|----------|--------|
+| PR-7.1 | Global @ControllerAdvice | P1 | ✅ Done — commit 540eb90 |
+| PR-7.2 | Rate limiting (write endpoints) | P1 | ✅ Done — merged into PR-7.1 (540eb90) |
+| PR-7.3 | PaywallCard SPA fix + refreshInsightsAccess | P1 | ✅ Done — commit 57a3f94 |
+| PR-7.4 | Frontend booking Page<> consumers | P1 | ✅ Done — commit 57a3f94 |
+| PR-7.5 | insights_access_until == NOW() boundary test | P2 | ✅ Done — commit 74b9d68 |
+| PR-7.6 | COMPLETED booking scheduler | P2 | ✅ Done — commit 9689739 |
+| PR-7.7 | Decline reason UI | P2 | ✅ Done — commit 47c6021 |
+| PR-7.8a | Edit Listing backend | P2 | ✅ Done — commit 2b9aa64 |
+| PR-7.8b | Edit Listing frontend | P2 | ✅ Done — commit 95af635 |
+| PR-7.9 | UI design reviews | P2 | ✅ Done — docs/UI_DESIGN_REVIEW_S7.md |
+
+### Codebase discoveries (pre-sprint)
+- `bucket4j-core` already in `pom.xml` — no new dependency for rate limiting
+- `AuthContext.refreshRole()` exists but does NOT refresh `insightsAccessUntil` — PR-7.3 must add `refreshInsightsAccess()`
+- `useMyBookings`/`useDealerBookings` type responses as `BookingResponse[]` — both need Page<> unwrapping (PR-7.4)
+- No `@ControllerAdvice` exists anywhere in the codebase — PR-7.1 starts from scratch
 
 ---
 
