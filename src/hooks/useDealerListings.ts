@@ -133,6 +133,22 @@ export function useUpdateListing(id: string) {
 }
 
 /**
+ * Deletes a DRAFT listing via DELETE /api/listings/{id}.
+ * Invalidates the dealer-listings query on success.
+ */
+export function useDeleteListing() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (listingId: string) =>
+      api.delete<void>(`/api/listings/${listingId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+    },
+  });
+}
+
+/**
  * Submits a listing for review via POST /api/listings/{id}/submit.
  * Backend validates address_confirmed=true, imageCount>=3, and required fields.
  * Throws an error with `.status` and `.body` attached for 422 responses.

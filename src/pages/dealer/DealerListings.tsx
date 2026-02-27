@@ -1,11 +1,23 @@
 import { Navigate, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDealerMyListings } from '@/hooks/useDealerListings';
+import { useDealerMyListings, useDeleteListing } from '@/hooks/useDealerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -35,6 +47,8 @@ function statusClassName(status: string): string {
 export default function DealerListings() {
   const { isDealer, isAdmin, isLoading } = useAuth();
   const { data, isLoading: listingsLoading, isError } = useDealerMyListings();
+  const deleteListingMutation = useDeleteListing();
+  const { toast } = useToast();
 
   if (isLoading) {
     return (
@@ -119,6 +133,41 @@ export default function DealerListings() {
                           </Link>
                         </Button>
                       </>
+                    )}
+                    {listing.status === 'DRAFT' && (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            Delete
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete draft listing?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete your draft listing. This cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => {
+                                deleteListingMutation.mutate(listing.id, {
+                                  onSuccess: () => {
+                                    toast({ title: 'Listing deleted' });
+                                  },
+                                });
+                              }}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     )}
                   </div>
                 </CardContent>
