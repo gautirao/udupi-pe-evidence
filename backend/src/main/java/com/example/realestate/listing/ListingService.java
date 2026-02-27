@@ -357,13 +357,32 @@ public class ListingService {
      * Update a listing. Enforces ownership (unless admin) and status constraints.
      *
      * @return the updated listing
-     * @throws ListingNotFoundException if listing not found or not owned
-     * @throws ListingStatusException   if status does not allow updates
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing is owned by a different user
+     * @throws ListingStatusException    if status does not allow updates
      */
     @Transactional
     public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description) {
+        return updateListing(listingId, userId, isAdmin,
+                propertyType, title, locality, price, description, null, null, null);
+    }
+
+    /**
+     * Update a listing with extended fields. Enforces ownership (unless admin) and status constraints.
+     * All parameters are optional (null = leave unchanged).
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing is owned by a different user
+     * @throws ListingStatusException    if status does not allow updates
+     */
+    @Transactional
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description,
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
         if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
@@ -375,6 +394,9 @@ public class ListingService {
         if (locality != null) listing.setLocality(locality);
         if (price != null) listing.setPrice(price);
         if (description != null) listing.setDescription(description);
+        if (landArea != null) listing.setLandArea(landArea);
+        if (bedrooms != null) listing.setBedrooms(bedrooms);
+        if (builtArea != null) listing.setBuiltArea(builtArea);
         listing.setUpdatedAt(OffsetDateTime.now());
 
         Listing saved = listingRepository.save(listing);
@@ -402,15 +424,15 @@ public class ListingService {
 
     /**
      * Find a listing that the user owns (or any listing if admin).
-     * Returns 404-equivalent if not found or not owned.
+     * Throws ListingNotFoundException if the listing does not exist.
+     * Throws ListingOwnershipException if the listing exists but is owned by someone else.
      */
     private Listing findOwnedListing(UUID listingId, UUID userId, boolean isAdmin) {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new ListingNotFoundException(listingId));
 
         if (!isAdmin && !userId.equals(listing.getCreatedBy())) {
-            // Return same exception as not-found to avoid leaking existence
-            throw new ListingNotFoundException(listingId);
+            throw new ListingOwnershipException(listingId);
         }
         return listing;
     }
@@ -606,6 +628,12 @@ public class ListingService {
     public static class ListingNotFoundException extends RuntimeException {
         public ListingNotFoundException(UUID id) {
             super("Listing not found: " + id);
+        }
+    }
+
+    public static class ListingOwnershipException extends RuntimeException {
+        public ListingOwnershipException(UUID id) {
+            super("Listing not owned by caller: " + id);
         }
     }
 

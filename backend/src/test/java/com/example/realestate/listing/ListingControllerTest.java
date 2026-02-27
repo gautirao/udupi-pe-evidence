@@ -124,7 +124,8 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("6000000"), "Updated desc");
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 eq("land"), eq("Updated title"), eq("Manipal"),
-                eq(new BigDecimal("6000000")), eq("Updated desc")))
+                eq(new BigDecimal("6000000")), eq("Updated desc"),
+                isNull(), isNull(), isNull()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -140,7 +141,8 @@ class ListingControllerTest {
 
         verify(listingService).updateListing(LISTING_ID, DEALER_ID, false,
                 "land", "Updated title", "Manipal",
-                new BigDecimal("6000000"), "Updated desc");
+                new BigDecimal("6000000"), "Updated desc",
+                null, null, null);
     }
 
     // ==================== Test 4: DELETE -> 204 ====================
@@ -194,7 +196,7 @@ class ListingControllerTest {
     void update_listingNotFound_returns404() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -207,13 +209,13 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
-    // ==================== Test 8: PUT -> wrong status -> 400 ====================
+    // ==================== Test 8: PUT -> wrong status -> 409 ====================
 
     @Test
-    void update_wrongStatus_returns400() throws Exception {
+    void update_wrongStatus_returns409() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -223,7 +225,7 @@ class ListingControllerTest {
                         .content("""
                                 {"title":"New title"}
                                 """))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot update listing with status LIVE"));
     }
 
@@ -423,6 +425,119 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.errors[0].field").value("price"))
                 .andExpect(jsonPath("$.errors[1].field").value("address_confirmed"))
                 .andExpect(jsonPath("$.errors[2].field").value("images"));
+    }
+
+    // ==================== PR-S7-5a: updateListing tests ====================
+
+    @Test
+    void updateListing_draftListing_returns200() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Draft Plot",
+                "Manipal", new BigDecimal("5000000"), "Updated draft");
+        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Draft Plot","locality":"Manipal","price":5000000}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+    }
+
+    @Test
+    void updateListing_rejectedListing_returns200() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing updated = buildListing(LISTING_ID, "REJECTED", "house", "Fixed House",
+                "Udupi", new BigDecimal("8000000"), "Fixed after rejection");
+        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Fixed House","price":8000000}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+    }
+
+    @Test
+    void updateListing_wrongOwner_returns403() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new ListingService.ListingOwnershipException(LISTING_ID));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"Someone else's listing"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different dealer"));
+    }
+
+    @Test
+    void updateListing_pendingReviewStatus_returns409() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new ListingService.ListingStatusException(
+                        "Cannot update listing with status PENDING_REVIEW"));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New title"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Cannot update listing with status PENDING_REVIEW"));
+    }
+
+    @Test
+    void updateListing_liveListing_returns409() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new ListingService.ListingStatusException(
+                        "Cannot update listing with status LIVE"));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New title"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Cannot update listing with status LIVE"));
+    }
+
+    @Test
+    void updateListing_listingNotFound_returns404() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"New title"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
     // ==================== Helper ====================

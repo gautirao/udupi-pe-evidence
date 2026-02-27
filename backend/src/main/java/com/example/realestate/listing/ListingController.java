@@ -80,12 +80,17 @@ public class ListingController {
             Listing updated = listingService.updateListing(
                     id, caller.userId(), caller.isAdmin(),
                     req.propertyType(), req.title(), req.locality(),
-                    req.price(), req.description());
+                    req.price(), req.description(),
+                    req.landArea(), req.bedrooms(), req.builtArea());
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
+        } catch (ListingService.ListingOwnershipException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different dealer"));
         } catch (ListingService.ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -171,7 +176,10 @@ public class ListingController {
             String title,
             String locality,
             BigDecimal price,
-            String description
+            String description,
+            BigDecimal landArea,
+            Integer bedrooms,
+            BigDecimal builtArea
     ) {}
 
     public record ListingResponse(
