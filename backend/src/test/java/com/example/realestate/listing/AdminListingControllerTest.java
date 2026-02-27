@@ -57,9 +57,14 @@ class AdminListingControllerTest {
     @MockitoBean
     private ListingService listingService;
 
+    @MockitoBean
+    private ListingImageRepository listingImageRepository;
+
     @BeforeEach
     void setUp() {
-        reset(listingService);
+        reset(listingService, listingImageRepository);
+        // Default stub: no images for any listing; tests that check imageCount override this.
+        when(listingImageRepository.countByListingId(any())).thenReturn(0L);
     }
 
     // ==================== Test 1: Approve -> 200, LIVE ====================

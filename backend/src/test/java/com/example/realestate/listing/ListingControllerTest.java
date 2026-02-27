@@ -61,9 +61,14 @@ class ListingControllerTest {
     @MockitoBean
     private ListingService listingService;
 
+    @MockitoBean
+    private ListingImageRepository listingImageRepository;
+
     @BeforeEach
     void setUp() {
-        reset(listingService);
+        reset(listingService, listingImageRepository);
+        // Default stub: no images; individual tests override when imageCount matters.
+        when(listingImageRepository.countByListingId(any())).thenReturn(0L);
     }
 
     // ==================== Test 1: POST creates draft -> 201 ====================
@@ -538,6 +543,45 @@ class ListingControllerTest {
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== PR-9.3: imageCount in ListingResponse ====================
+
+    @Test
+    void create_responseIncludesImageCount() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
+                "Manipal", new BigDecimal("5000000"), "Nice plot");
+        when(listingService.createDraft(any(), any(), any(), any(), any(), any()))
+                .thenReturn(saved);
+        when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"land","title":"Test plot","locality":"Manipal",
+                                 "price":5000000,"description":"Nice plot"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.imageCount").value(2));
+    }
+
+    @Test
+    void mine_responseIncludesImageCount() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
+                "Udupi", new BigDecimal("10000000"), "A house");
+        Page<Listing> page = new PageImpl<>(List.of(listing));
+        when(listingService.getListingsByOwner(eq(DEALER_ID), any(Pageable.class))).thenReturn(page);
+        when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(4L);
+
+        mockMvc.perform(get("/api/listings/mine")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].imageCount").value(4));
     }
 
     // ==================== Helper ====================

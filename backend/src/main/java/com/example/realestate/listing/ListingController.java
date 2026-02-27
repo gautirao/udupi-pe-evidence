@@ -38,9 +38,12 @@ public class ListingController {
     private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
 
     private final ListingService listingService;
+    private final ListingImageRepository listingImageRepository;
 
-    public ListingController(ListingService listingService) {
+    public ListingController(ListingService listingService,
+                             ListingImageRepository listingImageRepository) {
         this.listingService = listingService;
+        this.listingImageRepository = listingImageRepository;
     }
 
     @PostMapping
@@ -153,12 +156,14 @@ public class ListingController {
     }
 
     private ListingResponse toResponse(Listing l) {
+        int imageCount = (int) listingImageRepository.countByListingId(l.getId());
         return new ListingResponse(
                 l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
-                l.getCreatedAt(), l.getUpdatedAt());
+                l.getCreatedAt(), l.getUpdatedAt(),
+                imageCount);
     }
 
     // ===== DTOs =====
@@ -195,6 +200,7 @@ public class ListingController {
             boolean addressConfirmed,
             String rejectionReason,
             OffsetDateTime createdAt,
-            OffsetDateTime updatedAt
+            OffsetDateTime updatedAt,
+            int imageCount
     ) {}
 }
