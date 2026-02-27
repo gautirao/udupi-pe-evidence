@@ -1,8 +1,20 @@
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Loader2, Calendar, Clock } from 'lucide-react';
-import { useMyBookings, BookingResponse } from '@/hooks/useBookings';
+import { useMyBookings, useCancelBooking, BookingResponse } from '@/hooks/useBookings';
 
 // ─── Status badge helpers ─────────────────────────────────────────────────────
 
@@ -24,7 +36,15 @@ const STATUS_CLASS: Record<BookingResponse['status'], string> = {
 
 // ─── Booking card ─────────────────────────────────────────────────────────────
 
-function BookingCard({ booking }: { booking: BookingResponse }) {
+function BookingCard({
+  booking,
+  onCancel,
+  isCancelling,
+}: {
+  booking: BookingResponse;
+  onCancel: (id: string) => void;
+  isCancelling: boolean;
+}) {
   return (
     <Card>
       <CardContent className="p-4">
@@ -48,9 +68,42 @@ function BookingCard({ booking }: { booking: BookingResponse }) {
                 </span>
               </div>
             </div>
-            <Badge variant="outline" className={STATUS_CLASS[booking.status]}>
-              {STATUS_LABEL[booking.status]}
-            </Badge>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge variant="outline" className={STATUS_CLASS[booking.status]}>
+                {STATUS_LABEL[booking.status]}
+              </Badge>
+              {booking.status === 'REQUESTED' && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                      disabled={isCancelling}
+                    >
+                      Cancel Booking
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This can't be undone. The dealer will be notified.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep it</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={() => onCancel(booking.id)}
+                      >
+                        Yes, cancel
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
           </div>
 
           {booking.status === 'DECLINED' && booking.declineReason && (
@@ -68,6 +121,7 @@ function BookingCard({ booking }: { booking: BookingResponse }) {
 
 export default function MyBookings() {
   const { data: bookings, isLoading, isError } = useMyBookings();
+  const cancelBooking = useCancelBooking();
 
   return (
     <AppLayout>
@@ -90,7 +144,12 @@ export default function MyBookings() {
         ) : (
           <div className="space-y-3">
             {bookings.map((booking) => (
-              <BookingCard key={booking.id} booking={booking} />
+              <BookingCard
+                key={booking.id}
+                booking={booking}
+                onCancel={(id) => cancelBooking.mutate(id)}
+                isCancelling={cancelBooking.isPending}
+              />
             ))}
           </div>
         )}

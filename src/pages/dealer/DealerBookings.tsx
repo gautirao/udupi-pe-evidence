@@ -5,6 +5,17 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Loader2, Calendar, Clock } from 'lucide-react';
 import {
   useDealerBookings,
@@ -166,14 +177,35 @@ export default function DealerBookings() {
                           Confirmed
                         </Badge>
                       </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => cancelBooking.mutate(booking.id)}
-                        disabled={cancelBooking.isPending}
-                      >
-                        Cancel
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive border-destructive/50 hover:bg-destructive/10"
+                            disabled={cancelBooking.isPending}
+                          >
+                            Cancel
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This can't be undone. The dealer will be notified.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Keep it</AlertDialogCancel>
+                            <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              onClick={() => cancelBooking.mutate(booking.id)}
+                            >
+                              Yes, cancel
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </CardContent>
                 </Card>

@@ -4,12 +4,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import MyBookings from '../MyBookings';
-import { useMyBookings, BookingResponse } from '@/hooks/useBookings';
+import { useMyBookings, useCancelBooking, BookingResponse } from '@/hooks/useBookings';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
+const mockMutate = vi.fn();
+
 vi.mock('@/hooks/useBookings', () => ({
   useMyBookings: vi.fn(),
+  useCancelBooking: vi.fn(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -68,6 +71,10 @@ function renderMyBookings() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(useCancelBooking).mockReturnValue({
+    mutate: mockMutate,
+    isPending: false,
+  } as unknown as ReturnType<typeof useCancelBooking>);
 });
 
 describe('MyBookings page', () => {
@@ -147,5 +154,75 @@ describe('MyBookings page', () => {
     expect(
       screen.getByText('You have no viewing requests yet.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows Cancel Booking button for a REQUESTED booking', () => {
+    vi.mocked(useMyBookings).mockReturnValue({
+      data: [makeBooking({ status: 'REQUESTED' })],
+      isLoading: false,
+      isError: false,
+      totalPages: 1,
+      totalElements: 1,
+    } as ReturnType<typeof useMyBookings>);
+
+    renderMyBookings();
+
+    expect(screen.getByRole('button', { name: 'Cancel Booking' })).toBeInTheDocument();
+  });
+
+  it('does not show Cancel Booking button for CONFIRMED bookings', () => {
+    vi.mocked(useMyBookings).mockReturnValue({
+      data: [makeBooking({ status: 'CONFIRMED' })],
+      isLoading: false,
+      isError: false,
+      totalPages: 1,
+      totalElements: 1,
+    } as ReturnType<typeof useMyBookings>);
+
+    renderMyBookings();
+
+    expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
+  });
+
+  it('does not show Cancel Booking button for CANCELLED bookings', () => {
+    vi.mocked(useMyBookings).mockReturnValue({
+      data: [makeBooking({ status: 'CANCELLED' })],
+      isLoading: false,
+      isError: false,
+      totalPages: 1,
+      totalElements: 1,
+    } as ReturnType<typeof useMyBookings>);
+
+    renderMyBookings();
+
+    expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
+  });
+
+  it('does not show Cancel Booking button for COMPLETED bookings', () => {
+    vi.mocked(useMyBookings).mockReturnValue({
+      data: [makeBooking({ status: 'COMPLETED' })],
+      isLoading: false,
+      isError: false,
+      totalPages: 1,
+      totalElements: 1,
+    } as ReturnType<typeof useMyBookings>);
+
+    renderMyBookings();
+
+    expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
+  });
+
+  it('does not show Cancel Booking button for DECLINED bookings', () => {
+    vi.mocked(useMyBookings).mockReturnValue({
+      data: [makeBooking({ status: 'DECLINED' })],
+      isLoading: false,
+      isError: false,
+      totalPages: 1,
+      totalElements: 1,
+    } as ReturnType<typeof useMyBookings>);
+
+    renderMyBookings();
+
+    expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
   });
 });
