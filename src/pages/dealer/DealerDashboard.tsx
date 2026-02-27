@@ -31,7 +31,7 @@ export default function DealerDashboard() {
 
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-12 px-4">
+      <div className="container max-w-4xl py-6 px-4">
         <h1 className="text-3xl font-bold mb-8">Dealer Dashboard</h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <Card>

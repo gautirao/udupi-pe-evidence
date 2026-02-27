@@ -248,7 +248,7 @@ export default function Insights() {
                     {newListings.map((listing) => (
                       <div
                         key={listing.id}
-                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-secondary/50 transition-colors"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
@@ -317,7 +317,7 @@ export default function Insights() {
                     {recommendations.map((listing) => (
                       <div
                         key={listing.id}
-                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-secondary/50 transition-colors"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">

@@ -10,16 +10,18 @@ import { Loader2 } from 'lucide-react';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
+function statusClassName(status: string): string {
   switch (status) {
     case 'LIVE':
-      return 'default';
+      return 'bg-green-100 text-green-800 border-0';
     case 'PENDING_REVIEW':
-      return 'secondary';
+      return 'bg-amber-100 text-amber-800 border-0';
     case 'REJECTED':
-      return 'destructive';
+      return 'bg-red-100 text-red-800 border-0';
+    case 'DRAFT':
+      return 'bg-gray-100 text-gray-600 border-0';
     default:
-      return 'outline';
+      return 'bg-gray-100 text-gray-600 border-0';
   }
 }
 
@@ -50,7 +52,7 @@ export default function DealerListings() {
 
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-12 px-4">
+      <div className="container max-w-4xl py-6 px-4">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">My Listings</h1>
           <Button asChild>
@@ -87,7 +89,7 @@ export default function DealerListings() {
                     <CardTitle className="text-lg">
                       {listing.title ?? 'Untitled Listing'}
                     </CardTitle>
-                    <Badge variant={statusVariant(listing.status)}>
+                    <Badge className={statusClassName(listing.status)}>
                       {listing.status}
                     </Badge>
                   </div>

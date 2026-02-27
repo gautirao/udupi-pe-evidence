@@ -69,7 +69,7 @@ export function SavedAreas() {
             {savedAreas.map((area) => (
               <div
                 key={area.id}
-                className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-secondary/50 transition-colors"
               >
                 <div className="flex items-center gap-3 flex-1">
                   <MapPin className="h-4 w-4 text-primary flex-shrink-0" />

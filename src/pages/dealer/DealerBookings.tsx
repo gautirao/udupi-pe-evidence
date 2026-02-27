@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Calendar, Clock } from 'lucide-react';
 import {
   useDealerBookings,
@@ -25,7 +26,7 @@ import {
  */
 export default function DealerBookings() {
   const { isDealer, isAdmin, isLoading: authLoading } = useAuth();
-  const { data: bookings, isLoading: bookingsLoading } = useDealerBookings();
+  const { data: bookings, isLoading: bookingsLoading, isError } = useDealerBookings();
   const confirmBooking = useConfirmBooking();
   const declineBooking = useDeclineBooking();
   const cancelBooking = useCancelBooking();
@@ -49,7 +50,7 @@ export default function DealerBookings() {
 
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-12 px-4">
+      <div className="container max-w-4xl py-6 px-4">
         <h1 className="text-3xl font-bold mb-8">Booking Requests</h1>
 
         {/* Pending Requests */}
@@ -60,6 +61,14 @@ export default function DealerBookings() {
               <Badge>{requestedBookings.length}</Badge>
             )}
           </h2>
+
+          {isError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                Failed to load bookings. Please try again.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {bookingsLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -119,6 +128,14 @@ export default function DealerBookings() {
         {/* Confirmed Bookings */}
         <section>
           <h2 className="text-xl font-semibold mb-4">Confirmed Bookings</h2>
+
+          {isError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                Failed to load bookings. Please try again.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {bookingsLoading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
