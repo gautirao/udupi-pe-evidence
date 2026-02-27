@@ -20,6 +20,7 @@ const Insights = lazy(() => import("./pages/Insights"));
 // Lazily loaded — Dealer routes; not needed for public/admin users
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const NewListing = lazy(() => import("./pages/dealer/NewListing"));
+const EditListing = lazy(() => import("./pages/dealer/EditListing"));
 const DealerSetup = lazy(() => import("./pages/dealer/DealerSetup"));
 const DealerDashboard = lazy(() => import("./pages/dealer/DealerDashboard"));
 const DealerListings = lazy(() => import("./pages/dealer/DealerListings"));
@@ -104,6 +105,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <NewListing />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dealer/listings/:id/edit"
+                element={
+                  <ProtectedRoute>
+                    <EditListing />
                   </ProtectedRoute>
                 }
               />

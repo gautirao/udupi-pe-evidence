@@ -11,6 +11,18 @@ interface CreateListingRequest {
   description?: string;
 }
 
+// Mirrors backend UpdateRequest DTO
+export interface UpdateListingRequest {
+  title?: string;
+  description?: string;
+  price?: number;
+  propertyType?: string;
+  locality?: string;
+  landArea?: number;
+  bedrooms?: number;
+  builtArea?: number;
+}
+
 // Mirrors backend ListingResponse DTO
 export interface ListingResponse {
   id: string;
@@ -20,6 +32,9 @@ export interface ListingResponse {
   locality: string | null;
   price: number | null;
   description: string | null;
+  landArea: number | null;
+  bedrooms: number | null;
+  builtArea: number | null;
   latitude: number | null;
   longitude: number | null;
   addressConfirmed: boolean;
@@ -68,6 +83,42 @@ export function useCreateListing() {
     onError: (error: Error) => {
       toast({
         title: 'Failed to create listing',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * Fetches a single listing by ID from GET /api/listings/{id}.
+ */
+export function useGetListing(id: string) {
+  return useQuery({
+    queryKey: ['listing', id],
+    queryFn: () => api.get<ListingResponse>(`/api/listings/${id}`),
+    enabled: !!id,
+  });
+}
+
+/**
+ * Updates a listing via PUT /api/listings/{id}.
+ * Invalidates the dealer-listings and single listing query on success.
+ */
+export function useUpdateListing(id: string) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (data: UpdateListingRequest) =>
+      api.put<ListingResponse>(`/api/listings/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['listing', id] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to update listing',
         description: error.message,
         variant: 'destructive',
       });
