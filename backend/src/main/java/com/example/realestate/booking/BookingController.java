@@ -156,6 +156,27 @@ public class BookingController {
         }
     }
 
+    // ===== POST /api/bookings/{id}/cancel =====
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancelV2(JwtAuthenticationToken auth, @PathVariable UUID id) {
+        UUID callerId = UUID.fromString(auth.getToken().getSubject());
+
+        try {
+            ViewingRequest booking = bookingService.cancelBookingNew(id, callerId);
+            log.info("POST /api/bookings/{}/cancel -> 200 callerId={}", id, callerId);
+            return ResponseEntity.ok(toResponse(booking));
+        } catch (BookingService.BookingNotFoundException e) {
+            return notFound();
+        } catch (BookingService.BookingForbiddenException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Forbidden"));
+        } catch (BookingService.BookingStateConflictException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", "BOOKING_STATE_CONFLICT"));
+        }
+    }
+
     // ===== GET /api/bookings/mine =====
 
     @GetMapping("/mine")

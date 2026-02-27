@@ -268,6 +268,55 @@ public class BookingService {
         return saved;
     }
 
+    // ===== Cancel (v2 — POST path) =====
+
+    /**
+     * Cancel a booking via POST /api/bookings/{id}/cancel.
+     *
+     * Differs from cancelBooking in two ways:
+     * - Non-participant → BookingForbiddenException (403), not 404.
+     * - Requester path sets cancelledBy = 'requester' (not 'user').
+     *
+     * Allowed transitions:
+     * - Requester: REQUESTED → CANCELLED or CONFIRMED → CANCELLED
+     * - Dealer:    CONFIRMED → CANCELLED
+     */
+    @Transactional
+    public ViewingRequest cancelBookingNew(UUID bookingId, UUID callerId) {
+        ViewingRequest booking = viewingRequestRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+
+        boolean isRequester = callerId.equals(booking.getRequesterId());
+        boolean isDealer = callerId.equals(booking.getDealerId());
+
+        if (!isRequester && !isDealer) {
+            throw new BookingForbiddenException();
+        }
+
+        String cancelledBy;
+        Set<String> allowedStatuses;
+        if (isRequester) {
+            cancelledBy = "requester";
+            allowedStatuses = CANCELLABLE_BY_USER;
+        } else {
+            cancelledBy = "dealer";
+            allowedStatuses = CANCELLABLE_BY_DEALER;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        int rows = viewingRequestRepository.cancelAtomic(bookingId, allowedStatuses, callerId, cancelledBy, now);
+        if (rows == 0) {
+            throw new BookingStateConflictException();
+        }
+
+        ViewingRequest saved = viewingRequestRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        log.info("Cancelled booking (v2) bookingId={} cancelledBy={} callerId={}",
+                bookingId, saved.getCancelledBy(), callerId);
+        eventPublisher.publishEvent(new ViewingCancelledEvent(saved));
+        return saved;
+    }
+
     // ===== Queries =====
 
     public List<ViewingRequest> getBookingsForRequester(UUID requesterId) {
@@ -336,6 +385,12 @@ public class BookingService {
     public static class BookingStateConflictException extends RuntimeException {
         public BookingStateConflictException() {
             super("Booking state was modified concurrently");
+        }
+    }
+
+    public static class BookingForbiddenException extends RuntimeException {
+        public BookingForbiddenException() {
+            super("Caller is not a party to this booking");
         }
     }
 

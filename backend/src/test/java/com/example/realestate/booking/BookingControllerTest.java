@@ -473,6 +473,80 @@ class BookingControllerTest {
                 .andExpect(status().isTooManyRequests());
     }
 
+    // ==================== Tests 23-27: POST /api/bookings/{id}/cancel ====================
+
+    // Test 23: requester cancels a REQUESTED booking → 200, cancelledBy='requester'
+    @Test
+    void cancel_requestedBooking_asRequester_returns200() throws Exception {
+        ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_CANCELLED);
+        booking.setCancelledBy("requester");
+        when(bookingService.cancelBookingNew(BOOKING_ID, REQUESTER_ID)).thenReturn(booking);
+
+        mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelledBy").value("requester"));
+
+        verify(bookingService).cancelBookingNew(BOOKING_ID, REQUESTER_ID);
+    }
+
+    // Test 24: dealer cancels a CONFIRMED booking → 200, cancelledBy='dealer'
+    @Test
+    void cancel_confirmedBooking_asDealer_returns200() throws Exception {
+        ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_CANCELLED);
+        booking.setCancelledBy("dealer");
+        when(bookingService.cancelBookingNew(BOOKING_ID, DEALER_ID)).thenReturn(booking);
+
+        mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.cancelledBy").value("dealer"));
+
+        verify(bookingService).cancelBookingNew(BOOKING_ID, DEALER_ID);
+    }
+
+    // Test 25: dealer tries to cancel a REQUESTED booking → 409 (dealer can only cancel CONFIRMED)
+    @Test
+    void cancel_requestedBooking_asDealer_returns409() throws Exception {
+        when(bookingService.cancelBookingNew(BOOKING_ID, DEALER_ID))
+                .thenThrow(new BookingService.BookingStateConflictException());
+
+        mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
+    }
+
+    // Test 26: caller is neither requester nor dealer → 403
+    @Test
+    void cancel_wrongCaller_returns403() throws Exception {
+        UUID outsider = UUID.fromString("00000000-0000-0000-0000-0000000000ff");
+        when(bookingService.cancelBookingNew(BOOKING_ID, outsider))
+                .thenThrow(new BookingService.BookingForbiddenException());
+
+        mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
+                        .with(jwt().jwt(j -> j.subject(outsider.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Forbidden"));
+
+    }
+
+    // Test 27: booking already CANCELLED → 409
+    @Test
+    void cancel_alreadyCancelled_returns409() throws Exception {
+        when(bookingService.cancelBookingNew(BOOKING_ID, REQUESTER_ID))
+                .thenThrow(new BookingService.BookingStateConflictException());
+
+        mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
+    }
+
     // ==================== Helpers ====================
 
     private ViewingRequest buildBooking(UUID id, UUID requesterId, UUID dealerId, String status) {
