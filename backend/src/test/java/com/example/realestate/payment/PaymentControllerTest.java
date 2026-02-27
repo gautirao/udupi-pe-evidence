@@ -100,6 +100,20 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.insightsAccessUntil").exists());
     }
 
+    // ==================== Test 1b: insights_access_until == NOW() boundary → 200 ====================
+
+    @Test
+    void grantInsightsPass_accessExpiresAtExactNow_returns200() throws Exception {
+        // insights_access_until == NOW() means the condition 'insights_access_until <= NOW()' is TRUE at boundary → renewal allowed
+        // The atomic UPDATE succeeds (returns 1 row), so the endpoint grants access and returns 200.
+        when(jdbcTemplate.update(anyString(), any(OffsetDateTime.class), any(UUID.class))).thenReturn(1);
+
+        mockMvc.perform(post("/api/payments/insights-pass")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.insightsAccessUntil").exists());
+    }
+
     // ==================== Test 2: stub disabled → 404 ====================
 
     @Test
