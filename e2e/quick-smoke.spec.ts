@@ -222,6 +222,13 @@ test('Q7 — duplicate booking request is rejected', async ({ page }) => {
     smokeListingStatus !== 'LIVE',
     'Test listing is not LIVE (admin approval required for bookings) — skipping Q7',
   );
+  // When using the auto-created fixture (no explicit SMOKE_LISTING_ID), L4 in
+  // listing-lifecycle.spec.ts runs the same test concurrently, causing a race on the
+  // unique booking constraint. Skip Q7 in that case to avoid the conflict.
+  test.skip(
+    !process.env.SMOKE_LISTING_ID,
+    'Auto-fixture present — L4 in listing-lifecycle.spec.ts covers this; skipping Q7',
+  );
 
   // Log in
   await page.goto('/auth');

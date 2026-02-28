@@ -180,10 +180,19 @@ test('L3 — Request Viewing button visible for a LIVE listing', async ({ page }
     'Listing is not LIVE (admin creds absent or approve failed) — skipping L3',
   );
 
+  test.skip(
+    !hasUserCreds,
+    'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — /listing/:id requires auth; skipping L3',
+  );
+
   const { id } = fixture!;
 
+  // /listing/:id is a ProtectedRoute — must be logged in before navigating.
+  // Log in as user (not dealer — "Request Viewing" is for non-dealer users).
+  await loginAsUser(page);
   await page.goto(`/listing/${id}`);
   await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
 
   await expect(
     page.getByRole('button', { name: /request viewing/i }),

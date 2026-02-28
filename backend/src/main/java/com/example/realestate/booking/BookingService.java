@@ -153,7 +153,10 @@ public class BookingService {
         booking.setUpdatedAt(now);
 
         try {
-            ViewingRequest saved = viewingRequestRepository.save(booking);
+            // saveAndFlush forces the DB constraint check immediately (inside this try-catch)
+            // rather than deferring to transaction commit where DataIntegrityViolationException
+            // would escape the catch block and become a 500.
+            ViewingRequest saved = viewingRequestRepository.saveAndFlush(booking);
             log.info("Created booking bookingId={} listingId={} requesterId={} dealerId={}",
                     saved.getId(), listingId, requesterId, dealerId);
             eventPublisher.publishEvent(new ViewingRequestedEvent(saved));
