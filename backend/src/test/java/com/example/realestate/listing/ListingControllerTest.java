@@ -62,11 +62,14 @@ class ListingControllerTest {
     private ListingService listingService;
 
     @MockitoBean
+    private ListingRepository listingRepository;
+
+    @MockitoBean
     private ListingImageRepository listingImageRepository;
 
     @BeforeEach
     void setUp() {
-        reset(listingService, listingImageRepository);
+        reset(listingService, listingRepository, listingImageRepository);
         // Default stub: no images; individual tests override when imageCount matters.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
     }

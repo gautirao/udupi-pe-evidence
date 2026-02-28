@@ -38,11 +38,14 @@ public class ListingController {
     private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
 
     private final ListingService listingService;
+    private final ListingRepository listingRepository;
     private final ListingImageRepository listingImageRepository;
 
     public ListingController(ListingService listingService,
+                             ListingRepository listingRepository,
                              ListingImageRepository listingImageRepository) {
         this.listingService = listingService;
+        this.listingRepository = listingRepository;
         this.listingImageRepository = listingImageRepository;
     }
 
@@ -57,6 +60,20 @@ public class ListingController {
 
         log.info("POST /api/listings -> 201 listingId={} createdBy={}", saved.getId(), caller.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getById(JwtAuthenticationToken auth, @PathVariable UUID id) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) return notFound();
+        if (!caller.isAdmin() && !listing.getCreatedBy().equals(caller.userId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different dealer"));
+        }
+        return ResponseEntity.ok(toResponse(listing));
     }
 
     @GetMapping("/mine")
