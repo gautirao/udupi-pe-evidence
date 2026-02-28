@@ -45,6 +45,7 @@ export interface ListingResponse {
   longitude: number | null;
   addressConfirmed: boolean;
   imageCount: number;
+  firstImageUrl: string | null;
   rejectionReason: string | null;
   createdAt: string;
   updatedAt: string;

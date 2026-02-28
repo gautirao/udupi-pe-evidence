@@ -157,13 +157,18 @@ public class ListingController {
 
     private ListingResponse toResponse(Listing l) {
         int imageCount = (int) listingImageRepository.countByListingId(l.getId());
+        String firstImageUrl = listingImageRepository
+                .findByListingIdOrderByPositionAsc(l.getId())
+                .stream().findFirst()
+                .map(ListingImage::getUrl)
+                .orElse(null);
         return new ListingResponse(
                 l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount);
+                imageCount, firstImageUrl);
     }
 
     // ===== DTOs =====
@@ -201,6 +206,7 @@ public class ListingController {
             String rejectionReason,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt,
-            int imageCount
+            int imageCount,
+            String firstImageUrl
     ) {}
 }

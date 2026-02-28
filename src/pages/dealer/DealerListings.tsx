@@ -23,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Building2, Loader2 } from 'lucide-react';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
@@ -161,7 +161,18 @@ export default function DealerListings() {
         {!listingsLoading && !isError && data && data.listings.length > 0 && (
           <div className="space-y-4">
             {data.listings.map((listing) => (
-              <Card key={listing.id}>
+              <Card key={listing.id} className="overflow-hidden">
+                {listing.firstImageUrl ? (
+                  <img
+                    src={listing.firstImageUrl}
+                    alt=""
+                    className="w-full h-32 object-cover rounded-t-lg"
+                  />
+                ) : (
+                  <div className="w-full h-32 bg-secondary flex items-center justify-center rounded-t-lg">
+                    <Building2 className="h-8 w-8 text-muted-foreground/40" />
+                  </div>
+                )}
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-4">
                     <CardTitle className="text-lg">

@@ -99,13 +99,18 @@ public class AdminListingController {
 
     private ListingController.ListingResponse toResponse(Listing l) {
         int imageCount = (int) listingImageRepository.countByListingId(l.getId());
+        String firstImageUrl = listingImageRepository
+                .findByListingIdOrderByPositionAsc(l.getId())
+                .stream().findFirst()
+                .map(ListingImage::getUrl)
+                .orElse(null);
         return new ListingController.ListingResponse(
                 l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount);
+                imageCount, firstImageUrl);
     }
 
     // ===== DTOs =====
