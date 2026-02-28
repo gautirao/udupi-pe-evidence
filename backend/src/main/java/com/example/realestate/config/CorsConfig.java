@@ -26,6 +26,20 @@ public class CorsConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+
+        // --- Ingestion endpoint: open to any origin (API-key authenticated, no cookies) ---
+        // Called from the Chrome extension popup (chrome-extension:// origin) or any script.
+        // allowCredentials must be false when allowedOriginPatterns is "*".
+        CorsConfiguration ingestion = new CorsConfiguration();
+        ingestion.addAllowedOriginPattern("*");
+        ingestion.setAllowedMethods(List.of("POST", "OPTIONS"));
+        ingestion.setAllowedHeaders(List.of("Content-Type", "X-Ingestion-Api-Key"));
+        ingestion.setAllowCredentials(false);
+        ingestion.setMaxAge(3600L);
+        source.registerCorsConfiguration("/api/ingestion/**", ingestion);
+
+        // --- All other endpoints: strict origin allowlist ---
         CorsConfiguration config = new CorsConfiguration();
 
         // Only allow specific origins (never use "*" in production)
@@ -45,9 +59,6 @@ public class CorsConfig {
         // Preflight response cache time (1 hour)
         config.setMaxAge(3600L);
 
-        // Apply to all paths — origin restriction is the security boundary, not path pattern.
-        // Using /** avoids path-matching edge cases in Spring Security's internal CorsFilter.
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
 
         return source;
