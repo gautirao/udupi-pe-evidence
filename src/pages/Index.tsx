@@ -7,7 +7,8 @@ import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,7 @@ export default function Index() {
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [showFilters, setShowFilters] = useState(true);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const { data: listings = [], isLoading, error } = usePropertyListings(filters);
 
@@ -28,28 +30,48 @@ export default function Index() {
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex relative">
-        {/* Filters Panel */}
+        {/* Filters Panel — lg+ inline sidebar */}
         <div
           className={cn(
-            'h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
+            'hidden lg:block h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
             showFilters ? 'w-72' : 'w-0 overflow-hidden'
           )}
         >
           <MapFilters filters={filters} onFiltersChange={setFilters} />
         </div>
 
-        {/* Toggle Filters Button */}
+        {/* Toggle Filters Button — lg+ only */}
         <Button
           variant="ghost"
           size="icon"
           className={cn(
-            'absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
+            'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
             showFilters ? 'left-72' : 'left-0'
           )}
           onClick={() => setShowFilters(!showFilters)}
         >
           {showFilters ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
+
+        {/* Mobile Filters Sheet — below lg only */}
+        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="lg:hidden absolute top-3 left-3 z-10 gap-1.5 shadow-sm"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Filters</SheetTitle>
+            </SheetHeader>
+            <MapFilters filters={filters} onFiltersChange={setFilters} />
+          </SheetContent>
+        </Sheet>
 
         {/* Map Area */}
         <div className="flex-1 relative">

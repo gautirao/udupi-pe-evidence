@@ -36,6 +36,7 @@ import {
   Bell,
   Bookmark,
   CalendarCheck2,
+  ChevronDown,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
@@ -126,20 +127,18 @@ export function AppLayout({ children }: AppLayoutProps) {
         );
       })}
 
-      {isAdmin && (
+      {isAdmin && mobile && (
         <>
-          {mobile && (
-            <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
-              Admin
-            </div>
-          )}
+          <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
+            Admin
+          </div>
           {adminNavigation.map((item) => {
             const isActive = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href);
             return (
               <Link
                 key={item.name}
                 to={item.href}
-                onClick={() => mobile && setMobileOpen(false)}
+                onClick={() => setMobileOpen(false)}
                 className={cn(
                   'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                   isActive
@@ -153,6 +152,44 @@ export function AppLayout({ children }: AppLayoutProps) {
             );
           })}
         </>
+      )}
+
+      {isAdmin && !mobile && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors h-auto',
+                location.pathname.startsWith('/admin')
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+              )}
+            >
+              Admin
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-52">
+            {adminNavigation.map((item) => {
+              const isActive = location.pathname.startsWith(item.href);
+              return (
+                <DropdownMenuItem key={item.name} asChild>
+                  <Link
+                    to={item.href}
+                    className={cn(
+                      'flex items-center gap-2 w-full',
+                      isActive ? 'text-primary font-medium' : ''
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.name}
+                  </Link>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );

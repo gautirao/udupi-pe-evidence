@@ -128,26 +128,34 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
   });
 
-  it('admin role: shows Map, Insights and all 8 admin section links — no dealer/user links', () => {
+  it('admin role: shows Map, Insights and "Admin" dropdown trigger — no dealer/user links', async () => {
     mockAuth = baseAuth({
       user: { email: 'admin@test.com' },
       userRole: 'admin',
       isAdmin: true,
     });
+    const user = userEvent.setup();
     renderLayout();
 
     // Primary (admin) nav
     expect(screen.getAllByRole('link', { name: /^map$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /insights/i }).length).toBeGreaterThan(0);
 
-    // Admin section nav
-    expect(screen.getAllByRole('link', { name: /feed runs/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /facebook groups/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /manual posts/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /process posts/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /pending approval/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /duplicates/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /chrome extension/i }).length).toBeGreaterThan(0);
+    // Admin dropdown trigger is rendered (button containing "Admin" text)
+    const adminTrigger = screen.getByRole('button', { name: /admin/i });
+    expect(adminTrigger).toBeInTheDocument();
+
+    // Open the dropdown to expose admin nav links
+    await user.click(adminTrigger);
+
+    // Admin section items appear in the dropdown as menuitems (Radix DropdownMenuItem role)
+    expect(screen.getAllByRole('menuitem', { name: /feed runs/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /facebook groups/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /manual posts/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /process posts/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /pending approval/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /duplicates/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /chrome extension/i }).length).toBeGreaterThan(0);
 
     // Must NOT show dealer or user-only links
     expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
@@ -165,7 +173,8 @@ describe('AppLayout — admin badge', () => {
     });
     renderLayout();
 
-    expect(screen.getByText('Admin')).toBeInTheDocument();
+    // Admin users have both the badge pill and the dropdown trigger labeled "Admin"
+    expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
   });
 
   it('does not show Admin badge for regular users', () => {
