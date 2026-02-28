@@ -188,8 +188,8 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
   await expect(page.getByRole('link', { name: /feed runs/i })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /facebook groups/i })).toHaveCount(0);
 
-  // Home link must be present (logged-out nav)
-  await expect(page.getByRole('link', { name: /^home$/i }).first()).toBeVisible();
+  // Map link must be present (logged-out nav shows Map + Insights)
+  await expect(page.getByRole('link', { name: /^map$/i }).first()).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

@@ -132,6 +132,7 @@ export default function Auth() {
                         <FormLabel>Email</FormLabel>
                         <FormControl>
                           <Input
+                            id="signin-email"
                             type="email"
                             placeholder="you@example.com"
                             disabled={isLoading}
@@ -151,6 +152,7 @@ export default function Auth() {
                         <FormLabel>Password</FormLabel>
                         <FormControl>
                           <Input
+                            id="signin-password"
                             type="password"
                             placeholder="••••••••"
                             disabled={isLoading}
