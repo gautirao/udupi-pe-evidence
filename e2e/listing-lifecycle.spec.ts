@@ -110,6 +110,12 @@ test('L1 — created listing appears in dealer /dealer/listings', async ({ page 
 
   await expect(page).toHaveURL(/\/dealer\/listings/, { timeout: 8_000 });
 
+  // ProtectedRoute shows a "Loading..." paragraph while Supabase auth resolves.
+  // Wait for it to disappear before asserting listing content.
+  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+  // Then wait for the listings API fetch to settle.
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
   // The listing card must contain either the UUID or the test title substring.
   // Try the UUID first (most reliable), fall back to the title text.
   const byId = page.locator(`text=${id}`);
@@ -134,11 +140,20 @@ test('L2 — listing detail page loads without error', async ({ page }) => {
     fixture === null,
     'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
   );
+  test.skip(
+    !hasDealerCreds,
+    'DEALER_EMAIL / DEALER_PASSWORD not set — /listing/:id requires auth; skipping L2',
+  );
 
   const { id } = fixture!;
 
+  // /listing/:id is a ProtectedRoute — must be logged in before navigating.
+  await loginAsDealer(page);
   await page.goto(`/listing/${id}`);
   await page.waitForLoadState('domcontentloaded');
+
+  // Wait for ProtectedRoute auth check and page data to load.
+  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
 
   // No Sentry/error boundary banner
   await expect(

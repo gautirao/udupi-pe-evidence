@@ -42,7 +42,23 @@ function getListingId(): string {
   return '';
 }
 
+/**
+ * Returns 'LIVE' or 'DRAFT'.
+ * When SMOKE_LISTING_ID is explicitly set, assume LIVE.
+ * Otherwise read line 2 of .test-listing-id.
+ */
+function getListingStatus(): 'LIVE' | 'DRAFT' {
+  if (process.env.SMOKE_LISTING_ID) return 'LIVE';
+  const idFile = path.join(__dirname, '.test-listing-id');
+  if (fs.existsSync(idFile)) {
+    const line2 = fs.readFileSync(idFile, 'utf-8').trim().split('\n')[1]?.trim();
+    return line2 === 'LIVE' ? 'LIVE' : 'DRAFT';
+  }
+  return 'DRAFT';
+}
+
 const smokListingId = getListingId();
+const smokeListingStatus = getListingStatus();
 
 // ---------------------------------------------------------------------------
 // Q1 — App loads; no blank screen; Sentry error boundary not triggered
@@ -188,8 +204,9 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
   await expect(page.getByRole('link', { name: /feed runs/i })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /facebook groups/i })).toHaveCount(0);
 
-  // Map link must be present (logged-out nav shows Map + Insights)
-  await expect(page.getByRole('link', { name: /^map$/i }).first()).toBeVisible();
+  // All routes are protected — unauthenticated users land on /auth.
+  // Confirm the sign-in form is present (auth page loaded correctly).
+  await expect(page.getByRole('tab', { name: /sign in/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -200,6 +217,10 @@ test('Q7 — duplicate booking request is rejected', async ({ page }) => {
   test.skip(
     !userEmail || !userPassword || !smokListingId,
     'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set — skipping Q7',
+  );
+  test.skip(
+    smokeListingStatus !== 'LIVE',
+    'Test listing is not LIVE (admin approval required for bookings) — skipping Q7',
   );
 
   // Log in
