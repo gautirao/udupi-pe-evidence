@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -34,6 +35,7 @@ public class BookingEventListener {
     }
 
     @Async
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onViewingRequested(BookingService.ViewingRequestedEvent event) {
         ViewingRequest booking = event.booking();
@@ -54,6 +56,7 @@ public class BookingEventListener {
     }
 
     @Async
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onViewingConfirmed(BookingService.ViewingConfirmedEvent event) {
         ViewingRequest booking = event.booking();
@@ -74,6 +77,7 @@ public class BookingEventListener {
     }
 
     @Async
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onViewingDeclined(BookingService.ViewingDeclinedEvent event) {
         ViewingRequest booking = event.booking();
@@ -94,6 +98,7 @@ public class BookingEventListener {
     }
 
     @Async
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onViewingCancelled(BookingService.ViewingCancelledEvent event) {
         ViewingRequest booking = event.booking();
