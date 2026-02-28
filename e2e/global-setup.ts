@@ -4,7 +4,11 @@
  * Responsibilities:
  *   1. Authenticate as a dealer via Supabase password grant.
  *   2. Create a DRAFT listing via POST /api/listings.
- *   3. Optionally approve it via POST /api/admin/listings/{id}/approve using admin creds.
+ *   3. If admin creds are present, prepare the listing for approval:
+ *        a. PATCH addressConfirmed=true
+ *        b. Register 3 stub images (metadata only, no real files)
+ *        c. Submit for review (DRAFT → PENDING_REVIEW)
+ *        d. Admin approve (PENDING_REVIEW → LIVE)
  *   4. Write the result to e2e/.test-listing-id so individual specs can consume it.
  *
  * This function MUST NOT throw — any failure is logged and the suite runs in
@@ -58,6 +62,13 @@ async function getToken(email: string, password: string): Promise<string | null>
   }
 }
 
+/** Decode the `sub` claim (user UUID) from a JWT without verifying signature. */
+function getUserIdFromToken(token: string): string {
+  const payload = token.split('.')[1] ?? '';
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { sub?: string };
+  return decoded.sub ?? '';
+}
+
 export default async function globalSetup(): Promise<void> {
   const dealerEmail = process.env.DEALER_EMAIL ?? '';
   const dealerPassword = process.env.DEALER_PASSWORD ?? '';
@@ -81,6 +92,7 @@ export default async function globalSetup(): Promise<void> {
     console.log('[global-setup] Could not obtain dealer token — skipping listing creation.');
     return;
   }
+  const dealerUserId = getUserIdFromToken(dealerToken);
 
   // ------------------------------------------------------------------
   // Step 2: Create a DRAFT listing
@@ -128,34 +140,101 @@ export default async function globalSetup(): Promise<void> {
   let status: 'DRAFT' | 'LIVE' = 'DRAFT';
 
   if (adminEmail && adminPassword) {
-    const adminToken = await getToken(adminEmail, adminPassword);
-    if (adminToken) {
-      try {
-        const approveRes = await fetch(
-          `${BACKEND}/api/admin/listings/${listingId}/approve`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${adminToken}`,
-            },
-          },
-        );
+    // 3a: PATCH addressConfirmed=true (required for submission)
+    try {
+      const patchRes = await fetch(`${BACKEND}/api/listings/${listingId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${dealerToken}`,
+        },
+        body: JSON.stringify({ addressConfirmed: true }),
+      });
+      if (!patchRes.ok) {
+        const text = await patchRes.text().catch(() => '<unreadable>');
+        console.log(`[global-setup] PUT addressConfirmed failed (${patchRes.status}): ${text}`);
+      } else {
+        console.log('[global-setup] Set addressConfirmed=true');
+      }
+    } catch (err) {
+      console.log(`[global-setup] PUT addressConfirmed threw: ${String(err)}`);
+    }
 
-        if (approveRes.ok) {
-          status = 'LIVE';
-          console.log(`[global-setup] Listing ${listingId} approved — status: LIVE`);
-        } else {
-          const text = await approveRes.text().catch(() => '<unreadable>');
-          console.log(
-            `[global-setup] Approve failed (${approveRes.status}): ${text} — listing stays DRAFT`,
-          );
+    // 3b: Register 3 stub images (metadata only — no actual file upload needed)
+    const stubImages = ['img-1.jpg', 'img-2.jpg', 'img-3.jpg'];
+    for (const filename of stubImages) {
+      const storagePath = `listings/${dealerUserId}/${listingId}/${filename}`;
+      try {
+        const imgRes = await fetch(`${BACKEND}/api/listings/${listingId}/images`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${dealerToken}`,
+          },
+          body: JSON.stringify({
+            storagePath,
+            url: `https://placeholder.invalid/${filename}`,
+          }),
+        });
+        if (!imgRes.ok) {
+          const text = await imgRes.text().catch(() => '<unreadable>');
+          console.log(`[global-setup] Register image ${filename} failed (${imgRes.status}): ${text}`);
         }
       } catch (err) {
-        console.log(`[global-setup] Approve request threw: ${String(err)} — listing stays DRAFT`);
+        console.log(`[global-setup] Register image ${filename} threw: ${String(err)}`);
       }
-    } else {
-      console.log('[global-setup] Could not obtain admin token — listing stays DRAFT.');
+    }
+    console.log('[global-setup] Registered 3 stub images');
+
+    // 3c: Submit for review (DRAFT → PENDING_REVIEW)
+    let submitted = false;
+    try {
+      const submitRes = await fetch(`${BACKEND}/api/listings/${listingId}/submit`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${dealerToken}` },
+      });
+      if (submitRes.ok) {
+        submitted = true;
+        console.log('[global-setup] Submitted listing for review (PENDING_REVIEW)');
+      } else {
+        const text = await submitRes.text().catch(() => '<unreadable>');
+        console.log(`[global-setup] Submit failed (${submitRes.status}): ${text} — listing stays DRAFT`);
+      }
+    } catch (err) {
+      console.log(`[global-setup] Submit threw: ${String(err)} — listing stays DRAFT`);
+    }
+
+    // 3d: Admin approve (PENDING_REVIEW → LIVE)
+    if (submitted) {
+      const adminToken = await getToken(adminEmail, adminPassword);
+      if (adminToken) {
+        try {
+          const approveRes = await fetch(
+            `${BACKEND}/api/admin/listings/${listingId}/approve`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${adminToken}`,
+              },
+            },
+          );
+
+          if (approveRes.ok) {
+            status = 'LIVE';
+            console.log(`[global-setup] Listing ${listingId} approved — status: LIVE`);
+          } else {
+            const text = await approveRes.text().catch(() => '<unreadable>');
+            console.log(
+              `[global-setup] Approve failed (${approveRes.status}): ${text} — listing stays DRAFT`,
+            );
+          }
+        } catch (err) {
+          console.log(`[global-setup] Approve request threw: ${String(err)} — listing stays DRAFT`);
+        }
+      } else {
+        console.log('[global-setup] Could not obtain admin token — listing stays DRAFT.');
+      }
     }
   } else {
     console.log('[global-setup] ADMIN_EMAIL / ADMIN_PASSWORD not set — listing stays DRAFT.');

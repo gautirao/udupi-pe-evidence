@@ -101,7 +101,8 @@ public class ListingController {
                     id, caller.userId(), caller.isAdmin(),
                     req.propertyType(), req.title(), req.locality(),
                     req.price(), req.description(),
-                    req.landArea(), req.bedrooms(), req.builtArea());
+                    req.landArea(), req.bedrooms(), req.builtArea(),
+                    req.addressConfirmed());
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -206,7 +207,8 @@ public class ListingController {
             String description,
             BigDecimal landArea,
             Integer bedrooms,
-            BigDecimal builtArea
+            BigDecimal builtArea,
+            Boolean addressConfirmed
     ) {}
 
     public record ListingResponse(

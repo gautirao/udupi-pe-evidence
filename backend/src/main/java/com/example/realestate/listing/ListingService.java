@@ -366,7 +366,7 @@ public class ListingService {
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description) {
         return updateListing(listingId, userId, isAdmin,
-                propertyType, title, locality, price, description, null, null, null);
+                propertyType, title, locality, price, description, null, null, null, null);
     }
 
     /**
@@ -382,7 +382,8 @@ public class ListingService {
     public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description,
-                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea) {
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                                 Boolean addressConfirmed) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
         if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
@@ -397,6 +398,7 @@ public class ListingService {
         if (landArea != null) listing.setLandArea(landArea);
         if (bedrooms != null) listing.setBedrooms(bedrooms);
         if (builtArea != null) listing.setBuiltArea(builtArea);
+        if (addressConfirmed != null) listing.setAddressConfirmed(addressConfirmed);
         listing.setUpdatedAt(OffsetDateTime.now());
 
         Listing saved = listingRepository.save(listing);
