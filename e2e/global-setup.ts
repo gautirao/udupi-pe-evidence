@@ -13,6 +13,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
@@ -93,6 +96,8 @@ export default async function globalSetup(): Promise<void> {
       body: JSON.stringify({
         propertyType: 'RESIDENTIAL',
         title: '[E2E Test Listing] Auto-created by Playwright global-setup',
+        locality: 'Udupi',
+        price: 5000000,
         description: 'Automatically created by Playwright global-setup. Safe to delete.',
       }),
     });

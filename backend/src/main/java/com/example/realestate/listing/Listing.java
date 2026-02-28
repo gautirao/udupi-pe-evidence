@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -25,9 +26,11 @@ public class Listing {
     private UUID rawPostId;
 
     @Column(name = "property_type", nullable = false, columnDefinition = "public.property_type")
+    @ColumnTransformer(write = "?::public.property_type")
     private String propertyType = "other";
 
     @Column(name = "status", nullable = false, columnDefinition = "public.listing_status")
+    @ColumnTransformer(write = "?::public.listing_status")
     private String status = ListingStatus.SCRAPED.toDbValue();
 
     @Column(name = "title")
