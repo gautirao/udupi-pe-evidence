@@ -14,6 +14,8 @@
  */
 
 import { test, expect } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Read once at module level — never logged or exposed.
 const BACKEND =
@@ -22,7 +24,22 @@ const BACKEND =
 
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
-const smokListingId = process.env.SMOKE_LISTING_ID ?? '';
+
+/**
+ * Resolve the listing ID for Q7.
+ * Priority:
+ *   1. SMOKE_LISTING_ID env var (explicit override)
+ *   2. e2e/.test-listing-id written by global-setup (first line = UUID)
+ *   3. Empty string → Q7 will skip itself
+ */
+function getListingId(): string {
+  if (process.env.SMOKE_LISTING_ID) return process.env.SMOKE_LISTING_ID;
+  const idFile = path.join(__dirname, '.test-listing-id');
+  if (fs.existsSync(idFile)) return fs.readFileSync(idFile, 'utf-8').trim().split('\n')[0];
+  return '';
+}
+
+const smokListingId = getListingId();
 
 // ---------------------------------------------------------------------------
 // Q1 — App loads; no blank screen; Sentry error boundary not triggered
