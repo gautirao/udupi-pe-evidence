@@ -24,7 +24,7 @@
 | PR-9.4 | Save/unsave areas verification + fix | P1 | ✅ Verified complete — pre-built, no code change needed |
 | PR-9.5 | Auth.tsx React Hook Form migration | P1 | ✅ Done (dcd8504, 96 tests) |
 | PR-9.6 | AppLayout: a11y + dealer Bookings nav + active state | P1 | ✅ Done (c61a64e, 91 tests) |
-| PR-9.7 | Playwright E2E smoke suite | P2 | 🔲 Not started |
+| PR-9.7 | Playwright E2E smoke suite | P2 | ✅ Done (8e3f2b2+6c9f0d9+e65e3eb) |
 | PR-9.8 | Admin nav overflow + map mobile filter | P2 | ✅ Done (6fea28f, 96 tests) |
 | PR-9.9 | Listing image thumbnails on dealer cards | P2 | ✅ Done (dfb025f, 96 tests) |
 
