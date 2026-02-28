@@ -1,6 +1,11 @@
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useDealerMyListings, useDeleteListing } from '@/hooks/useDealerListings';
+import {
+  useDealerMyListings,
+  useDeleteListing,
+  useSubmitListing,
+  type ListingResponse,
+} from '@/hooks/useDealerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,6 +40,65 @@ function statusClassName(status: string): string {
     default:
       return 'bg-gray-100 text-gray-600 border-0';
   }
+}
+
+/**
+ * Submit button for DRAFT listings only.
+ *
+ * Rendered as a separate component so that `useSubmitListing` (a hook) can be
+ * called at the top level rather than inside the parent's `.map()`.
+ */
+function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const submitMutation = useSubmitListing(listing.id);
+
+  const isReady = listing.addressConfirmed && listing.imageCount >= 3;
+
+  if (isReady) {
+    return (
+      <Button
+        size="sm"
+        disabled={submitMutation.isPending}
+        onClick={() => {
+          submitMutation.mutate(undefined, {
+            onSuccess: () => {
+              toast({ title: 'Submitted for review' });
+            },
+          });
+        }}
+      >
+        {submitMutation.isPending ? (
+          <>
+            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            Submitting…
+          </>
+        ) : (
+          'Submit for Review'
+        )}
+      </Button>
+    );
+  }
+
+  const bothMissing = !listing.addressConfirmed && listing.imageCount < 3;
+  const hint = bothMissing
+    ? 'Add images & confirm address to submit'
+    : listing.imageCount < 3
+      ? `Need ${3 - listing.imageCount} more image(s)`
+      : 'Confirm address to submit';
+
+  return (
+    <div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => navigate(`/dealer/listings/${listing.id}/edit`)}
+      >
+        Complete &amp; Submit
+      </Button>
+      <p className="text-xs text-muted-foreground mt-1">{hint}</p>
+    </div>
+  );
 }
 
 /**
@@ -121,17 +185,21 @@ export default function DealerListings() {
                       Rejection reason: {listing.rejectionReason}
                     </p>
                   )}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap items-start">
                     {EDITABLE_STATUSES.includes(listing.status) && (
                       <>
                         <Button variant="outline" size="sm" asChild>
                           <Link to={`/dealer/listings/${listing.id}/edit`}>Edit</Link>
                         </Button>
-                        <Button size="sm" asChild>
-                          <Link to={`/dealer/listings/${listing.id}/edit`}>
-                            Submit for Review
-                          </Link>
-                        </Button>
+                        {listing.status === 'DRAFT' ? (
+                          <DraftSubmitButton listing={listing} />
+                        ) : (
+                          <Button size="sm" asChild>
+                            <Link to={`/dealer/listings/${listing.id}/edit`}>
+                              Submit for Review
+                            </Link>
+                          </Button>
+                        )}
                       </>
                     )}
                     {listing.status === 'DRAFT' && (
