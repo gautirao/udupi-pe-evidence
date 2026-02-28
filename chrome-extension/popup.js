@@ -189,8 +189,7 @@ async function sendPostsInBatches(posts, apiUrl, apiKey, sourceUrl, groupName, u
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'apikey': apiKey
+        'X-Ingestion-Api-Key': apiKey
       },
       body: JSON.stringify({
         posts: batch,

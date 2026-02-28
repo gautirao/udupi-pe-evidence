@@ -12,8 +12,8 @@ A browser extension to extract property posts from Facebook groups for the Udupi
 ## Setup
 
 1. Click the extension icon in Chrome
-2. Configure the API endpoint: `https://ynctsqjakvxvfcywzptf.supabase.co/functions/v1/ingest-posts`
-3. Enter your Supabase anon key (get it from the app settings)
+2. Configure the API endpoint: `https://udupi-property-explorer.onrender.com/api/ingestion/ingest-posts`
+3. Enter the ingestion API key (the `INGESTION_API_KEY` env var from your Render service)
 4. Click "Save Configuration"
 
 ## Usage
