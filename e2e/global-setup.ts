@@ -94,7 +94,7 @@ export default async function globalSetup(): Promise<void> {
         Authorization: `Bearer ${dealerToken}`,
       },
       body: JSON.stringify({
-        propertyType: 'RESIDENTIAL',
+        propertyType: 'house',
         title: '[E2E Test Listing] Auto-created by Playwright global-setup',
         locality: 'Udupi',
         price: 5000000,
