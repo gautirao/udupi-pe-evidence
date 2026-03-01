@@ -60,8 +60,9 @@ public class IngestionJobRunner {
 
         for (RawPost post : batch) {
             try {
-                processPost(post);
+                Listing listing = processPost(post);
                 processed++;
+                if (listing != null) listingsCreated++;
             } catch (Exception e) {
                 errors++;
                 log.error("Failed to process post postId={}: {}", post.getId(), e.getMessage(), e);
@@ -72,7 +73,7 @@ public class IngestionJobRunner {
                 processed, listingsCreated, errors);
     }
 
-    private void processPost(RawPost post) {
+    private Listing processPost(RawPost post) {
         log.info("Processing post postId={} contentLength={}",
                 post.getId(), post.getContent() != null ? post.getContent().length() : 0);
 
@@ -83,7 +84,7 @@ public class IngestionJobRunner {
         if (post.getContent() == null || post.getContent().isBlank()) {
             log.warn("Skipping post with empty content postId={}", post.getId());
             rawPostService.markProcessed(post.getId());
-            return;
+            return null;
         }
 
         // Classify using AI
@@ -93,7 +94,7 @@ public class IngestionJobRunner {
         } catch (ClassificationException e) {
             log.error("Classification failed for post postId={}: {}", post.getId(), e.getMessage());
             // Don't mark as processed - allow retry later
-            return;
+            return null;
         }
 
         // Create listing (handles marking as processed transactionally)
@@ -103,5 +104,6 @@ public class IngestionJobRunner {
         if (listing != null) {
             log.info("Created listing listingId={} for post postId={}", listing.getId(), post.getId());
         }
+        return listing;
     }
 }

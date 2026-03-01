@@ -106,8 +106,7 @@ public class AiClient implements AiClientPort {
                                         Map.of("type", "string", "enum", List.of("house", "apartment", "land", "commercial", "other")),
                                         Map.of("type", "null")))),
                                 Map.entry("price", Map.of("anyOf", nullableNumber)),
-                                Map.entry("price_unit", Map.of(
-                                        "type", "string", "default", "INR")),
+                                Map.entry("price_unit", Map.of("anyOf", nullableString)),
                                 Map.entry("locality", Map.of("anyOf", nullableString)),
                                 Map.entry("bedrooms", Map.of("anyOf", nullableNumber)),
                                 Map.entry("bathrooms", Map.of("anyOf", nullableNumber)),
