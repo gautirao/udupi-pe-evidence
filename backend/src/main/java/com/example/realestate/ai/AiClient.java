@@ -88,6 +88,11 @@ public class AiClient implements AiClientPort {
     }
 
     private Map<String, Object> buildRequestBody(String postContent) {
+        // JSON Schema nullable union types — compatible with both OpenAI and Groq.
+        // "nullable": true is an OpenAI extension not recognised by strict JSON Schema validators.
+        List<Map<String, String>> nullableString = List.of(Map.of("type", "string"), Map.of("type", "null"));
+        List<Map<String, String>> nullableNumber = List.of(Map.of("type", "number"), Map.of("type", "null"));
+
         Map<String, Object> toolFunction = Map.of(
                 "name", "parse_property",
                 "description", "Parse and classify a property listing from a social media post",
@@ -100,30 +105,19 @@ public class AiClient implements AiClientPort {
                                 Map.entry("property_type", Map.of(
                                         "type", "string",
                                         "enum", List.of("house", "apartment", "land", "commercial", "other"))),
-                                Map.entry("price", Map.of(
-                                        "type", "number", "nullable", true)),
+                                Map.entry("price", Map.of("anyOf", nullableNumber)),
                                 Map.entry("price_unit", Map.of(
                                         "type", "string", "default", "INR")),
-                                Map.entry("locality", Map.of(
-                                        "type", "string", "nullable", true)),
-                                Map.entry("bedrooms", Map.of(
-                                        "type", "number", "nullable", true)),
-                                Map.entry("bathrooms", Map.of(
-                                        "type", "number", "nullable", true)),
-                                Map.entry("land_area", Map.of(
-                                        "type", "number", "nullable", true)),
-                                Map.entry("land_area_unit", Map.of(
-                                        "type", "string", "nullable", true)),
-                                Map.entry("built_area", Map.of(
-                                        "type", "number", "nullable", true)),
-                                Map.entry("built_area_unit", Map.of(
-                                        "type", "string", "nullable", true)),
-                                Map.entry("contact_phone", Map.of(
-                                        "type", "string", "nullable", true)),
-                                Map.entry("contact_info", Map.of(
-                                        "type", "string", "nullable", true)),
-                                Map.entry("description", Map.of(
-                                        "type", "string", "nullable", true)),
+                                Map.entry("locality", Map.of("anyOf", nullableString)),
+                                Map.entry("bedrooms", Map.of("anyOf", nullableNumber)),
+                                Map.entry("bathrooms", Map.of("anyOf", nullableNumber)),
+                                Map.entry("land_area", Map.of("anyOf", nullableNumber)),
+                                Map.entry("land_area_unit", Map.of("anyOf", nullableString)),
+                                Map.entry("built_area", Map.of("anyOf", nullableNumber)),
+                                Map.entry("built_area_unit", Map.of("anyOf", nullableString)),
+                                Map.entry("contact_phone", Map.of("anyOf", nullableString)),
+                                Map.entry("contact_info", Map.of("anyOf", nullableString)),
+                                Map.entry("description", Map.of("anyOf", nullableString)),
                                 Map.entry("confidence_score", Map.of(
                                         "type", "number", "minimum", 0, "maximum", 100))
                         )),

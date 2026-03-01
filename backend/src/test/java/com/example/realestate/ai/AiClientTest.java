@@ -1,5 +1,6 @@
 package com.example.realestate.ai;
 
+import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -303,6 +304,45 @@ class AiClientTest {
         assertThatThrownBy(() -> aiClient.classify(postId, "test"))
                 .isInstanceOf(ClassificationException.class)
                 .hasMessageContaining("Failed to parse AI response");
+    }
+
+    @Test
+    void classify_schemaUsesAnyOfForNullableFields_andParsesNullsCorrectly() {
+        // Reproduces Groq 400 error: hotel listing where optional fields are null.
+        // The request schema must use anyOf union types — not OpenAI-proprietary "nullable":true —
+        // so strict providers like Groq accept null values from the model.
+        String aiResponse = """
+                {
+                  "choices": [{
+                    "message": {
+                      "tool_calls": [{
+                        "function": {
+                          "name": "parse_property",
+                          "arguments": "{\\"is_real_estate\\": true, \\"property_type\\": \\"commercial\\", \\"price\\": 80, \\"price_unit\\": \\"crore\\", \\"locality\\": null, \\"bedrooms\\": 28, \\"bathrooms\\": null, \\"land_area\\": 97, \\"land_area_unit\\": \\"cents\\", \\"built_area\\": null, \\"built_area_unit\\": null, \\"contact_phone\\": null, \\"contact_info\\": null, \\"description\\": \\"Hotel for sale with amenities\\", \\"confidence_score\\": 90}"
+                        }
+                      }]
+                    }
+                  }]
+                }
+                """;
+
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(Matchers.containsString("\"anyOf\"")))
+                .andExpect(content().string(Matchers.not(Matchers.containsString("\"nullable\""))))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
+
+        ClassificationResult result = aiClient.classify(UUID.randomUUID(), "Hotel for sale 97 cents land 28 rooms");
+
+        assertThat(result.isRealEstate()).isTrue();
+        assertThat(result.propertyType()).isEqualTo(PropertyType.COMMERCIAL);
+        assertThat(result.locality()).isNull();
+        assertThat(result.bathrooms()).isNull();
+        assertThat(result.builtArea()).isNull();
+        assertThat(result.builtAreaUnit()).isNull();
+        assertThat(result.contactPhone()).isNull();
+        assertThat(result.contactInfo()).isNull();
+        mockServer.verify();
     }
 
     @Test
