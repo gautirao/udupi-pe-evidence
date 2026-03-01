@@ -252,8 +252,11 @@ class AiClientTest {
     }
 
     @Test
-    void classify_unknownPropertyInArguments_throws() {
-        // Strict mode: unknown fields cause failure
+    void classify_unknownPropertyInArguments_droppedSilently() {
+        // Models hallucinate extra fields (e.g. land_use, is_rent, price_currency).
+        // Groq rejects the response if the schema has additionalProperties:false.
+        // Fix: remove additionalProperties constraint from schema; make Jackson lenient.
+        // Extra fields must be silently dropped — not cause a ClassificationException.
         String aiResponse = """
                 {
                   "choices": [{
@@ -261,7 +264,7 @@ class AiClientTest {
                       "tool_calls": [{
                         "function": {
                           "name": "parse_property",
-                          "arguments": "{\\"is_real_estate\\": true, \\"property_type\\": \\"house\\", \\"confidence_score\\": 80, \\"unexpected_field\\": \\"surprise\\"}"
+                          "arguments": "{\\"is_real_estate\\": true, \\"property_type\\": \\"land\\", \\"confidence_score\\": 100, \\"land_area\\": 25, \\"land_area_unit\\": \\"cents\\", \\"land_use\\": null, \\"is_rent\\": false, \\"price_currency\\": \\"INR\\", \\"contact_name\\": null, \\"contact_email\\": null, \\"description_max_length\\": 200}"
                         }
                       }]
                     }
@@ -273,10 +276,12 @@ class AiClientTest {
                 .andExpect(method(HttpMethod.POST))
                 .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
 
-        UUID postId = UUID.randomUUID();
-        assertThatThrownBy(() -> aiClient.classify(postId, "test"))
-                .isInstanceOf(ClassificationException.class)
-                .hasMessageContaining("Failed to parse AI response");
+        ClassificationResult result = aiClient.classify(UUID.randomUUID(), "Land for sale 25 cents");
+
+        assertThat(result.isRealEstate()).isTrue();
+        assertThat(result.propertyType()).isEqualTo(PropertyType.LAND);
+        assertThat(result.confidenceScore()).isEqualTo(100);
+        mockServer.verify();
     }
 
     @Test

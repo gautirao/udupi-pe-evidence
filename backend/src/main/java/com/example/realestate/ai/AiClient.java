@@ -45,9 +45,10 @@ public class AiClient implements AiClientPort {
         this.apiKey = apiKey;
         this.model = model;
 
-        // Strict mapper: fail on unknown properties, missing required fields
+        // Lenient mapper: silently drop unknown properties (model often hallucinates extra fields).
+        // Required fields (is_real_estate, confidence_score) are still enforced by @JsonProperty(required=true).
         this.strictMapper = new ObjectMapper();
-        this.strictMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
+        this.strictMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     }
 
     /**
@@ -121,8 +122,7 @@ public class AiClient implements AiClientPort {
                                 Map.entry("confidence_score", Map.of(
                                         "type", "number", "minimum", 0, "maximum", 100))
                         )),
-                        Map.entry("required", List.of("is_real_estate", "property_type", "confidence_score")),
-                        Map.entry("additionalProperties", false)
+                        Map.entry("required", List.of("is_real_estate", "property_type", "confidence_score"))
                 )
         );
 
