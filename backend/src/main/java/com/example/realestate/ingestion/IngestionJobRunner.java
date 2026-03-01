@@ -93,8 +93,9 @@ public class IngestionJobRunner {
             result = classificationService.classify(post);
         } catch (ClassificationException e) {
             log.error("Classification failed for post postId={}: {}", post.getId(), e.getMessage());
-            // Don't mark as processed - allow retry later
-            return null;
+            // Don't mark as processed - allow retry later.
+            // Re-throw so the outer loop increments the errors counter.
+            throw e;
         }
 
         // Create listing (handles marking as processed transactionally)
