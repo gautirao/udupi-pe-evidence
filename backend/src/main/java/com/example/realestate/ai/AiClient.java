@@ -11,6 +11,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -73,6 +74,12 @@ public class AiClient implements AiClientPort {
         String responseJson;
         try {
             responseJson = restTemplate.postForObject(apiUrl, entity, String.class);
+        } catch (HttpClientErrorException e) {
+            // Groq returns failed_generation in 400 error bodies — try to recover the model's output
+            ClassificationResult recovered = tryRecoverFromFailedGeneration(postId, e);
+            if (recovered != null) return recovered;
+            throw new ClassificationException(
+                    "AI API HTTP error for post " + postId + ": " + e.getMessage(), e);
         } catch (RestClientException e) {
             throw new ClassificationException(
                     "AI API HTTP error for post " + postId + ": " + e.getMessage(), e);
@@ -135,6 +142,88 @@ public class AiClient implements AiClientPort {
                 "tools", List.of(Map.of("type", "function", "function", toolFunction)),
                 "tool_choice", Map.of("type", "function", "function", Map.of("name", "parse_property"))
         );
+    }
+
+    /**
+     * Attempts to recover a ClassificationResult from Groq's {@code failed_generation} error field.
+     * Groq returns the model's raw output in the error body when schema validation fails.
+     * Two patterns handled:
+     * <ul>
+     *   <li>Pattern A: valid JSON wrapped in {@code <function=parse_property>...</function>} tags</li>
+     *   <li>Pattern B: all values stringified ("900", "true", "null") — coerced to correct types</li>
+     * </ul>
+     *
+     * @return parsed result, or {@code null} if recovery is not possible
+     */
+    private ClassificationResult tryRecoverFromFailedGeneration(UUID postId, HttpClientErrorException ex) {
+        try {
+            String body = ex.getResponseBodyAsString();
+            if (body == null || body.isEmpty()) return null;
+
+            ObjectMapper errorMapper = new ObjectMapper();
+            JsonNode root = errorMapper.readTree(body);
+
+            if (!"tool_use_failed".equals(root.path("error").path("code").asText(""))) return null;
+
+            String failedGeneration = root.path("error").path("failed_generation").asText("");
+            if (failedGeneration.isEmpty()) return null;
+
+            // Strip <function=parse_property> ... </function> wrapper
+            String jsonStr = extractJsonFromFunctionTag(failedGeneration);
+            if (jsonStr == null || jsonStr.isEmpty()) return null;
+
+            JsonNode argsNode = errorMapper.readTree(jsonStr);
+            if (!argsNode.isObject()) return null;
+
+            com.fasterxml.jackson.databind.node.ObjectNode argsObj =
+                    (com.fasterxml.jackson.databind.node.ObjectNode) argsNode;
+
+            // Coerce all string-typed scalar values to their correct JSON types
+            coerceStringValues(argsObj);
+
+            ClassificationResult result = strictMapper.treeToValue(argsObj, ClassificationResult.class);
+            log.warn("Recovered classification from Groq failed_generation postId={}", postId);
+            return result;
+
+        } catch (Exception e) {
+            log.debug("Could not recover from Groq failed_generation for post {}: {}", postId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Strips {@code <function=parse_property>} prefix and optional {@code </function>} suffix. */
+    private String extractJsonFromFunctionTag(String failedGeneration) {
+        int start = failedGeneration.indexOf('>');
+        if (start < 0) return null;
+        String content = failedGeneration.substring(start + 1).trim();
+        int end = content.lastIndexOf("</function>");
+        if (end >= 0) content = content.substring(0, end).trim();
+        return content;
+    }
+
+    /**
+     * Coerces string-typed scalar values in an ObjectNode to correct JSON types.
+     * Handles: {@code "null"} → null, {@code "true"/"false"} → boolean,
+     * numeric strings → number. Actual string values (e.g. "Udupi") are left unchanged.
+     */
+    private void coerceStringValues(com.fasterxml.jackson.databind.node.ObjectNode obj) {
+        List<String> keys = new ArrayList<>();
+        obj.fieldNames().forEachRemaining(keys::add);
+        for (String key : keys) {
+            JsonNode value = obj.get(key);
+            if (!value.isTextual()) continue;
+            String text = value.asText();
+            if ("null".equals(text)) {
+                obj.putNull(key);
+            } else if ("true".equals(text)) {
+                obj.put(key, true);
+            } else if ("false".equals(text)) {
+                obj.put(key, false);
+            } else {
+                try { obj.put(key, Long.parseLong(text)); continue; } catch (NumberFormatException ignored) {}
+                try { obj.put(key, Double.parseDouble(text)); } catch (NumberFormatException ignored) {}
+            }
+        }
     }
 
     private ClassificationResult parseToolCallResponse(UUID postId, String responseJson) {

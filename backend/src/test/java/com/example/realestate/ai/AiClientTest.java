@@ -422,6 +422,70 @@ class AiClientTest {
     }
 
     @Test
+    void classify_groqToolUseFailed_validJson_recoversFromFailedGeneration() {
+        // Pattern A: model uses <function=parse_property> tag format with valid JSON.
+        // Groq rejects the format but failed_generation contains a valid parseable payload.
+        String errorBody = """
+                {
+                  "error": {
+                    "message": "Failed to call a function. Please adjust your prompt.",
+                    "type": "invalid_request_error",
+                    "code": "tool_use_failed",
+                    "failed_generation": "<function=parse_property>{\\"description\\": \\"4 bhk 2800 sqft apartment\\",\\"confidence_score\\": 100,\\"property_type\\": \\"apartment\\",\\"price\\": null,\\"price_unit\\": null,\\"locality\\": \\"Padavinangady\\",\\"bedrooms\\": 4,\\"bathrooms\\": null,\\"land_area\\": null,\\"land_area_unit\\": null,\\"built_area\\": 2800,\\"built_area_unit\\": \\"sqft\\",\\"contact_phone\\": null,\\"contact_info\\": null,\\"is_real_estate\\": true}</function>"
+                  }
+                }
+                """;
+
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withBadRequest().body(errorBody).contentType(MediaType.APPLICATION_JSON));
+
+        ClassificationResult result = aiClient.classify(UUID.randomUUID(), "4 bhk apartment for sale");
+
+        assertThat(result.isRealEstate()).isTrue();
+        assertThat(result.propertyType()).isEqualTo(PropertyType.APARTMENT);
+        assertThat(result.locality()).isEqualTo("Padavinangady");
+        assertThat(result.bedrooms()).isEqualTo(4);
+        assertThat(result.builtArea()).isEqualByComparingTo("2800");
+        assertThat(result.confidenceScore()).isEqualTo(100);
+        mockServer.verify();
+    }
+
+    @Test
+    void classify_groqToolUseFailed_allStringValues_recoversWithCoercion() {
+        // Pattern B: model returns ALL values as strings including numbers and booleans.
+        // Groq rejects because schema expects number/boolean types.
+        // failed_generation contains the raw output; we coerce string values to correct types.
+        String errorBody = """
+                {
+                  "error": {
+                    "message": "tool call validation failed: parameters did not match schema",
+                    "type": "invalid_request_error",
+                    "code": "tool_use_failed",
+                    "failed_generation": "<function=parse_property> {\\"description\\": \\"23 cent record with 900 sqft 2 BHK House in Halekatte Nitte\\", \\"contact_info\\": \\"null\\", \\"land_area_unit\\": \\"cents\\", \\"price\\": \\"null\\", \\"built_area\\": \\"900\\", \\"confidence_score\\": \\"100\\", \\"locality\\": \\"Halekatte Nitte\\", \\"is_real_estate\\": \\"true\\", \\"built_area_unit\\": \\"sqft\\", \\"bedrooms\\": \\"2\\", \\"bathrooms\\": \\"null\\", \\"property_type\\": \\"house\\", \\"contact_phone\\": \\"null\\", \\"land_area\\": \\"23\\"} </function>"
+                  }
+                }
+                """;
+
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withBadRequest().body(errorBody).contentType(MediaType.APPLICATION_JSON));
+
+        ClassificationResult result = aiClient.classify(UUID.randomUUID(), "23 cent 2 BHK house Halekatte Nitte");
+
+        assertThat(result.isRealEstate()).isTrue();
+        assertThat(result.propertyType()).isEqualTo(PropertyType.HOUSE);
+        assertThat(result.locality()).isEqualTo("Halekatte Nitte");
+        assertThat(result.builtArea()).isEqualByComparingTo("900");
+        assertThat(result.landArea()).isEqualByComparingTo("23");
+        assertThat(result.bedrooms()).isEqualTo(2);
+        assertThat(result.bathrooms()).isNull();
+        assertThat(result.contactInfo()).isNull();
+        assertThat(result.confidenceScore()).isEqualTo(100);
+        mockServer.verify();
+    }
+
+    @Test
     void classify_httpError_throws() {
         mockServer.expect(requestTo(API_URL))
                 .andExpect(method(HttpMethod.POST))
