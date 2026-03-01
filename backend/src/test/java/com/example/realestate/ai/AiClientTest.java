@@ -307,6 +307,38 @@ class AiClientTest {
     }
 
     @Test
+    void classify_nonRealEstate_nullPropertyType_parsesSuccessfully() {
+        // Reproduces Groq 400: model returns property_type:null for non-real-estate posts.
+        // Schema must allow null for property_type via anyOf union type.
+        String aiResponse = """
+                {
+                  "choices": [{
+                    "message": {
+                      "tool_calls": [{
+                        "function": {
+                          "name": "parse_property",
+                          "arguments": "{\\"is_real_estate\\": false, \\"property_type\\": null, \\"confidence_score\\": 0}"
+                        }
+                      }]
+                    }
+                  }]
+                }
+                """;
+
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().string(Matchers.containsString("\"anyOf\"")))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
+
+        ClassificationResult result = aiClient.classify(UUID.randomUUID(), "Selling furniture cheap");
+
+        assertThat(result.isRealEstate()).isFalse();
+        assertThat(result.propertyType()).isNull();
+        assertThat(result.confidenceScore()).isEqualTo(0);
+        mockServer.verify();
+    }
+
+    @Test
     void classify_schemaUsesAnyOfForNullableFields_andParsesNullsCorrectly() {
         // Reproduces Groq 400 error: hotel listing where optional fields are null.
         // The request schema must use anyOf union types — not OpenAI-proprietary "nullable":true —

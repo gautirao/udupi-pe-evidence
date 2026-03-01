@@ -102,9 +102,9 @@ public class AiClient implements AiClientPort {
                                 Map.entry("is_real_estate", Map.of(
                                         "type", "boolean",
                                         "description", "Whether this post is a real estate listing")),
-                                Map.entry("property_type", Map.of(
-                                        "type", "string",
-                                        "enum", List.of("house", "apartment", "land", "commercial", "other"))),
+                                Map.entry("property_type", Map.of("anyOf", List.of(
+                                        Map.of("type", "string", "enum", List.of("house", "apartment", "land", "commercial", "other")),
+                                        Map.of("type", "null")))),
                                 Map.entry("price", Map.of("anyOf", nullableNumber)),
                                 Map.entry("price_unit", Map.of(
                                         "type", "string", "default", "INR")),

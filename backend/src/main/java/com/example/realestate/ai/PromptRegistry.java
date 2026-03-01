@@ -24,6 +24,8 @@ public final class PromptRegistry {
             - Moving services
             - Cleaning services
 
+            When is_real_estate is false: set property_type to "other", confidence_score to a low value (0-30), and leave all other fields null.
+
             For valid real estate posts, extract:
             - property_type: house, apartment, land, commercial, or other
             - price: numeric value only (null if not mentioned)
