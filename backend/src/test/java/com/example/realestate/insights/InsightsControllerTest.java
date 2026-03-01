@@ -143,8 +143,8 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].propertyType").value("land"))
                 .andExpect(jsonPath("$.content[0].locality").value("Manipal"))
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.totalPages").value(1));
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.page.totalPages").value(1));
     }
 
     // ==================== Test 5: new-listings no saved areas -> 200 empty Page ====================
@@ -159,7 +159,7 @@ class InsightsControllerTest {
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0))
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     // ==================== Test 6: new-listings pagination params forwarded ====================
@@ -204,8 +204,8 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].propertyType").value("land"))
                 .andExpect(jsonPath("$.content[0].undervaluationScore").value(0.25))
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.totalPages").value(1));
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.page.totalPages").value(1));
     }
 
     // ==================== Test 8: recommendations no saved areas -> 200 (general, paged) ====================
@@ -225,7 +225,7 @@ class InsightsControllerTest {
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.totalElements").value(1));
+                .andExpect(jsonPath("$.page.totalElements").value(1));
     }
 
     // ==================== Test 9: recommendations pagination params forwarded ====================
