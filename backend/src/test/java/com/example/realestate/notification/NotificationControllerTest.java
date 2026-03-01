@@ -82,8 +82,8 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.content[0].title").value("Listing approved"))
                 .andExpect(jsonPath("$.content[0].message").value("Your listing was approved."))
                 .andExpect(jsonPath("$.content[0].isRead").value(false))
-                .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.totalPages").value(1));
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.page.totalPages").value(1));
 
         verify(notificationRepository).findByUserId(eq(USER_A), any());
     }
@@ -99,7 +99,7 @@ class NotificationControllerTest {
                         .with(jwt().jwt(j -> j.subject(USER_A.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0))
-                .andExpect(jsonPath("$.totalElements").value(0));
+                .andExpect(jsonPath("$.page.totalElements").value(0));
     }
 
     // ==================== Test 3: GET notifications without JWT -> 403 ====================

@@ -19,6 +19,7 @@ spring:
       pageable:
         max-page-size: 100
         default-page-size: 20
+        serialization-mode: via_dto
 
   jpa:
     hibernate:
