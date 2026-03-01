@@ -43,7 +43,9 @@ import {
   Filter,
   Image as ImageIcon,
   Globe,
+  Eye,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
 const propertyTypeColors: Record<PropertyType, string> = {
@@ -329,9 +331,16 @@ export default function Listings() {
                       {formatRelativeDate(listing.created_at)}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(listing)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" asChild>
+                          <Link to={`/listing/${listing.id}`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(listing)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                   );

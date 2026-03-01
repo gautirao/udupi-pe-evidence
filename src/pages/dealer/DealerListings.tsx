@@ -23,7 +23,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Loader2 } from 'lucide-react';
+import { Building2, Eye, Loader2 } from 'lucide-react';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
@@ -197,6 +197,12 @@ export default function DealerListings() {
                     </p>
                   )}
                   <div className="flex gap-2 flex-wrap items-start">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/listing/${listing.id}`}>
+                        <Eye className="h-3.5 w-3.5 mr-1" />
+                        View
+                      </Link>
+                    </Button>
                     {EDITABLE_STATUSES.includes(listing.status) && (
                       <>
                         <Button variant="outline" size="sm" asChild>
