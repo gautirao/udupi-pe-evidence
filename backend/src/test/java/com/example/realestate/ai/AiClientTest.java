@@ -378,6 +378,45 @@ class AiClientTest {
     }
 
     @Test
+    void classify_stringNullValues_sanitizedToJsonNull() {
+        // Reproduces Groq 400: model returns string "null" instead of JSON null
+        // for unspecified numeric/string optional fields.
+        // e.g. "land_area": "null", "bathrooms": "null" — rejected by Groq schema validator.
+        // Our sanitizer must convert string "null" → JSON null before Jackson deserialization.
+        String aiResponse = """
+                {
+                  "choices": [{
+                    "message": {
+                      "tool_calls": [{
+                        "function": {
+                          "name": "parse_property",
+                          "arguments": "{\\"is_real_estate\\": true, \\"property_type\\": \\"house\\", \\"price\\": 490000, \\"price_unit\\": \\"lakh\\", \\"locality\\": \\"null\\", \\"bedrooms\\": 2, \\"bathrooms\\": \\"null\\", \\"land_area\\": \\"null\\", \\"land_area_unit\\": \\"null\\", \\"built_area\\": \\"null\\", \\"built_area_unit\\": \\"null\\", \\"contact_phone\\": \\"null\\", \\"contact_info\\": \\"null\\", \\"description\\": \\"2 BHK House Just @ 49 Lakh\\", \\"confidence_score\\": 90}"
+                        }
+                      }]
+                    }
+                  }]
+                }
+                """;
+
+        mockServer.expect(requestTo(API_URL))
+                .andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess(aiResponse, MediaType.APPLICATION_JSON));
+
+        ClassificationResult result = aiClient.classify(UUID.randomUUID(), "2 BHK House Just @ 49 Lakh");
+
+        assertThat(result.isRealEstate()).isTrue();
+        assertThat(result.propertyType()).isEqualTo(PropertyType.HOUSE);
+        assertThat(result.locality()).isNull();
+        assertThat(result.bathrooms()).isNull();
+        assertThat(result.landArea()).isNull();
+        assertThat(result.landAreaUnit()).isNull();
+        assertThat(result.builtArea()).isNull();
+        assertThat(result.contactPhone()).isNull();
+        assertThat(result.confidenceScore()).isEqualTo(90);
+        mockServer.verify();
+    }
+
+    @Test
     void classify_httpError_throws() {
         mockServer.expect(requestTo(API_URL))
                 .andExpect(method(HttpMethod.POST))

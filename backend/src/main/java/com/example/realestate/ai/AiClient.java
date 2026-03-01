@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -169,7 +170,24 @@ public class AiClient implements AiClientPort {
                         "Empty tool call arguments in AI response for post " + postId);
             }
 
-            // Strict deserialization: fails on unknown properties or missing required fields
+            // Sanitize: models sometimes return the string "null" instead of JSON null.
+            // Walk the top-level object fields and replace string-valued "null" with JSON null
+            // so downstream types (BigDecimal, Integer) don't fail strict deserialization.
+            JsonNode argsTree = envelopeMapper.readTree(arguments);
+            if (argsTree.isObject()) {
+                com.fasterxml.jackson.databind.node.ObjectNode argsObj =
+                        (com.fasterxml.jackson.databind.node.ObjectNode) argsTree;
+                List<String> stringNullKeys = new ArrayList<>();
+                argsObj.fields().forEachRemaining(e -> {
+                    if (e.getValue().isTextual() && "null".equals(e.getValue().asText())) {
+                        stringNullKeys.add(e.getKey());
+                    }
+                });
+                stringNullKeys.forEach(argsObj::putNull);
+                return strictMapper.treeToValue(argsObj, ClassificationResult.class);
+            }
+
+            // Fallback: strict deserialization (no string-null sanitization needed)
             return strictMapper.readValue(arguments, ClassificationResult.class);
 
         } catch (JsonProcessingException e) {
