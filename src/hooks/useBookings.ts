@@ -83,8 +83,8 @@ export function useMyBookings() {
   return {
     ...query,
     data: query.data?.content ?? undefined,
-    totalPages: query.data?.totalPages ?? 0,
-    totalElements: query.data?.totalElements ?? 0,
+    totalPages: query.data?.page?.totalPages ?? 0,
+    totalElements: query.data?.page?.totalElements ?? 0,
   };
 }
 
@@ -106,8 +106,8 @@ export function useDealerBookings() {
   return {
     ...query,
     data: query.data?.content ?? undefined,
-    totalPages: query.data?.totalPages ?? 0,
-    totalElements: query.data?.totalElements ?? 0,
+    totalPages: query.data?.page?.totalPages ?? 0,
+    totalElements: query.data?.page?.totalElements ?? 0,
   };
 }
 

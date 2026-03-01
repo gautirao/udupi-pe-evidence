@@ -4,16 +4,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085
 
 /**
  * Spring Data Page<T> wrapper returned by paginated endpoints.
- * Matches the backend Page<T> JSON structure (e.g. GET /api/listings/mine).
+ * Matches the VIA_DTO serialization shape (spring.data.web.pageable.serialization-mode=via_dto).
+ * Pagination metadata is nested under the `page` object.
  */
 export interface PageResponse<T> {
   content: T[];
-  totalPages: number;
-  totalElements: number;
-  size: number;
-  number: number;
-  first: boolean;
-  last: boolean;
+  page: {
+    size: number;
+    number: number;
+    totalElements: number;
+    totalPages: number;
+  };
 }
 
 export class ApiError extends Error {

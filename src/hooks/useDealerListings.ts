@@ -67,12 +67,12 @@ export function useDealerMyListings(page = 0, size = 20) {
       );
       return {
         listings: response.content,
-        totalPages: response.totalPages,
-        totalElements: response.totalElements,
-        currentPage: response.number,
-        pageSize: response.size,
-        isFirst: response.first,
-        isLast: response.last,
+        totalPages: response.page.totalPages,
+        totalElements: response.page.totalElements,
+        currentPage: response.page.number,
+        pageSize: response.page.size,
+        isFirst: response.page.number === 0,
+        isLast: response.page.number + 1 >= response.page.totalPages,
       };
     },
   });
