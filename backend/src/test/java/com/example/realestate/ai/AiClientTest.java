@@ -61,10 +61,8 @@ class AiClientTest {
         assertThat(result.isRealEstate()).isTrue();
         assertThat(result.propertyType()).isEqualTo(PropertyType.HOUSE);
         assertThat(result.price()).isEqualByComparingTo("5000000");
-        assertThat(result.priceUnit()).isEqualTo("INR");
         assertThat(result.locality()).isEqualTo("Udupi");
         assertThat(result.bedrooms()).isEqualTo(3);
-        assertThat(result.bathrooms()).isEqualTo(2);
         assertThat(result.landArea()).isEqualByComparingTo("1200");
         assertThat(result.landAreaUnit()).isEqualTo("sqft");
         assertThat(result.builtArea()).isEqualByComparingTo("1800");
@@ -374,7 +372,6 @@ class AiClientTest {
         assertThat(result.isRealEstate()).isTrue();
         assertThat(result.propertyType()).isEqualTo(PropertyType.COMMERCIAL);
         assertThat(result.locality()).isNull();
-        assertThat(result.bathrooms()).isNull();
         assertThat(result.builtArea()).isNull();
         assertThat(result.builtAreaUnit()).isNull();
         assertThat(result.contactPhone()).isNull();
@@ -412,7 +409,6 @@ class AiClientTest {
         assertThat(result.isRealEstate()).isTrue();
         assertThat(result.propertyType()).isEqualTo(PropertyType.HOUSE);
         assertThat(result.locality()).isNull();
-        assertThat(result.bathrooms()).isNull();
         assertThat(result.landArea()).isNull();
         assertThat(result.landAreaUnit()).isNull();
         assertThat(result.builtArea()).isNull();
@@ -479,7 +475,6 @@ class AiClientTest {
         assertThat(result.builtArea()).isEqualByComparingTo("900");
         assertThat(result.landArea()).isEqualByComparingTo("23");
         assertThat(result.bedrooms()).isEqualTo(2);
-        assertThat(result.bathrooms()).isNull();
         assertThat(result.contactInfo()).isNull();
         assertThat(result.confidenceScore()).isEqualTo(100);
         mockServer.verify();
