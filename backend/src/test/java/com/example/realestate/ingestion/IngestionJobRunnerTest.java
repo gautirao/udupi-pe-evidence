@@ -67,16 +67,16 @@ class IngestionJobRunnerTest {
 
     private ClassificationResult makeRealEstateResult(int confidence) {
         return new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "Udupi", null, null, null,
                 null, null, null, null, "Test listing", confidence
         );
     }
 
     private ClassificationResult makeNotRealEstateResult() {
         return new ClassificationResult(
-                false, PropertyType.OTHER, null, null,
-                null, null, null, null, null,
+                false, PropertyType.OTHER, null,
+                null, null, null, null,
                 null, null, null, null, null, 20
         );
     }

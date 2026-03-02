@@ -59,8 +59,8 @@ class ListingServiceTest {
     void createFrom_notRealEstate_discardsAndMarksProcessed() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                false, PropertyType.OTHER, null, null,
-                null, null, null, null, null,
+                false, PropertyType.OTHER, null,
+                null, null, null, null,
                 null, null, null, null, null, 30
         );
 
@@ -77,8 +77,8 @@ class ListingServiceTest {
     void createFrom_confidence49_discardsAndMarksProcessed() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, null,
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "Udupi", null, null, null,
                 null, null, null, null, "House for sale", 49
         );
 
@@ -95,8 +95,8 @@ class ListingServiceTest {
     void createFrom_confidence50_createsListingWithIsValidFalse() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("1000000"), "INR",
-                "Manipal", null, null, new BigDecimal("2400"), "sqft",
+                true, PropertyType.LAND, new BigDecimal("1000000"),
+                "Manipal", null, new BigDecimal("2400"), "sqft",
                 null, null, null, null, "Land for sale", 50
         );
 
@@ -118,8 +118,8 @@ class ListingServiceTest {
     void createFrom_confidence70_createsListingWithIsValidTrue() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, new BigDecimal("1200"), "sqft",
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, new BigDecimal("1200"), "sqft",
                 new BigDecimal("1800"), "sqft", "9876543210", "John",
                 "3BHK house", 70
         );
@@ -142,8 +142,8 @@ class ListingServiceTest {
     void createFrom_duplicateRawPostId_discardsAndMarksProcessed() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "Udupi", null, null, null,
                 null, null, null, null, "House", 85
         );
 
@@ -162,8 +162,8 @@ class ListingServiceTest {
     void createFrom_apartmentMappedToHouse() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.APARTMENT, new BigDecimal("3000000"), "INR",
-                "Mangalore", 2, 1, null, null,
+                true, PropertyType.APARTMENT, new BigDecimal("3000000"),
+                "Mangalore", 2, null, null,
                 new BigDecimal("900"), "sqft", null, null,
                 "2BHK apartment", 85
         );
@@ -183,8 +183,8 @@ class ListingServiceTest {
     void createFrom_nullPriceUnit_defaultsToINR() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, null, null,
-                "Udupi", null, null, null, null,
+                true, PropertyType.LAND, null,
+                "Udupi", null, null, null,
                 null, null, null, null, "Land", 60
         );
 
@@ -202,8 +202,8 @@ class ListingServiceTest {
     void createFrom_parsedDataIncludesModelAndVersion() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "Udupi", null, null, null,
                 null, null, null, null, "House", 75
         );
 
@@ -224,8 +224,8 @@ class ListingServiceTest {
     void createFrom_mapsAllFieldsFromClassification() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.COMMERCIAL, new BigDecimal("15000000"), "USD",
-                "Bangalore", null, null, new BigDecimal("5000"), "sqft",
+                true, PropertyType.COMMERCIAL, new BigDecimal("15000000"),
+                "Bangalore", null, new BigDecimal("5000"), "sqft",
                 new BigDecimal("4500"), "sqft", "555-1234", "broker@example.com",
                 "Commercial space downtown", 95
         );
@@ -239,7 +239,7 @@ class ListingServiceTest {
         assertThat(listing.getRawPostId()).isEqualTo(post.getId());
         assertThat(listing.getPropertyType()).isEqualTo("commercial");
         assertThat(listing.getPrice()).isEqualByComparingTo("15000000");
-        assertThat(listing.getPriceUnit()).isEqualTo("USD");
+        assertThat(listing.getPriceUnit()).isEqualTo("INR"); // price_unit dropped from schema; always INR
         assertThat(listing.getLocality()).isEqualTo("Bangalore");
         assertThat(listing.getLandArea()).isEqualByComparingTo("5000");
         assertThat(listing.getLandAreaUnit()).isEqualTo("sqft");
@@ -258,8 +258,8 @@ class ListingServiceTest {
     void createFrom_confidence69_isValidFalse() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, null,
-                null, null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                null, null, null, null,
                 null, null, null, null, null, 69
         );
 
@@ -278,8 +278,8 @@ class ListingServiceTest {
     void createFrom_withLocality_callsGeocodingAndPersistsCoordinates() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "House in Udupi", 80
         );
 
@@ -302,8 +302,8 @@ class ListingServiceTest {
     void createFrom_geocodingReturnsNull_leavesLatLngNull() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, null, "INR",
-                "Unknown Place", null, null, null, null,
+                true, PropertyType.LAND, null,
+                "Unknown Place", null, null, null,
                 null, null, null, null, "Land somewhere", 75
         );
 
@@ -324,8 +324,8 @@ class ListingServiceTest {
     void createFrom_nullLocality_doesNotCallGeocoding() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                null, null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                null, null, null, null,
                 null, null, null, null, "House", 70
         );
 
@@ -344,8 +344,8 @@ class ListingServiceTest {
     void createFrom_blankLocality_doesNotCallGeocoding() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                "   ", null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "   ", null, null, null,
                 null, null, null, null, "House", 70
         );
 
@@ -362,8 +362,8 @@ class ListingServiceTest {
     void createFrom_geocodingThrowsException_leavesLatLngNullButCreatesListing() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.COMMERCIAL, new BigDecimal("10000000"), "INR",
-                "Mangalore", null, null, null, null,
+                true, PropertyType.COMMERCIAL, new BigDecimal("10000000"),
+                "Mangalore", null, null, null,
                 null, null, null, null, "Commercial space", 85
         );
 
@@ -387,8 +387,8 @@ class ListingServiceTest {
     void createFrom_sameDescriptionLocalityPrice_flagsAsDuplicate() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "3BHK house for sale", 80
         );
 
@@ -409,8 +409,8 @@ class ListingServiceTest {
     void createFrom_noDuplicateHash_notFlaggedAsDuplicate() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("2000000"), "INR",
-                "Manipal", null, null, new BigDecimal("2400"), "sqft",
+                true, PropertyType.LAND, new BigDecimal("2000000"),
+                "Manipal", null, new BigDecimal("2400"), "sqft",
                 null, null, null, null, "Land for sale", 75
         );
 
@@ -429,8 +429,8 @@ class ListingServiceTest {
     void createFrom_differentDescription_notFlaggedAsDuplicate() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", null, null, null,
                 null, null, null, null, "Different description", 70
         );
 
@@ -448,8 +448,8 @@ class ListingServiceTest {
     void createFrom_differentLocality_notFlaggedAsDuplicate() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Mangalore", null, null, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Mangalore", null, null, null,
                 null, null, null, null, "3BHK house for sale", 70
         );
 
@@ -467,8 +467,8 @@ class ListingServiceTest {
     void createFrom_differentPrice_notFlaggedAsDuplicate() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("6000000"), "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("6000000"),
+                "Udupi", null, null, null,
                 null, null, null, null, "3BHK house for sale", 70
         );
 
@@ -486,8 +486,8 @@ class ListingServiceTest {
     void createFrom_rerunIdempotent_existingRawPostIdPreventsCreation() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", null, null, null,
                 null, null, null, null, "House", 80
         );
 
@@ -505,8 +505,8 @@ class ListingServiceTest {
     void createFrom_nullDescriptionLocalityPrice_noHashComputed() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.OTHER, null, "INR",
-                null, null, null, null, null,
+                true, PropertyType.OTHER, null,
+                null, null, null, null,
                 null, null, null, null, null, 60
         );
 
@@ -543,8 +543,8 @@ class ListingServiceTest {
     void createFrom_geocodingSuccess_setsAreaKeyAndAreaLabel() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Ambalpady", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Ambalpady", 3, null, null,
                 null, null, null, null, "House in Ambalpady", 80
         );
 
@@ -564,8 +564,8 @@ class ListingServiceTest {
     void createFrom_geocodingReturnsNull_areaKeyAndLabelNull() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, null, "INR",
-                "Unknown", null, null, null, null,
+                true, PropertyType.LAND, null,
+                "Unknown", null, null, null,
                 null, null, null, null, "Land", 75
         );
 
@@ -583,8 +583,8 @@ class ListingServiceTest {
     void createFrom_geocodingThrows_areaKeyAndLabelNull() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                "Mangalore", null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "Mangalore", null, null, null,
                 null, null, null, null, "House", 80
         );
 
@@ -752,8 +752,8 @@ class ListingServiceTest {
     void createFrom_validLandAreaAndUnit_normalizesArea() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("5000000"), "INR",
-                "Udupi", null, null, new BigDecimal("1000"), "sqft",
+                true, PropertyType.LAND, new BigDecimal("5000000"),
+                "Udupi", null, new BigDecimal("1000"), "sqft",
                 null, null, null, null, "Land 1000 sqft", 75
         );
 
@@ -776,8 +776,8 @@ class ListingServiceTest {
     void createFrom_unknownUnit_leavesNormalizedFieldsNull() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("5000000"), "INR",
-                "Udupi", null, null, new BigDecimal("1"), "acre",
+                true, PropertyType.LAND, new BigDecimal("5000000"),
+                "Udupi", null, new BigDecimal("1"), "acre",
                 null, null, null, null, "Land 1 acre", 75
         );
 
@@ -798,8 +798,8 @@ class ListingServiceTest {
     void createFrom_nullLandArea_leavesNormalizedFieldsNull() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 new BigDecimal("1200"), "sqft", null, null, "3BHK house", 75
         );
 
@@ -824,8 +824,8 @@ class ListingServiceTest {
         RawPost post = makePost();
         // AI returns price = 5000000 (rupees), which should become pricePaise = 500000000000L
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("5000000"), "INR",
-                "Udupi", null, null, new BigDecimal("10"), "cent",
+                true, PropertyType.LAND, new BigDecimal("5000000"),
+                "Udupi", null, new BigDecimal("10"), "cent",
                 null, null, null, null, "Land 10 cents", 75
         );
 
@@ -851,8 +851,8 @@ class ListingServiceTest {
     void createFrom_firstOccurrence_repostCountIsZero() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "Unique house listing", 80
         );
 
@@ -871,8 +871,8 @@ class ListingServiceTest {
     void createFrom_secondOccurrence_repostCountIsOne() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "Reposted house", 80
         );
 
@@ -892,8 +892,8 @@ class ListingServiceTest {
     void createFrom_thirdOccurrence_repostCountIsTwo() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "Reposted house again", 80
         );
 
@@ -913,8 +913,8 @@ class ListingServiceTest {
     void createFrom_nullDedupeHash_repostCountIsZero() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.OTHER, null, "INR",
-                null, null, null, null, null,
+                true, PropertyType.OTHER, null,
+                null, null, null, null,
                 null, null, null, null, null, 60
         );
 
@@ -933,8 +933,8 @@ class ListingServiceTest {
     void createFrom_repostDoesNotBreakExistingDuplicateFlag() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", null, null, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", null, null, null,
                 null, null, null, null, "Repost test", 85
         );
 
@@ -954,8 +954,8 @@ class ListingServiceTest {
     void createFrom_idempotencyGuard_doesNotInflateRepostCount() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "Reposted house", 80
         );
 
@@ -973,8 +973,8 @@ class ListingServiceTest {
     void createFrom_firstOccurrence_doesNotCallCountByDedupeHash() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.LAND, new BigDecimal("3000000"), "INR",
-                "Manipal", null, null, null, null,
+                true, PropertyType.LAND, new BigDecimal("3000000"),
+                "Manipal", null, null, null,
                 null, null, null, null, "Fresh land listing", 75
         );
 
@@ -993,8 +993,8 @@ class ListingServiceTest {
     void createFrom_duplicateWithHighCount_repostCountMatchesPriorCount() {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
-                true, PropertyType.HOUSE, new BigDecimal("5000000"), "INR",
-                "Udupi", 3, 2, null, null,
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
                 null, null, null, null, "Heavily reposted house", 80
         );
 

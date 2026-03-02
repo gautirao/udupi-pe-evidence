@@ -96,10 +96,8 @@ public class ListingService {
         listing.setRawPostId(post.getId());
         listing.setPropertyType(mapPropertyType(result.propertyType()));
         listing.setPrice(result.price());
-        listing.setPriceUnit(Objects.requireNonNullElse(result.priceUnit(), "INR"));
         listing.setLocality(result.locality());
         listing.setBedrooms(result.bedrooms());
-        listing.setBathrooms(result.bathrooms());
         listing.setLandArea(result.landArea());
         listing.setLandAreaUnit(result.landAreaUnit());
 

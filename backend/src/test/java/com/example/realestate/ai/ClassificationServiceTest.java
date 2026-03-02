@@ -39,8 +39,8 @@ class ClassificationServiceTest {
     void classify_delegatesToAiClient() {
         RawPost post = makePost("3BHK house for sale in Udupi");
         ClassificationResult expected = new ClassificationResult(
-                true, PropertyType.HOUSE, null, "INR",
-                "Udupi", 3, 2, null, null, null, null,
+                true, PropertyType.HOUSE, null,
+                "Udupi", 3, null, null, null, null,
                 null, null, "3BHK house", 92
         );
 
