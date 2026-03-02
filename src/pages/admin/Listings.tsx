@@ -56,6 +56,23 @@ const propertyTypeColors: Record<PropertyType, string> = {
   other: 'bg-gray-500/10 text-gray-600',
 };
 
+const statusBadgeStyles: Record<string, string> = {
+  SCRAPED: 'bg-blue-500/10 text-blue-600',
+  LIVE: 'bg-green-500/10 text-green-600',
+  PENDING_REVIEW: 'bg-yellow-500/10 text-yellow-700',
+  DRAFT: 'bg-gray-500/10 text-gray-600',
+  REJECTED: 'bg-red-500/10 text-red-600',
+};
+
+function StatusBadge({ status }: { status: string | null }) {
+  if (!status) return <span className="text-muted-foreground">—</span>;
+  return (
+    <Badge className={statusBadgeStyles[status] ?? 'bg-gray-500/10 text-gray-600'}>
+      {status.replace('_', ' ').toLowerCase()}
+    </Badge>
+  );
+}
+
 const confidenceColor = (score: number | null) => {
   if (!score) return 'text-muted-foreground';
   if (score >= 80) return 'text-green-600';
@@ -72,6 +89,7 @@ export default function Listings() {
   const [showGeocodeDialog, setShowGeocodeDialog] = useState(false);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterValidity, setFilterValidity] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [editForm, setEditForm] = useState({
@@ -125,6 +143,7 @@ export default function Listings() {
     if (filterType !== 'all' && listing.property_type !== filterType) return false;
     if (filterValidity === 'valid' && !listing.is_valid) return false;
     if (filterValidity === 'invalid' && listing.is_valid) return false;
+    if (filterStatus !== 'all' && listing.status !== filterStatus) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
@@ -232,6 +251,19 @@ export default function Listings() {
                   <SelectItem value="invalid">Invalid Only</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="SCRAPED">Scraped</SelectItem>
+                  <SelectItem value="LIVE">Live</SelectItem>
+                  <SelectItem value="PENDING_REVIEW">Pending Review</SelectItem>
+                  <SelectItem value="DRAFT">Draft</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
               <div className="text-sm text-muted-foreground ml-auto">
                 Showing {filteredListings.length} of {listings.length}
               </div>
@@ -252,6 +284,7 @@ export default function Listings() {
                   <TableHead>Type</TableHead>
                   <TableHead>Locality</TableHead>
                   <TableHead>Price</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead>Coords</TableHead>
                   <TableHead>Confidence</TableHead>
                   <TableHead>Valid</TableHead>
@@ -308,6 +341,9 @@ export default function Listings() {
                     </TableCell>
                     <TableCell>
                       {listing.price ? formatPrice(listing.price, listing.price_unit) : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={listing.status} />
                     </TableCell>
                     <TableCell>
                       {listing.latitude && listing.longitude ? (

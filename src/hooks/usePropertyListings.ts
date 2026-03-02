@@ -33,6 +33,7 @@ export interface PropertyListing {
   language_detected: string | null;
   is_valid: boolean;
   is_duplicate: boolean;
+  status: string | null;
   created_at: string;
   updated_at: string;
   raw_post_id: string | null;
