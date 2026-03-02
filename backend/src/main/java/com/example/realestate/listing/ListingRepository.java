@@ -51,6 +51,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND latitude IS NOT NULL
               AND longitude IS NOT NULL
               AND area_key IS NOT NULL
+              AND status IN ('SCRAPED', 'LIVE')
               AND (CAST(:minPpc AS bigint) IS NULL OR price_per_cent_paise >= :minPpc)
               AND (CAST(:maxPpc AS bigint) IS NULL OR price_per_cent_paise <= :maxPpc)
               AND (CAST(:createdAfter AS timestamptz) IS NULL OR created_at >= :createdAfter)
@@ -64,6 +65,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND latitude IS NOT NULL
               AND longitude IS NOT NULL
               AND area_key IS NOT NULL
+              AND status IN ('SCRAPED', 'LIVE')
               AND (CAST(:minPpc AS bigint) IS NULL OR price_per_cent_paise >= :minPpc)
               AND (CAST(:maxPpc AS bigint) IS NULL OR price_per_cent_paise <= :maxPpc)
               AND (CAST(:createdAfter AS timestamptz) IS NULL OR created_at >= :createdAfter)
