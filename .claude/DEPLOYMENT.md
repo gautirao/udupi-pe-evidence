@@ -64,6 +64,29 @@ Data correctness outweighs convenience.
 
 ---
 
+## E2E / Playwright CI Variables
+
+These env vars are required to run the full Playwright suite (Q3, Q7, global-setup, global-teardown).
+Tests that need credentials use `test.skip` when vars are absent — they will not fail CI, but auth-gated coverage is skipped.
+
+| Variable | Required for | Description |
+|----------|-------------|-------------|
+| `PLAYWRIGHT_BASE_URL` | All | Frontend URL (e.g. `http://localhost:8080`) |
+| `BACKEND_BASE_URL` | Q4, Q5, Q7 | Backend URL (e.g. `http://localhost:8085`) |
+| `SMOKE_USER_EMAIL` | Q3, Q7 | Regular user account email |
+| `SMOKE_USER_PASSWORD` | Q3, Q7 | Regular user account password |
+| `SMOKE_LISTING_ID` | Q7 (override) | LIVE listing ID — overrides auto-fixture |
+| `DEALER_EMAIL` | global-setup, teardown | Dealer account email |
+| `DEALER_PASSWORD` | global-setup, teardown | Dealer account password |
+| `ADMIN_EMAIL` | listing-lifecycle | Admin account email |
+| `ADMIN_PASSWORD` | listing-lifecycle | Admin account password |
+| `VITE_SUPABASE_URL` | global-teardown auth | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | global-teardown auth | Supabase anon/publishable key |
+
+Reference: `.env.e2e` at repo root contains example values for local development.
+
+---
+
 ## Enforcement
 
 If a deployment decision conflicts with this document:
