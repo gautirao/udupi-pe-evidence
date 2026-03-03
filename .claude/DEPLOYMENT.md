@@ -95,3 +95,22 @@ If a deployment decision conflicts with this document:
 - Wait for human direction
 
 Deployment rules override speed, convenience, and experimentation.
+
+
+## CORS safety rule
+
+- Do **not** use wildcard origins (`*`) when requests include credentials or `Authorization` headers.
+- Prefer an explicit allowlist of known frontend origins (e.g., Cloudflare Pages / custom domains).
+
+## Required environment variables (registry)
+
+Maintain a canonical list of required env vars so services fail fast with actionable errors.
+
+Backend (example):
+- DATABASE_URL
+- SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+
+Frontend (example):
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_ANON_KEY

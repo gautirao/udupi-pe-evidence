@@ -177,18 +177,36 @@
     
     // Helper to check if URL is valid post image
     function isValidImageUrl(url) {
-      if (!url || url.length < 10) return false;
+      if (!url || url.length < 10) {
+        console.log(`${logPrefix}   [SKIP] URL empty/too short: "${url}"`);
+        return false;
+      }
       // Must be from Facebook CDN or external image hosts
       const validDomains = ['scontent', 'fbcdn', 'fbsbx', 'fb.com', 'facebook.com', 'external'];
       const hasValidDomain = validDomains.some(d => url.includes(d));
-      if (!hasValidDomain) return false;
+      if (!hasValidDomain) {
+        console.log(`${logPrefix}   [SKIP] Not a CDN domain: ${url.substring(0, 100)}`);
+        return false;
+      }
       // Skip profile pictures and small icons
-      if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) return false;
-      if (url.includes('/cp0/') || url.includes('/s32x32/') || url.includes('/s40x40/')) return false;
+      if (url.includes('/p50x50/') || url.includes('/p60x60/') || url.includes('/c0.0.40.40')) {
+        console.log(`${logPrefix}   [SKIP] Profile pic size pattern: ${url.substring(0, 100)}`);
+        return false;
+      }
+      if (url.includes('/cp0/') || url.includes('/s32x32/') || url.includes('/s40x40/')) {
+        console.log(`${logPrefix}   [SKIP] Small icon size pattern: ${url.substring(0, 100)}`);
+        return false;
+      }
       // Skip reaction/emoji images
-      if (url.includes('/reaction/') || url.includes('emoji') || url.includes('/rsrc')) return false;
+      if (url.includes('/reaction/') || url.includes('emoji') || url.includes('/rsrc')) {
+        console.log(`${logPrefix}   [SKIP] Reaction/emoji/rsrc: ${url.substring(0, 100)}`);
+        return false;
+      }
       // Skip static resources
-      if (url.includes('static.xx') || url.includes('/images/composer/')) return false;
+      if (url.includes('static.xx') || url.includes('/images/composer/')) {
+        console.log(`${logPrefix}   [SKIP] Static resource: ${url.substring(0, 100)}`);
+        return false;
+      }
       return true;
     }
     
@@ -210,8 +228,11 @@
     function addImageUrl(url, alt = null, width = null, height = null, source = 'img') {
       const cleanUrl = normalizeUrl(url);
       if (!cleanUrl || !isValidImageUrl(cleanUrl)) return false;
-      if (seenUrls.has(cleanUrl)) return false;
-      
+      if (seenUrls.has(cleanUrl)) {
+        console.log(`${logPrefix}   [DUP] Already seen (${source}): ${cleanUrl.substring(0, 80)}`);
+        return false;
+      }
+
       seenUrls.add(cleanUrl);
       images.push({ url: cleanUrl, alt, width, height });
       console.log(`${logPrefix}   -> ADDED (${source}): ${cleanUrl}`);
@@ -223,12 +244,18 @@
     console.log(`${logPrefix} Total img elements found: ${allImgs.length}`);
     
     allImgs.forEach((img, idx) => {
+      const rawSrc = img.src || img.dataset.src || img.getAttribute('data-src') || '(none)';
+      console.log(`${logPrefix}   img[${idx}] src=${rawSrc.substring(0, 100)} w=${img.width} h=${img.height} alt="${img.alt || ''}"`);
+
       // Skip if clearly a profile picture or icon
       const isInProfileLink = img.closest('a[href*="/profile"]') || img.closest('a[aria-label*="profile picture"]');
       const isInSvg = img.closest('svg');
       const isSmallIcon = (img.width && img.width < 50) || (img.height && img.height < 50);
-      
-      if (isInSvg) return;
+
+      if (isInSvg) {
+        console.log(`${logPrefix}   [SKIP] img[${idx}] is inside SVG`);
+        return;
+      }
       
       // Skip emojis based on class, alt text, or size
       const imgClass = img.className || '';
@@ -352,7 +379,77 @@
         }
       }
     });
-    
+
+    // STRATEGY 6: Facebook "May be an image of …" aria-label pattern
+    // Each photo in a FB post gallery is wrapped in:
+    //   <a aria-label="May be an image of indoors" …><img src="https://scontent-…" /></a>
+    // This is the most reliable selector for the actual content images.
+    const mayBeSelectors = [
+      'a[aria-label*="May be an image"] img',
+      'a[aria-label*="May be a photo"] img',
+      'a[aria-label*="image of"] img',
+    ];
+    const s6total = mayBeSelectors.reduce((n, sel) => n + postElement.querySelectorAll(sel).length, 0);
+    console.log(`${logPrefix} STRATEGY 6: aria-label image links inside postElement: ${s6total}`);
+    mayBeSelectors.forEach(sel => {
+      postElement.querySelectorAll(sel).forEach(img => {
+        const src = img.src || img.getAttribute('src');
+        if (src) {
+          const width = img.naturalWidth || img.width || 0;
+          const height = img.naturalHeight || img.height || 0;
+          addImageUrl(src, img.alt || null, width, height, 'aria-img');
+        }
+      });
+    });
+
+    // STRATEGY 7: Walk up ancestor chain (up to 5 levels) looking for image gallery siblings.
+    // Facebook sometimes puts the image carousel OUTSIDE [role="article"] in a sibling element
+    // of a grandparent container. We walk upward until we find a container that has
+    // "May be an image" links that are NOT already inside our postElement.
+    if (images.length === 0) {
+      console.log(`${logPrefix} STRATEGY 7: no images found yet — walking up DOM for gallery siblings...`);
+      let ancestor = postElement.parentElement;
+      let level = 0;
+      while (ancestor && ancestor !== document.body && level < 5) {
+        level++;
+        // Collect all aria-label image links in this ancestor that are NOT inside postElement
+        const candidates = [];
+        mayBeSelectors.forEach(sel => {
+          ancestor.querySelectorAll(sel).forEach(img => {
+            if (!postElement.contains(img)) candidates.push(img);
+          });
+        });
+        if (candidates.length > 0) {
+          console.log(`${logPrefix} STRATEGY 7: found ${candidates.length} images at ancestor level ${level}`);
+          candidates.forEach(img => {
+            const src = img.src || img.getAttribute('src');
+            if (src) {
+              const width = img.naturalWidth || img.width || 0;
+              const height = img.naturalHeight || img.height || 0;
+              addImageUrl(src, img.alt || null, width, height, `ancestor-l${level}`);
+            }
+          });
+          break; // stop walking up once we find something
+        }
+        // Also try a generic img scan at this level (as last resort)
+        if (level === 5) {
+          console.log(`${logPrefix} STRATEGY 7: trying generic img scan at ancestor level ${level}...`);
+          ancestor.querySelectorAll('img').forEach(img => {
+            if (postElement.contains(img)) return;
+            const src = img.src || img.getAttribute('src');
+            if (src) {
+              const width = img.naturalWidth || img.width || 0;
+              const height = img.naturalHeight || img.height || 0;
+              if (width === 0 || width >= 60) {
+                addImageUrl(src, img.alt || null, width, height, `ancestor-img-l${level}`);
+              }
+            }
+          });
+        }
+        ancestor = ancestor.parentElement;
+      }
+    }
+
     console.log(`${logPrefix} Total images extracted: ${images.length}`);
     return images;
   }
@@ -527,16 +624,32 @@
     `;
 
     const checkbox = overlay.querySelector('.udupi-post-checkbox');
+
+    // Debug: confirm click events reach the checkbox.
+    // Use stopImmediatePropagation to also stop other same-element handlers,
+    // and capture=true so we run before Facebook's bubble-phase listeners.
+    overlay.addEventListener('click', (e) => {
+      e.stopImmediatePropagation();
+    }, true /* capture phase */);
+
+    checkbox.addEventListener('click', (e) => {
+      e.stopImmediatePropagation();
+      console.log(`[Udupi Tracker] Checkbox CLICK on post key=${postElement.dataset.udupiKey} index=${postElement.dataset.udupiIndex} checked=${e.target.checked}`);
+    });
+
     checkbox.addEventListener('change', (e) => {
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       const index = postElement.dataset.udupiIndex;
       if (e.target.checked) {
         selectedPosts.add(index);
         postElement.classList.add('udupi-selected');
+        console.log(`[Udupi Tracker] ✅ SELECTED index=${index}, total selected=${selectedPosts.size}`);
       } else {
         selectedPosts.delete(index);
         postElement.classList.remove('udupi-selected');
+        console.log(`[Udupi Tracker] ❌ DESELECTED index=${index}, total selected=${selectedPosts.size}`);
       }
+      console.log(`[Udupi Tracker] selectedPosts now:`, Array.from(selectedPosts));
     });
 
     // Position the overlay
@@ -648,7 +761,7 @@
               
               // SCROLL POST INTO VIEW to force Facebook to reload content
               post.scrollIntoView({ behavior: 'instant', block: 'center' });
-              await new Promise(resolve => setTimeout(resolve, 150)); // Wait for DOM to update
+              await new Promise(resolve => setTimeout(resolve, 500)); // Wait for lazy-loaded images to appear
               
               const text = getPostText(post);
               const images = getPostImages(post, postId);

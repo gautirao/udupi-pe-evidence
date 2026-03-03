@@ -1,40 +1,47 @@
 # PR Rules
 
-Every change produced by Claude is treated as a **Pull Request**, even if no GitHub PR exists.
-Claude must follow the rules in this file for every task.
+All Claude-generated changes are treated as Pull Requests.
 
-These rules apply regardless of task size.
+For any task that modifies files:
+1. Post Pre-Implementation Plan
+2. Wait for explicit approval
+3. Implement
+4. Post Post-Implementation Checklist
+
+No code may be written before approval.
+
+## Fast Path (optional, user-invoked)
+
+If the user explicitly says **"fast path"** or **"pre-approved"** for a change:
+- Still paste the **Pre-Implementation Plan** template first (verbatim).
+- Do **not** wait for explicit approval after the plan.
+- Proceed immediately to implementation.
+- Still paste the **Post-Implementation Checklist** template at the end (verbatim).
+- All other PR_RULES constraints still apply.
+
+## Terminology
+
+When these rules reference roles:
+- "engineer" means: **backend-engineer** or **frontend-engineer** (whichever applies)
+- "qa-validate" means: **qa-fast final** (or **qa** only when test-writing is required)
+- "architect" means: **architect agent** (design-only, no direct code edits)
 
 ---
 
-## Mandatory PR Template
+## What counts as a file
 
-For every task, change, or code submission, Claude must paste the following templates:
-- Once **before any code is written** (Pre-Implementation Plan)
-- Again **after implementation**, with checkboxes completed (Post-Implementation Checklist)
-
-Claude must **not** modify wording, remove items, reorder sections, or skip sections.
-Failure to paste these templates exactly is a violation.
-
----
-
-## What counts as a “file”
-
-A “file” includes (but is not limited to):
-- source code files
-- test files
-- configuration files
-- documentation files
+Any created or modified file, including:
+- source code
+- tests
+- config
+- documentation
 - env templates
-- build or deployment files
-
-There are no exceptions.
+- build/deployment files
 
 ---
 
 ## Pre-Implementation Plan (REQUIRED BEFORE CODE)
 
-```
 ## Pre-Implementation Plan
 
 ### Goal
@@ -43,103 +50,89 @@ There are no exceptions.
 ### Approach
 <Step-by-step plan>
 
-### Files to be changed or created
+### Files
 * <file 1>
 * <file 2>
 * <file 3>
 
-### Scope check
-* [ ] This task modifies 3 files or fewer
-* [ ] If more than 3 files are required, the task has been stopped and split
+### Scope
+* [ ] 3 files or fewer
+* [ ] If more than 3 files are required, task stopped and split
 
-### Open questions / assumptions
-* <Anything unclear that requires approval>
-```
+### Open questions
+* <Assumptions requiring approval>
 
-Claude must **stop and wait for explicit approval** after posting this section.
-
-No code may be written before approval.
+Claude must stop after this section and wait for approval.
 
 ---
 
 ## Post-Implementation Checklist (REQUIRED AFTER CODE)
 
-```
 ## Post-Implementation Checklist
 
-### Scope & planning
-* [ ] Approach was approved before coding
+### Scope
+* [ ] Plan approved before coding
 * [ ] All modified files were listed in advance
-* [ ] No unapproved scope expansion occurred
+* [ ] No unapproved scope expansion
 
-### Requirements & correctness
-* [ ] CLAUDE.md and relevant .claude/ rules were re-read before implementation
-* [ ] PROJECT_CONTEXT.md was consulted for system facts
-* [ ] No non-goals were violated
-* [ ] No authentication logic was reimplemented
-* [ ] No Supabase client libraries were introduced
-* [ ] No AI calls were added to synchronous request paths
-* [ ] Raw data is persisted before processing
+### Correctness
+* [ ] CLAUDE.md and .claude rules reviewed
+* [ ] PROJECT_CONTEXT.md consulted
+* [ ] No non-goals violated
+* [ ] Architecture constraints respected
 
-### Testing discipline
-* [ ] New logic is covered by tests
-* [ ] Existing tests updated if behavior changed
-* [ ] Idempotency is tested where applicable
+### Testing
+* [ ] New logic covered by tests
+* [ ] Existing tests updated if needed
+* [ ] Idempotency tested where applicable
 
 #### Bug fix protocol (if applicable)
-* [ ] A failing test was written first
-* [ ] The test failed before the fix
-* [ ] The test passes after the fix
+* [ ] Failing test written first
+* [ ] Test failed before fix
+* [ ] Test passes after fix
 
 ### Failure analysis
-* [ ] "What could break?" section included
-* [ ] Edge cases and failure modes listed
+* [ ] “What could break?” included
+* [ ] Edge cases listed
 * [ ] Invalid assumptions identified
 
 ### Self-correction
-* [ ] Any human correction resulted in a new rule added to .claude/ files
-```
+* [ ] Human corrections converted into rules
 
 ---
 
-## Scope and Splitting Rules (Expanded)
+## Scope Rules
 
 If a task requires changes to more than 3 files:
-1. STOP immediately
-2. Propose a breakdown into smaller, sequential tasks
-3. Wait for confirmation on the task split before continuing
+1. Stop immediately
+2. Propose task split
+3. Wait for confirmation
 
-Claude must not:
-- Make sweeping refactors
-- “Just fix it while here”
-- Change unrelated files opportunistically
+No opportunistic refactors.
+No unrelated file changes.
 
 ---
 
-## Analysis-only or no-code tasks
+## Analysis-only / No-code tasks
 
-If a task produces **no code changes**:
-- A condensed Pre-Implementation Plan is still required — include **Goal** and **Approach** only; omit Files, Scope check, and Open questions
-- The Post-Implementation Checklist may be omitted
-- Claude must explicitly state: “No code changes made”
-
-This exception applies only when **zero files** are modified.
+If zero files are modified:
+- Provide Goal and Approach only
+- Explicitly state: "No code changes made"
+- Post-Implementation Checklist not required
 
 ---
 
----
+## Risk Pipeline
 
-## Review Pipeline (Risk-Tiered)
+Default tier: MEDIUM
 
-Choose the pipeline based on the PR's risk level. Apply the highest matching tier.
+| Tier | Applies to | Pipeline |
+|------|------------|----------|
+| CRITICAL | auth, payments, security, atomicity | qa-fast → engineer → qa-validate → code-reviewer → security-reviewer |
+| MEDIUM | endpoints, DB changes, service logic | qa-fast → engineer → code-reviewer |
+| LOW | UI tweaks, tests, cosmetic | engineer → code-reviewer |
 
-| Tier | Applies when | Pipeline |
-|------|-------------|----------|
-| **CRITICAL** | auth, JWT, payments, RLS policies, atomicity, security config | qa-fast → engineer → qa-validate → code-reviewer → security-reviewer |
-| **MEDIUM** | new endpoints, pagination, DB migrations, service logic changes | qa-fast → engineer → code-reviewer → security-reviewer (only if touching auth/data access) |
-| **LOW** | bundle optimization, UI tweaks, test additions, cosmetic changes | engineer → code-reviewer only |
-
-**Default to MEDIUM** when in doubt. Escalate to CRITICAL if auth or money is involved.
+Escalate to CRITICAL if auth, money, or security involved.
 
 ---
 

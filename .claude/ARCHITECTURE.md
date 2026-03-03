@@ -121,3 +121,20 @@ If a proposed change conflicts with this document:
 - Wait for human direction
 
 Architecture rules override convenience, speed, and cleverness.
+
+
+## Allowed async patterns (examples)
+
+When using AI or long-running enrichment:
+- Persist raw input → enqueue job → worker enriches → write to processed tables
+- Use an outbox pattern when emitting events tied to DB writes
+- If user-triggered: return **202 Accepted** + jobId, never block on AI/enrichment
+
+## Example (bad vs good)
+
+Bad:
+- HTTP request → call AI synchronously → wait → return response
+
+Good:
+- HTTP request → write record → enqueue job → return 202/jobId
+- Worker → call AI → store results → UI polls or receives event

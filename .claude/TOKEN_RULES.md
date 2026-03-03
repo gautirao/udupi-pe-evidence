@@ -1,3 +1,7 @@
-# Token and Session Rules
+# TOKEN_RULES.md
 
-Content consolidated into the `## Token checkpoint` section of `CLAUDE.md`.
+Token discipline is defined in:
+- CLAUDE.md (Token Discipline + Global Checkpoint Format)
+- .claude/skills/SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md (rolling checkpoint rules)
+
+This file is intentionally minimal to avoid conflicting guidance.

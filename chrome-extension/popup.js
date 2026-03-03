@@ -176,13 +176,18 @@ async function sendPostsInBatches(posts, apiUrl, apiKey, sourceUrl, groupName, u
   let batchNumber = 0;
   const totalBatches = Math.ceil(totalPosts / BATCH_SIZE);
   
-  console.log(`[Udupi Popup] Starting batch upload: ${totalPosts} posts in ${totalBatches} batches`);
-  
+  const totalImages = posts.reduce((sum, p) => sum + (p.images?.length || 0), 0);
+  console.log(`[Udupi Popup] Starting batch upload: ${totalPosts} posts, ${totalImages} total images, in ${totalBatches} batches`);
+  posts.forEach((p, idx) => {
+    console.log(`[Udupi Popup]   post[${idx}] images=${p.images?.length || 0} text="${p.content?.substring(0, 60).replace(/\n/g, ' ')}"`);
+  });
+
   for (let i = 0; i < totalPosts; i += BATCH_SIZE) {
     batchNumber++;
     const batch = posts.slice(i, i + BATCH_SIZE);
-    
-    console.log(`[Udupi Popup] Sending batch ${batchNumber}/${totalBatches}: ${batch.length} posts`);
+    const batchImages = batch.reduce((sum, p) => sum + (p.images?.length || 0), 0);
+
+    console.log(`[Udupi Popup] Sending batch ${batchNumber}/${totalBatches}: ${batch.length} posts, ${batchImages} images`);
     updateStatus(`Sending batch ${batchNumber}/${totalBatches} (${i + batch.length}/${totalPosts} posts)...`, 'info');
     
     const apiResponse = await fetch(apiUrl, {

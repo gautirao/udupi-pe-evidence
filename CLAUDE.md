@@ -1,44 +1,118 @@
-# CLAUDE.md — Router + Minimal Defaults (Token-Efficient)
+# CLAUDE.md — Lean Deterministic Workflow
 
-## Defaults (always)
-- Be correct, concise, and non-repetitive.
-- Do not restate confirmed assumptions or unchanged context.
-- Do not quote or summarize policy docs unless the user asks.
-- Exception: when `.claude/PR_RULES.md` requires pasting templates, paste them verbatim.
-- Prefer asking 1–3 clarifying questions over guessing.
-- If rules conflict, the more specific triggered doc (e.g., PR_RULES / TOOLING / TOKEN_RULES) overrides these defaults.
+## Core Rules
+- Be correct, concise, non-repetitive.
+- Ask 1–3 clarifying questions instead of guessing.
+- Do not restate confirmed context.
+- More specific rule docs override generic ones.
+- Production safety > cleverness.
 
-## Routing (consult only when triggered)
-- Any code changes / patches / file edits (including tests/config/docs) → `.claude/PR_RULES.md`
-- Any shell commands → `.claude/TOOLING.md`
-- Frontend/UI changes → `docs/FRONTEND_GUIDE.md`
-- Deployment/infra/env/CI/migrations/data rules → `.claude/DEPLOYMENT.md`
-- Auth/permissions/cross-cutting architecture → `.claude/ARCHITECTURE.md`
+---
 
-## Planning gate
-Use the Pre-Implementation Plan template in `.claude/PR_RULES.md` (required for all code changes).
+## 1) Task Routing (Default)
 
-## Bug fixes (real behavior defects)
-Reproduce first (test or clear failing case) → confirm fail → fix → confirm pass.
-No “fix by inspection” for real bugs.
+All feature, bugfix, refactor, perf, security, and UI tasks MUST run via:
 
-## Failure analysis (only when behavior or risk changes)
+.claude/skills/ROUTE_AND_RUN.md
+
+Rules:
+- Select smallest effective agent set.
+- 1 pass only unless BLOCKING.
+- Prefer `qa-fast` over `qa`.
+- Do not manually invoke agents.
+
+---
+
+## 2) Sprint Execution
+
+When sprint execution is requested:
+
+Use:
+.claude/skills/SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md
+
+Rules:
+- 1 PR at a time.
+- Diff/snippets only.
+- No auto-advance.
+- Emit rolling checkpoint after each PR.
+- Resume only from checkpoint.
+
+---
+
+## 3) Document Triggers (Auto-Load When Applicable)
+
+- Code edits → .claude/PR_RULES.md
+- Shell commands → .claude/TOOLING.md
+- Frontend/UI → docs/FRONTEND_GUIDE.md
+- Deploy/infra/migrations → .claude/DEPLOYMENT.md
+- Auth/cross-cutting architecture → .claude/ARCHITECTURE.md
+
+Load only when triggered. Never preload all.
+
+---
+
+## 4) Planning Gate
+
+All code changes must follow the Pre-Implementation Plan in:
+.claude/PR_RULES.md
+
+(ROUTE_AND_RUN satisfies this automatically.)
+
+---
+
+## 5) Bug Fix Protocol
+
+For real defects:
+1. Reproduce.
+2. Confirm fail.
+3. Fix.
+4. Confirm pass.
+
+No fix-by-inspection.
+
+---
+
+## 6) Failure Analysis (Only When Risk Changes)
+
 Include:
-- What could break? (bullets)
-- Suggested tests (bullets)
+- What could break?
+- Suggested tests.
 
-Skip failure analysis for formatting, comments, pure renames, or cosmetic-only UI tweaks.
+Skip for cosmetic or non-behavioral edits.
 
-## Agent teams (rare)
-Consult `.claude/agents/*` only when the user explicitly requests agent/parallel work.
+---
 
-## Token checkpoint (if near limit)
-Output:
+## 7) Token Discipline
+
+- Prefer diffs over full files.
+- Do not repeat sprint plans.
+- Stop early and emit checkpoint if output grows.
+- Never auto-iterate more than once unless BLOCKING.
+- Use `/compact` if context grows large.
+- Prefer the latest rolling checkpoint over injected memory/context.
+
+---
+
+## 8) Global Checkpoint Format
+
+If nearing limit, output exactly:
+
 CHECKPOINT
-- Completed
-- Remaining
-- Next file + method (or next concrete edit location)
-Then stop and wait for: "Resume from last checkpoint".
-- When resuming: do not re-run completed steps; verify state, then continue.
-- Use `/compact` to compress long conversations when context grows large.
-- Start new conversations for unrelated tasks.
+- Completed:
+- Remaining:
+- Next file + method:
+- Open blockers:
+
+Then stop.
+
+Resume from checkpoint only.
+
+---
+
+## Execution Philosophy
+
+- Small PRs > large refactors
+- Backward-compatible > breaking
+- Safe migrations (expand/contract)
+- Idempotency + timeouts for inter-service calls
+- Minimize blast radius

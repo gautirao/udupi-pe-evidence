@@ -83,3 +83,15 @@ Default location:
 ../worktrees/<branch-name>
 
 Never create worktrees inside the main project directory.
+
+## Audio notifications (only when applicable)
+
+Audio notifications apply only when running via Claude CLI **and** an audio command exists (e.g., `afplay` on macOS).
+If unavailable, skip audio without comment.
+
+## Command batching (reduce iterations)
+
+When running tool commands, batch logically related steps into one command block when safe:
+- show diff/status
+- run tests/lint
+- re-run the minimal failing subset
