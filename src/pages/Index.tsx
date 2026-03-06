@@ -12,6 +12,7 @@ import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal }
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
+import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
 
 export default function Index() {
   const navigate = useNavigate();
@@ -44,30 +45,15 @@ export default function Index() {
 
   const areaMedians = useMemo(() => computeAreaMedians(filteredListings), [filteredListings]);
 
-  const topLocalities = useMemo(() => {
-    const counts = new Map<string, number>();
-    listingsWithCoords.forEach((l) => {
-      if (l.locality) counts.set(l.locality, (counts.get(l.locality) ?? 0) + 1);
-    });
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([locality, count]) => ({ locality, count }));
-  }, [listingsWithCoords]);
+  const topLocalities = useMemo(
+    () => computeTopLocalities(listingsWithCoords),
+    [listingsWithCoords]
+  );
 
-  const focusBounds = useMemo((): [[number, number], [number, number]] | null => {
-    if (!filters.localities || filters.localities.length === 0) return null;
-    const locListings = listingsWithCoords.filter(
-      (l) => l.locality && filters.localities!.includes(l.locality)
-    );
-    if (locListings.length === 0) return null;
-    const lats = locListings.map((l) => l.latitude!);
-    const lngs = locListings.map((l) => l.longitude!);
-    return [
-      [Math.min(...lats), Math.min(...lngs)],
-      [Math.max(...lats), Math.max(...lngs)],
-    ];
-  }, [filters.localities, listingsWithCoords]);
+  const focusBounds = useMemo(
+    () => computeFocusBounds(listingsWithCoords, filters.localities ?? []),
+    [filters.localities, listingsWithCoords]
+  );
 
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     navigate(`/listing/${listing.id}`);
