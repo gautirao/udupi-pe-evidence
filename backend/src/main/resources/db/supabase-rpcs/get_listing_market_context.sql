@@ -35,7 +35,7 @@ LANGUAGE SQL STABLE AS $$
       END AS price_per_unit
     FROM property_listings pl, price_basis pb
     WHERE pl.locality = p_locality
-      AND pl.property_type = p_property_type
+      AND pl.property_type::TEXT = p_property_type
       AND pl.is_valid = true
       AND (p_bedrooms IS NULL OR pl.bedrooms = p_bedrooms)
       AND pl.created_at > NOW() - (p_months || ' months')::INTERVAL
