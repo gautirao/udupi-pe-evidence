@@ -37,6 +37,7 @@ const Duplicates = lazy(() => import("./pages/admin/Duplicates"));
 const ChromeExtensionSetup = lazy(() => import("./pages/admin/ChromeExtensionSetup"));
 const ProcessPosts = lazy(() => import("./pages/admin/ProcessPosts"));
 const PendingListings = lazy(() => import("./pages/admin/PendingListings"));
+const LocalityNormalizer = lazy(() => import("./pages/admin/LocalityNormalizer"));
 
 const queryClient = new QueryClient();
 
@@ -220,6 +221,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireAdmin>
                     <Duplicates />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/localities"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <LocalityNormalizer />
                   </ProtectedRoute>
                 }
               />

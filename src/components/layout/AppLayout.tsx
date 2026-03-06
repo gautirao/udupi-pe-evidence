@@ -61,6 +61,7 @@ const adminNavigation = [
   { name: 'Pending Approval', href: '/admin/listings/pending', icon: ClipboardList },
   { name: 'Duplicates', href: '/admin/duplicates', icon: Copy },
   { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
+  { name: 'Locality Normalizer', href: '/admin/localities', icon: MapPin },
 ];
 
 const userNavigation = [
