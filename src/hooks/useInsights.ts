@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useListingMarketContext } from './useListingMarketContext';
 
@@ -118,6 +118,23 @@ export function useAreaMarketTrend(
     propertyType,
     bedrooms: null,
     enabled: enabled && !!areaKey,
+  });
+}
+
+/**
+ * Fetch price trends for multiple areas simultaneously (for comparison chart).
+ * Results are ordered to match the input areaKeys array.
+ */
+export function useMultiAreaTrend(areaKeys: string[], enabled = true) {
+  return useQueries({
+    queries: areaKeys.map((areaKey) => ({
+      queryKey: ['insights', 'price-trend', areaKey],
+      queryFn: async () => {
+        if (!areaKey) return [] as PriceTrendData[];
+        return api.get<PriceTrendData[]>(`/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}`);
+      },
+      enabled: enabled && !!areaKey,
+    })),
   });
 }
 
