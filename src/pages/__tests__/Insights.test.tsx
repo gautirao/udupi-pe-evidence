@@ -9,6 +9,8 @@ import {
   usePriceTrend,
   useNewListings,
   useRecommendations,
+  useAreaMarketTrend,
+  useMultiAreaTrend,
 } from '@/hooks/useInsights';
 import { api } from '@/lib/api';
 
@@ -40,6 +42,8 @@ vi.mock('@/hooks/useInsights', () => ({
   usePriceTrend: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   useNewListings: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   useRecommendations: vi.fn(() => ({ data: [], isLoading: false, error: null })),
+  useAreaMarketTrend: vi.fn(() => ({ data: [], isLoading: false, error: null })),
+  useMultiAreaTrend: vi.fn(() => []),
 }));
 
 vi.mock('@/components/insights/SavedAreas', () => ({
@@ -113,6 +117,8 @@ beforeEach(() => {
   vi.mocked(usePriceTrend).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof usePriceTrend>);
   vi.mocked(useNewListings).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useNewListings>);
   vi.mocked(useRecommendations).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useRecommendations>);
+  vi.mocked(useAreaMarketTrend).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useAreaMarketTrend>);
+  vi.mocked(useMultiAreaTrend).mockReturnValue([]);
   vi.mocked(api.post).mockResolvedValue({});
 });
 
@@ -178,5 +184,37 @@ describe('Insights page — access gating', () => {
     renderInsights();
     // showPaywall = !true && !false = false → PaywallCard should not render
     expect(screen.queryByText('Insights Access Required')).not.toBeInTheDocument();
+  });
+});
+
+describe('Insights page — type selector (PR-11.9)', () => {
+  it('calls useAreaMarketTrend on every render (even with disabled=false)', () => {
+    mockAuth.insightsAccessUntil = daysFromNow(10);
+    renderInsights();
+    // Default selectedPriceType='land', selectedArea=null
+    // propertyType arg: 'land' === 'apartment' ? 'apartment' : 'house' → 'house'
+    // enabled: hasAccess && !!selectedArea && selectedPriceType !== 'land' → false
+    expect(vi.mocked(useAreaMarketTrend)).toHaveBeenCalledWith(
+      null,
+      'house',
+      false,
+    );
+  });
+
+  it('calls useAreaMarketTrend with enabled=false when hasAccess=false', () => {
+    mockAuth.insightsAccessUntil = null;
+    renderInsights();
+    expect(vi.mocked(useAreaMarketTrend)).toHaveBeenCalledWith(
+      null,
+      'house',
+      false,
+    );
+  });
+
+  it('calls useMultiAreaTrend with empty array when no avgPriceData', () => {
+    mockAuth.insightsAccessUntil = daysFromNow(10);
+    renderInsights();
+    // selectedCompareAreas starts empty; initialised by useEffect once avgPriceData loads
+    expect(vi.mocked(useMultiAreaTrend)).toHaveBeenCalledWith([], false);
   });
 });
