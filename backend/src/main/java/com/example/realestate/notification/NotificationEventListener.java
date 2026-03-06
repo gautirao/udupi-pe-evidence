@@ -29,14 +29,17 @@ public class NotificationEventListener {
     private final ObjectMapper objectMapper;
     private final SavedAreaRepository savedAreaRepository;
     private final NotificationRepository notificationRepository;
+    private final EmailService emailService;
 
     public NotificationEventListener(ListingRepository listingRepository, ObjectMapper objectMapper,
                                       SavedAreaRepository savedAreaRepository,
-                                      NotificationRepository notificationRepository) {
+                                      NotificationRepository notificationRepository,
+                                      EmailService emailService) {
         this.listingRepository = listingRepository;
         this.objectMapper = objectMapper;
         this.savedAreaRepository = savedAreaRepository;
         this.notificationRepository = notificationRepository;
+        this.emailService = emailService;
     }
 
     @Async
@@ -93,6 +96,17 @@ public class NotificationEventListener {
 
             log.info("Area alerts sent listingId={} areaKey={} recipients={}",
                     event.listingId(), event.areaKey(), userIds.size());
+
+            // Send email alerts to subscribers (fire-and-forget; each failure is isolated)
+            List<String> emails = savedAreaRepository.findUserEmailsByAreaKey(event.areaKey());
+            for (String email : emails) {
+                try {
+                    emailService.sendNewListingAlert(
+                            email, area, event.listingId(), event.title(), event.pricePaise());
+                } catch (Exception emailEx) {
+                    log.error("Failed to send alert email to={} listingId={}", email, event.listingId(), emailEx);
+                }
+            }
         } catch (Exception e) {
             log.error("Failed to send area alerts listingId={} areaKey={}",
                     event.listingId(), event.areaKey(), e);
