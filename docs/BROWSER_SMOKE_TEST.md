@@ -1,9 +1,9 @@
 # Browser Smoke Test Checklist — Udupi Property Explorer
 
-**Version**: Sprint 5 (post Sprint 5 PRs: PR-1..PR-4 + PR-7)
+**Version**: Sprint 11 (post Sprint 11 PRs: PR-11.1..PR-11.10)
 **Target environment**: Production
-**Estimated time**: 12–15 minutes (full run) / 4–5 minutes (Quick 7-step smoke)
-**Last updated**: 2026-02-20
+**Estimated time**: 15–18 minutes (full run) / 4–5 minutes (Quick 7-step smoke)
+**Last updated**: 2026-03-06
 
 ---
 
@@ -264,6 +264,37 @@ Verify the insights access gating added in Sprint 5 PR-5b/PR-6.
 
 ---
 
+## Section M — Map Locality Navigation (Sprint 11: PR-11.2 + PR-11.3)
+
+Verify locality quick-chips and map zoom behavior.
+
+**Role**: ANY (no login required)
+
+| # | Action | Expected | Result | Notes |
+|---|--------|----------|--------|-------|
+| M1 | Open the map page. Wait for pins to load. Observe the top of the map area. | A row of up to 6 locality chips is visible overlaid on the map, each showing the locality name and a listing count badge. Chips do not appear before listings load. | PASS / FAIL / WARN | |
+| M2 | Click a locality chip (e.g., "Udupi"). | Map flies to fit all Udupi listings in view. The clicked chip changes to primary style (filled). The MapFilters sidebar locality filter also shows "Udupi" selected. | PASS / FAIL / WARN | |
+| M3 | Click the active chip again (the one with primary styling). | Chip returns to outline style. Locality filter is cleared. Map does NOT reset to default Udupi center — it stays wherever it panned to. | PASS / FAIL / WARN | |
+| M4 | Open the MapFilters sidebar. Select a locality from the locality combobox. | Same zoom behavior as M2: map flies to fit that locality's listings. Chip for that locality becomes active (if it is in the top-6 visible chips). | PASS / FAIL / WARN | |
+
+---
+
+## Section N — Listing Market Context (Sprint 11: PR-11.6 + PR-11.7 + PR-11.8)
+
+Verify the AreaMarketWidget, good deal badge on map, and similar listings section.
+
+**Role**: ANY (logged in)
+
+| # | Action | Expected | Result | Notes |
+|---|--------|----------|--------|-------|
+| N1 | Open any listing detail page for a listing with a locality set. Observe the sidebar. | An "Area Market" widget is visible in the sidebar (between "Request Viewing" and "Contact" cards). It shows one of: loading skeletons, sparkline chart with stats, or "Not enough data yet" empty state. No crash or blank space. | PASS / FAIL / WARN | If the Supabase RPC is not yet registered, the widget will show an error state — mark WARN and note. |
+| N2 | If the Area Market widget shows data: verify the chart and stats. | Chart (sparkline) renders with at least one line. "Area median" row shows a price with unit (₹X / sqft or ₹X / cent). If the listing's own rate is computable, a "This listing" row appears. | PASS / FAIL / WARN | |
+| N3 | If the listing is priced well below the area median: verify badge. | A green badge appears next to "This listing" row: "Good value · X% below" or "Great deal · X% below". No badge appears for listings at or above median (no negative labeling). | PASS / FAIL / WARN | |
+| N4 | Return to the map page. Click any map pin. | No Leaflet popup appears. The bottom card appears as before (price, type, locality, View Details button). If the listing is underpriced vs. area median, a "✅ X% below market" line appears below the price. | PASS / FAIL / WARN | |
+| N5 | Open any listing detail page. Scroll below the description card. | A "More in {locality}" section shows up to 3 similar listing cards (same type, same locality, excluding current listing). Each card has a thumbnail, type badge, and price. Clicking a card navigates to that listing. If no similar listings exist, the section is absent (not an empty card). | PASS / FAIL / WARN | |
+
+---
+
 ## Summary Scorecard
 
 Fill this in after completing all sections.
@@ -283,7 +314,9 @@ Fill this in after completing all sections.
 | J — Onboarding Flow | 3 | | | |
 | K — Booking Request Flow | 8 | | | |
 | L — Insights Paywall / Trial Banner | 3 | | | |
-| **Total** | **61** | | | |
+| M — Map Locality Navigation (Sprint 11) | 4 | | | |
+| N — Listing Market Context (Sprint 11) | 5 | | | |
+| **Total** | **70** | | | |
 
 **Sign-off**
 

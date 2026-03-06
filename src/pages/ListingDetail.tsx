@@ -16,6 +16,9 @@ import { format } from 'date-fns';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
+import { SimilarListings } from '@/components/listing/SimilarListings';
 
 const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
   land: { label: 'Land', badgeClass: 'bg-green-100 text-green-800 border-0' },
@@ -82,9 +85,9 @@ export default function ListingDetail() {
     return (
       <AppLayout>
         <div className="max-w-4xl mx-auto p-6">
-          <Button variant="ghost" onClick={() => navigate(-1)} className="mb-6">
+          <Button variant="ghost" onClick={() => navigate('/')} className="mb-6">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            Back to Map
           </Button>
           <Card className="p-8 text-center">
             <h2 className="text-xl font-semibold mb-2">Listing Not Found</h2>
@@ -135,9 +138,9 @@ export default function ListingDetail() {
       <div className="max-w-4xl mx-auto p-4 md:p-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
+          <Button variant="ghost" onClick={() => navigate('/')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
+            Back to Map
           </Button>
           <Button variant="outline" onClick={handleShare} className="gap-2">
             {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
@@ -242,9 +245,18 @@ export default function ListingDetail() {
               <div className="flex items-center gap-2 mb-3">
                 <Badge className={badgeClass}>{label}</Badge>
                 {listing.confidence_score && listing.confidence_score < 70 && (
-                  <Badge variant="outline" className="text-yellow-600 border-yellow-400">
-                    Low confidence
-                  </Badge>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-yellow-600 border-yellow-400 cursor-help">
+                          Low confidence
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>This listing was extracted automatically from a social media post. Some details may need verification with the seller.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
               <h1 className="text-2xl md:text-3xl font-bold mb-2">{title}</h1>
@@ -253,6 +265,17 @@ export default function ListingDetail() {
                   {formatPrice(listing.price, listing.price_unit)}
                 </p>
               )}
+              {listing.property_type === 'land' && listing.price_per_cent_paise ? (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  ₹{(listing.price_per_cent_paise / 100).toLocaleString('en-IN')} / cent
+                </p>
+              ) : (['apartment', 'house'].includes(listing.property_type) &&
+                  listing.built_area && listing.built_area > 0 &&
+                  listing.built_area_unit === 'sqft' && listing.price) ? (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  ₹{Math.round(listing.price / listing.built_area!).toLocaleString('en-IN')} / sqft
+                </p>
+              ) : null}
             </div>
 
             {/* Location */}
@@ -341,10 +364,32 @@ export default function ListingDetail() {
               <span className="text-muted-foreground/50">•</span>
               <span>{formatRelativeDate(listing.created_at)}</span>
             </div>
+
+            {/* Similar listings */}
+            <SimilarListings
+              listingId={listing.id}
+              locality={listing.locality}
+              propertyType={listing.property_type}
+            />
           </div>
 
           {/* Sidebar - Contact */}
           <div className="space-y-4">
+            {/* Request Viewing — primary CTA, always first */}
+            <Card>
+              <CardContent className="p-4">
+                <Button
+                  className="w-full"
+                  onClick={() => setBookingModalOpen(true)}
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Request Viewing
+                </Button>
+              </CardContent>
+            </Card>
+
+            <AreaMarketWidget listing={listing} />
+
             {listing.contact_phone && (
               <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
                 <CardContent className="p-4">
@@ -352,7 +397,7 @@ export default function ListingDetail() {
                     <Phone className="h-4 w-4 text-green-600" />
                     Contact
                   </h3>
-                  <a 
+                  <a
                     href={`tel:${listing.contact_phone}`}
                     className="text-xl font-bold text-green-600 hover:underline block mb-3"
                   >
@@ -396,19 +441,6 @@ export default function ListingDetail() {
                     </a>
                   </Button>
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Request Viewing */}
-            <Card>
-              <CardContent className="p-4">
-                <Button
-                  className="w-full"
-                  onClick={() => setBookingModalOpen(true)}
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Request Viewing
-                </Button>
               </CardContent>
             </Card>
           </div>

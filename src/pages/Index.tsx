@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
@@ -11,6 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
+import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
 
 export default function Index() {
   const navigate = useNavigate();
@@ -22,6 +23,33 @@ export default function Index() {
   const { data: listings = [], isLoading, error } = usePropertyListings(filters);
 
   const listingsWithCoords = listings.filter((l) => l.latitude && l.longitude);
+
+  const areaMedians = useMemo(() => computeAreaMedians(listings), [listings]);
+
+  const topLocalities = useMemo(() => {
+    const counts = new Map<string, number>();
+    listingsWithCoords.forEach((l) => {
+      if (l.locality) counts.set(l.locality, (counts.get(l.locality) ?? 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([locality, count]) => ({ locality, count }));
+  }, [listingsWithCoords]);
+
+  const focusBounds = useMemo((): [[number, number], [number, number]] | null => {
+    if (!filters.localities || filters.localities.length === 0) return null;
+    const locListings = listingsWithCoords.filter(
+      (l) => l.locality && filters.localities!.includes(l.locality)
+    );
+    if (locListings.length === 0) return null;
+    const lats = locListings.map((l) => l.latitude!);
+    const lngs = locListings.map((l) => l.longitude!);
+    return [
+      [Math.min(...lats), Math.min(...lngs)],
+      [Math.max(...lats), Math.max(...lngs)],
+    ];
+  }, [filters.localities, listingsWithCoords]);
 
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     navigate(`/listing/${listing.id}`);
@@ -94,7 +122,50 @@ export default function Index() {
               listings={listingsWithCoords}
               selectedListing={selectedListing}
               onSelectListing={setSelectedListing}
+              focusBounds={focusBounds}
             />
+          )}
+
+          {/* Locality Quick-Chips */}
+          {!isLoading && topLocalities.length > 0 && (
+            <div className="absolute top-3 left-16 right-36 z-[1000] lg:left-3 overflow-x-auto scrollbar-none">
+              <div className="flex gap-1.5 flex-nowrap pb-1">
+                {topLocalities.map(({ locality, count }) => {
+                  const isActive = filters.localities?.includes(locality) ?? false;
+                  return (
+                    <Button
+                      key={locality}
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        'flex-shrink-0 h-7 text-xs gap-1.5 bg-card/90 backdrop-blur shadow-sm',
+                        isActive && 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 hover:text-primary-foreground'
+                      )}
+                      onClick={() => {
+                        const current = filters.localities ?? [];
+                        const newLocalities = isActive
+                          ? current.filter((l) => l !== locality)
+                          : [...current, locality];
+                        setFilters({
+                          ...filters,
+                          localities: newLocalities.length > 0 ? newLocalities : undefined,
+                        });
+                      }}
+                    >
+                      {locality}
+                      <span className={cn(
+                        'inline-flex items-center justify-center rounded-full text-[10px] px-1 min-w-[16px] h-4',
+                        isActive
+                          ? 'bg-primary-foreground/20 text-primary-foreground'
+                          : 'bg-muted text-muted-foreground'
+                      )}>
+                        {count}
+                      </span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {/* Stats Bar */}
@@ -150,6 +221,14 @@ export default function Index() {
                     {formatPrice(selectedListing.price, selectedListing.price_unit)}
                   </p>
                 )}
+                {(() => {
+                  const signal = getMarketSignal(selectedListing, areaMedians);
+                  return signal ? (
+                    <p className="text-xs text-green-700 mb-2">
+                      ✅ {signal.percent}% below market
+                    </p>
+                  ) : null;
+                })()}
 
                 {selectedListing.locality && (
                   <p className="text-sm text-muted-foreground flex items-center gap-1.5 mb-2">

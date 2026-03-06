@@ -16,8 +16,10 @@ import {
   usePriceTrend,
   useNewListings,
   useRecommendations,
+  useAreaMarketTrend,
 } from '@/hooks/useInsights';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
+import { format } from 'date-fns';
 import {
   BarChart,
   Bar,
@@ -35,6 +37,7 @@ export default function Insights() {
   const navigate = useNavigate();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [newListingsDays, setNewListingsDays] = useState<number>(7);
+  const [selectedPriceType, setSelectedPriceType] = useState<'land' | 'apartment' | 'house'>('land');
 
   // Access gating
   const { insightsAccessUntil, isLoading: authLoading } = useAuth();
@@ -49,7 +52,12 @@ export default function Insights() {
 
   // Fetch data
   const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea({ enabled: hasAccess });
-  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, hasAccess && !!selectedArea);
+  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, hasAccess && !!selectedArea && selectedPriceType === 'land');
+  const { data: sqftTrendData = [], isLoading: sqftTrendLoading, error: sqftTrendError } = useAreaMarketTrend(
+    selectedArea,
+    selectedPriceType === 'apartment' ? 'apartment' : 'house',
+    hasAccess && !!selectedArea && selectedPriceType !== 'land'
+  );
   const { data: newListings = [], isLoading: newListingsLoading, error: newListingsError } = useNewListings(newListingsDays, { enabled: hasAccess });
   const { data: recommendations = [], isLoading: recommendationsLoading, error: recommendationsError } = useRecommendations({ enabled: hasAccess });
 
@@ -160,12 +168,14 @@ export default function Insights() {
                   <TrendingUp className="h-5 w-5 text-primary" />
                   Price Trend
                 </CardTitle>
-                <CardDescription>Weekly median price over time</CardDescription>
+                <CardDescription>
+                  {selectedPriceType === 'land' ? 'Weekly median price per cent' : 'Monthly median price per sqft'}
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="mb-4">
+                <div className="flex flex-wrap gap-3 mb-4">
                   <Select value={selectedArea || undefined} onValueChange={setSelectedArea}>
-                    <SelectTrigger className="w-full sm:w-64">
+                    <SelectTrigger className="w-full sm:w-48">
                       <SelectValue placeholder="Select an area" />
                     </SelectTrigger>
                     <SelectContent>
@@ -176,38 +186,106 @@ export default function Insights() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <Select value={selectedPriceType} onValueChange={(v) => setSelectedPriceType(v as 'land' | 'apartment' | 'house')}>
+                    <SelectTrigger className="w-full sm:w-52">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="land">Land (₹ / cent)</SelectItem>
+                      <SelectItem value="apartment">Apartment (₹ / sqft)</SelectItem>
+                      <SelectItem value="house">House (₹ / sqft)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                {trendLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : trendError ? (
-                  <div className="flex items-center gap-2 text-destructive py-4">
-                    <AlertCircle className="h-5 w-5" />
-                    <p className="text-sm">Failed to load trend data</p>
-                  </div>
-                ) : priceTrendData.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No trend data available for this area</p>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={priceTrendChartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" />
-                      <YAxis
-                        tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`}
-                      />
-                      <Tooltip
-                        formatter={(value: number) => [`₹${(value / 100000).toFixed(2)}L`, 'Price per cent']}
-                      />
-                      <Legend />
-                      <Line type="monotone" dataKey="medianPrice" stroke="hsl(var(--primary))" name="Median" strokeWidth={2} />
-                      <Line type="monotone" dataKey="p25" stroke="hsl(var(--muted-foreground))" name="25th percentile" strokeDasharray="5 5" />
-                      <Line type="monotone" dataKey="p75" stroke="hsl(var(--muted-foreground))" name="75th percentile" strokeDasharray="5 5" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
+                {(() => {
+                  const isLoading = selectedPriceType === 'land' ? trendLoading : sqftTrendLoading;
+                  const hasError = selectedPriceType === 'land' ? trendError : sqftTrendError;
+                  const unit = selectedPriceType === 'land' ? '/ cent' : '/ sqft';
+
+                  if (isLoading) {
+                    return (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    );
+                  }
+                  if (hasError) {
+                    return (
+                      <div className="flex items-center gap-2 text-destructive py-4">
+                        <AlertCircle className="h-5 w-5" />
+                        <p className="text-sm">Failed to load trend data</p>
+                      </div>
+                    );
+                  }
+
+                  if (selectedPriceType === 'land') {
+                    if (priceTrendData.length === 0) {
+                      return (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm font-medium">No land price data available for this area yet.</p>
+                          <p className="text-xs mt-1">Data will appear here as weekly prices are recorded.</p>
+                        </div>
+                      );
+                    }
+                    const chartData = priceTrendData.map((item) => ({
+                      period: new Date(item.weekStartDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+                      median: paiseToRupees(item.medianPricePerCentPaise),
+                      p25: paiseToRupees(item.p25PricePerCentPaise),
+                      p75: paiseToRupees(item.p75PricePerCentPaise),
+                    }));
+                    return (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="period" />
+                          <YAxis tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                          <Tooltip formatter={(v: number) => [`₹${(v / 100000).toFixed(2)}L ${unit}`, '']} />
+                          <Legend />
+                          <Line type="monotone" dataKey="median" stroke="hsl(var(--primary))" name="Median" strokeWidth={2} />
+                          <Line type="monotone" dataKey="p25" stroke="hsl(var(--muted-foreground))" name="25th pct" strokeDasharray="5 5" />
+                          <Line type="monotone" dataKey="p75" stroke="hsl(var(--muted-foreground))" name="75th pct" strokeDasharray="5 5" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    );
+                  }
+
+                  // Apartment / House — from RPC
+                  const totalCount = sqftTrendData[0]?.totalSimilarCount ?? 0;
+                  if (sqftTrendData.length === 0 || totalCount < 5) {
+                    return (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm font-medium">
+                          Not enough {selectedPriceType} data in {selectedArea || 'this area'} yet.
+                        </p>
+                        <p className="text-xs mt-1">
+                          More listings will appear here as the market grows.
+                        </p>
+                      </div>
+                    );
+                  }
+                  const sqftChartData = sqftTrendData.map((d) => ({
+                    period: format(new Date(d.month), 'MMM'),
+                    median: d.medianPricePerUnit ? Math.round(Number(d.medianPricePerUnit)) : null,
+                    p25: d.p25PricePerUnit ? Math.round(Number(d.p25PricePerUnit)) : null,
+                    p75: d.p75PricePerUnit ? Math.round(Number(d.p75PricePerUnit)) : null,
+                  }));
+                  return (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={sqftChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="period" />
+                        <YAxis tickFormatter={(v) => `₹${v.toLocaleString('en-IN')}`} />
+                        <Tooltip formatter={(v: number) => [`₹${v.toLocaleString('en-IN')} ${unit}`, '']} />
+                        <Legend />
+                        <Line type="monotone" dataKey="median" stroke="hsl(var(--primary))" name="Median" strokeWidth={2} />
+                        <Line type="monotone" dataKey="p25" stroke="hsl(var(--muted-foreground))" name="25th pct" strokeDasharray="5 5" />
+                        <Line type="monotone" dataKey="p75" stroke="hsl(var(--muted-foreground))" name="75th pct" strokeDasharray="5 5" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  );
+                })()}
               </CardContent>
             </Card>
 

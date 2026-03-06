@@ -31,6 +31,7 @@ export interface PropertyListing {
   longitude: number | null;
   confidence_score: number | null;
   language_detected: string | null;
+  price_per_cent_paise: number | null;
   is_valid: boolean;
   is_duplicate: boolean;
   status: string | null;

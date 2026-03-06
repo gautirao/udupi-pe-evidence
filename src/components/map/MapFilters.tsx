@@ -22,6 +22,7 @@ interface MapFiltersProps {
 const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'land', label: 'Land' },
   { value: 'house', label: 'House' },
+  { value: 'apartment', label: 'Apartment' },
   { value: 'commercial', label: 'Commercial' },
   { value: 'other', label: 'Other' },
 ];

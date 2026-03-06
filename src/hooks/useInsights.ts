@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useListingMarketContext } from './useListingMarketContext';
 
 // ===== Type Definitions from Backend API =====
 
@@ -100,6 +101,23 @@ export function useNewListings(days = 7, options?: { enabled?: boolean }) {
       return page.content;
     },
     enabled: options?.enabled ?? true,
+  });
+}
+
+/**
+ * Wraps useListingMarketContext for the Insights price trend chart.
+ * Uses areaKey as the locality parameter (same concept in the Udupi context).
+ */
+export function useAreaMarketTrend(
+  areaKey: string | null,
+  propertyType: 'apartment' | 'house',
+  enabled = true
+) {
+  return useListingMarketContext({
+    locality: areaKey,
+    propertyType,
+    bedrooms: null,
+    enabled: enabled && !!areaKey,
   });
 }
 

@@ -272,9 +272,16 @@ interface PropertyMapProps {
   listings: PropertyListingWithImages[];
   selectedListing?: PropertyListingWithImages | null;
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
+  focusBounds?: [[number, number], [number, number]] | null;
 }
 
-function MapController({ selectedListing }: { selectedListing?: PropertyListing | null }) {
+function MapController({
+  selectedListing,
+  focusBounds,
+}: {
+  selectedListing?: PropertyListing | null;
+  focusBounds?: [[number, number], [number, number]] | null;
+}) {
   const map = useMap();
 
   useEffect(() => {
@@ -284,6 +291,17 @@ function MapController({ selectedListing }: { selectedListing?: PropertyListing 
       });
     }
   }, [selectedListing, map]);
+
+  useEffect(() => {
+    if (!focusBounds) return;
+    const [[s, w], [n, e]] = focusBounds;
+    if (s === n && w === e) {
+      // Single point — fitBounds on a zero-area bounds is degenerate; use flyTo
+      map.flyTo([s, w], 15, { duration: 1 });
+    } else {
+      map.fitBounds(focusBounds, { padding: [50, 50] });
+    }
+  }, [focusBounds, map]);
 
   return null;
 }
@@ -340,11 +358,6 @@ function MarkerClusterLayer({
         { icon: createMarkerIcon(listing.property_type) }
       );
       
-      marker.bindPopup(createPopupContent(listing), {
-        maxWidth: 320,
-        className: 'property-popup',
-      });
-      
       marker.on('click', () => {
         onSelectListing?.(listing);
       });
@@ -363,7 +376,7 @@ function MarkerClusterLayer({
   return null;
 }
 
-export function PropertyMap({ listings, selectedListing, onSelectListing }: PropertyMapProps) {
+export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -380,7 +393,7 @@ export function PropertyMap({ listings, selectedListing, onSelectListing }: Prop
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapController selectedListing={selectedListing} />
+        <MapController selectedListing={selectedListing} focusBounds={focusBounds} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
       </MapContainer>
 
