@@ -237,4 +237,25 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("threshold") double threshold,
             @Param("freshDays") int freshDays,
             Pageable pageable);
+
+    // ===== Locality normalizer queries =====
+
+    @Query(value = """
+        SELECT locality, COUNT(*) AS listing_count
+        FROM public.property_listings
+        WHERE locality IS NOT NULL AND locality <> ''
+        GROUP BY locality
+        ORDER BY COUNT(*) DESC
+        """, nativeQuery = true)
+    List<Object[]> findLocalitiesWithCounts();
+
+    @Query(value = "SELECT COUNT(*) FROM public.property_listings WHERE locality = :locality",
+            nativeQuery = true)
+    long countListingsByLocality(@Param("locality") String locality);
+
+    @Modifying
+    @Query(value = "UPDATE public.property_listings SET locality = :toLocality WHERE locality = :fromLocality",
+            nativeQuery = true)
+    int bulkUpdateLocality(@Param("fromLocality") String fromLocality,
+                           @Param("toLocality") String toLocality);
 }
