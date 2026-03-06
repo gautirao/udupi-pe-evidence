@@ -38,6 +38,7 @@ const ChromeExtensionSetup = lazy(() => import("./pages/admin/ChromeExtensionSet
 const ProcessPosts = lazy(() => import("./pages/admin/ProcessPosts"));
 const PendingListings = lazy(() => import("./pages/admin/PendingListings"));
 const LocalityNormalizer = lazy(() => import("./pages/admin/LocalityNormalizer"));
+const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
 
 const queryClient = new QueryClient();
 
@@ -229,6 +230,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireAdmin>
                     <LocalityNormalizer />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/audit-log"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <AuditLog />
                   </ProtectedRoute>
                 }
               />
