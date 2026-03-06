@@ -1,5 +1,6 @@
 package com.example.realestate.notification;
 
+import com.example.realestate.insights.SavedArea;
 import com.example.realestate.insights.SavedAreaRepository;
 import com.example.realestate.listing.ListingService.ListingApprovedEvent;
 import com.example.realestate.listing.ListingService.ListingRejectedEvent;
@@ -17,6 +18,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -68,13 +70,15 @@ public class NotificationEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onNewListingInArea(NewListingInAreaEvent event) {
         try {
-            List<UUID> userIds = savedAreaRepository.findUserIdsByAreaKey(event.areaKey());
-            if (userIds.isEmpty()) {
+            List<SavedArea> subscribers =
+                    savedAreaRepository.findByAreaKeyAndAlertsEnabledTrue(event.areaKey());
+            if (subscribers.isEmpty()) {
                 return;
             }
 
             String area = event.areaLabel() != null ? event.areaLabel() : event.areaKey();
             String message = "A new " + event.propertyType() + " listing is available in " + area + ".";
+            Long priceRupees = event.pricePaise() != null ? event.pricePaise() / 100L : null;
 
             ObjectNode metadata = objectMapper.createObjectNode();
             metadata.put("listing_id", event.listingId().toString());
@@ -82,9 +86,18 @@ public class NotificationEventListener {
             String metadataJson = objectMapper.writeValueAsString(metadata);
 
             OffsetDateTime now = OffsetDateTime.now();
-            for (UUID userId : userIds) {
+            List<UUID> eligibleUserIds = new ArrayList<>();
+
+            for (SavedArea subscriber : subscribers) {
+                Long threshold = subscriber.getPriceThresholdRupees();
+                if (priceRupees != null && threshold != null && priceRupees > threshold) {
+                    log.debug("Skipping notification userId={} listingId={} priceRupees={} threshold={}",
+                            subscriber.getUserId(), event.listingId(), priceRupees, threshold);
+                    continue;
+                }
+
                 Notification n = new Notification();
-                n.setUserId(userId);
+                n.setUserId(subscriber.getUserId());
                 n.setType("new_listing_in_area");
                 n.setTitle("New listing in " + area);
                 n.setMessage(message);
@@ -92,13 +105,18 @@ public class NotificationEventListener {
                 n.setRead(false);
                 n.setCreatedAt(now);
                 notificationRepository.save(n);
+                eligibleUserIds.add(subscriber.getUserId());
             }
 
             log.info("Area alerts sent listingId={} areaKey={} recipients={}",
-                    event.listingId(), event.areaKey(), userIds.size());
+                    event.listingId(), event.areaKey(), eligibleUserIds.size());
 
-            // Send email alerts to subscribers (fire-and-forget; each failure is isolated)
-            List<String> emails = savedAreaRepository.findUserEmailsByAreaKey(event.areaKey());
+            if (eligibleUserIds.isEmpty()) {
+                return;
+            }
+
+            // Send email alerts to eligible subscribers (fire-and-forget; each failure is isolated)
+            List<String> emails = savedAreaRepository.findEmailsByUserIds(eligibleUserIds);
             for (String email : emails) {
                 try {
                     emailService.sendNewListingAlert(

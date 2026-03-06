@@ -163,6 +163,55 @@ class SavedAreaControllerTest {
                 .andExpect(jsonPath("$.error").value("Saved area not found"));
     }
 
+    // ==================== Test 8: PATCH threshold -> 200 ====================
+
+    @Test
+    void updateThreshold_setsThreshold_returns200() throws Exception {
+        SavedArea area = buildArea(AREA_ID, USER_A, "india|karnataka|udupi|manipal", "Manipal, Udupi");
+        when(savedAreaRepository.findByIdAndUserId(AREA_ID, USER_A)).thenReturn(Optional.of(area));
+        when(savedAreaRepository.save(any(SavedArea.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        mockMvc.perform(patch("/api/saved-areas/" + AREA_ID + "/threshold")
+                        .with(jwt().jwt(j -> j.subject(USER_A.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"priceThresholdRupees":5000000}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.priceThresholdRupees").value(5000000));
+    }
+
+    @Test
+    void updateThreshold_clearThreshold_returns200WithNull() throws Exception {
+        SavedArea area = buildArea(AREA_ID, USER_A, "india|karnataka|udupi|manipal", "Manipal, Udupi");
+        area.setPriceThresholdRupees(5_000_000L);
+        when(savedAreaRepository.findByIdAndUserId(AREA_ID, USER_A)).thenReturn(Optional.of(area));
+        when(savedAreaRepository.save(any(SavedArea.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        mockMvc.perform(patch("/api/saved-areas/" + AREA_ID + "/threshold")
+                        .with(jwt().jwt(j -> j.subject(USER_A.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"priceThresholdRupees":null}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.priceThresholdRupees").doesNotExist());
+    }
+
+    @Test
+    void updateThreshold_notFound_returns404() throws Exception {
+        when(savedAreaRepository.findByIdAndUserId(AREA_ID, USER_A)).thenReturn(Optional.empty());
+
+        mockMvc.perform(patch("/api/saved-areas/" + AREA_ID + "/threshold")
+                        .with(jwt().jwt(j -> j.subject(USER_A.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"priceThresholdRupees":5000000}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Saved area not found"));
+    }
+
     // ==================== Helper ====================
 
     private SavedArea buildArea(UUID id, UUID userId, String areaKey, String areaLabel) {
