@@ -28,11 +28,14 @@ public class AdminListingController {
 
     private final ListingService listingService;
     private final ListingImageRepository listingImageRepository;
+    private final AdminAuditService adminAuditService;
 
     public AdminListingController(ListingService listingService,
-                                  ListingImageRepository listingImageRepository) {
+                                  ListingImageRepository listingImageRepository,
+                                  AdminAuditService adminAuditService) {
         this.listingService = listingService;
         this.listingImageRepository = listingImageRepository;
+        this.adminAuditService = adminAuditService;
     }
 
     @PostMapping("/{id}/approve")
@@ -43,6 +46,8 @@ public class AdminListingController {
         try {
             Listing approved = listingService.approveListing(id, adminId);
             log.info("POST /api/admin/listings/{}/approve -> 200 status=LIVE", id);
+            adminAuditService.record(adminId, "listing_approved", "listing", id, null,
+                    "{\"status\":\"LIVE\"}");
             return ResponseEntity.ok(toResponse(approved));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -66,6 +71,8 @@ public class AdminListingController {
         try {
             Listing rejected = listingService.rejectListing(id, adminId, req.rejectionReason());
             log.info("POST /api/admin/listings/{}/reject -> 200 status=REJECTED", id);
+            adminAuditService.record(adminId, "listing_rejected", "listing", id, null,
+                    "{\"status\":\"REJECTED\",\"reason\":\"" + req.rejectionReason().replace("\"", "\\\"") + "\"}");
             return ResponseEntity.ok(toResponse(rejected));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
