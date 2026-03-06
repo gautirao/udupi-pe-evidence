@@ -16,7 +16,6 @@ Checkpoint is the single source of truth.
 - Always emit checkpoint before stopping
 
 ---
-
 ## Execution Loop (Mandatory)
 
 For PR N:
@@ -24,15 +23,24 @@ For PR N:
 1. State PR id + title (1 line)
 2. Run ROUTE_AND_RUN
 3. Produce:
-   - minimal code diffs/snippets
-   - required commands (if any)
-   - short migration/config notes (if any)
-4. Emit checkpoint
-5. Ask: "Continue to next PR?"
+    - minimal code diffs/snippets
+    - required commands (if any)
+    - short migration/config notes (if any)
 
-STOP.
+4. Git + PR step
+    - `git pull origin main` (sync before starting if not already on a fresh branch)
+    - Create branch: `git checkout -b <type>/pr-<id>-<short-slug>`
+    - Run minimal checks (tests/lint) relevant to the change
+    - Stage specific files: `git add <files>`
+    - Commit: `git commit -m "PR-<id> <title>"`
+    - Push: `git push -u origin <branch>`
+    - Open PR: `gh pr create --title "PR-<id> <title>" --body "..." --base main`
+    - Merge PR ideally with CI green
+    - Play approval chime: `afplay /System/Library/Sounds/Glass.aiff`
+   
 
-Never proceed without emitting checkpoint.
+5. Emit checkpoint
+6. After user confirms merge: `git checkout main && git pull origin main`, then continue to next PR
 
 ---
 
