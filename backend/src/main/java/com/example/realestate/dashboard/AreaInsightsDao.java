@@ -25,7 +25,7 @@ public interface AreaInsightsDao {
         return VALID_SORTS.contains(sort);
     }
 
-    List<AreaInsightRow> findInsights(String sort, int limit, int minCount, String propertyType);
+    List<AreaInsightRow> findInsights(String sort, int limit, int minCount, String propertyType, int bedrooms);
 }
 
 @Repository
@@ -38,7 +38,7 @@ class JdbcAreaInsightsDao implements AreaInsightsDao {
     }
 
     @Override
-    public List<AreaInsightRow> findInsights(String sort, int limit, int minCount, String propertyType) {
+    public List<AreaInsightRow> findInsights(String sort, int limit, int minCount, String propertyType, int bedrooms) {
         String orderBy = switch (sort) {
             case "median_desc" -> "median_price_per_cent_paise DESC NULLS LAST";
             case "median_asc" -> "median_price_per_cent_paise ASC NULLS LAST";
@@ -52,6 +52,7 @@ class JdbcAreaInsightsDao implements AreaInsightsDao {
                 FROM area_stats_latest
                 WHERE listing_count >= ?
                   AND property_type = ?
+                  AND bedrooms = ?
                 ORDER BY %s
                 LIMIT ?
                 """.formatted(orderBy);
@@ -63,6 +64,6 @@ class JdbcAreaInsightsDao implements AreaInsightsDao {
                 rs.getObject("city_median_price_per_cent_paise", Long.class),
                 rs.getBigDecimal("price_index"),
                 rs.getObject("updated_at", OffsetDateTime.class)
-        ), minCount, propertyType, limit);
+        ), minCount, propertyType, bedrooms, limit);
     }
 }

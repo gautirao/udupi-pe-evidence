@@ -71,7 +71,7 @@ class InsightsControllerTest {
         var row = new AreaInsightsDao.AreaInsightRow(
                 "india|karnataka|udupi|manipal", 15, 500000L, 600000L,
                 new BigDecimal("0.8333"), OffsetDateTime.now());
-        when(insightsService.getAvgPriceByArea(anyString())).thenReturn(List.of(row));
+        when(insightsService.getAvgPriceByArea(anyString(), anyInt())).thenReturn(List.of(row));
 
         mockMvc.perform(get("/api/insights/avg-price-by-area")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -84,25 +84,25 @@ class InsightsControllerTest {
 
     @Test
     void avgPriceByArea_withPropertyTypeParam_passesTypeToService() throws Exception {
-        when(insightsService.getAvgPriceByArea(eq("land"))).thenReturn(List.of());
+        when(insightsService.getAvgPriceByArea(eq("land"), anyInt())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/insights/avg-price-by-area")
                         .param("propertyType", "land")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk());
 
-        verify(insightsService).getAvgPriceByArea("land");
+        verify(insightsService).getAvgPriceByArea("land", 0);
     }
 
     @Test
     void avgPriceByArea_withoutPropertyTypeParam_defaultsToAll() throws Exception {
-        when(insightsService.getAvgPriceByArea(anyString())).thenReturn(List.of());
+        when(insightsService.getAvgPriceByArea(anyString(), anyInt())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/insights/avg-price-by-area")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk());
 
-        verify(insightsService).getAvgPriceByArea("all");
+        verify(insightsService).getAvgPriceByArea("all", 0);
     }
 
     // ==================== Test 2: price-trend -> 200 ====================
@@ -117,7 +117,7 @@ class InsightsControllerTest {
         w.setListingCount(8);
         w.setP25PricePerCentPaise(400000L);
         w.setP75PricePerCentPaise(600000L);
-        when(insightsService.getPriceTrend(eq("india|karnataka|udupi|manipal"), anyString()))
+        when(insightsService.getPriceTrend(eq("india|karnataka|udupi|manipal"), anyString(), anyInt()))
                 .thenReturn(List.of(w));
 
         mockMvc.perform(get("/api/insights/price-trend")
@@ -134,7 +134,7 @@ class InsightsControllerTest {
 
     @Test
     void priceTrend_unknownArea_returnsEmptyArray() throws Exception {
-        when(insightsService.getPriceTrend(eq("nonexistent"), anyString())).thenReturn(List.of());
+        when(insightsService.getPriceTrend(eq("nonexistent"), anyString(), anyInt())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/insights/price-trend")
                         .param("area_key", "nonexistent")
@@ -145,7 +145,7 @@ class InsightsControllerTest {
 
     @Test
     void priceTrend_withPropertyTypeParam_passesTypeToService() throws Exception {
-        when(insightsService.getPriceTrend(anyString(), eq("land"))).thenReturn(List.of());
+        when(insightsService.getPriceTrend(anyString(), eq("land"), anyInt())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/insights/price-trend")
                         .param("area_key", "india|karnataka|udupi|manipal")
@@ -153,19 +153,19 @@ class InsightsControllerTest {
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk());
 
-        verify(insightsService).getPriceTrend("india|karnataka|udupi|manipal", "land");
+        verify(insightsService).getPriceTrend("india|karnataka|udupi|manipal", "land", 0);
     }
 
     @Test
     void priceTrend_withoutPropertyTypeParam_defaultsToAll() throws Exception {
-        when(insightsService.getPriceTrend(anyString(), anyString())).thenReturn(List.of());
+        when(insightsService.getPriceTrend(anyString(), anyString(), anyInt())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/insights/price-trend")
                         .param("area_key", "india|karnataka|udupi|manipal")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk());
 
-        verify(insightsService).getPriceTrend("india|karnataka|udupi|manipal", "all");
+        verify(insightsService).getPriceTrend("india|karnataka|udupi|manipal", "all", 0);
     }
 
     // ==================== Test 4: new-listings with saved areas -> 200 (Page) ====================

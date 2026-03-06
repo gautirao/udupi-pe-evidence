@@ -41,6 +41,9 @@ public class AreaPriceWeekly {
     @Column(name = "p75_price_per_cent_paise")
     private Long p75PricePerCentPaise;
 
+    @Column(name = "bedrooms", nullable = false)
+    private int bedrooms = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -103,6 +106,14 @@ public class AreaPriceWeekly {
 
     public void setP75PricePerCentPaise(Long p75PricePerCentPaise) {
         this.p75PricePerCentPaise = p75PricePerCentPaise;
+    }
+
+    public int getBedrooms() {
+        return bedrooms;
+    }
+
+    public void setBedrooms(int bedrooms) {
+        this.bedrooms = bedrooms;
     }
 
     public OffsetDateTime getCreatedAt() {

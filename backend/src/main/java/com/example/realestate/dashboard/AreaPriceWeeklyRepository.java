@@ -23,10 +23,12 @@ public interface AreaPriceWeeklyRepository extends JpaRepository<AreaPriceWeekly
             SELECT * FROM public.area_price_weekly
             WHERE area_key = :areaKey
               AND property_type = :propertyType
+              AND bedrooms = :bedrooms
             ORDER BY week_start_date DESC
             LIMIT :limit
             """, nativeQuery = true)
     List<AreaPriceWeekly> findRecentByAreaKey(@Param("areaKey") String areaKey,
                                               @Param("propertyType") String propertyType,
+                                              @Param("bedrooms") int bedrooms,
                                               @Param("limit") int limit);
 }

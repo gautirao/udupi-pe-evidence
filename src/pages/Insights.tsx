@@ -40,6 +40,7 @@ export default function Insights() {
   const [newListingsDays, setNewListingsDays] = useState<number>(7);
   const [selectedPriceType, setSelectedPriceType] = useState<'land' | 'apartment' | 'house'>('land');
   const [avgPricePropertyType, setAvgPricePropertyType] = useState<string>('all');
+  const [avgPriceBedrooms, setAvgPriceBedrooms] = useState<number>(0);
   const [selectedCompareAreas, setSelectedCompareAreas] = useState<string[]>([]);
   const compareInitialized = useRef(false);
 
@@ -55,9 +56,9 @@ export default function Insights() {
   const showTrialBanner = hasAccess && daysRemaining <= 3;
 
   // Fetch data
-  const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea(avgPricePropertyType, { enabled: hasAccess });
+  const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea(avgPricePropertyType, avgPriceBedrooms, { enabled: hasAccess });
   const trendPropertyType = selectedPriceType === 'land' ? 'land' : 'all';
-  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, trendPropertyType, hasAccess && !!selectedArea && selectedPriceType === 'land');
+  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, trendPropertyType, 0, hasAccess && !!selectedArea && selectedPriceType === 'land');
   const { data: sqftTrendData = [], isLoading: sqftTrendLoading, error: sqftTrendError } = useAreaMarketTrend(
     selectedArea,
     selectedPriceType === 'apartment' ? 'apartment' : 'house',
@@ -177,17 +178,36 @@ export default function Insights() {
                     </CardTitle>
                     <CardDescription>Median price per cent compared to city average</CardDescription>
                   </div>
-                  <Select value={avgPricePropertyType} onValueChange={setAvgPricePropertyType}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All types</SelectItem>
-                      <SelectItem value="land">Land</SelectItem>
-                      <SelectItem value="apartment">Apartment</SelectItem>
-                      <SelectItem value="house">House</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <Select value={avgPricePropertyType} onValueChange={(v) => { setAvgPricePropertyType(v); setAvgPriceBedrooms(0); }}>
+                      <SelectTrigger className="w-40">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All types</SelectItem>
+                        <SelectItem value="land">Land</SelectItem>
+                        <SelectItem value="apartment">Apartment</SelectItem>
+                        <SelectItem value="house">House</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {avgPricePropertyType !== 'land' && (
+                      <div className="flex gap-1">
+                        {[{ label: 'All BHK', value: 0 }, { label: '1 BHK', value: 1 }, { label: '2 BHK', value: 2 }, { label: '3 BHK', value: 3 }, { label: '4 BHK+', value: 4 }].map(({ label, value }) => (
+                          <button
+                            key={value}
+                            onClick={() => setAvgPriceBedrooms(value)}
+                            className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                              avgPriceBedrooms === value
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'border-border bg-background text-muted-foreground hover:border-primary/50'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>

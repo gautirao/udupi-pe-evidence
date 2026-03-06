@@ -40,19 +40,19 @@ class AreaStatsLatestRollupJobTest {
 
             int result = rollupJob.computeStatsFromDate(fromDate);
 
-            // Two queries: 'all' aggregate + per-type; returns combined row count
-            assertThat(result).isEqualTo(10);
-            verify(jdbcOperations, times(2)).update(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class), any(OffsetDateTime.class));
+            // Four queries: 'all', per-type, per-bedrooms, per-type-per-bedrooms; returns combined row count
+            assertThat(result).isEqualTo(20);
+            verify(jdbcOperations, times(4)).update(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class), any(OffsetDateTime.class));
         }
 
         @Test
         void computeStatsFromDate_returnsRowCount() {
             LocalDate fromDate = LocalDate.of(2024, 1, 1);
-            when(jdbcOperations.update(anyString(), any(), any(), any())).thenReturn(20, 22);
+            when(jdbcOperations.update(anyString(), any(), any(), any())).thenReturn(20, 22, 5, 7);
 
             int result = rollupJob.computeStatsFromDate(fromDate);
 
-            assertThat(result).isEqualTo(42);
+            assertThat(result).isEqualTo(54);
         }
 
         @Test
@@ -223,7 +223,7 @@ class AreaStatsLatestRollupJobTest {
 
             // First captured value is the 'all' aggregate SQL
             String sql = sqlCaptor.getValue();
-            assertThat(sql).contains("ON CONFLICT (area_key, property_type)");
+            assertThat(sql).contains("ON CONFLICT (area_key, property_type, bedrooms)");
             assertThat(sql).contains("DO UPDATE SET");
         }
 
@@ -254,7 +254,7 @@ class AreaStatsLatestRollupJobTest {
             rollupJob.computeAreaStats();
 
             ArgumentCaptor<OffsetDateTime> dateCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
-            verify(jdbcOperations, times(2)).update(anyString(), dateCaptor.capture(), any(), any());
+            verify(jdbcOperations, times(4)).update(anyString(), dateCaptor.capture(), any(), any());
 
             OffsetDateTime capturedDate = dateCaptor.getValue();
             LocalDate expectedCutoff = LocalDate.now().minusWeeks(12);

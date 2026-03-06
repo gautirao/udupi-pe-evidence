@@ -63,11 +63,11 @@ interface SpringPage<T> {
  * Fetch average price by area (median prices per area), filtered by property type.
  * @param propertyType - 'all' (default) or a specific type like 'land', 'apartment', 'house'
  */
-export function useAvgPriceByArea(propertyType = 'all', options?: { enabled?: boolean }) {
+export function useAvgPriceByArea(propertyType = 'all', bedrooms = 0, options?: { enabled?: boolean }) {
   return useQuery<AreaPriceData[]>({
-    queryKey: ['insights', 'avg-price-by-area', propertyType],
+    queryKey: ['insights', 'avg-price-by-area', propertyType, bedrooms],
     queryFn: async () => {
-      return api.get<AreaPriceData[]>(`/api/insights/avg-price-by-area?propertyType=${encodeURIComponent(propertyType)}`);
+      return api.get<AreaPriceData[]>(`/api/insights/avg-price-by-area?propertyType=${encodeURIComponent(propertyType)}&bedrooms=${bedrooms}`);
     },
     enabled: options?.enabled ?? true,
   });
@@ -79,13 +79,13 @@ export function useAvgPriceByArea(propertyType = 'all', options?: { enabled?: bo
  * @param propertyType - 'all' (default) or a specific type like 'land', 'apartment', 'house'
  * @param enabled - Whether the query should run (default: true if areaKey exists)
  */
-export function usePriceTrend(areaKey: string | null, propertyType = 'all', enabled = true) {
+export function usePriceTrend(areaKey: string | null, propertyType = 'all', bedrooms = 0, enabled = true) {
   return useQuery<PriceTrendData[]>({
-    queryKey: ['insights', 'price-trend', areaKey, propertyType],
+    queryKey: ['insights', 'price-trend', areaKey, propertyType, bedrooms],
     queryFn: async () => {
       if (!areaKey) return [];
       return api.get<PriceTrendData[]>(
-        `/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}&propertyType=${encodeURIComponent(propertyType)}`
+        `/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}&propertyType=${encodeURIComponent(propertyType)}&bedrooms=${bedrooms}`
       );
     },
     enabled: enabled && !!areaKey,

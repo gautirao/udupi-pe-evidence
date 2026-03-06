@@ -65,77 +65,122 @@ public class AreaPriceWeeklyRollupJob {
     public int computeRollupsFromDate(LocalDate fromDate) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-        // 'all' aggregate row — covers all listings regardless of property_type
+        // 1. Grand aggregate: property_type='all', bedrooms=0
         String allSql = """
             INSERT INTO public.area_price_weekly (
-                area_key,
-                week_start_date,
-                property_type,
-                listing_count,
-                median_price_per_cent_paise,
-                p25_price_per_cent_paise,
-                p75_price_per_cent_paise,
-                created_at,
-                updated_at
+                area_key, week_start_date, property_type, bedrooms,
+                listing_count, median_price_per_cent_paise,
+                p25_price_per_cent_paise, p75_price_per_cent_paise,
+                created_at, updated_at
             )
             SELECT
                 area_key,
                 DATE_TRUNC('week', created_at)::date AS week_start_date,
                 'all' AS property_type,
+                0 AS bedrooms,
                 COUNT(*) AS listing_count,
                 NULL AS median_price_per_cent_paise,
                 NULL AS p25_price_per_cent_paise,
                 NULL AS p75_price_per_cent_paise,
-                ? AS created_at,
-                ? AS updated_at
+                ? AS created_at, ? AS updated_at
             FROM public.property_listings
             WHERE area_key IS NOT NULL
               AND is_duplicate = false
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date
-            ON CONFLICT (area_key, week_start_date, property_type)
-            DO UPDATE SET
-                listing_count = EXCLUDED.listing_count,
-                updated_at = EXCLUDED.updated_at
+            ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
+            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
             """;
 
-        // Per-type rows — one row per (area_key, week_start_date, property_type)
+        // 2. Per-type aggregate: property_type=<type>, bedrooms=0
         String perTypeSql = """
             INSERT INTO public.area_price_weekly (
-                area_key,
-                week_start_date,
-                property_type,
-                listing_count,
-                median_price_per_cent_paise,
-                p25_price_per_cent_paise,
-                p75_price_per_cent_paise,
-                created_at,
-                updated_at
+                area_key, week_start_date, property_type, bedrooms,
+                listing_count, median_price_per_cent_paise,
+                p25_price_per_cent_paise, p75_price_per_cent_paise,
+                created_at, updated_at
             )
             SELECT
                 area_key,
                 DATE_TRUNC('week', created_at)::date AS week_start_date,
                 property_type,
+                0 AS bedrooms,
                 COUNT(*) AS listing_count,
                 NULL AS median_price_per_cent_paise,
                 NULL AS p25_price_per_cent_paise,
                 NULL AS p75_price_per_cent_paise,
-                ? AS created_at,
-                ? AS updated_at
+                ? AS created_at, ? AS updated_at
             FROM public.property_listings
             WHERE area_key IS NOT NULL
               AND is_duplicate = false
               AND property_type IS NOT NULL
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date, property_type
-            ON CONFLICT (area_key, week_start_date, property_type)
-            DO UPDATE SET
-                listing_count = EXCLUDED.listing_count,
-                updated_at = EXCLUDED.updated_at
+            ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
+            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
             """;
 
-        int allRows = jdbcOperations.update(allSql, now, now, fromDate);
-        int perTypeRows = jdbcOperations.update(perTypeSql, now, now, fromDate);
-        return allRows + perTypeRows;
+        // 3. Per-bedrooms aggregate: property_type='all', bedrooms=<n> (n > 0)
+        String perBedroomsSql = """
+            INSERT INTO public.area_price_weekly (
+                area_key, week_start_date, property_type, bedrooms,
+                listing_count, median_price_per_cent_paise,
+                p25_price_per_cent_paise, p75_price_per_cent_paise,
+                created_at, updated_at
+            )
+            SELECT
+                area_key,
+                DATE_TRUNC('week', created_at)::date AS week_start_date,
+                'all' AS property_type,
+                bedrooms,
+                COUNT(*) AS listing_count,
+                NULL AS median_price_per_cent_paise,
+                NULL AS p25_price_per_cent_paise,
+                NULL AS p75_price_per_cent_paise,
+                ? AS created_at, ? AS updated_at
+            FROM public.property_listings
+            WHERE area_key IS NOT NULL
+              AND is_duplicate = false
+              AND bedrooms IS NOT NULL AND bedrooms > 0
+              AND DATE_TRUNC('week', created_at)::date >= ?
+            GROUP BY area_key, DATE_TRUNC('week', created_at)::date, bedrooms
+            ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
+            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
+            """;
+
+        // 4. Per-type-per-bedrooms: property_type=<type>, bedrooms=<n> (n > 0)
+        String perTypePerBedroomsSql = """
+            INSERT INTO public.area_price_weekly (
+                area_key, week_start_date, property_type, bedrooms,
+                listing_count, median_price_per_cent_paise,
+                p25_price_per_cent_paise, p75_price_per_cent_paise,
+                created_at, updated_at
+            )
+            SELECT
+                area_key,
+                DATE_TRUNC('week', created_at)::date AS week_start_date,
+                property_type,
+                bedrooms,
+                COUNT(*) AS listing_count,
+                NULL AS median_price_per_cent_paise,
+                NULL AS p25_price_per_cent_paise,
+                NULL AS p75_price_per_cent_paise,
+                ? AS created_at, ? AS updated_at
+            FROM public.property_listings
+            WHERE area_key IS NOT NULL
+              AND is_duplicate = false
+              AND property_type IS NOT NULL
+              AND bedrooms IS NOT NULL AND bedrooms > 0
+              AND DATE_TRUNC('week', created_at)::date >= ?
+            GROUP BY area_key, DATE_TRUNC('week', created_at)::date, property_type, bedrooms
+            ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
+            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
+            """;
+
+        int r1 = jdbcOperations.update(allSql, now, now, fromDate);
+        int r2 = jdbcOperations.update(perTypeSql, now, now, fromDate);
+        int r3 = jdbcOperations.update(perBedroomsSql, now, now, fromDate);
+        int r4 = jdbcOperations.update(perTypePerBedroomsSql, now, now, fromDate);
+        return r1 + r2 + r3 + r4;
     }
 }
