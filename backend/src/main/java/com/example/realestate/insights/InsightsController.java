@@ -38,12 +38,13 @@ public class InsightsController {
 
     @GetMapping("/avg-price-by-area")
     public ResponseEntity<?> avgPriceByArea(JwtAuthenticationToken auth,
-                                             @RequestParam(defaultValue = "all") String propertyType) {
+                                             @RequestParam(defaultValue = "all") String propertyType,
+                                             @RequestParam(defaultValue = "0") int bedrooms) {
         UUID userId = extractUserId(auth);
         ResponseEntity<?> denied = checkAccess(userId);
         if (denied != null) return denied;
 
-        List<AreaPriceResponse> result = insightsService.getAvgPriceByArea(propertyType).stream()
+        List<AreaPriceResponse> result = insightsService.getAvgPriceByArea(propertyType, bedrooms).stream()
                 .map(row -> new AreaPriceResponse(
                         row.areaKey(),
                         row.listingCount(),
@@ -61,12 +62,13 @@ public class InsightsController {
     @GetMapping("/price-trend")
     public ResponseEntity<?> priceTrend(JwtAuthenticationToken auth,
                                          @RequestParam(name = "area_key") String areaKey,
-                                         @RequestParam(defaultValue = "all") String propertyType) {
+                                         @RequestParam(defaultValue = "all") String propertyType,
+                                         @RequestParam(defaultValue = "0") int bedrooms) {
         UUID userId = extractUserId(auth);
         ResponseEntity<?> denied = checkAccess(userId);
         if (denied != null) return denied;
 
-        List<PriceTrendResponse> result = insightsService.getPriceTrend(areaKey, propertyType).stream()
+        List<PriceTrendResponse> result = insightsService.getPriceTrend(areaKey, propertyType, bedrooms).stream()
                 .map(w -> new PriceTrendResponse(
                         w.getWeekStartDate().toString(),
                         w.getMedianPricePerCentPaise(),
@@ -75,8 +77,8 @@ public class InsightsController {
                         w.getP75PricePerCentPaise()))
                 .toList();
 
-        log.info("GET /api/insights/price-trend -> 200 areaKey={} propertyType={} count={} userId={}",
-                areaKey, propertyType, result.size(), userId);
+        log.info("GET /api/insights/price-trend -> 200 areaKey={} propertyType={} bedrooms={} count={} userId={}",
+                areaKey, propertyType, bedrooms, result.size(), userId);
         return ResponseEntity.ok(result);
     }
 

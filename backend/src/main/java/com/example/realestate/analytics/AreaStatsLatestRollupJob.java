@@ -68,12 +68,10 @@ public class AreaStatsLatestRollupJob {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime fromDateOdt = fromDate.atStartOfDay().atOffset(ZoneOffset.UTC);
 
-        // 'all' aggregate — full CTE with city_median + price_index (existing logic)
+        // 1. Grand aggregate: property_type='all', bedrooms=0
         String allSql = """
             WITH filtered_listings AS (
-                SELECT
-                    area_key,
-                    price_per_cent_paise
+                SELECT area_key, price_per_cent_paise
                 FROM public.property_listings
                 WHERE area_key IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
@@ -81,29 +79,22 @@ public class AreaStatsLatestRollupJob {
                   AND created_at >= ?
             ),
             area_stats AS (
-                SELECT
-                    area_key,
-                    COUNT(*) AS listing_count,
+                SELECT area_key, COUNT(*) AS listing_count,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT
                         AS median_price_per_cent_paise
-                FROM filtered_listings
-                GROUP BY area_key
+                FROM filtered_listings GROUP BY area_key
             ),
             city_keys AS (
-                SELECT
-                    area_key,
-                    CASE
-                        WHEN array_length(string_to_array(area_key, '|'), 1) = 4
-                        THEN (string_to_array(area_key, '|'))[1] || '|' ||
-                             (string_to_array(area_key, '|'))[2] || '|' ||
-                             (string_to_array(area_key, '|'))[3]
-                        ELSE NULL
-                    END AS city_key
+                SELECT area_key,
+                    CASE WHEN array_length(string_to_array(area_key, '|'), 1) = 4
+                         THEN (string_to_array(area_key, '|'))[1] || '|' ||
+                              (string_to_array(area_key, '|'))[2] || '|' ||
+                              (string_to_array(area_key, '|'))[3]
+                         ELSE NULL END AS city_key
                 FROM area_stats
             ),
             city_medians AS (
-                SELECT
-                    ck.city_key,
+                SELECT ck.city_key,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fl.price_per_cent_paise))::BIGINT
                         AS city_median_price_per_cent_paise
                 FROM filtered_listings fl
@@ -112,33 +103,22 @@ public class AreaStatsLatestRollupJob {
                 GROUP BY ck.city_key
             )
             INSERT INTO public.area_stats_latest (
-                area_key,
-                property_type,
-                listing_count,
-                median_price_per_cent_paise,
-                city_median_price_per_cent_paise,
-                price_index,
-                created_at,
-                updated_at
+                area_key, property_type, bedrooms, listing_count,
+                median_price_per_cent_paise, city_median_price_per_cent_paise,
+                price_index, created_at, updated_at
             )
-            SELECT
-                a.area_key,
-                'all' AS property_type,
-                a.listing_count,
-                a.median_price_per_cent_paise,
+            SELECT a.area_key, 'all' AS property_type, 0 AS bedrooms,
+                a.listing_count, a.median_price_per_cent_paise,
                 cm.city_median_price_per_cent_paise,
-                CASE
-                    WHEN cm.city_median_price_per_cent_paise IS NOT NULL
-                         AND cm.city_median_price_per_cent_paise > 0
-                    THEN ROUND(a.median_price_per_cent_paise::NUMERIC / cm.city_median_price_per_cent_paise, 4)
-                    ELSE NULL
-                END AS price_index,
-                ? AS created_at,
-                ? AS updated_at
+                CASE WHEN cm.city_median_price_per_cent_paise IS NOT NULL
+                          AND cm.city_median_price_per_cent_paise > 0
+                     THEN ROUND(a.median_price_per_cent_paise::NUMERIC / cm.city_median_price_per_cent_paise, 4)
+                     ELSE NULL END AS price_index,
+                ? AS created_at, ? AS updated_at
             FROM area_stats a
             LEFT JOIN city_keys ck ON a.area_key = ck.area_key
             LEFT JOIN city_medians cm ON ck.city_key = cm.city_key
-            ON CONFLICT (area_key, property_type)
+            ON CONFLICT (area_key, property_type, bedrooms)
             DO UPDATE SET
                 listing_count = EXCLUDED.listing_count,
                 median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
@@ -147,13 +127,10 @@ public class AreaStatsLatestRollupJob {
                 updated_at = EXCLUDED.updated_at
             """;
 
-        // Per-type rows — listing_count + median per (area_key, property_type); no city context
+        // 2. Per-type aggregate: property_type=<type>, bedrooms=0
         String perTypeSql = """
             WITH filtered_listings AS (
-                SELECT
-                    area_key,
-                    property_type,
-                    price_per_cent_paise
+                SELECT area_key, property_type, price_per_cent_paise
                 FROM public.property_listings
                 WHERE area_key IS NOT NULL
                   AND property_type IS NOT NULL
@@ -162,28 +139,16 @@ public class AreaStatsLatestRollupJob {
                   AND created_at >= ?
             )
             INSERT INTO public.area_stats_latest (
-                area_key,
-                property_type,
-                listing_count,
-                median_price_per_cent_paise,
-                city_median_price_per_cent_paise,
-                price_index,
-                created_at,
-                updated_at
+                area_key, property_type, bedrooms, listing_count,
+                median_price_per_cent_paise, city_median_price_per_cent_paise,
+                price_index, created_at, updated_at
             )
-            SELECT
-                area_key,
-                property_type,
-                COUNT(*) AS listing_count,
-                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT
-                    AS median_price_per_cent_paise,
-                NULL AS city_median_price_per_cent_paise,
-                NULL AS price_index,
-                ? AS created_at,
-                ? AS updated_at
+            SELECT area_key, property_type, 0 AS bedrooms, COUNT(*) AS listing_count,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT,
+                NULL, NULL, ? AS created_at, ? AS updated_at
             FROM filtered_listings
             GROUP BY area_key, property_type
-            ON CONFLICT (area_key, property_type)
+            ON CONFLICT (area_key, property_type, bedrooms)
             DO UPDATE SET
                 listing_count = EXCLUDED.listing_count,
                 median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
@@ -192,8 +157,71 @@ public class AreaStatsLatestRollupJob {
                 updated_at = EXCLUDED.updated_at
             """;
 
-        int allRows = jdbcOperations.update(allSql, fromDateOdt, now, now);
-        int perTypeRows = jdbcOperations.update(perTypeSql, fromDateOdt, now, now);
-        return allRows + perTypeRows;
+        // 3. Per-bedrooms aggregate: property_type='all', bedrooms=<n> (n > 0)
+        String perBedroomsSql = """
+            WITH filtered_listings AS (
+                SELECT area_key, bedrooms, price_per_cent_paise
+                FROM public.property_listings
+                WHERE area_key IS NOT NULL
+                  AND price_per_cent_paise IS NOT NULL
+                  AND is_duplicate = false
+                  AND bedrooms IS NOT NULL AND bedrooms > 0
+                  AND created_at >= ?
+            )
+            INSERT INTO public.area_stats_latest (
+                area_key, property_type, bedrooms, listing_count,
+                median_price_per_cent_paise, city_median_price_per_cent_paise,
+                price_index, created_at, updated_at
+            )
+            SELECT area_key, 'all' AS property_type, bedrooms, COUNT(*) AS listing_count,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT,
+                NULL, NULL, ? AS created_at, ? AS updated_at
+            FROM filtered_listings
+            GROUP BY area_key, bedrooms
+            ON CONFLICT (area_key, property_type, bedrooms)
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                city_median_price_per_cent_paise = EXCLUDED.city_median_price_per_cent_paise,
+                price_index = EXCLUDED.price_index,
+                updated_at = EXCLUDED.updated_at
+            """;
+
+        // 4. Per-type-per-bedrooms: property_type=<type>, bedrooms=<n> (n > 0)
+        String perTypePerBedroomsSql = """
+            WITH filtered_listings AS (
+                SELECT area_key, property_type, bedrooms, price_per_cent_paise
+                FROM public.property_listings
+                WHERE area_key IS NOT NULL
+                  AND property_type IS NOT NULL
+                  AND price_per_cent_paise IS NOT NULL
+                  AND is_duplicate = false
+                  AND bedrooms IS NOT NULL AND bedrooms > 0
+                  AND created_at >= ?
+            )
+            INSERT INTO public.area_stats_latest (
+                area_key, property_type, bedrooms, listing_count,
+                median_price_per_cent_paise, city_median_price_per_cent_paise,
+                price_index, created_at, updated_at
+            )
+            SELECT area_key, property_type, bedrooms, COUNT(*) AS listing_count,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT,
+                NULL, NULL, ? AS created_at, ? AS updated_at
+            FROM filtered_listings
+            GROUP BY area_key, property_type, bedrooms
+            ON CONFLICT (area_key, property_type, bedrooms)
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                city_median_price_per_cent_paise = EXCLUDED.city_median_price_per_cent_paise,
+                price_index = EXCLUDED.price_index,
+                updated_at = EXCLUDED.updated_at
+            """;
+
+        int r1 = jdbcOperations.update(allSql, fromDateOdt, now, now);
+        int r2 = jdbcOperations.update(perTypeSql, fromDateOdt, now, now);
+        int r3 = jdbcOperations.update(perBedroomsSql, fromDateOdt, now, now);
+        int r4 = jdbcOperations.update(perTypePerBedroomsSql, fromDateOdt, now, now);
+        return r1 + r2 + r3 + r4;
     }
 }

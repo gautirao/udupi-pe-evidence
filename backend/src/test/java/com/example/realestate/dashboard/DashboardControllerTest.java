@@ -111,7 +111,7 @@ class DashboardControllerTest {
                 createWeeklyData("manipal", LocalDate.of(2026, 1, 27), 8, 480000L, 380000L, 580000L),
                 createWeeklyData("manipal", LocalDate.of(2026, 1, 20), 12, 520000L, 420000L, 620000L)
         );
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 52)).thenReturn(mockData);
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 0, 52)).thenReturn(mockData);
 
         // Act & Assert
         mockMvc.perform(get("/api/dashboard/areas/manipal/price-history"))
@@ -122,7 +122,7 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$[1].weekStartDate").value("2026-01-27"))
                 .andExpect(jsonPath("$[2].weekStartDate").value("2026-01-20"));
 
-        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 52);
+        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 0, 52);
     }
 
     // ==================== Paise to Rupees Conversion Tests ====================
@@ -134,7 +134,7 @@ class DashboardControllerTest {
         List<AreaPriceWeekly> mockData = List.of(
                 createWeeklyData("udupi", LocalDate.of(2026, 2, 3), 15, 500000L, 400000L, 600000L)
         );
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("udupi", "all", 52)).thenReturn(mockData);
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("udupi", "all", 0, 52)).thenReturn(mockData);
 
         // Act & Assert
         mockMvc.perform(get("/api/dashboard/areas/udupi/price-history"))
@@ -151,7 +151,7 @@ class DashboardControllerTest {
         List<AreaPriceWeekly> mockData = List.of(
                 createWeeklyData("empty-area", LocalDate.of(2026, 2, 3), 0, null, null, null)
         );
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("empty-area", "all", 52)).thenReturn(mockData);
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("empty-area", "all", 0, 52)).thenReturn(mockData);
 
         // Act & Assert
         mockMvc.perform(get("/api/dashboard/areas/empty-area/price-history"))
@@ -169,7 +169,7 @@ class DashboardControllerTest {
         List<AreaPriceWeekly> mockData = List.of(
                 createWeeklyData("test-area", LocalDate.of(2026, 2, 3), 5, 12345L, 12344L, 12346L)
         );
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("test-area", "all", 52)).thenReturn(mockData);
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("test-area", "all", 0, 52)).thenReturn(mockData);
 
         // Act & Assert
         mockMvc.perform(get("/api/dashboard/areas/test-area/price-history"))
@@ -184,50 +184,50 @@ class DashboardControllerTest {
     @Test
     @WithMockUser
     void getPriceHistory_respectsWeeksParameter() throws Exception {
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 12)).thenReturn(List.of());
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 0, 12)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/manipal/price-history")
                         .param("weeks", "12"))
                 .andExpect(status().isOk());
 
-        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 12);
+        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 0, 12);
     }
 
     @Test
     @WithMockUser
     void getPriceHistory_defaultsTo52Weeks() throws Exception {
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 52)).thenReturn(List.of());
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 0, 52)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/manipal/price-history"))
                 .andExpect(status().isOk());
 
-        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 52);
+        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 0, 52);
     }
 
     @Test
     @WithMockUser
     void getPriceHistory_clampsTooLargeWeeksValue() throws Exception {
         // MAX_WEEKS is 520; values above should be clamped
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 520)).thenReturn(List.of());
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 0, 520)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/manipal/price-history")
                         .param("weeks", "9999"))
                 .andExpect(status().isOk());
 
-        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 520);
+        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 0, 520);
     }
 
     @Test
     @WithMockUser
     void getPriceHistory_clampsTooSmallWeeksValue() throws Exception {
         // Values below 1 should be clamped to 1
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 1)).thenReturn(List.of());
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("manipal", "all", 0, 1)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/manipal/price-history")
                         .param("weeks", "0"))
                 .andExpect(status().isOk());
 
-        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 1);
+        verify(areaPriceWeeklyRepository).findRecentByAreaKey("manipal", "all", 0, 1);
     }
 
     // ==================== Empty Result Tests ====================
@@ -235,7 +235,7 @@ class DashboardControllerTest {
     @Test
     @WithMockUser
     void getPriceHistory_unknownAreaKey_returnsEmptyArray() throws Exception {
-        when(areaPriceWeeklyRepository.findRecentByAreaKey("nonexistent-area", "all", 52)).thenReturn(List.of());
+        when(areaPriceWeeklyRepository.findRecentByAreaKey("nonexistent-area", "all", 0, 52)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/nonexistent-area/price-history"))
                 .andExpect(status().isOk())
@@ -265,36 +265,36 @@ class DashboardControllerTest {
     @Test
     @WithMockUser
     void getInsights_defaultSort_isMedianDesc() throws Exception {
-        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all")).thenReturn(List.of());
+        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all", 0)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/insights"))
                 .andExpect(status().isOk());
 
-        verify(areaInsightsDao).findInsights("median_desc", 50, 5, "all");
+        verify(areaInsightsDao).findInsights("median_desc", 50, 5, "all", 0);
     }
 
     @Test
     @WithMockUser
     void getInsights_medianAsc_passesCorrectSort() throws Exception {
-        when(areaInsightsDao.findInsights("median_asc", 50, 5, "all")).thenReturn(List.of());
+        when(areaInsightsDao.findInsights("median_asc", 50, 5, "all", 0)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/insights")
                         .param("sort", "median_asc"))
                 .andExpect(status().isOk());
 
-        verify(areaInsightsDao).findInsights("median_asc", 50, 5, "all");
+        verify(areaInsightsDao).findInsights("median_asc", 50, 5, "all", 0);
     }
 
     @Test
     @WithMockUser
     void getInsights_activityDesc_passesCorrectSort() throws Exception {
-        when(areaInsightsDao.findInsights("activity_desc", 50, 5, "all")).thenReturn(List.of());
+        when(areaInsightsDao.findInsights("activity_desc", 50, 5, "all", 0)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/insights")
                         .param("sort", "activity_desc"))
                 .andExpect(status().isOk());
 
-        verify(areaInsightsDao).findInsights("activity_desc", 50, 5, "all");
+        verify(areaInsightsDao).findInsights("activity_desc", 50, 5, "all", 0);
     }
 
     @Test
@@ -306,7 +306,7 @@ class DashboardControllerTest {
                 new AreaInsightsDao.AreaInsightRow("area-b", 15, 700000L, 800000L, new BigDecimal("0.8750"), now),
                 new AreaInsightsDao.AreaInsightRow("area-c", 10, 500000L, 800000L, new BigDecimal("0.6250"), now)
         );
-        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all")).thenReturn(mockData);
+        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all", 0)).thenReturn(mockData);
 
         mockMvc.perform(get("/api/dashboard/areas/insights"))
                 .andExpect(status().isOk())
@@ -325,7 +325,7 @@ class DashboardControllerTest {
         List<AreaInsightsDao.AreaInsightRow> mockData = List.of(
                 new AreaInsightsDao.AreaInsightRow("test-area", 10, 500000L, 300000L, new BigDecimal("1.6667"), now)
         );
-        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all")).thenReturn(mockData);
+        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all", 0)).thenReturn(mockData);
 
         mockMvc.perform(get("/api/dashboard/areas/insights"))
                 .andExpect(status().isOk())
@@ -341,7 +341,7 @@ class DashboardControllerTest {
         List<AreaInsightsDao.AreaInsightRow> mockData = List.of(
                 new AreaInsightsDao.AreaInsightRow("null-area", 5, null, null, null, now)
         );
-        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all")).thenReturn(mockData);
+        when(areaInsightsDao.findInsights("median_desc", 50, 5, "all", 0)).thenReturn(mockData);
 
         mockMvc.perform(get("/api/dashboard/areas/insights"))
                 .andExpect(status().isOk())
@@ -357,25 +357,25 @@ class DashboardControllerTest {
     @Test
     @WithMockUser
     void getInsights_passesMinCountToDao() throws Exception {
-        when(areaInsightsDao.findInsights("median_desc", 50, 10, "all")).thenReturn(List.of());
+        when(areaInsightsDao.findInsights("median_desc", 50, 10, "all", 0)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/insights")
                         .param("minCount", "10"))
                 .andExpect(status().isOk());
 
-        verify(areaInsightsDao).findInsights("median_desc", 50, 10, "all");
+        verify(areaInsightsDao).findInsights("median_desc", 50, 10, "all", 0);
     }
 
     @Test
     @WithMockUser
     void getInsights_minCountFlooredAtZero() throws Exception {
-        when(areaInsightsDao.findInsights("median_desc", 50, 0, "all")).thenReturn(List.of());
+        when(areaInsightsDao.findInsights("median_desc", 50, 0, "all", 0)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/insights")
                         .param("minCount", "-5"))
                 .andExpect(status().isOk());
 
-        verify(areaInsightsDao).findInsights("median_desc", 50, 0, "all");
+        verify(areaInsightsDao).findInsights("median_desc", 50, 0, "all", 0);
     }
 
     // ==================== Area Insights: Limit ====================
@@ -383,13 +383,13 @@ class DashboardControllerTest {
     @Test
     @WithMockUser
     void getInsights_limitCappedAt200() throws Exception {
-        when(areaInsightsDao.findInsights("median_desc", 200, 5, "all")).thenReturn(List.of());
+        when(areaInsightsDao.findInsights("median_desc", 200, 5, "all", 0)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/dashboard/areas/insights")
                         .param("limit", "999"))
                 .andExpect(status().isOk());
 
-        verify(areaInsightsDao).findInsights("median_desc", 200, 5, "all");
+        verify(areaInsightsDao).findInsights("median_desc", 200, 5, "all", 0);
     }
 
     // ==================== Map Listings: Auth Tests ====================
