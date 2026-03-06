@@ -62,6 +62,7 @@ const adminNavigation = [
   { name: 'Duplicates', href: '/admin/duplicates', icon: Copy },
   { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
   { name: 'Locality Normalizer', href: '/admin/localities', icon: MapPin },
+  { name: 'Audit Log', href: '/admin/audit-log', icon: Shield },
 ];
 
 const userNavigation = [
