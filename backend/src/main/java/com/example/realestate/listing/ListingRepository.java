@@ -238,6 +238,35 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("freshDays") int freshDays,
             Pageable pageable);
 
+    // ===== Full-text search =====
+
+    @Query(value = """
+            SELECT * FROM public.property_listings
+            WHERE status IN ('SCRAPED', 'LIVE')
+              AND is_duplicate = false
+              AND (:q IS NULL OR search_vector @@ plainto_tsquery('english', :q))
+              AND (:locality IS NULL OR locality = :locality)
+              AND (:propertyType IS NULL OR property_type::text = :propertyType)
+              AND (:bedrooms IS NULL OR bedrooms = CAST(:bedrooms AS integer))
+            ORDER BY created_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM public.property_listings
+            WHERE status IN ('SCRAPED', 'LIVE')
+              AND is_duplicate = false
+              AND (:q IS NULL OR search_vector @@ plainto_tsquery('english', :q))
+              AND (:locality IS NULL OR locality = :locality)
+              AND (:propertyType IS NULL OR property_type::text = :propertyType)
+              AND (:bedrooms IS NULL OR bedrooms = CAST(:bedrooms AS integer))
+            """,
+            nativeQuery = true)
+    Page<Listing> findBySearch(
+            @Param("q") String q,
+            @Param("locality") String locality,
+            @Param("propertyType") String propertyType,
+            @Param("bedrooms") Integer bedrooms,
+            Pageable pageable);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """
