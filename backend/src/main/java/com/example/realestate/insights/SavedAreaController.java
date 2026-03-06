@@ -89,6 +89,24 @@ public class SavedAreaController {
         return ResponseEntity.ok(SavedAreaResponse.from(saved));
     }
 
+    @PatchMapping("/{id}/threshold")
+    public ResponseEntity<?> updateThreshold(JwtAuthenticationToken auth,
+                                             @PathVariable UUID id,
+                                             @RequestBody ThresholdRequest req) {
+        UUID userId = extractUserId(auth);
+
+        SavedArea area = savedAreaRepository.findByIdAndUserId(id, userId).orElse(null);
+        if (area == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Saved area not found"));
+        }
+
+        area.setPriceThresholdRupees(req.priceThresholdRupees());
+        SavedArea saved = savedAreaRepository.save(area);
+        log.info("PATCH /api/saved-areas/{}/threshold -> threshold={} userId={}", id, req.priceThresholdRupees(), userId);
+        return ResponseEntity.ok(SavedAreaResponse.from(saved));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(JwtAuthenticationToken auth, @PathVariable UUID id) {
         UUID userId = extractUserId(auth);
@@ -116,12 +134,16 @@ public class SavedAreaController {
 
     public record AlertsRequest(boolean alertsEnabled) {}
 
-    public record SavedAreaResponse(UUID id, String areaKey, String areaLabel, String createdAt, boolean alertsEnabled) {
+    public record ThresholdRequest(Long priceThresholdRupees) {}
+
+    public record SavedAreaResponse(UUID id, String areaKey, String areaLabel, String createdAt,
+                                    boolean alertsEnabled, Long priceThresholdRupees) {
         static SavedAreaResponse from(SavedArea a) {
             return new SavedAreaResponse(
                     a.getId(), a.getAreaKey(), a.getAreaLabel(),
                     a.getCreatedAt() != null ? a.getCreatedAt().toString() : null,
-                    a.isAlertsEnabled());
+                    a.isAlertsEnabled(),
+                    a.getPriceThresholdRupees());
         }
     }
 }

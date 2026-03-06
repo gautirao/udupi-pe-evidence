@@ -33,6 +33,9 @@ public class SavedArea {
     @Column(name = "alerts_enabled", nullable = false)
     private boolean alertsEnabled = true;
 
+    @Column(name = "price_threshold_rupees")
+    private Long priceThresholdRupees;
+
     // ===== Getters / Setters =====
 
     public UUID getId() { return id; }
@@ -52,4 +55,7 @@ public class SavedArea {
 
     public boolean isAlertsEnabled() { return alertsEnabled; }
     public void setAlertsEnabled(boolean alertsEnabled) { this.alertsEnabled = alertsEnabled; }
+
+    public Long getPriceThresholdRupees() { return priceThresholdRupees; }
+    public void setPriceThresholdRupees(Long priceThresholdRupees) { this.priceThresholdRupees = priceThresholdRupees; }
 }
