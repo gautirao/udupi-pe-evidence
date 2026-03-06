@@ -60,29 +60,33 @@ interface SpringPage<T> {
 // ===== Custom Hooks =====
 
 /**
- * Fetch average price by area (median prices per area)
+ * Fetch average price by area (median prices per area), filtered by property type.
+ * @param propertyType - 'all' (default) or a specific type like 'land', 'apartment', 'house'
  */
-export function useAvgPriceByArea(options?: { enabled?: boolean }) {
+export function useAvgPriceByArea(propertyType = 'all', options?: { enabled?: boolean }) {
   return useQuery<AreaPriceData[]>({
-    queryKey: ['insights', 'avg-price-by-area'],
+    queryKey: ['insights', 'avg-price-by-area', propertyType],
     queryFn: async () => {
-      return api.get<AreaPriceData[]>('/api/insights/avg-price-by-area');
+      return api.get<AreaPriceData[]>(`/api/insights/avg-price-by-area?propertyType=${encodeURIComponent(propertyType)}`);
     },
     enabled: options?.enabled ?? true,
   });
 }
 
 /**
- * Fetch price trend for a specific area (weekly data)
+ * Fetch price trend for a specific area (weekly data), filtered by property type.
  * @param areaKey - The area key to fetch trends for
+ * @param propertyType - 'all' (default) or a specific type like 'land', 'apartment', 'house'
  * @param enabled - Whether the query should run (default: true if areaKey exists)
  */
-export function usePriceTrend(areaKey: string | null, enabled = true) {
+export function usePriceTrend(areaKey: string | null, propertyType = 'all', enabled = true) {
   return useQuery<PriceTrendData[]>({
-    queryKey: ['insights', 'price-trend', areaKey],
+    queryKey: ['insights', 'price-trend', areaKey, propertyType],
     queryFn: async () => {
       if (!areaKey) return [];
-      return api.get<PriceTrendData[]>(`/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}`);
+      return api.get<PriceTrendData[]>(
+        `/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}&propertyType=${encodeURIComponent(propertyType)}`
+      );
     },
     enabled: enabled && !!areaKey,
   });
@@ -128,10 +132,12 @@ export function useAreaMarketTrend(
 export function useMultiAreaTrend(areaKeys: string[], enabled = true) {
   return useQueries({
     queries: areaKeys.map((areaKey) => ({
-      queryKey: ['insights', 'price-trend', areaKey],
+      queryKey: ['insights', 'price-trend', areaKey, 'all'],
       queryFn: async () => {
         if (!areaKey) return [] as PriceTrendData[];
-        return api.get<PriceTrendData[]>(`/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}`);
+        return api.get<PriceTrendData[]>(
+          `/api/insights/price-trend?area_key=${encodeURIComponent(areaKey)}&propertyType=all`
+        );
       },
       enabled: enabled && !!areaKey,
     })),

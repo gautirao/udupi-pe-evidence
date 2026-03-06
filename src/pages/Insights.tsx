@@ -39,6 +39,7 @@ export default function Insights() {
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [newListingsDays, setNewListingsDays] = useState<number>(7);
   const [selectedPriceType, setSelectedPriceType] = useState<'land' | 'apartment' | 'house'>('land');
+  const [avgPricePropertyType, setAvgPricePropertyType] = useState<string>('all');
   const [selectedCompareAreas, setSelectedCompareAreas] = useState<string[]>([]);
   const compareInitialized = useRef(false);
 
@@ -54,8 +55,9 @@ export default function Insights() {
   const showTrialBanner = hasAccess && daysRemaining <= 3;
 
   // Fetch data
-  const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea({ enabled: hasAccess });
-  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, hasAccess && !!selectedArea && selectedPriceType === 'land');
+  const { data: avgPriceData = [], isLoading: avgPriceLoading, error: avgPriceError } = useAvgPriceByArea(avgPricePropertyType, { enabled: hasAccess });
+  const trendPropertyType = selectedPriceType === 'land' ? 'land' : 'all';
+  const { data: priceTrendData = [], isLoading: trendLoading, error: trendError } = usePriceTrend(selectedArea, trendPropertyType, hasAccess && !!selectedArea && selectedPriceType === 'land');
   const { data: sqftTrendData = [], isLoading: sqftTrendLoading, error: sqftTrendError } = useAreaMarketTrend(
     selectedArea,
     selectedPriceType === 'apartment' ? 'apartment' : 'house',
@@ -167,11 +169,26 @@ export default function Insights() {
             {/* Average Price by Area */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-primary" />
-                  Average Price by Area
-                </CardTitle>
-                <CardDescription>Median price per cent compared to city average</CardDescription>
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-primary" />
+                      Average Price by Area
+                    </CardTitle>
+                    <CardDescription>Median price per cent compared to city average</CardDescription>
+                  </div>
+                  <Select value={avgPricePropertyType} onValueChange={setAvgPricePropertyType}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All types</SelectItem>
+                      <SelectItem value="land">Land</SelectItem>
+                      <SelectItem value="apartment">Apartment</SelectItem>
+                      <SelectItem value="house">House</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
               <CardContent>
                 {avgPriceLoading ? (

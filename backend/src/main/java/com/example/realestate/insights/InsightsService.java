@@ -44,18 +44,18 @@ public class InsightsService {
     }
 
     /**
-     * Average price by area from area_stats_latest.
+     * Average price by area from area_stats_latest, filtered by property type.
      */
-    public List<AreaInsightsDao.AreaInsightRow> getAvgPriceByArea() {
-        return areaInsightsDao.findInsights("median_desc", 100, 1);
+    public List<AreaInsightsDao.AreaInsightRow> getAvgPriceByArea(String propertyType) {
+        return areaInsightsDao.findInsights("median_desc", 100, 1, propertyType);
     }
 
     /**
-     * Weekly price trend for a specific area.
+     * Weekly price trend for a specific area and property type.
      * Returns empty list if area has no data.
      */
-    public List<AreaPriceWeekly> getPriceTrend(String areaKey) {
-        return areaPriceWeeklyRepository.findRecentByAreaKey(areaKey, DEFAULT_WEEKS);
+    public List<AreaPriceWeekly> getPriceTrend(String areaKey, String propertyType) {
+        return areaPriceWeeklyRepository.findRecentByAreaKey(areaKey, propertyType, DEFAULT_WEEKS);
     }
 
     /**

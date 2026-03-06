@@ -71,7 +71,7 @@ class InsightsControllerTest {
         var row = new AreaInsightsDao.AreaInsightRow(
                 "india|karnataka|udupi|manipal", 15, 500000L, 600000L,
                 new BigDecimal("0.8333"), OffsetDateTime.now());
-        when(insightsService.getAvgPriceByArea()).thenReturn(List.of(row));
+        when(insightsService.getAvgPriceByArea(anyString())).thenReturn(List.of(row));
 
         mockMvc.perform(get("/api/insights/avg-price-by-area")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -80,6 +80,29 @@ class InsightsControllerTest {
                 .andExpect(jsonPath("$[0].areaKey").value("india|karnataka|udupi|manipal"))
                 .andExpect(jsonPath("$[0].listingCount").value(15))
                 .andExpect(jsonPath("$[0].medianPricePerCentPaise").value(500000));
+    }
+
+    @Test
+    void avgPriceByArea_withPropertyTypeParam_passesTypeToService() throws Exception {
+        when(insightsService.getAvgPriceByArea(eq("land"))).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/insights/avg-price-by-area")
+                        .param("propertyType", "land")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        verify(insightsService).getAvgPriceByArea("land");
+    }
+
+    @Test
+    void avgPriceByArea_withoutPropertyTypeParam_defaultsToAll() throws Exception {
+        when(insightsService.getAvgPriceByArea(anyString())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/insights/avg-price-by-area")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        verify(insightsService).getAvgPriceByArea("all");
     }
 
     // ==================== Test 2: price-trend -> 200 ====================
@@ -94,7 +117,7 @@ class InsightsControllerTest {
         w.setListingCount(8);
         w.setP25PricePerCentPaise(400000L);
         w.setP75PricePerCentPaise(600000L);
-        when(insightsService.getPriceTrend("india|karnataka|udupi|manipal"))
+        when(insightsService.getPriceTrend(eq("india|karnataka|udupi|manipal"), anyString()))
                 .thenReturn(List.of(w));
 
         mockMvc.perform(get("/api/insights/price-trend")
@@ -111,13 +134,38 @@ class InsightsControllerTest {
 
     @Test
     void priceTrend_unknownArea_returnsEmptyArray() throws Exception {
-        when(insightsService.getPriceTrend("nonexistent")).thenReturn(List.of());
+        when(insightsService.getPriceTrend(eq("nonexistent"), anyString())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/insights/price-trend")
                         .param("area_key", "nonexistent")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void priceTrend_withPropertyTypeParam_passesTypeToService() throws Exception {
+        when(insightsService.getPriceTrend(anyString(), eq("land"))).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/insights/price-trend")
+                        .param("area_key", "india|karnataka|udupi|manipal")
+                        .param("propertyType", "land")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        verify(insightsService).getPriceTrend("india|karnataka|udupi|manipal", "land");
+    }
+
+    @Test
+    void priceTrend_withoutPropertyTypeParam_defaultsToAll() throws Exception {
+        when(insightsService.getPriceTrend(anyString(), anyString())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/insights/price-trend")
+                        .param("area_key", "india|karnataka|udupi|manipal")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        verify(insightsService).getPriceTrend("india|karnataka|udupi|manipal", "all");
     }
 
     // ==================== Test 4: new-listings with saved areas -> 200 (Page) ====================
