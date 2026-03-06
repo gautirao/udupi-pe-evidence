@@ -10,13 +10,16 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PropertyFilters, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
-import { CalendarIcon, Filter, MapPin, X, ChevronDown } from 'lucide-react';
+import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 
 interface MapFiltersProps {
   filters: PropertyFilters;
   onFiltersChange: (filters: PropertyFilters) => void;
+  searchQuery: string;
+  onSearchChange: (q: string) => void;
 }
 
 const propertyTypes: { value: PropertyType; label: string }[] = [
@@ -27,7 +30,7 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
+export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChange }: MapFiltersProps) {
   const { data: localities = [] } = useLocalities();
   const { data: priceRange } = usePriceRange();
   const [localityOpen, setLocalityOpen] = useState(false);
@@ -67,6 +70,7 @@ export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
   };
 
   const hasActiveFilters =
+    !!searchQuery ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
     (filters.localities && filters.localities.length > 0) ||
     (filters.bedrooms && filters.bedrooms.length > 0) ||
@@ -84,7 +88,7 @@ export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
             Filters
           </CardTitle>
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2">
+            <Button variant="ghost" size="sm" onClick={() => { clearFilters(); onSearchChange(''); }} className="h-8 px-2">
               <X className="h-3.5 w-3.5 mr-1" />
               Clear
             </Button>
@@ -93,6 +97,27 @@ export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
       </CardHeader>
 
       <CardContent className="flex-1 overflow-y-auto scrollbar-thin space-y-6">
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search listings..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="pl-8 h-9 text-sm"
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+              onClick={() => onSearchChange('')}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+
         {/* Property Type */}
         <div className="space-y-3">
           <Label className="text-sm font-medium">Property Type</Label>

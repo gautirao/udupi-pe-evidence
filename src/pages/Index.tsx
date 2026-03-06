@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
@@ -19,12 +19,30 @@ export default function Index() {
   const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const { data: listings = [], isLoading, error } = usePropertyListings(filters);
 
-  const listingsWithCoords = listings.filter((l) => l.latitude && l.longitude);
+  const filteredListings = useMemo(() => {
+    if (!debouncedSearch) return listings;
+    const q = debouncedSearch.toLowerCase();
+    return listings.filter(
+      (l) =>
+        l.title?.toLowerCase().includes(q) ||
+        l.description?.toLowerCase().includes(q) ||
+        l.locality?.toLowerCase().includes(q)
+    );
+  }, [listings, debouncedSearch]);
 
-  const areaMedians = useMemo(() => computeAreaMedians(listings), [listings]);
+  const listingsWithCoords = filteredListings.filter((l) => l.latitude && l.longitude);
+
+  const areaMedians = useMemo(() => computeAreaMedians(filteredListings), [filteredListings]);
 
   const topLocalities = useMemo(() => {
     const counts = new Map<string, number>();
@@ -65,7 +83,7 @@ export default function Index() {
             showFilters ? 'w-72' : 'w-0 overflow-hidden'
           )}
         >
-          <MapFilters filters={filters} onFiltersChange={setFilters} />
+          <MapFilters filters={filters} onFiltersChange={setFilters} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
         </div>
 
         {/* Toggle Filters Button — lg+ only */}
@@ -97,7 +115,7 @@ export default function Index() {
             <SheetHeader className="sr-only">
               <SheetTitle>Filters</SheetTitle>
             </SheetHeader>
-            <MapFilters filters={filters} onFiltersChange={setFilters} />
+            <MapFilters filters={filters} onFiltersChange={setFilters} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
           </SheetContent>
         </Sheet>
 
@@ -179,7 +197,7 @@ export default function Index() {
                 </div>
                 <div className="text-muted-foreground">|</div>
                 <div className="text-muted-foreground">
-                  {listings.length} total listings
+                  {filteredListings.length} total listings
                 </div>
               </div>
             </Card>
