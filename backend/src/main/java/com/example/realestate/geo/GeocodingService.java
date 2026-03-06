@@ -1,31 +1,60 @@
 package com.example.realestate.geo;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
- * Geocoding service implementation.
- * Currently a stub that returns null; actual API integration (e.g., Google Maps,
- * Nominatim) will be added in a future PR.
+ * Geocoding service backed by Nominatim (OpenStreetMap).
+ * <p>
+ * Caches results in geocode_cache table to avoid redundant API calls.
+ * Applies locality simplification (noise-word removal) before querying Nominatim.
+ * Nominatim rate limit: 1 req/sec — callers are responsible for throttling between listings.
  */
 @Service
 public class GeocodingService implements GeocodingPort {
 
     private static final Logger log = LoggerFactory.getLogger(GeocodingService.class);
 
+    private static final String NOMINATIM_BASE = "https://nominatim.openstreetmap.org/search";
+    private static final String USER_AGENT = "UdupiPropertyTracker/1.0 (property listing aggregator)";
+
+    private static final Set<String> NOISE_WORDS = Set.of(
+            "highway", "road", "rd", "street", "st", "lane", "ln", "avenue", "ave",
+            "junction", "jn", "jnc", "circle", "square", "cross", "crossing",
+            "beach", "temple", "church", "mosque", "school", "college", "hospital",
+            "near", "opp", "opposite", "behind", "beside", "main", "bypass",
+            "nh", "sh", "mh", "east", "west", "north", "south"
+    );
+
+    private final GeocodeCacheRepository cacheRepository;
+    private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
+
+    public GeocodingService(GeocodeCacheRepository cacheRepository) {
+        this.cacheRepository = cacheRepository;
+        this.httpClient = HttpClient.newHttpClient();
+        this.objectMapper = new ObjectMapper();
+    }
+
     /**
-     * Result of a geocoding operation, including coordinates and structured address components.
-     * Address components are nullable and may not all be populated depending on the geocoding provider.
-     *
-     * @param latitude     the latitude coordinate
-     * @param longitude    the longitude coordinate
-     * @param displayName  human-readable address string from the geocoder
-     * @param country      country name (e.g., "India")
-     * @param region       state/province/region (e.g., "Karnataka")
-     * @param city         city/district (e.g., "Udupi")
-     * @param locality     locality/village/area (e.g., "Ambalpady")
-     * @param neighborhood sub-locality or neighborhood (fallback for locality)
+     * Result of a geocoding operation.
      */
     public record GeoResult(
             double latitude,
@@ -40,10 +69,139 @@ public class GeocodingService implements GeocodingPort {
 
     /**
      * Geocode a locality string to coordinates.
-     * Currently a stub that returns null.
+     * Checks DB cache first, then queries Nominatim with progressive simplification.
+     *
+     * @return GeoResult or null if geocoding fails
      */
+    @Override
     public GeoResult geocode(String locality) {
-        log.debug("Geocoding not yet implemented for locality={}", locality);
+        if (locality == null || locality.isBlank()) return null;
+
+        String normalized = locality.trim().toLowerCase();
+
+        // 1. Cache lookup (original)
+        Optional<GeocodeCache> cached = cacheRepository.findByLocalityIgnoreCase(normalized);
+        if (cached.isPresent()) {
+            log.debug("geocode cache hit locality={}", normalized);
+            return toGeoResult(cached.get(), locality);
+        }
+
+        // 2. Simplify and check cache for simplified form
+        String simplified = simplify(locality.trim());
+        if (!simplified.equalsIgnoreCase(normalized)) {
+            Optional<GeocodeCache> simplifiedCached = cacheRepository.findByLocalityIgnoreCase(simplified.toLowerCase());
+            if (simplifiedCached.isPresent()) {
+                log.debug("geocode cache hit (simplified) locality={}", simplified);
+                saveCache(normalized, simplifiedCached.get().getLatitude(),
+                        simplifiedCached.get().getLongitude(), simplifiedCached.get().getDisplayName());
+                return toGeoResult(simplifiedCached.get(), locality);
+            }
+        }
+
+        // 3. Build search variations and call Nominatim
+        List<String> variations = buildVariations(simplified);
+        for (String term : variations) {
+            double[] coords = callNominatim(term);
+            if (coords != null) {
+                String displayName = coords.length > 2 ? null : null; // display name not captured in coords array
+                saveCache(normalized, coords[0], coords[1], null);
+                return new GeoResult(coords[0], coords[1], null, null, null, null, locality, null);
+            }
+        }
+
+        log.warn("geocode failed for locality={}", locality);
         return null;
+    }
+
+    // ===== Nominatim call =====
+
+    private double[] callNominatim(String term) {
+        String searchQuery = term + ", Karnataka, India";
+        URI uri = UriComponentsBuilder.fromHttpUrl(NOMINATIM_BASE)
+                .queryParam("q", searchQuery)
+                .queryParam("format", "json")
+                .queryParam("limit", "1")
+                .queryParam("countrycodes", "in")
+                .build(true).toUri();
+
+        try {
+            HttpRequest request = HttpRequest.newBuilder(uri)
+                    .header("User-Agent", USER_AGENT)
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                log.warn("Nominatim HTTP {} for term={}", response.statusCode(), term);
+                return null;
+            }
+
+            JsonNode results = objectMapper.readTree(response.body());
+            if (results.isEmpty()) {
+                log.debug("Nominatim no results for term={}", term);
+                return null;
+            }
+
+            JsonNode first = results.get(0);
+            double lat = first.get("lat").asDouble();
+            double lon = first.get("lon").asDouble();
+            log.debug("Nominatim success term={} lat={} lon={}", term, lat, lon);
+            return new double[]{lat, lon};
+
+        } catch (Exception e) {
+            log.warn("Nominatim error for term={}: {}", term, e.getMessage());
+            return null;
+        }
+    }
+
+    // ===== Helpers =====
+
+    private void saveCache(String locality, double lat, double lon, String displayName) {
+        try {
+            cacheRepository.save(new GeocodeCache(locality, lat, lon, displayName,
+                    OffsetDateTime.now(ZoneOffset.UTC)));
+        } catch (DataIntegrityViolationException e) {
+            // Race condition: another thread cached same locality — ignore
+        }
+    }
+
+    private static GeoResult toGeoResult(GeocodeCache c, String originalLocality) {
+        return new GeoResult(c.getLatitude(), c.getLongitude(), c.getDisplayName(),
+                null, null, null, originalLocality, null);
+    }
+
+    static String simplify(String locality) {
+        String simplified = locality.toLowerCase();
+        for (String word : NOISE_WORDS) {
+            simplified = simplified.replaceAll("(?i)\\b" + Pattern.quote(word) + "\\b", "");
+        }
+        simplified = simplified
+                .replaceAll("[-–—]", " ")
+                .replaceAll("[()\\[\\]{}]", "")
+                .replaceAll("\\s+", " ")
+                .replaceAll("^\\s*,\\s*", "")
+                .replaceAll("\\s*,\\s*$", "")
+                .replaceAll(",\\s*,", ",")
+                .trim();
+
+        List<String> parts = new ArrayList<>();
+        for (String p : simplified.split(",")) {
+            String trimmed = p.trim();
+            if (trimmed.length() > 2) parts.add(trimmed);
+        }
+        return parts.isEmpty() ? locality.trim() : String.join(", ", parts);
+    }
+
+    private static List<String> buildVariations(String simplified) {
+        List<String> variations = new ArrayList<>();
+        variations.add(simplified);
+        String[] parts = simplified.split(",");
+        if (parts.length >= 2) {
+            variations.add(parts[0].trim() + ", " + parts[parts.length - 1].trim());
+        }
+        if (parts.length >= 1 && !parts[0].trim().equals(simplified)) {
+            variations.add(parts[0].trim());
+        }
+        return variations;
     }
 }
