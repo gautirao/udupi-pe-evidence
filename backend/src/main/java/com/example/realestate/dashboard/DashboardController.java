@@ -88,6 +88,44 @@ public class DashboardController {
         return new BigDecimal(paise).divide(PAISE_TO_RUPEES, 2, RoundingMode.HALF_UP);
     }
 
+    // ==================== Listing Search Endpoint ====================
+
+    @GetMapping("/listings/search")
+    public ResponseEntity<Page<SearchListingResponse>> searchListings(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String locality,
+            @RequestParam(required = false) String propertyType,
+            @RequestParam(required = false) Integer bedrooms,
+            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        String effectiveQ = (q != null && !q.isBlank()) ? q.trim() : null;
+
+        log.info("GET /api/dashboard/listings/search q={} locality={} propertyType={} bedrooms={} page={} size={}",
+                effectiveQ, locality, propertyType, bedrooms,
+                pageable.getPageNumber(), pageable.getPageSize());
+
+        Page<SearchListingResponse> response = listingRepository
+                .findBySearch(effectiveQ, locality, propertyType, bedrooms, pageable)
+                .map(this::toSearchListingResponse);
+
+        return ResponseEntity.ok(response);
+    }
+
+    private SearchListingResponse toSearchListingResponse(Listing l) {
+        return new SearchListingResponse(
+                l.getId(),
+                l.getTitle(),
+                l.getLocality(),
+                l.getPropertyType(),
+                l.getBedrooms(),
+                paiseToRupees(l.getPricePaise()),
+                l.getAreaKey(),
+                l.getAreaLabel(),
+                l.getLatitude(),
+                l.getLongitude(),
+                l.getCreatedAt());
+    }
+
     // ==================== Map Listings Endpoint ====================
 
     @GetMapping("/map/listings")
@@ -207,6 +245,21 @@ public class DashboardController {
             BigDecimal cityMedianPricePerCentRupees,
             BigDecimal priceIndex,
             OffsetDateTime updatedAt
+    ) {
+    }
+
+    public record SearchListingResponse(
+            UUID id,
+            String title,
+            String locality,
+            String propertyType,
+            Integer bedrooms,
+            BigDecimal priceRupees,
+            String areaKey,
+            String areaLabel,
+            Double latitude,
+            Double longitude,
+            OffsetDateTime createdAt
     ) {
     }
 
