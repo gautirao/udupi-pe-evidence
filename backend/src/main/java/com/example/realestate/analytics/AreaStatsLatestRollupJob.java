@@ -55,20 +55,21 @@ public class AreaStatsLatestRollupJob {
 
     /**
      * Computes area stats for listings created on or after the given date.
+     * Produces two row types per area_key:
+     *   - one 'all' aggregate row with city_median and price_index (full CTE logic)
+     *   - one row per distinct property_type (listing_count + median only; no city context)
      * Exposed for testing.
      *
      * @param fromDate the earliest created_at date to include
-     * @return number of rows upserted
+     * @return total number of rows upserted across both queries
      */
     @Transactional
     public int computeStatsFromDate(LocalDate fromDate) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+        OffsetDateTime fromDateOdt = fromDate.atStartOfDay().atOffset(ZoneOffset.UTC);
 
-        // CTE approach:
-        // 1. area_stats: compute listing_count and median per area
-        // 2. city_medians: compute median per city (derived from area_key)
-        // 3. Join and compute price_index, then UPSERT
-        String sql = """
+        // 'all' aggregate — full CTE with city_median + price_index (existing logic)
+        String allSql = """
             WITH filtered_listings AS (
                 SELECT
                     area_key,
@@ -112,6 +113,7 @@ public class AreaStatsLatestRollupJob {
             )
             INSERT INTO public.area_stats_latest (
                 area_key,
+                property_type,
                 listing_count,
                 median_price_per_cent_paise,
                 city_median_price_per_cent_paise,
@@ -121,6 +123,7 @@ public class AreaStatsLatestRollupJob {
             )
             SELECT
                 a.area_key,
+                'all' AS property_type,
                 a.listing_count,
                 a.median_price_per_cent_paise,
                 cm.city_median_price_per_cent_paise,
@@ -135,7 +138,7 @@ public class AreaStatsLatestRollupJob {
             FROM area_stats a
             LEFT JOIN city_keys ck ON a.area_key = ck.area_key
             LEFT JOIN city_medians cm ON ck.city_key = cm.city_key
-            ON CONFLICT (area_key)
+            ON CONFLICT (area_key, property_type)
             DO UPDATE SET
                 listing_count = EXCLUDED.listing_count,
                 median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
@@ -144,6 +147,53 @@ public class AreaStatsLatestRollupJob {
                 updated_at = EXCLUDED.updated_at
             """;
 
-        return jdbcOperations.update(sql, fromDate.atStartOfDay().atOffset(ZoneOffset.UTC), now, now);
+        // Per-type rows — listing_count + median per (area_key, property_type); no city context
+        String perTypeSql = """
+            WITH filtered_listings AS (
+                SELECT
+                    area_key,
+                    property_type,
+                    price_per_cent_paise
+                FROM public.property_listings
+                WHERE area_key IS NOT NULL
+                  AND property_type IS NOT NULL
+                  AND price_per_cent_paise IS NOT NULL
+                  AND is_duplicate = false
+                  AND created_at >= ?
+            )
+            INSERT INTO public.area_stats_latest (
+                area_key,
+                property_type,
+                listing_count,
+                median_price_per_cent_paise,
+                city_median_price_per_cent_paise,
+                price_index,
+                created_at,
+                updated_at
+            )
+            SELECT
+                area_key,
+                property_type,
+                COUNT(*) AS listing_count,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT
+                    AS median_price_per_cent_paise,
+                NULL AS city_median_price_per_cent_paise,
+                NULL AS price_index,
+                ? AS created_at,
+                ? AS updated_at
+            FROM filtered_listings
+            GROUP BY area_key, property_type
+            ON CONFLICT (area_key, property_type)
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                city_median_price_per_cent_paise = EXCLUDED.city_median_price_per_cent_paise,
+                price_index = EXCLUDED.price_index,
+                updated_at = EXCLUDED.updated_at
+            """;
+
+        int allRows = jdbcOperations.update(allSql, fromDateOdt, now, now);
+        int perTypeRows = jdbcOperations.update(perTypeSql, fromDateOdt, now, now);
+        return allRows + perTypeRows;
     }
 }

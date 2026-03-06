@@ -42,8 +42,9 @@ class AreaPriceWeeklyRollupJobTest {
 
         int result = rollupJob.computeRollupsFromDate(fromDate);
 
-        assertThat(result).isEqualTo(5);
-        verify(jdbcOperations).update(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class), eq(fromDate));
+        // Two queries: 'all' aggregate + per-type; returns combined row count
+        assertThat(result).isEqualTo(10);
+        verify(jdbcOperations, times(2)).update(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class), eq(fromDate));
     }
 
     @Test
@@ -54,15 +55,12 @@ class AreaPriceWeeklyRollupJobTest {
 
         rollupJob.computeRollupsFromDate(fromDate);
 
+        // First captured value is the 'all' aggregate SQL
         String sql = sqlCaptor.getValue();
-        // Verify duplicates are excluded
         assertThat(sql).contains("is_duplicate = false");
-        // Verify null area_key is excluded
         assertThat(sql).contains("area_key IS NOT NULL");
-        // Verify week truncation
         assertThat(sql).contains("DATE_TRUNC('week', created_at)");
-        // Verify upsert behavior
-        assertThat(sql).contains("ON CONFLICT (area_key, week_start_date)");
+        assertThat(sql).contains("ON CONFLICT (area_key, week_start_date, property_type)");
         assertThat(sql).contains("DO UPDATE SET");
     }
 
@@ -105,8 +103,7 @@ class AreaPriceWeeklyRollupJobTest {
         rollupJob.computeRollupsFromDate(fromDate);
 
         String sql = sqlCaptor.getValue();
-        // Verify ON CONFLICT clause updates listing_count and updated_at
-        assertThat(sql).contains("ON CONFLICT (area_key, week_start_date)");
+        assertThat(sql).contains("ON CONFLICT (area_key, week_start_date, property_type)");
         assertThat(sql).contains("listing_count = EXCLUDED.listing_count");
         assertThat(sql).contains("updated_at = EXCLUDED.updated_at");
     }
@@ -120,7 +117,7 @@ class AreaPriceWeeklyRollupJobTest {
         rollupJob.computeWeeklyRollups();
 
         ArgumentCaptor<LocalDate> dateCaptor = ArgumentCaptor.forClass(LocalDate.class);
-        verify(jdbcOperations).update(anyString(), any(), any(), dateCaptor.capture());
+        verify(jdbcOperations, times(2)).update(anyString(), any(), any(), dateCaptor.capture());
 
         LocalDate capturedDate = dateCaptor.getValue();
         LocalDate expectedCutoff = LocalDate.now().minusWeeks(12);
@@ -149,7 +146,8 @@ class AreaPriceWeeklyRollupJobTest {
     @Test
     void computeRollupsFromDate_returnsRowCount() {
         LocalDate fromDate = LocalDate.of(2024, 1, 1);
-        when(jdbcOperations.update(anyString(), any(), any(), any())).thenReturn(42);
+        // First call ('all') returns 10, second call (per-type) returns 32
+        when(jdbcOperations.update(anyString(), any(), any(), any())).thenReturn(10, 32);
 
         int result = rollupJob.computeRollupsFromDate(fromDate);
 
