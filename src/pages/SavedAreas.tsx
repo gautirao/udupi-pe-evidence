@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, Loader2, Trash2 } from 'lucide-react';
+import { Bell, BellOff, Loader2, Trash2, X } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 
@@ -12,6 +14,71 @@ interface SavedAreaResponse {
   areaLabel: string | null;
   createdAt: string | null;
   alertsEnabled: boolean;
+  priceThresholdRupees: number | null;
+}
+
+function formatRupees(val: number): string {
+  if (val >= 10_000_000) return `₹${(val / 10_000_000).toFixed(1)} Cr`;
+  if (val >= 100_000) return `₹${(val / 100_000).toFixed(1)} L`;
+  return `₹${val.toLocaleString('en-IN')}`;
+}
+
+function ThresholdInput({
+  areaId,
+  initialValue,
+  onSave,
+}: {
+  areaId: string;
+  initialValue: number | null;
+  onSave: (id: string, value: number | null) => void;
+}) {
+  const [raw, setRaw] = useState(initialValue != null ? String(initialValue) : '');
+
+  function commit() {
+    const stripped = raw.trim().replace(/[₹,\s]/g, '');
+    if (stripped === '') {
+      onSave(areaId, null);
+    } else {
+      const parsed = parseInt(stripped, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        onSave(areaId, parsed);
+      } else {
+        setRaw(initialValue != null ? String(initialValue) : '');
+      }
+    }
+  }
+
+  function clear() {
+    setRaw('');
+    onSave(areaId, null);
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-xs text-muted-foreground hidden sm:inline">Max ₹</span>
+      <div className="relative flex items-center">
+        <Input
+          className="h-7 w-28 text-xs pr-6"
+          placeholder="no limit"
+          value={raw}
+          onChange={(e) => setRaw(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && commit()}
+          title={raw && !isNaN(parseInt(raw, 10)) ? formatRupees(parseInt(raw, 10)) : undefined}
+        />
+        {raw && (
+          <button
+            type="button"
+            onClick={clear}
+            className="absolute right-1.5 text-muted-foreground hover:text-foreground"
+            aria-label="Clear threshold"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function useSavedAreas() {
@@ -36,6 +103,16 @@ export default function SavedAreas() {
   const alertsMutation = useMutation({
     mutationFn: ({ id, alertsEnabled }: { id: string; alertsEnabled: boolean }) =>
       api.patch<SavedAreaResponse>(`/api/saved-areas/${id}/alerts`, { alertsEnabled }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<SavedAreaResponse[]>(['saved-areas'], (prev) =>
+        prev?.map((a) => (a.id === updated.id ? updated : a)) ?? [],
+      );
+    },
+  });
+
+  const thresholdMutation = useMutation({
+    mutationFn: ({ id, priceThresholdRupees }: { id: string; priceThresholdRupees: number | null }) =>
+      api.patch<SavedAreaResponse>(`/api/saved-areas/${id}/threshold`, { priceThresholdRupees }),
     onSuccess: (updated) => {
       queryClient.setQueryData<SavedAreaResponse[]>(['saved-areas'], (prev) =>
         prev?.map((a) => (a.id === updated.id ? updated : a)) ?? [],
@@ -90,6 +167,15 @@ export default function SavedAreas() {
                 </div>
 
                 <div className="flex items-center gap-4 shrink-0 ml-4">
+                  {area.alertsEnabled && (
+                    <ThresholdInput
+                      areaId={area.id}
+                      initialValue={area.priceThresholdRupees}
+                      onSave={(id, value) =>
+                        thresholdMutation.mutate({ id, priceThresholdRupees: value })
+                      }
+                    />
+                  )}
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground hidden sm:inline">
                       Alerts
