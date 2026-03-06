@@ -53,20 +53,24 @@ public class AreaPriceWeeklyRollupJob {
 
     /**
      * Computes rollups for all weeks starting from the given date.
+     * Produces two row types per (area_key, week_start_date):
+     *   - one row per distinct property_type present in listings
+     *   - one aggregate 'all' row covering all property types
      * Exposed for testing.
      *
      * @param fromDate the earliest week_start_date to include
-     * @return number of rows upserted
+     * @return total number of rows upserted across both queries
      */
     @Transactional
     public int computeRollupsFromDate(LocalDate fromDate) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
 
-        // Aggregate listings by area_key and week, then upsert into area_price_weekly
-        String sql = """
+        // 'all' aggregate row — covers all listings regardless of property_type
+        String allSql = """
             INSERT INTO public.area_price_weekly (
                 area_key,
                 week_start_date,
+                property_type,
                 listing_count,
                 median_price_per_cent_paise,
                 p25_price_per_cent_paise,
@@ -77,6 +81,7 @@ public class AreaPriceWeeklyRollupJob {
             SELECT
                 area_key,
                 DATE_TRUNC('week', created_at)::date AS week_start_date,
+                'all' AS property_type,
                 COUNT(*) AS listing_count,
                 NULL AS median_price_per_cent_paise,
                 NULL AS p25_price_per_cent_paise,
@@ -88,12 +93,49 @@ public class AreaPriceWeeklyRollupJob {
               AND is_duplicate = false
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date
-            ON CONFLICT (area_key, week_start_date)
+            ON CONFLICT (area_key, week_start_date, property_type)
             DO UPDATE SET
                 listing_count = EXCLUDED.listing_count,
                 updated_at = EXCLUDED.updated_at
             """;
 
-        return jdbcOperations.update(sql, now, now, fromDate);
+        // Per-type rows — one row per (area_key, week_start_date, property_type)
+        String perTypeSql = """
+            INSERT INTO public.area_price_weekly (
+                area_key,
+                week_start_date,
+                property_type,
+                listing_count,
+                median_price_per_cent_paise,
+                p25_price_per_cent_paise,
+                p75_price_per_cent_paise,
+                created_at,
+                updated_at
+            )
+            SELECT
+                area_key,
+                DATE_TRUNC('week', created_at)::date AS week_start_date,
+                property_type,
+                COUNT(*) AS listing_count,
+                NULL AS median_price_per_cent_paise,
+                NULL AS p25_price_per_cent_paise,
+                NULL AS p75_price_per_cent_paise,
+                ? AS created_at,
+                ? AS updated_at
+            FROM public.property_listings
+            WHERE area_key IS NOT NULL
+              AND is_duplicate = false
+              AND property_type IS NOT NULL
+              AND DATE_TRUNC('week', created_at)::date >= ?
+            GROUP BY area_key, DATE_TRUNC('week', created_at)::date, property_type
+            ON CONFLICT (area_key, week_start_date, property_type)
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                updated_at = EXCLUDED.updated_at
+            """;
+
+        int allRows = jdbcOperations.update(allSql, now, now, fromDate);
+        int perTypeRows = jdbcOperations.update(perTypeSql, now, now, fromDate);
+        return allRows + perTypeRows;
     }
 }

@@ -40,14 +40,15 @@ class AreaStatsLatestRollupJobTest {
 
             int result = rollupJob.computeStatsFromDate(fromDate);
 
-            assertThat(result).isEqualTo(5);
-            verify(jdbcOperations).update(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class), any(OffsetDateTime.class));
+            // Two queries: 'all' aggregate + per-type; returns combined row count
+            assertThat(result).isEqualTo(10);
+            verify(jdbcOperations, times(2)).update(anyString(), any(OffsetDateTime.class), any(OffsetDateTime.class), any(OffsetDateTime.class));
         }
 
         @Test
         void computeStatsFromDate_returnsRowCount() {
             LocalDate fromDate = LocalDate.of(2024, 1, 1);
-            when(jdbcOperations.update(anyString(), any(), any(), any())).thenReturn(42);
+            when(jdbcOperations.update(anyString(), any(), any(), any())).thenReturn(20, 22);
 
             int result = rollupJob.computeStatsFromDate(fromDate);
 
@@ -150,6 +151,9 @@ class AreaStatsLatestRollupJobTest {
     @Nested
     class CityDerivationTests {
 
+        // City derivation logic lives in the 'all' aggregate SQL (first of the two queries).
+        // Use getAllValues().get(0) to inspect the 'all' SQL specifically.
+
         @Test
         void sqlDerivesCtiyKeyFromAreaKey() {
             LocalDate fromDate = LocalDate.of(2024, 1, 1);
@@ -158,8 +162,7 @@ class AreaStatsLatestRollupJobTest {
 
             rollupJob.computeStatsFromDate(fromDate);
 
-            String sql = sqlCaptor.getValue();
-            // Check that city_key is derived from first 3 parts of area_key
+            String sql = sqlCaptor.getAllValues().get(0); // 'all' aggregate SQL
             assertThat(sql).contains("string_to_array(area_key, '|')");
             assertThat(sql).contains("array_length");
             assertThat(sql).contains("= 4");
@@ -173,7 +176,7 @@ class AreaStatsLatestRollupJobTest {
 
             rollupJob.computeStatsFromDate(fromDate);
 
-            String sql = sqlCaptor.getValue();
+            String sql = sqlCaptor.getAllValues().get(0); // 'all' aggregate SQL
             assertThat(sql).contains("city_medians");
             assertThat(sql).contains("city_median_price_per_cent_paise");
         }
@@ -186,8 +189,7 @@ class AreaStatsLatestRollupJobTest {
 
             rollupJob.computeStatsFromDate(fromDate);
 
-            String sql = sqlCaptor.getValue();
-            // price_index = area_median / city_median
+            String sql = sqlCaptor.getAllValues().get(0); // 'all' aggregate SQL
             assertThat(sql).contains("price_index");
             assertThat(sql).contains("median_price_per_cent_paise::NUMERIC / cm.city_median_price_per_cent_paise");
         }
@@ -200,11 +202,9 @@ class AreaStatsLatestRollupJobTest {
 
             rollupJob.computeStatsFromDate(fromDate);
 
-            String sql = sqlCaptor.getValue();
-            // Should use LEFT JOIN so areas without valid city_key still appear
+            String sql = sqlCaptor.getAllValues().get(0); // 'all' aggregate SQL
             assertThat(sql).contains("LEFT JOIN city_keys");
             assertThat(sql).contains("LEFT JOIN city_medians");
-            // Should handle null/zero city median
             assertThat(sql).contains("WHEN cm.city_median_price_per_cent_paise IS NOT NULL");
             assertThat(sql).contains("cm.city_median_price_per_cent_paise > 0");
         }
@@ -221,8 +221,9 @@ class AreaStatsLatestRollupJobTest {
 
             rollupJob.computeStatsFromDate(fromDate);
 
+            // First captured value is the 'all' aggregate SQL
             String sql = sqlCaptor.getValue();
-            assertThat(sql).contains("ON CONFLICT (area_key)");
+            assertThat(sql).contains("ON CONFLICT (area_key, property_type)");
             assertThat(sql).contains("DO UPDATE SET");
         }
 
@@ -253,7 +254,7 @@ class AreaStatsLatestRollupJobTest {
             rollupJob.computeAreaStats();
 
             ArgumentCaptor<OffsetDateTime> dateCaptor = ArgumentCaptor.forClass(OffsetDateTime.class);
-            verify(jdbcOperations).update(anyString(), dateCaptor.capture(), any(), any());
+            verify(jdbcOperations, times(2)).update(anyString(), dateCaptor.capture(), any(), any());
 
             OffsetDateTime capturedDate = dateCaptor.getValue();
             LocalDate expectedCutoff = LocalDate.now().minusWeeks(12);
