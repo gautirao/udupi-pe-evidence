@@ -30,11 +30,14 @@ public class AdminLocalityController {
 
     private final LocalityNormalizerService normalizerService;
     private final ListingService listingService;
+    private final AdminAuditService adminAuditService;
 
     public AdminLocalityController(LocalityNormalizerService normalizerService,
-                                   ListingService listingService) {
+                                   ListingService listingService,
+                                   AdminAuditService adminAuditService) {
         this.normalizerService = normalizerService;
         this.listingService = listingService;
+        this.adminAuditService = adminAuditService;
     }
 
     @GetMapping("/candidates")
@@ -68,9 +71,13 @@ public class AdminLocalityController {
         if (req.to() == null || req.to().isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "'to' is required"));
         }
+        long beforeCount = normalizerService.previewImpact(req.from());
         int updated = normalizerService.apply(req.from(), req.to());
         log.info("POST /api/admin/localities/apply admin={} from='{}' to='{}' -> {} rows updated",
                 adminId, req.from(), req.to(), updated);
+        adminAuditService.record(adminId, "locality_renamed", "locality", null,
+                "{\"from\":\"" + req.from().replace("\"", "\\\"") + "\",\"count\":" + beforeCount + "}",
+                "{\"to\":\"" + req.to().replace("\"", "\\\"") + "\",\"updatedCount\":" + updated + "}");
         return ResponseEntity.ok(Map.of("updatedCount", updated, "from", req.from(), "to", req.to()));
     }
 
