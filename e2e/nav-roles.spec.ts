@@ -68,29 +68,36 @@ test('N1 — user role: Insights, My Saved Areas, My Bookings visible; no dealer
 });
 
 // ---------------------------------------------------------------------------
-// N2 — Admin role: admin nav + role label visible; no dealer links
+// N2 — Admin role: "Admin" dropdown trigger visible; dropdown reveals admin links; no dealer links
 // ---------------------------------------------------------------------------
-test('N2 — admin role: Administrator label and admin nav links visible; no dealer links', async ({ page }) => {
+test('N2 — admin role: Admin dropdown visible; admin nav links present; no dealer links', async ({ page }) => {
   test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping N2');
 
   await loginAs(page, adminEmail, adminPassword);
   await page.waitForTimeout(2_000);
 
-  // Role label in the header
-  await expect(page.getByText(/administrator/i).first()).toBeVisible({ timeout: 8_000 });
+  // On desktop, admin nav renders as a dropdown behind an "Admin" button trigger.
+  // The trigger itself must be visible for admin users.
+  const adminTrigger = page.getByRole('button', { name: /^admin$/i }).first();
+  await expect(adminTrigger).toBeVisible({ timeout: 8_000 });
 
-  // Admin nav links must be visible (desktop sidebar — Playwright viewport is 1280px wide)
-  await expect(
-    page.getByRole('link', { name: /pending approval/i }).first(),
-  ).toBeVisible({ timeout: 8_000 });
-  await expect(
-    page.getByRole('link', { name: /locality normalizer/i }).first(),
-  ).toBeVisible({ timeout: 8_000 });
-  await expect(
-    page.getByRole('link', { name: /feed runs/i }).first(),
-  ).toBeVisible({ timeout: 8_000 });
+  // Open the dropdown to reveal admin nav links
+  await adminTrigger.click();
 
-  // Dealer-only links must NOT appear
+  await expect(
+    page.getByRole('menuitem', { name: /pending approval/i }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(
+    page.getByRole('menuitem', { name: /locality normalizer/i }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(
+    page.getByRole('menuitem', { name: /feed runs/i }).first(),
+  ).toBeVisible({ timeout: 5_000 });
+
+  // Close dropdown by pressing Escape
+  await page.keyboard.press('Escape');
+
+  // Dealer-only links must NOT appear anywhere on the page
   await expect(page.getByRole('link', { name: /^my listings$/i })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /new listing/i })).toHaveCount(0);
 });
