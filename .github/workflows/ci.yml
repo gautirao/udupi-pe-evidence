@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-flight runs for the same branch when a new push arrives.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Frontend ────────────────────────────────────────────────────────────────
+  # Runs on every PR and push to main.
+  # Required check for branch protection.
+  frontend:
+    name: Frontend (lint · test · build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Needed at Vite build time to embed the Supabase client config.
+          # Set these as repository secrets: Settings → Secrets → Actions.
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+
+  # ── Backend ─────────────────────────────────────────────────────────────────
+  # Runs on every PR and push to main.
+  # Required check for branch protection.
+  backend:
+    name: Backend (mvn test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run backend tests
+        working-directory: backend
+        run: mvn test -B --no-transfer-progress
+        env:
+          # Placeholder values — unit tests mock all real connections.
+          # @WebMvcTest slices exclude OAuth2ResourceServerAutoConfiguration,
+          # so the JWT issuer URI is never resolved.
+          # @DataJpaTest uses Testcontainers (@ServiceConnection), so no real DB is needed.
+          SUPABASE_DB_HOST: localhost
+          SUPABASE_DB_USER: postgres
+          SUPABASE_DB_PASSWORD: postgres
+          SUPABASE_PROJECT_REF: ci-placeholder
+          AI_API_KEY: ci-placeholder
+
+  # ── E2E ─────────────────────────────────────────────────────────────────────
+  # Runs only after a successful merge to main (not on PRs).
+  # Uses Playwright against the deployed production URL.
+  # All required credentials are stored as repository secrets.
+  e2e:
+    name: E2E (Playwright)
+    needs: [frontend, backend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+          DEALER_EMAIL: ${{ secrets.DEALER_EMAIL }}
+          DEALER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+
+      - name: Upload Playwright report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7
