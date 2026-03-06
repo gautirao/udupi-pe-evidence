@@ -244,17 +244,21 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             SELECT * FROM public.property_listings
             WHERE status IN ('SCRAPED', 'LIVE')
               AND is_duplicate = false
-              AND (:q IS NULL OR search_vector @@ plainto_tsquery('english', :q))
+              AND (:q IS NULL OR search_vector @@ websearch_to_tsquery('english', :q))
               AND (:locality IS NULL OR locality = :locality)
               AND (:propertyType IS NULL OR property_type::text = :propertyType)
               AND (:bedrooms IS NULL OR bedrooms = CAST(:bedrooms AS integer))
-            ORDER BY created_at DESC
+            ORDER BY
+              CASE WHEN :q IS NOT NULL
+                   THEN ts_rank(search_vector, websearch_to_tsquery('english', :q))
+                   ELSE 0 END DESC,
+              created_at DESC
             """,
             countQuery = """
             SELECT COUNT(*) FROM public.property_listings
             WHERE status IN ('SCRAPED', 'LIVE')
               AND is_duplicate = false
-              AND (:q IS NULL OR search_vector @@ plainto_tsquery('english', :q))
+              AND (:q IS NULL OR search_vector @@ websearch_to_tsquery('english', :q))
               AND (:locality IS NULL OR locality = :locality)
               AND (:propertyType IS NULL OR property_type::text = :propertyType)
               AND (:bedrooms IS NULL OR bedrooms = CAST(:bedrooms AS integer))
