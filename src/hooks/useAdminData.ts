@@ -4,6 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useCallback } from 'react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
+
 // Types
 export interface FacebookGroup {
   id: string;
@@ -26,7 +28,7 @@ export interface FeedRun {
   posts_fetched: number;
   posts_parsed: number;
   posts_failed: number;
-  error_log: any[];
+  error_log: unknown[];
   created_at: string;
   facebook_groups?: FacebookGroup;
 }
@@ -338,20 +340,21 @@ export function useGeocodeMissing() {
     setLogs([]);
     setProgress(null);
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
     try {
-      // Use raw fetch for streaming - supabase.functions.invoke doesn't support streams
-      const response = await fetch(`${supabaseUrl}/functions/v1/geocode-missing`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('Not authenticated');
+
+      // Stream from Spring Boot backend endpoint
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/geocode/missing?batchSize=${batchSize}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         },
-        body: JSON.stringify({ batch_size: batchSize, stream: true }),
-      });
+      );
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
