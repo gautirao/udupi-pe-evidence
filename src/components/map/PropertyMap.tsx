@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -6,8 +6,6 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
-import { formatPrice } from '@/lib/formatters';
-import { escapeHtml } from '@/lib/security';
 import { Card } from '@/components/ui/card';
 
 // Extended listing with images for map display
@@ -65,207 +63,7 @@ const createMarkerIcon = (propertyType: PropertyType) => {
     `,
     iconSize: [32, 32],
     iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
   });
-};
-
-// Create popup content
-const createPopupContent = (listing: PropertyListingWithImages): string => {
-  const { label } = propertyConfig[listing.property_type];
-  const bgColor = propertyConfig[listing.property_type].color;
-  const firstImage = listing.images?.[0]?.url;
-  
-  // Use the title from the listing, or generate one from available data
-  const title = listing.title || (() => {
-    const titleParts = [label];
-    if (listing.land_area) {
-      titleParts.push(`${listing.land_area} ${listing.land_area_unit || 'sq ft'}`);
-    }
-    if (listing.locality) {
-      titleParts.push(`in ${listing.locality}`);
-    }
-    return titleParts.join(' ');
-  })();
-  
-  let html = `
-    <div style="min-width: 260px; max-width: 320px; font-family: system-ui, sans-serif;">
-  `;
-  
-  // Thumbnail image at the top
-  if (firstImage) {
-    html += `
-      <div style="margin: -10px -10px 10px -10px; border-radius: 8px 8px 0 0; overflow: hidden; height: 120px; background: #f1f5f9;">
-        <img
-          src="${escapeHtml(firstImage)}"
-          alt="Property"
-          style="width: 100%; height: 100%; object-fit: cover;"
-          onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'display: flex; align-items: center; justify-content: center; height: 100%; color: #94a3b8;\\'>No image</div>';"
-        />
-      </div>
-    `;
-  }
-  
-  // Title
-  html += `
-    <h3 style="font-size: 14px; font-weight: 600; margin: 0 0 8px 0; color: #1e293b; line-height: 1.3;">
-      ${escapeHtml(title)}
-    </h3>
-  `;
-  
-  html += `
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;">
-        <span style="
-          background-color: ${bgColor};
-          color: white;
-          padding: 2px 10px;
-          border-radius: 9999px;
-          font-size: 12px;
-          font-weight: 500;
-        ">${label}</span>
-  `;
-  
-  if (listing.confidence_score && listing.confidence_score < 70) {
-    html += `
-        <span style="
-          border: 1px solid #facc15;
-          color: #ca8a04;
-          padding: 2px 8px;
-          border-radius: 9999px;
-          font-size: 11px;
-        ">Low confidence</span>
-    `;
-  }
-  
-  html += `</div>`;
-  
-  // Price - prominent display
-  if (listing.price) {
-    html += `
-      <p style="font-size: 18px; font-weight: 700; color: #0ea5e9; margin: 0 0 10px 0;">
-        ${escapeHtml(formatPrice(listing.price, listing.price_unit))}
-      </p>
-    `;
-  }
-  
-  // Property details grid
-  html += `<div style="display: grid; gap: 6px; font-size: 13px; color: #64748b;">`;
-  
-  // Locality
-  if (listing.locality) {
-    html += `
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-          <circle cx="12" cy="10" r="3"/>
-        </svg>
-        <span>${escapeHtml(listing.locality)}</span>
-      </div>
-    `;
-  }
-  
-  // Land area
-  if (listing.land_area) {
-    html += `
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21.3 8.7 8.7 21.3c-1 1-2.5 1-3.4 0l-2.6-2.6c-1-1-1-2.5 0-3.4L15.3 2.7c1-1 2.5-1 3.4 0l2.6 2.6c1 1 1 2.5 0 3.4Z"/>
-          <path d="m7.5 10.5 2 2"/>
-          <path d="m10.5 7.5 2 2"/>
-          <path d="m13.5 4.5 2 2"/>
-          <path d="m4.5 13.5 2 2"/>
-        </svg>
-        <span>Land: ${escapeHtml(listing.land_area)} ${escapeHtml(listing.land_area_unit || 'sq ft')}</span>
-      </div>
-    `;
-  }
-  
-  // Built area (for houses/apartments)
-  if (listing.built_area && (listing.property_type === 'house' || listing.property_type === 'apartment')) {
-    html += `
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect width="18" height="18" x="3" y="3" rx="2"/>
-          <path d="M3 9h18"/>
-          <path d="M9 21V9"/>
-        </svg>
-        <span>Built: ${escapeHtml(listing.built_area)} ${escapeHtml(listing.built_area_unit || 'sq ft')}</span>
-      </div>
-    `;
-  }
-  
-  // Bedrooms & Bathrooms
-  if (listing.bedrooms || listing.bathrooms) {
-    const parts = [];
-    if (listing.bedrooms) parts.push(`${listing.bedrooms} BHK`);
-    if (listing.bathrooms) parts.push(`${listing.bathrooms} Bath`);
-    
-    html += `
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
-        </svg>
-        <span>${escapeHtml(parts.join(' • '))}</span>
-      </div>
-    `;
-  }
-  
-  // Contact phone — safe phone rendering, guard against javascript: URI injection in tel: href
-  const safePhone = listing.contact_phone &&
-    /^[\d\s+\-()\/.#*]+$/.test(listing.contact_phone.trim())
-    ? listing.contact_phone.trim()
-    : null;
-
-  if (safePhone) {
-    html += `
-      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-        <span style="font-size: 11px; color: #64748b; font-weight: 500; min-width: 60px;">Contact:</span>
-        <a href="tel:${escapeHtml(safePhone)}" style="color: inherit; text-decoration: none;">
-          ${escapeHtml(safePhone)}
-        </a>
-      </div>
-    `;
-  } else if (listing.contact_phone) {
-    html += `
-      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-        <span style="font-size: 11px; color: #64748b; font-weight: 500; min-width: 60px;">Contact:</span>
-        <span>${escapeHtml(listing.contact_phone)}</span>
-      </div>
-    `;
-  }
-  
-  html += `</div>`;
-  
-  // Description snippet
-  if (listing.description) {
-    const shortDesc = listing.description.length > 100
-      ? listing.description.substring(0, 100) + '...'
-      : listing.description;
-    html += `
-      <p style="font-size: 12px; color: #94a3b8; margin: 10px 0 0 0; line-height: 1.4; border-top: 1px solid #e2e8f0; padding-top: 8px;">
-        ${escapeHtml(shortDesc)}
-      </p>
-    `;
-  }
-  
-  // Date footer
-  const date = new Date(listing.created_at);
-  const formattedDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  
-  html += `
-    <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: #94a3b8; margin-top: 8px; padding-top: 6px; border-top: 1px solid #e2e8f0;">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-        <line x1="16" x2="16" y1="2" y2="6"/>
-        <line x1="8" x2="8" y1="2" y2="6"/>
-        <line x1="3" x2="21" y1="10" y2="10"/>
-      </svg>
-      <span>Posted ${formattedDate}</span>
-    </div>
-  </div>
-  `;
-  
-  return html;
 };
 
 interface PropertyMapProps {
@@ -315,7 +113,6 @@ function MarkerClusterLayer({
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
 }) {
   const map = useMap();
-  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
 
   useEffect(() => {
     // Create cluster group with custom options
@@ -346,8 +143,6 @@ function MarkerClusterLayer({
         });
       },
     });
-
-    clusterGroupRef.current = clusterGroup;
 
     // Add markers to cluster group
     const validListings = listings.filter(l => l.latitude && l.longitude);
