@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { useListingSearch } from '@/hooks/useListingSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,18 +29,22 @@ export default function Index() {
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  const { data: listings = [], isLoading, error } = usePropertyListings(filters);
+  const { data: listings = [], isLoading: listingsLoading, error: listingsError } = usePropertyListings(filters);
 
-  const filteredListings = useMemo(() => {
-    if (!debouncedSearch) return listings;
-    const q = debouncedSearch.toLowerCase();
-    return listings.filter(
-      (l) =>
-        l.title?.toLowerCase().includes(q) ||
-        l.description?.toLowerCase().includes(q) ||
-        l.locality?.toLowerCase().includes(q)
-    );
-  }, [listings, debouncedSearch]);
+  const singleLocality = filters.localities?.length === 1 ? filters.localities[0] : undefined;
+  const singlePropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
+  const singleBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
+
+  const { data: searchResults, isLoading: searchLoading, error: searchError } = useListingSearch({
+    q: debouncedSearch,
+    locality: singleLocality,
+    propertyType: singlePropertyType,
+    bedrooms: singleBedrooms,
+  });
+
+  const isLoading = debouncedSearch ? searchLoading : listingsLoading;
+  const error = debouncedSearch ? searchError : listingsError;
+  const filteredListings = debouncedSearch ? (searchResults ?? []) : listings;
 
   const listingsWithCoords = filteredListings.filter((l) => l.latitude && l.longitude);
 
