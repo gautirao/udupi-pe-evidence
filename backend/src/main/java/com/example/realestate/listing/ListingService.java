@@ -587,7 +587,7 @@ public class ListingService {
             String listingTitle = Objects.requireNonNullElse(saved.getTitle(), "New property");
             applicationEventPublisher.publishEvent(
                     new NewListingInAreaEvent(saved.getId(), saved.getAreaKey(), saved.getAreaLabel(),
-                            listingTitle, saved.getPropertyType()));
+                            listingTitle, saved.getPropertyType(), saved.getPricePaise()));
         }
 
         log.info("Approved listing listingId={} by adminId={} status=LIVE", listingId, adminUserId);
@@ -671,5 +671,5 @@ public class ListingService {
 
     /** Fired when a listing with a known areaKey goes LIVE. Triggers area-subscriber notifications. */
     public record NewListingInAreaEvent(UUID listingId, String areaKey, String areaLabel,
-                                        String title, String propertyType) {}
+                                        String title, String propertyType, Long pricePaise) {}
 }

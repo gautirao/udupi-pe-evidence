@@ -47,6 +47,10 @@ app:
     poll-interval-ms: ${INGESTION_POLL_INTERVAL_MS:30000}
     api-key: ${INGESTION_API_KEY:changeme-local-dev-only}
 
+  email:
+    resend-api-key: ${RESEND_API_KEY:disabled}
+    from-address: ${RESEND_FROM_ADDRESS:alerts@udupi-properties.com}
+
 management:
   endpoints:
     web:

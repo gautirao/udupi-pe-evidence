@@ -18,4 +18,12 @@ public interface SavedAreaRepository extends JpaRepository<SavedArea, UUID> {
 
     @Query("SELECT DISTINCT s.userId FROM SavedArea s WHERE s.areaKey = :areaKey AND s.alertsEnabled = true")
     List<UUID> findUserIdsByAreaKey(@Param("areaKey") String areaKey);
+
+    @Query(value = """
+            SELECT DISTINCT p.email
+            FROM user_saved_areas s
+            JOIN public.profiles p ON p.user_id = s.user_id
+            WHERE s.area_key = :areaKey AND s.alerts_enabled = true AND p.email IS NOT NULL
+            """, nativeQuery = true)
+    List<String> findUserEmailsByAreaKey(@Param("areaKey") String areaKey);
 }
