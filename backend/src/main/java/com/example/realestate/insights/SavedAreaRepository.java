@@ -16,6 +16,6 @@ public interface SavedAreaRepository extends JpaRepository<SavedArea, UUID> {
 
     Optional<SavedArea> findByIdAndUserId(UUID id, UUID userId);
 
-    @Query("SELECT DISTINCT s.userId FROM SavedArea s WHERE s.areaKey = :areaKey")
+    @Query("SELECT DISTINCT s.userId FROM SavedArea s WHERE s.areaKey = :areaKey AND s.alertsEnabled = true")
     List<UUID> findUserIdsByAreaKey(@Param("areaKey") String areaKey);
 }

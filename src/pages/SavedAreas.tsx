@@ -1,17 +1,47 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bell, BellOff, Loader2, Trash2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Loader2 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { api } from '@/lib/api';
+
+interface SavedAreaResponse {
+  id: string;
+  areaKey: string;
+  areaLabel: string | null;
+  createdAt: string | null;
+  alertsEnabled: boolean;
+}
+
+function useSavedAreas() {
+  return useQuery<SavedAreaResponse[]>({
+    queryKey: ['saved-areas'],
+    queryFn: () => api.get<SavedAreaResponse[]>('/api/saved-areas'),
+  });
+}
 
 /**
- * "My Saved Areas" placeholder page for authenticated users.
- *
- * Guards:
- *  - Unauthenticated: ProtectedRoute redirects to /auth before this component renders.
+ * "My Saved Areas" page — lists saved areas with per-area alert toggles.
  */
 export default function SavedAreas() {
-  const { isLoading } = useAuth();
+  const queryClient = useQueryClient();
+  const { data: areas, isLoading } = useSavedAreas();
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/saved-areas/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved-areas'] }),
+  });
+
+  const alertsMutation = useMutation({
+    mutationFn: ({ id, alertsEnabled }: { id: string; alertsEnabled: boolean }) =>
+      api.patch<SavedAreaResponse>(`/api/saved-areas/${id}/alerts`, { alertsEnabled }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<SavedAreaResponse[]>(['saved-areas'], (prev) =>
+        prev?.map((a) => (a.id === updated.id ? updated : a)) ?? [],
+      );
+    },
+  });
 
   if (isLoading) {
     return (
@@ -25,16 +55,67 @@ export default function SavedAreas() {
 
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-12 px-4">
-        <h1 className="text-3xl font-bold mb-4">My Saved Areas</h1>
-        <p className="text-muted-foreground mt-4">
-          Coming Soon — area tracking is not yet available.
-        </p>
-        <div className="mt-6">
-          <Button asChild>
+      <div className="container max-w-2xl py-12 px-4">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold">My Saved Areas</h1>
+          <Button variant="outline" asChild>
             <Link to="/insights">View Insights</Link>
           </Button>
         </div>
+
+        {!areas || areas.length === 0 ? (
+          <p className="text-muted-foreground">
+            No saved areas yet. Save an area from the{' '}
+            <Link to="/insights" className="underline underline-offset-2">
+              Insights
+            </Link>{' '}
+            page to get notified when new listings appear.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {areas.map((area) => (
+              <li
+                key={area.id}
+                className="flex items-center justify-between rounded-lg border p-4 bg-card"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {area.alertsEnabled ? (
+                    <Bell className="h-4 w-4 shrink-0 text-primary" />
+                  ) : (
+                    <BellOff className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="font-medium truncate">
+                    {area.areaLabel ?? area.areaKey}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-4 shrink-0 ml-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground hidden sm:inline">
+                      Alerts
+                    </span>
+                    <Switch
+                      checked={area.alertsEnabled}
+                      disabled={alertsMutation.isPending}
+                      onCheckedChange={(checked) =>
+                        alertsMutation.mutate({ id: area.id, alertsEnabled: checked })
+                      }
+                    />
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={deleteMutation.isPending}
+                    onClick={() => deleteMutation.mutate(area.id)}
+                    aria-label="Remove saved area"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </AppLayout>
   );

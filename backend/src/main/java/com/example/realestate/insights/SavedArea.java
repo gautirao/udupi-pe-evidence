@@ -30,6 +30,9 @@ public class SavedArea {
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "alerts_enabled", nullable = false)
+    private boolean alertsEnabled = true;
+
     // ===== Getters / Setters =====
 
     public UUID getId() { return id; }
@@ -46,4 +49,7 @@ public class SavedArea {
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
+    public boolean isAlertsEnabled() { return alertsEnabled; }
+    public void setAlertsEnabled(boolean alertsEnabled) { this.alertsEnabled = alertsEnabled; }
 }

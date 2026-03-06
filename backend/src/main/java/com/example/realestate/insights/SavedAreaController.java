@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,6 +71,24 @@ public class SavedAreaController {
         }
     }
 
+    @PatchMapping("/{id}/alerts")
+    public ResponseEntity<?> updateAlerts(JwtAuthenticationToken auth,
+                                          @PathVariable UUID id,
+                                          @RequestBody AlertsRequest req) {
+        UUID userId = extractUserId(auth);
+
+        SavedArea area = savedAreaRepository.findByIdAndUserId(id, userId).orElse(null);
+        if (area == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Saved area not found"));
+        }
+
+        area.setAlertsEnabled(req.alertsEnabled());
+        SavedArea saved = savedAreaRepository.save(area);
+        log.info("PATCH /api/saved-areas/{}/alerts -> alertsEnabled={} userId={}", id, req.alertsEnabled(), userId);
+        return ResponseEntity.ok(SavedAreaResponse.from(saved));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(JwtAuthenticationToken auth, @PathVariable UUID id) {
         UUID userId = extractUserId(auth);
@@ -95,11 +114,14 @@ public class SavedAreaController {
 
     public record SaveAreaRequest(String areaKey, String areaLabel) {}
 
-    public record SavedAreaResponse(UUID id, String areaKey, String areaLabel, String createdAt) {
+    public record AlertsRequest(boolean alertsEnabled) {}
+
+    public record SavedAreaResponse(UUID id, String areaKey, String areaLabel, String createdAt, boolean alertsEnabled) {
         static SavedAreaResponse from(SavedArea a) {
             return new SavedAreaResponse(
                     a.getId(), a.getAreaKey(), a.getAreaLabel(),
-                    a.getCreatedAt() != null ? a.getCreatedAt().toString() : null);
+                    a.getCreatedAt() != null ? a.getCreatedAt().toString() : null,
+                    a.isAlertsEnabled());
         }
     }
 }
