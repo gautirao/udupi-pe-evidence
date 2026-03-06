@@ -61,7 +61,7 @@ public class DashboardController {
         int effectiveWeeks = Math.min(Math.max(weeks, 1), MAX_WEEKS);
         log.info("Fetching price history areaKey={} weeks={}", areaKey, effectiveWeeks);
 
-        List<AreaPriceWeekly> data = areaPriceWeeklyRepository.findRecentByAreaKey(areaKey, effectiveWeeks);
+        List<AreaPriceWeekly> data = areaPriceWeeklyRepository.findRecentByAreaKey(areaKey, "all", effectiveWeeks);
 
         List<PriceHistoryResponse> response = data.stream()
                 .map(this::toResponse)
@@ -196,7 +196,7 @@ public class DashboardController {
 
         log.info("Fetching area insights sort={} limit={} minCount={}", sort, effectiveLimit, effectiveMinCount);
 
-        List<AreaInsightsResponse> response = areaInsightsDao.findInsights(sort, effectiveLimit, effectiveMinCount)
+        List<AreaInsightsResponse> response = areaInsightsDao.findInsights(sort, effectiveLimit, effectiveMinCount, "all")
                 .stream()
                 .map(row -> new AreaInsightsResponse(
                         row.areaKey(),

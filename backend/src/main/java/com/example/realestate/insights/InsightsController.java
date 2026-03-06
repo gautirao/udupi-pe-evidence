@@ -37,12 +37,13 @@ public class InsightsController {
     // ==================== 1. Avg price by area ====================
 
     @GetMapping("/avg-price-by-area")
-    public ResponseEntity<?> avgPriceByArea(JwtAuthenticationToken auth) {
+    public ResponseEntity<?> avgPriceByArea(JwtAuthenticationToken auth,
+                                             @RequestParam(defaultValue = "all") String propertyType) {
         UUID userId = extractUserId(auth);
         ResponseEntity<?> denied = checkAccess(userId);
         if (denied != null) return denied;
 
-        List<AreaPriceResponse> result = insightsService.getAvgPriceByArea().stream()
+        List<AreaPriceResponse> result = insightsService.getAvgPriceByArea(propertyType).stream()
                 .map(row -> new AreaPriceResponse(
                         row.areaKey(),
                         row.listingCount(),
@@ -59,12 +60,13 @@ public class InsightsController {
 
     @GetMapping("/price-trend")
     public ResponseEntity<?> priceTrend(JwtAuthenticationToken auth,
-                                         @RequestParam(name = "area_key") String areaKey) {
+                                         @RequestParam(name = "area_key") String areaKey,
+                                         @RequestParam(defaultValue = "all") String propertyType) {
         UUID userId = extractUserId(auth);
         ResponseEntity<?> denied = checkAccess(userId);
         if (denied != null) return denied;
 
-        List<PriceTrendResponse> result = insightsService.getPriceTrend(areaKey).stream()
+        List<PriceTrendResponse> result = insightsService.getPriceTrend(areaKey, propertyType).stream()
                 .map(w -> new PriceTrendResponse(
                         w.getWeekStartDate().toString(),
                         w.getMedianPricePerCentPaise(),
@@ -73,8 +75,8 @@ public class InsightsController {
                         w.getP75PricePerCentPaise()))
                 .toList();
 
-        log.info("GET /api/insights/price-trend -> 200 areaKey={} count={} userId={}",
-                areaKey, result.size(), userId);
+        log.info("GET /api/insights/price-trend -> 200 areaKey={} propertyType={} count={} userId={}",
+                areaKey, propertyType, result.size(), userId);
         return ResponseEntity.ok(result);
     }
 
