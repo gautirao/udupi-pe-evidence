@@ -60,9 +60,16 @@ export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
     onFiltersChange({});
   };
 
+  const handleBedroomToggle = (value: number) => {
+    const current = filters.bedrooms || [];
+    const next = current.includes(value) ? current.filter((b) => b !== value) : [...current, value];
+    onFiltersChange({ ...filters, bedrooms: next.length > 0 ? next : undefined });
+  };
+
   const hasActiveFilters =
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
     (filters.localities && filters.localities.length > 0) ||
+    (filters.bedrooms && filters.bedrooms.length > 0) ||
     filters.priceMin !== undefined ||
     filters.priceMax !== undefined ||
     filters.dateFrom !== undefined ||
@@ -107,6 +114,27 @@ export function MapFilters({ filters, onFiltersChange }: MapFiltersProps) {
                 </Label>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Bedrooms (BHK) */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Bedrooms (BHK)</Label>
+          <div className="flex gap-2 flex-wrap">
+            {[{ label: '1', value: 1 }, { label: '2', value: 2 }, { label: '3', value: 3 }, { label: '4+', value: 4 }].map(({ label, value }) => {
+              const active = filters.bedrooms?.includes(value) || false;
+              return (
+                <Button
+                  key={value}
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 px-3 text-sm"
+                  onClick={() => handleBedroomToggle(value)}
+                >
+                  {label}
+                </Button>
+              );
+            })}
           </div>
         </div>
 

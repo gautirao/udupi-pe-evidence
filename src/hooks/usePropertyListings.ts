@@ -47,6 +47,8 @@ export interface PropertyFilters {
   priceMax?: number;
   dateFrom?: Date;
   dateTo?: Date;
+  /** BHK values: 1, 2, 3, or 4 (meaning 4+) */
+  bedrooms?: number[];
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
@@ -88,6 +90,18 @@ export function usePropertyListings(filters?: PropertyFilters) {
 
       if (filters?.dateTo) {
         query = query.lte('created_at', filters.dateTo.toISOString());
+      }
+
+      if (filters?.bedrooms && filters.bedrooms.length > 0) {
+        const has4Plus = filters.bedrooms.includes(4);
+        const exactValues = filters.bedrooms.filter((b) => b < 4);
+        if (has4Plus && exactValues.length > 0) {
+          query = query.or(`bedrooms.in.(${exactValues.join(',')}),bedrooms.gte.4`);
+        } else if (has4Plus) {
+          query = query.gte('bedrooms', 4);
+        } else {
+          query = query.in('bedrooms', exactValues);
+        }
       }
 
       const { data, error } = await query;
