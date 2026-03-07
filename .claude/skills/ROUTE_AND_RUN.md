@@ -139,6 +139,9 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 ### Invocation Rules
 
 - `qa-fast` runs BEFORE the engineer writes any code.
+  When invoking pre-implementation, use this Task prompt pattern:
+  > "Review the codebase and identify risks for this planned change: [paste issue/PR description].
+  > The feature does not exist yet — scan the surrounding codebase and flag what could go wrong."
 - `code-reviewer` runs AFTER the engineer completes the implementation.
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: stop and surface to user.
