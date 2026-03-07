@@ -18,6 +18,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
@@ -90,6 +91,19 @@ export default function NewListing() {
         onSuccess: (data) => {
           toast({ title: 'Draft saved', description: 'Your listing has been created as a draft.' });
           navigate(`/dealer/listings/${data.id}/edit`);
+        },
+        onError: (error: Error) => {
+          const apiErr = error as ApiError;
+          const body = apiErr.body as Record<string, unknown> | undefined;
+          const message =
+            (body?.message as string) ??
+            (body?.error as string) ??
+            'Failed to save draft. Please try again.';
+          toast({
+            title: 'Save failed',
+            description: message,
+            variant: 'destructive',
+          });
         },
       },
     );
