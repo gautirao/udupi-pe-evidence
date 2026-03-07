@@ -154,6 +154,8 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
         longitude: longitude !== '' ? parseFloat(longitude) : undefined,
       }),
     onSettled: () => {
+      // Invalidates the dealer suggestions cache. The public POI cache
+      // (['pois', listingId]) is managed separately by PR-15.6 public display.
       queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
     },
     onSuccess: () => {
@@ -248,6 +250,7 @@ interface PoiManagerProps {
 
 export function PoiManager({ listingId }: PoiManagerProps) {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('suggestions');
 
   const {
     data: pois,
@@ -297,7 +300,7 @@ export function PoiManager({ listingId }: PoiManagerProps) {
         <CardTitle>Nearby Points of Interest</CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="suggestions">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
             <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
             <TabsTrigger value="approved">Approved</TabsTrigger>
@@ -329,9 +332,9 @@ export function PoiManager({ listingId }: PoiManagerProps) {
                     onApprove={(id) => approveMutation.mutate(id)}
                     onPin={(id) => pinMutation.mutate(id)}
                     onDelete={(id) => deleteMutation.mutate(id)}
-                    isPinPending={pinMutation.isPending}
-                    isDeletePending={deleteMutation.isPending}
-                    isApprovePending={approveMutation.isPending}
+                    isPinPending={pinMutation.isPending && pinMutation.variables === poi.id}
+                    isDeletePending={deleteMutation.isPending && deleteMutation.variables === poi.id}
+                    isApprovePending={approveMutation.isPending && approveMutation.variables === poi.id}
                   />
                 ))}
               </div>
@@ -361,8 +364,8 @@ export function PoiManager({ listingId }: PoiManagerProps) {
                     poi={poi}
                     onPin={(id) => pinMutation.mutate(id)}
                     onDelete={(id) => deleteMutation.mutate(id)}
-                    isPinPending={pinMutation.isPending}
-                    isDeletePending={deleteMutation.isPending}
+                    isPinPending={pinMutation.isPending && pinMutation.variables === poi.id}
+                    isDeletePending={deleteMutation.isPending && deleteMutation.variables === poi.id}
                   />
                 ))}
               </div>
@@ -371,7 +374,7 @@ export function PoiManager({ listingId }: PoiManagerProps) {
 
           {/* Add Manual tab */}
           <TabsContent value="add">
-            <AddManualForm listingId={listingId} onAdded={() => {}} />
+            <AddManualForm listingId={listingId} onAdded={() => setActiveTab('approved')} />
           </TabsContent>
         </Tabs>
 
