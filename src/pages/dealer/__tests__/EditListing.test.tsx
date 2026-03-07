@@ -33,11 +33,37 @@ vi.mock('@/components/poi/PoiManager', () => ({
 }));
 
 vi.mock('@/components/dealer/AddressPicker', () => ({
-  AddressPicker: ({ onConfirm }: { onConfirm: (v: unknown) => void }) =>
-    React.createElement('button', {
-      'data-testid': 'address-picker-confirm',
-      onClick: () => onConfirm({ lat: 13.34, lng: 74.74, address_confirmed: true }),
-    }, 'Confirm Location'),
+  AddressPicker: ({
+    onConfirm,
+    onUnconfirm,
+    initialConfirmed,
+  }: {
+    onConfirm: (v: { lat: number; lng: number; address_confirmed: boolean }) => void;
+    onUnconfirm?: () => void;
+    initialConfirmed?: boolean;
+  }) =>
+    React.createElement(
+      'div',
+      { 'data-testid': 'address-picker' },
+      React.createElement(
+        'button',
+        {
+          'data-testid': 'address-picker-confirm',
+          onClick: () => onConfirm({ lat: 13.34, lng: 74.74, address_confirmed: true }),
+        },
+        'Confirm Location',
+      ),
+      initialConfirmed
+        ? React.createElement(
+            'button',
+            {
+              'data-testid': 'address-picker-change',
+              onClick: () => onUnconfirm?.(),
+            },
+            'Change',
+          )
+        : null,
+    ),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -222,5 +248,27 @@ describe('EditListing page', () => {
 
     // navigate to /dealer/listings should have been triggered
     expect(mockNavigate).toHaveBeenCalledWith('/dealer/listings');
+  });
+
+  it('calls mutate with addressConfirmed false when Change is clicked on a confirmed listing', async () => {
+    vi.mocked(useGetListing).mockReturnValue({
+      data: makeListing({ status: 'DRAFT', addressConfirmed: true, latitude: 13.34, longitude: 74.74 }),
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useGetListing>);
+
+    const mutateFn = vi.fn();
+    vi.mocked(useUpdateListing).mockReturnValue({
+      mutate: mutateFn,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateListing>);
+
+    renderEditListing();
+
+    // The mock renders a "Change" button when initialConfirmed=true
+    const changeButton = await screen.findByTestId('address-picker-change');
+    fireEvent.click(changeButton);
+
+    expect(mutateFn).toHaveBeenCalledWith({ addressConfirmed: false });
   });
 });

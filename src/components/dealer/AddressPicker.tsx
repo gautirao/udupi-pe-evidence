@@ -46,7 +46,9 @@ export interface AddressPickerProps {
   initialLatitude?: number | null;
   initialLongitude?: number | null;
   initialLocality?: string | null;
+  initialConfirmed?: boolean;
   onConfirm: (address: AddressPickerValue) => void;
+  onUnconfirm?: () => void;
 }
 
 /** Fly the map to a given position when it changes. */
@@ -83,7 +85,9 @@ export function AddressPicker({
   initialLatitude,
   initialLongitude,
   initialLocality,
+  initialConfirmed,
   onConfirm,
+  onUnconfirm,
 }: AddressPickerProps) {
   // --- state ---
   const [query, setQuery] = useState(initialLocality ?? '');
@@ -101,7 +105,7 @@ export function AddressPicker({
     hasInitial ? [initialLatitude!, initialLongitude!] : null,
   );
   const [displayName, setDisplayName] = useState(initialLocality ?? '');
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmed, setConfirmed] = useState(initialConfirmed ?? false);
   const [dragged, setDragged] = useState(false);
 
   // Keep the latest parsed address for confirm-after-drag
@@ -197,6 +201,15 @@ export function AddressPicker({
     );
   }, [pinPosition, onConfirm]);
 
+  // --- change location: reset confirmed state, preserve pin position ---
+  const handleChangeLocation = useCallback(() => {
+    setConfirmed(false);
+    setDragged(false);
+    setQuery('');
+    setDisplayName('');
+    onUnconfirm?.();
+  }, [onUnconfirm]);
+
   const markerEventHandlers = { dragend: handleMarkerDragEnd };
 
   return (
@@ -272,10 +285,21 @@ export function AddressPicker({
               Confirm Location
             </Button>
           ) : confirmed ? (
-            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium whitespace-nowrap pt-0.5">
-              <Check className="h-4 w-4" />
-              Confirmed
-            </span>
+            <div className="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
+                <Check className="h-4 w-4 flex-shrink-0" />
+                <span>Location confirmed</span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground h-7 px-2 text-xs"
+                onClick={handleChangeLocation}
+              >
+                Change
+              </Button>
+            </div>
           ) : null}
         </div>
       )}

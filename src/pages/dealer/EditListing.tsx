@@ -344,34 +344,32 @@ export default function EditListing() {
 
               {/* Section B — Address confirmation (DRAFT / REJECTED only) */}
               {isSubmittable && (
-                <>
-                  {!listing.addressConfirmed && (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-semibold">Confirm Location</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Drag the pin to your listing's exact location, then click Confirm.
-                      </p>
-                      <AddressPicker
-                        initialLatitude={listing.latitude}
-                        initialLongitude={listing.longitude}
-                        initialLocality={listing.locality}
-                        onConfirm={(addr) => {
-                          updateListing.mutate({
-                            latitude: addr.lat,
-                            longitude: addr.lng,
-                            addressConfirmed: true,
-                          });
-                        }}
-                      />
-                    </div>
-                  )}
-                  {listing.addressConfirmed && (
-                    <div className="flex items-center gap-2 text-sm text-green-700">
-                      <Check className="h-4 w-4" />
-                      Location confirmed
-                    </div>
-                  )}
-                </>
+                <div id="address-picker-section" className="space-y-2">
+                  <h3 className="text-sm font-semibold">Confirm Location</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Search for your listing's address, drag the pin to the exact spot, then confirm.
+                  </p>
+                  <AddressPicker
+                    initialLatitude={listing.latitude}
+                    initialLongitude={listing.longitude}
+                    initialLocality={listing.locality}
+                    initialConfirmed={listing.addressConfirmed}
+                    onConfirm={(addr) => {
+                      if (!updateListing.isPending) {
+                        updateListing.mutate({
+                          latitude: addr.lat,
+                          longitude: addr.lng,
+                          addressConfirmed: true,
+                        });
+                      }
+                    }}
+                    onUnconfirm={() => {
+                      if (!updateListing.isPending) {
+                        updateListing.mutate({ addressConfirmed: false });
+                      }
+                    }}
+                  />
+                </div>
               )}
 
               {/* Actions */}
@@ -409,9 +407,21 @@ export default function EditListing() {
                       Submit for Review
                     </Button>
                     {!listing.addressConfirmed && (
-                      <p className="text-xs text-muted-foreground text-center">
-                        Confirm your location before submitting
-                      </p>
+                      <Alert className="mb-3">
+                        <MapPin className="h-4 w-4" />
+                        <AlertDescription className="flex items-center justify-between">
+                          <span>Location must be confirmed before submitting.</span>
+                          <button
+                            type="button"
+                            className="text-sm underline underline-offset-2 ml-2 whitespace-nowrap"
+                            onClick={() =>
+                              document.getElementById('address-picker-section')?.scrollIntoView({ behavior: 'smooth' })
+                            }
+                          >
+                            Go to location ↑
+                          </button>
+                        </AlertDescription>
+                      </Alert>
                     )}
                   </div>
                 </>
