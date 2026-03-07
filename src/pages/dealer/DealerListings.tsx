@@ -10,7 +10,6 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +22,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Eye, Loader2 } from 'lucide-react';
+import { AlertCircle, Building2, Eye, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
@@ -110,7 +110,7 @@ function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
  */
 export default function DealerListings() {
   const { isDealer, isAdmin, isLoading } = useAuth();
-  const { data, isLoading: listingsLoading, isError } = useDealerMyListings();
+  const { data, isLoading: listingsLoading, isError, refetch } = useDealerMyListings();
   const deleteListingMutation = useDeleteListing();
   const { toast } = useToast();
 
@@ -139,17 +139,27 @@ export default function DealerListings() {
         </div>
 
         {listingsLoading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="overflow-hidden">
+                <Skeleton className="w-full h-32" />
+                <div className="p-4 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              </Card>
+            ))}
           </div>
         )}
 
         {isError && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Failed to load your listings. Please try again.
-            </AlertDescription>
-          </Alert>
+          <div className="text-center py-8 space-y-2">
+            <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
+            <p className="text-sm text-muted-foreground">Failed to load your listings.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Try again
+            </Button>
+          </div>
         )}
 
         {!listingsLoading && !isError && data?.listings.length === 0 && (
