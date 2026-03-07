@@ -7,6 +7,7 @@ import com.example.realestate.listing.ListingRepository.OpportunityProjection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -96,16 +97,20 @@ public class DashboardController {
             @RequestParam(required = false) String locality,
             @RequestParam(required = false) String propertyType,
             @RequestParam(required = false) Integer bedrooms,
-            @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 50) Pageable pageable) {
 
         String effectiveQ = (q != null && !q.isBlank()) ? q.trim() : null;
 
+        // Strip any Sort from the Pageable: the native SQL already owns ORDER BY.
+        // Passing a sorted Pageable to a native query causes a duplicate ORDER BY crash in PostgreSQL.
+        Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+
         log.info("GET /api/dashboard/listings/search q={} locality={} propertyType={} bedrooms={} page={} size={}",
                 effectiveQ, locality, propertyType, bedrooms,
-                pageable.getPageNumber(), pageable.getPageSize());
+                unsorted.getPageNumber(), unsorted.getPageSize());
 
         Page<SearchListingResponse> response = listingRepository
-                .findBySearch(effectiveQ, locality, propertyType, bedrooms, pageable)
+                .findBySearch(effectiveQ, locality, propertyType, bedrooms, unsorted)
                 .map(this::toSearchListingResponse);
 
         return ResponseEntity.ok(response);
@@ -137,7 +142,7 @@ public class DashboardController {
             @RequestParam(required = false) BigDecimal minPpc,
             @RequestParam(required = false) BigDecimal maxPpc,
             @RequestParam(name = "freshDays", defaultValue = "7") int freshDays,
-            @PageableDefault(size = 200, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+            @PageableDefault(size = 200) Pageable pageable) {
 
         if (minLat > maxLat || minLng > maxLng) {
             return ResponseEntity.badRequest().body("Invalid bounding box: min must be <= max");
@@ -150,14 +155,17 @@ public class DashboardController {
                 ? OffsetDateTime.now().minusDays(freshDays)
                 : null;
 
+        // Strip any Sort — native SQL owns ORDER BY (created_at DESC).
+        Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+
         log.info("Map listings query bbox=[{},{} -> {},{}] ppc=[{},{}] freshDays={} page={} size={}",
                 minLat, minLng, maxLat, maxLng, minPpcPaise, maxPpcPaise, freshDays,
-                pageable.getPageNumber(), pageable.getPageSize());
+                unsorted.getPageNumber(), unsorted.getPageSize());
 
         Page<Listing> listings = listingRepository.findInBoundingBox(
                 minLat, minLng, maxLat, maxLng,
                 minPpcPaise, maxPpcPaise,
-                createdAfter, pageable);
+                createdAfter, unsorted);
 
         Page<MapListingResponse> response = listings.map(this::toMapListingResponse);
 
