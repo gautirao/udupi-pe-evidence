@@ -21,6 +21,7 @@ import { Loader2, Lock, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
+import { PoiManager } from '@/components/poi/PoiManager';
 import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
@@ -372,6 +373,15 @@ export default function EditListing() {
                   )}
                 </>
               )}
+
+              {/* Section D — Nearby POIs */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Nearby Places</h3>
+                <p className="text-xs text-muted-foreground">
+                  Review auto-suggested places from OpenStreetMap, approve what to show publicly, or add your own.
+                </p>
+                <PoiManager listingId={id!} />
+              </div>
 
               {/* Actions */}
               <div className="flex justify-end gap-3 pt-4">
