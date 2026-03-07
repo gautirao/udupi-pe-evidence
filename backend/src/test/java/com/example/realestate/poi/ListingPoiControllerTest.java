@@ -62,8 +62,8 @@ class ListingPoiControllerTest {
 
     @Test
     void getApproved_returnsOnlyApprovedPois() throws Exception {
-        PoiResponse poi1 = new PoiResponse("id-1", "District Hospital", "HOSPITAL", 150, 13.3415, 74.7430, false);
-        PoiResponse poi2 = new PoiResponse("id-2", "St. Mary's School", "SCHOOL", 300, 13.3420, 74.7440, false);
+        PoiResponse poi1 = new PoiResponse("id-1", "District Hospital", "HOSPITAL", 150, 13.3415, 74.7430, false, true);
+        PoiResponse poi2 = new PoiResponse("id-2", "St. Mary's School", "SCHOOL", 300, 13.3420, 74.7440, false, true);
         when(service.getApproved(LISTING_ID)).thenReturn(List.of(poi1, poi2));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
@@ -80,8 +80,8 @@ class ListingPoiControllerTest {
         // Service already returns correctly ordered results; controller just delegates.
         // Mock returns pinned(200m) first, then unpinned(50m) — verifying controller
         // passes through the service-ordered list unchanged.
-        PoiResponse unpinned = new PoiResponse("id-unpinned", "Nearby ATM",   "BANK",    50,  13.3411, 74.7422, false);
-        PoiResponse pinned   = new PoiResponse("id-pinned",   "Featured Park", "PARK",   200, 13.3430, 74.7450, true);
+        PoiResponse unpinned = new PoiResponse("id-unpinned", "Nearby ATM",   "BANK",    50,  13.3411, 74.7422, false, true);
+        PoiResponse pinned   = new PoiResponse("id-pinned",   "Featured Park", "PARK",   200, 13.3430, 74.7450, true,  true);
         when(service.getApproved(LISTING_ID)).thenReturn(List.of(pinned, unpinned));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
