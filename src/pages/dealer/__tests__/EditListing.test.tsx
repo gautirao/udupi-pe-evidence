@@ -24,7 +24,17 @@ vi.mock('@/hooks/useDealerListings', () => ({
 }));
 
 vi.mock('@/components/dealer/ImageUploader', () => ({
-  ImageUploader: () => React.createElement('div', { 'data-testid': 'image-uploader' }),
+  ImageUploader: ({
+    onCanSubmitChange,
+  }: {
+    listingId: string;
+    onCanSubmitChange?: (canSubmit: boolean) => void;
+  }) => {
+    React.useEffect(() => {
+      onCanSubmitChange?.(false);
+    }, [onCanSubmitChange]);
+    return React.createElement('div', { 'data-testid': 'image-uploader' });
+  },
 }));
 
 vi.mock('@/components/poi/PoiManager', () => ({
@@ -212,7 +222,7 @@ describe('EditListing page', () => {
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
   });
 
-  it('submitsUpdates_andNavigates', async () => {
+  it('savesChanges_staysOnPage', async () => {
     vi.mocked(useGetListing).mockReturnValue({
       data: makeListing({ status: 'DRAFT' }),
       isLoading: false,
@@ -238,7 +248,7 @@ describe('EditListing page', () => {
     const saveButton = screen.getByRole('button', { name: /Save Changes/i });
     fireEvent.click(saveButton);
 
-    // PUT should have been called with the updated title
+    // mutate should have been called with the updated title
     await waitFor(() => {
       expect(mutateFn).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Updated Title' }),
@@ -246,8 +256,8 @@ describe('EditListing page', () => {
       );
     });
 
-    // navigate to /dealer/listings should have been triggered
-    expect(mockNavigate).toHaveBeenCalledWith('/dealer/listings');
+    // Save Changes must NOT navigate away — user stays on the edit page
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('calls mutate with addressConfirmed false when Change is clicked on a confirmed listing', async () => {

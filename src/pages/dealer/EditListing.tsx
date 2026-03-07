@@ -4,11 +4,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGetListing, useUpdateListing, useSubmitListing } from '@/hooks/useDealerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Lock, Check, MapPin } from 'lucide-react';
+import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
@@ -54,6 +54,7 @@ export default function EditListing() {
   const [landArea, setLandArea] = useState('');
   const [bedrooms, setBedrooms] = useState('');
   const [builtArea, setBuiltArea] = useState('');
+  const [canSubmitImages, setCanSubmitImages] = useState(false);
 
   // Pre-populate form once listing loads
   useEffect(() => {
@@ -172,7 +173,6 @@ export default function EditListing() {
       {
         onSuccess: () => {
           toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
-          navigate('/dealer/listings');
         },
       },
     );
@@ -205,16 +205,37 @@ export default function EditListing() {
   const showBuiltArea = propertyType === 'apartment' || propertyType === 'house';
   const isSubmittable = SUBMITTABLE_STATUSES.includes(listing.status);
 
+  const statusBadgeVariant = listing.status === 'REJECTED'
+    ? 'destructive'
+    : listing.status === 'DRAFT'
+    ? 'secondary'
+    : 'outline';
+
+  const requiredFieldsComplete = !!price && !!propertyType && !!locality;
+  const allConditionsMet = canSubmitImages && !!listing.addressConfirmed && requiredFieldsComplete;
+
   return (
     <AppLayout>
-      <div className="container max-w-2xl py-8 px-4">
+      <div className="container max-w-2xl py-8 px-4 space-y-6">
+
+        {/* Page header */}
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h1 className="text-2xl font-bold">Edit Listing</h1>
+            <Badge variant={statusBadgeVariant}>{listing.status}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Complete all sections below before submitting for review.
+          </p>
+        </div>
+
+        {/* Card 1: Listing Details */}
         <Card>
           <CardHeader>
-            <CardTitle>Edit Listing</CardTitle>
-            <CardDescription>
-              Update the details for your listing. Status:{' '}
-              <strong>{listing.status}</strong>
-            </CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Listing Details
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -331,105 +352,69 @@ export default function EditListing() {
                 </div>
               )}
 
-              {/* Section A — Images (DRAFT / REJECTED only) */}
-              {isSubmittable && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Listing Images</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Minimum 3 images required to submit for review.
-                  </p>
-                  <ImageUploader listingId={id!} />
-                </div>
-              )}
-
-              {/* Section B — Address confirmation (DRAFT / REJECTED only) */}
-              {isSubmittable && (
-                <div id="address-picker-section" className="space-y-2">
-                  <h3 className="text-sm font-semibold">Confirm Location</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Search for your listing's address, drag the pin to the exact spot, then confirm.
-                  </p>
-                  <AddressPicker
-                    initialLatitude={listing.latitude}
-                    initialLongitude={listing.longitude}
-                    initialLocality={listing.locality}
-                    initialConfirmed={listing.addressConfirmed}
-                    onConfirm={(addr) => {
-                      if (!updateListing.isPending) {
-                        updateListing.mutate({
-                          latitude: addr.lat,
-                          longitude: addr.lng,
-                          addressConfirmed: true,
-                        });
-                      }
-                    }}
-                    onUnconfirm={() => {
-                      if (!updateListing.isPending) {
-                        updateListing.mutate({ addressConfirmed: false });
-                      }
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate('/dealer/listings')}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={updateListing.isPending}>
+              {/* Save button */}
+              <div className="flex justify-end pt-4 border-t mt-2">
+                <Button type="submit" variant="outline" disabled={updateListing.isPending}>
                   {updateListing.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   Save Changes
                 </Button>
               </div>
-
-              {/* Section C — Submit for Review (DRAFT / REJECTED only) */}
-              {isSubmittable && (
-                <>
-                  <Separator className="my-2" />
-                  <div className="space-y-1">
-                    <Button
-                      type="button"
-                      className="w-full"
-                      variant="default"
-                      disabled={submitListing.isPending || !listing.addressConfirmed}
-                      onClick={handleSubmitForReview}
-                    >
-                      {submitListing.isPending && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      Submit for Review
-                    </Button>
-                    {!listing.addressConfirmed && (
-                      <Alert className="mb-3">
-                        <MapPin className="h-4 w-4" />
-                        <AlertDescription className="flex items-center justify-between">
-                          <span>Location must be confirmed before submitting.</span>
-                          <button
-                            type="button"
-                            className="text-sm underline underline-offset-2 ml-2 whitespace-nowrap"
-                            onClick={() =>
-                              document.getElementById('address-picker-section')?.scrollIntoView({ behavior: 'smooth' })
-                            }
-                          >
-                            Go to location ↑
-                          </button>
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                </>
-              )}
             </form>
           </CardContent>
         </Card>
 
+        {/* Card 2: Listing Images (isSubmittable only) */}
+        {isSubmittable && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Listing Images
+              </CardTitle>
+              <CardDescription>Minimum 3 images required to submit for review.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Card 3: Confirm Location (isSubmittable only) */}
+        {isSubmittable && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Confirm Location
+              </CardTitle>
+              <CardDescription>
+                Search for your listing's address, drag the pin to the exact spot, then confirm.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AddressPicker
+                initialLatitude={listing.latitude}
+                initialLongitude={listing.longitude}
+                initialLocality={listing.locality}
+                initialConfirmed={listing.addressConfirmed}
+                onConfirm={(addr) => {
+                  if (!updateListing.isPending) {
+                    updateListing.mutate({ latitude: addr.lat, longitude: addr.lng, addressConfirmed: true });
+                  }
+                }}
+                onUnconfirm={() => {
+                  if (!updateListing.isPending) {
+                    updateListing.mutate({ addressConfirmed: false });
+                  }
+                }}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Card 4: POIs */}
         {listing.addressConfirmed ? (
           <PoiManager listingId={id!} />
         ) : (
@@ -448,6 +433,76 @@ export default function EditListing() {
             </CardContent>
           </Card>
         )}
+
+        {/* Card 5: Submit for Review (isSubmittable only, absolute last) */}
+        {isSubmittable && (
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Send className="h-5 w-5 text-primary" />
+                Ready to Submit?
+              </CardTitle>
+              <CardDescription>
+                All requirements must be met before submitting for admin review.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                {[
+                  {
+                    label: 'Listing photos',
+                    met: canSubmitImages,
+                    detail: canSubmitImages
+                      ? 'Minimum 3 photos uploaded'
+                      : 'At least 3 photos required',
+                  },
+                  {
+                    label: 'Location confirmed',
+                    met: !!listing.addressConfirmed,
+                    detail: listing.addressConfirmed
+                      ? 'Pin position confirmed on map'
+                      : 'Confirm your pin location above',
+                  },
+                  {
+                    label: 'Required fields',
+                    met: requiredFieldsComplete,
+                    detail: requiredFieldsComplete
+                      ? 'All required fields filled in'
+                      : 'Price, property type, and locality required',
+                  },
+                ].map(({ label, met, detail }) => (
+                  <div key={label} className="flex items-start gap-3">
+                    {met
+                      ? <Check className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                      : <X className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />}
+                    <div>
+                      <p className="text-sm font-medium">{label}</p>
+                      <p className="text-xs text-muted-foreground">{detail}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="pt-3 border-t">
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={submitListing.isPending || updateListing.isPending || !allConditionsMet}
+                  onClick={handleSubmitForReview}
+                >
+                  {submitListing.isPending
+                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
+                    : 'Submit for Review'}
+                </Button>
+                {listing.status === 'REJECTED' && (
+                  <p className="text-xs text-muted-foreground text-center mt-2">
+                    Previously rejected — review the feedback before resubmitting.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
       </div>
     </AppLayout>
   );
