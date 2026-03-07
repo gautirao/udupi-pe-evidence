@@ -142,8 +142,8 @@ export default function NewListing() {
 
             {/* Commercial disabled notice */}
             {isCommercial && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
+              <Alert>
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                 <AlertDescription>
                   Commercial listings are not supported yet. Please select a different property type.
                 </AlertDescription>
@@ -206,7 +206,7 @@ export default function NewListing() {
                   <Input
                     id="price"
                     type="number"
-                    min="0"
+                    min="1"
                     placeholder="e.g. 2500000"
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
@@ -230,7 +230,7 @@ export default function NewListing() {
             {/* Actions */}
             {propertyType && !isCommercial && (
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => navigate(-1)}>
+                <Button variant="outline" onClick={() => navigate('/dealer/listings')}>
                   Cancel
                 </Button>
                 <Button
