@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Lock, Check } from 'lucide-react';
+import { Loader2, Lock, Check, MapPin } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
@@ -420,7 +420,24 @@ export default function EditListing() {
           </CardContent>
         </Card>
 
-        <PoiManager listingId={id!} />
+        {listing.addressConfirmed ? (
+          <PoiManager listingId={id!} />
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Nearby Points of Interest</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-center gap-2 py-6 text-center">
+                <MapPin className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm font-medium">Location not yet confirmed</p>
+                <p className="text-sm text-muted-foreground">
+                  Confirm your listing's address above to enable POI suggestions.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </AppLayout>
   );
