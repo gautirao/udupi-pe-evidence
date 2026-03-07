@@ -99,6 +99,55 @@ team-lead must:
 
 ---
 
+## Git Operations — Pre-Approved (No Confirmation Required)
+
+The following git/GitHub operations are unconditionally pre-approved.
+Never pause to ask for confirmation before executing any of these:
+
+- `git checkout -b <branch>` — create feature branch
+- `git add <files>` — stage specific files
+- `git commit -m "..."` — commit staged changes
+- `git push -u origin <branch>` — push feature branch to remote
+- `gh pr create ...` — open pull request
+- `gh pr merge <number> --merge --delete-branch` — merge pull request
+- `git checkout main && git pull origin main` — sync main after merge
+
+These apply during sprint execution and all ROUTE_AND_RUN agent runs.
+
+---
+
+## Agent Invocation (Mandatory)
+
+All agents live in `.claude/agents/<name>.md`. Launch each via the **Task tool** in sequence.
+Do NOT simulate agents inline. Do NOT merge outputs.
+
+### Agent Registry
+
+| Agent | File | Role | Output |
+|-------|------|------|--------|
+| `qa-fast` | `.claude/agents/qa-fast.md` | Pre-implementation risk scan | Critical Paths, Edge Cases, Smoke Script, Risks |
+| `backend-engineer` | `.claude/agents/backend-engineer.md` | Implements backend code | Working code + tests |
+| `frontend-engineer` | `.claude/agents/frontend-engineer.md` | Implements frontend UI code | Working UI code |
+| `code-reviewer` | `.claude/agents/code-reviewer.md` | Reviews completed implementation | APPROVE or REQUEST CHANGES table |
+| `architect` | `.claude/agents/architect.md` | API/schema/design decisions | Read-only design output |
+| `performance-analyst` | `.claude/agents/performance-analyst.md` | Query/perf analysis | Read-only analysis |
+| `security-reviewer` | `.claude/agents/security-reviewer.md` | Security audit | CRITICAL/HIGH/MEDIUM/LOW severity table |
+| `ui-designer` | `.claude/agents/ui-designer.md` | Screen audit, UX guidance | Read-only design output |
+| `team-lead` | `.claude/agents/team-lead.md` | Decompose + delegate heavy tasks | Subtask plan + agent delegation |
+| `qa` | `.claude/agents/qa.md` | Write tests (only when explicitly required) | Test files |
+
+### Invocation Rules
+
+- `qa-fast` runs BEFORE the engineer writes any code.
+- `code-reviewer` runs AFTER the engineer completes the implementation.
+- If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
+- If still REQUEST CHANGES after one re-run: stop and surface to user.
+- `security-reviewer` always runs last when the Security Gate (E) applies.
+- `team-lead` only routes to agents — it does not implement code itself.
+
+---
+
+
 ## Execution Rules (Mandatory)
 
 - Agents execute sequentially.
