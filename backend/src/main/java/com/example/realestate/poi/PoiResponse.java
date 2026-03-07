@@ -11,7 +11,8 @@ public record PoiResponse(
         Integer distanceMeters,
         Double latitude,
         Double longitude,
-        boolean pinned
+        boolean pinned,
+        boolean approved
 ) {
     public static PoiResponse from(ListingPoi p) {
         return new PoiResponse(
@@ -21,7 +22,8 @@ public record PoiResponse(
                 p.getDistanceMeters(),
                 p.getLatitude(),
                 p.getLongitude(),
-                Boolean.TRUE.equals(p.getPinned())
+                Boolean.TRUE.equals(p.getPinned()),
+                Boolean.TRUE.equals(p.getApproved())
         );
     }
 }

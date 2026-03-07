@@ -27,6 +27,11 @@ vi.mock('@/components/dealer/ImageUploader', () => ({
   ImageUploader: () => React.createElement('div', { 'data-testid': 'image-uploader' }),
 }));
 
+vi.mock('@/components/poi/PoiManager', () => ({
+  PoiManager: ({ listingId }: { listingId: string }) =>
+    React.createElement('div', { 'data-testid': 'poi-manager', 'data-listing-id': listingId }),
+}));
+
 vi.mock('@/components/dealer/AddressPicker', () => ({
   AddressPicker: ({ onConfirm }: { onConfirm: (v: unknown) => void }) =>
     React.createElement('button', {

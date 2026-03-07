@@ -21,6 +21,7 @@ import { Loader2, Lock, Check } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
+import { PoiManager } from '@/components/poi/PoiManager';
 import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
@@ -418,6 +419,8 @@ export default function EditListing() {
             </form>
           </CardContent>
         </Card>
+
+        <PoiManager listingId={id!} />
       </div>
     </AppLayout>
   );
