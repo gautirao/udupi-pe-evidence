@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
+import { PropertyListing } from '@/hooks/usePropertyListings';
 
 // ─── Polyfills ────────────────────────────────────────────────
 class ResizeObserverStub {
@@ -58,7 +59,7 @@ const APARTMENT_LISTING = {
   built_area: 1000,
   built_area_unit: 'sqft',
   bedrooms: null,
-} as any;
+} as unknown as PropertyListing;
 
 // land: listingRate = price_per_cent_paise / 100 = 200_000 / 100 = 2000
 const LAND_LISTING = {
@@ -72,7 +73,7 @@ const LAND_LISTING = {
   built_area: null,
   built_area_unit: null,
   bedrooms: null,
-} as any;
+} as unknown as PropertyListing;
 
 // ─── Tests ────────────────────────────────────────────────────
 

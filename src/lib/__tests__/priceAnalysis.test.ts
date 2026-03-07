@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { computeAreaMedians, getMarketSignal } from '../priceAnalysis';
+import { PropertyListing } from '@/hooks/usePropertyListings';
 
 // Mock supabase to prevent initialization from the usePropertyListings import chain
 vi.mock('@/integrations/supabase/client', () => ({ supabase: {} }));
@@ -19,7 +20,7 @@ function makeListing(overrides: Record<string, unknown> = {}) {
     built_area_unit: null,
     bedrooms: null,
     ...overrides,
-  } as any;
+  } as unknown as PropertyListing;
 }
 
 function makeApartment(price: number, built_area: number, locality = 'Udupi', bedrooms: number | null = null) {

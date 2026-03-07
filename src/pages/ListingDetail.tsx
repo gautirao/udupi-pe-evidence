@@ -44,7 +44,7 @@ function useListingById(id: string | undefined) {
       if (!data) return null;
       
       // Transform to include images
-      const rawImages = (data.raw_posts as any)?.images;
+      const rawImages = (data.raw_posts as { images?: PropertyImage[] } | null)?.images;
       const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
       
       return {

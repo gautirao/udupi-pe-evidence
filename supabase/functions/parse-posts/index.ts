@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -169,7 +169,7 @@ For valid real estate posts, extract:
 
 // Check for duplicate listings based on key attributes
 async function checkForDuplicate(
-  supabase: any,
+  supabase: SupabaseClient,
   parsed: ParsedProperty,
   normalizedType: string
 ): Promise<{ isDuplicate: boolean; matchedId: string | null; matchReason: string | null }> {
@@ -239,7 +239,7 @@ async function checkForDuplicate(
 }
 
 async function geocodeLocality(
-  supabase: any,
+  supabase: SupabaseClient,
   locality: string
 ): Promise<GeocodedLocation | null> {
   const normalizedLocality = locality.trim().toLowerCase()

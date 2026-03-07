@@ -19,6 +19,20 @@ interface UseListingMarketContextParams {
   enabled?: boolean;
 }
 
+type RpcRow = {
+  month: string;
+  listing_count: number;
+  median_price_per_unit: number | null;
+  p25_price_per_unit: number | null;
+  p75_price_per_unit: number | null;
+  price_basis: 'per_sqft' | 'per_cent';
+  total_similar_count: number;
+};
+
+type SupabaseRpc = {
+  rpc: (fn: string, params: Record<string, unknown>) => Promise<{ data: RpcRow[] | null; error: { message: string } | null }>;
+};
+
 export function useListingMarketContext({
   locality,
   propertyType,
@@ -29,7 +43,7 @@ export function useListingMarketContext({
   return useQuery<MarketContextDataPoint[]>({
     queryKey: ['listing-market-context', locality, propertyType, bedrooms, months],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc('get_listing_market_context', {
+      const { data, error } = await (supabase as unknown as SupabaseRpc).rpc('get_listing_market_context', {
         p_locality: locality,
         p_property_type: propertyType,
         p_bedrooms: bedrooms ?? null,
@@ -39,7 +53,7 @@ export function useListingMarketContext({
       if (error) throw error;
       if (!data || !Array.isArray(data)) return [];
 
-      return (data as any[]).map((row) => ({
+      return data.map((row) => ({
         month: row.month as string,
         listingCount: row.listing_count as number,
         medianPricePerUnit: row.median_price_per_unit as number | null,

@@ -27,7 +27,7 @@ export function useSimilarListings(
       if (error) throw error;
       if (!data) return [];
 
-      return data.map((row: any) => {
+      return data.map((row) => {
         const rawImages = row.raw_posts?.images;
         const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
         return { ...row, images } as SimilarListing;

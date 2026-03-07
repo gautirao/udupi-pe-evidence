@@ -151,9 +151,9 @@ describe('Insights page — access gating', () => {
   it('calls useAvgPriceByArea with enabled=false when hasAccess=false', () => {
     mockAuth.insightsAccessUntil = null;
     renderInsights();
-    expect(vi.mocked(useAvgPriceByArea)).toHaveBeenCalledWith({ enabled: false });
-    // usePriceTrend(selectedArea, enabled): selectedArea=null initially, enabled=false
-    expect(vi.mocked(usePriceTrend)).toHaveBeenCalledWith(null, false);
+    expect(vi.mocked(useAvgPriceByArea)).toHaveBeenCalledWith('all', 0, { enabled: false });
+    // usePriceTrend(selectedArea, propertyType, bedrooms, enabled): selectedArea=null, default type='land'
+    expect(vi.mocked(usePriceTrend)).toHaveBeenCalledWith(null, 'land', 0, false);
     // useNewListings(days, { enabled }): days=7 (default), enabled=false
     expect(vi.mocked(useNewListings)).toHaveBeenCalledWith(7, { enabled: false });
     expect(vi.mocked(useRecommendations)).toHaveBeenCalledWith({ enabled: false });
@@ -162,7 +162,7 @@ describe('Insights page — access gating', () => {
   it('calls useAvgPriceByArea with enabled=true when hasAccess=true', () => {
     mockAuth.insightsAccessUntil = daysFromNow(10);
     renderInsights();
-    expect(vi.mocked(useAvgPriceByArea)).toHaveBeenCalledWith({ enabled: true });
+    expect(vi.mocked(useAvgPriceByArea)).toHaveBeenCalledWith('all', 0, { enabled: true });
   });
 
   it('always renders SavedAreas regardless of access state', () => {

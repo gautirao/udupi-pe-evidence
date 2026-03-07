@@ -295,7 +295,7 @@ export default function Listings() {
               <TableBody>
                 {filteredListings.map((listing) => {
                   // Get images from joined raw_posts data
-                  const rawPost = (listing as any).raw_posts;
+                  const rawPost = (listing as Record<string, unknown>).raw_posts as { images?: Array<{ url: string }> } | null;
                   const images = rawPost?.images || [];
                   const firstImage = images[0]?.url;
                   
