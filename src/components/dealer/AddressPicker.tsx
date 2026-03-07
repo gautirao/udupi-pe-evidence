@@ -108,8 +108,8 @@ export function AddressPicker({
   const [confirmed, setConfirmed] = useState(initialConfirmed ?? false);
   const [dragged, setDragged] = useState(false);
 
-  // Keep the latest parsed address for confirm-after-drag
-  const parsedRef = useRef<ParsedAddress>({ address_line1: '' });
+  // Parsed address fields for display and confirm output
+  const [parsedAddress, setParsedAddress] = useState<ParsedAddress>({ address_line1: '' });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -156,7 +156,7 @@ export function AddressPicker({
     (result: NominatimResult) => {
       const pos: L.LatLngTuple = [result.lat, result.lon];
       const parsed = parseAddress(result.address);
-      parsedRef.current = parsed;
+      setParsedAddress(parsed);
 
       setPinPosition(pos);
       setDisplayName(result.display_name);
@@ -182,7 +182,7 @@ export function AddressPicker({
       const rev = await reverseGeocode(latlng.lat, latlng.lng);
       if (rev) {
         const parsed = parseAddress(rev.address);
-        parsedRef.current = parsed;
+        setParsedAddress(parsed);
         setDisplayName(rev.display_name);
         setQuery(rev.display_name);
       }
@@ -196,10 +196,8 @@ export function AddressPicker({
     if (!pinPosition) return;
     setConfirmed(true);
     setDragged(false);
-    onConfirm(
-      buildOutput(pinPosition[0], pinPosition[1], parsedRef.current, true),
-    );
-  }, [pinPosition, onConfirm]);
+    onConfirm(buildOutput(pinPosition[0], pinPosition[1], parsedAddress, true));
+  }, [pinPosition, onConfirm, parsedAddress]);
 
   // --- change location: reset confirmed state, preserve pin position ---
   const handleChangeLocation = useCallback(() => {
@@ -207,6 +205,7 @@ export function AddressPicker({
     setDragged(false);
     setQuery('');
     setDisplayName('');
+    setParsedAddress({ address_line1: '' });
     onUnconfirm?.();
   }, [onUnconfirm]);
 
@@ -301,6 +300,19 @@ export function AddressPicker({
               </Button>
             </div>
           ) : null}
+        </div>
+      )}
+
+      {confirmed && (parsedAddress.address_line1 || parsedAddress.city || parsedAddress.postcode) && (
+        <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm space-y-0.5">
+          {parsedAddress.address_line1 && (
+            <p className="font-medium">{parsedAddress.address_line1}</p>
+          )}
+          {(parsedAddress.city || parsedAddress.postcode) && (
+            <p className="text-muted-foreground">
+              {[parsedAddress.city, parsedAddress.postcode].filter(Boolean).join(', ')}
+            </p>
+          )}
         </div>
       )}
 
