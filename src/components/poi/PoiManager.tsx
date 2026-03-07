@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Pin, Trash2, PinOff } from 'lucide-react';
+import { CATEGORY_LABELS, formatDistance } from '@/lib/poi-categories';
 
 interface PoiResponse {
   id: string;
@@ -28,23 +29,7 @@ interface PoiResponse {
   approved: boolean;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  WORSHIP: 'Place of Worship',
-  HOSPITAL: 'Hospital / Clinic',
-  SCHOOL: 'School / University',
-  HOTEL: 'Hotel',
-  TRANSPORT: 'Bus / Transit',
-  AIRPORT: 'Airport',
-  GROCERY: 'Supermarket / Market',
-};
-
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
-
-function formatDistance(distanceMeters: number | null): string {
-  if (distanceMeters == null) return 'manual';
-  if (distanceMeters < 1000) return `${distanceMeters} m`;
-  return `${(distanceMeters / 1000).toFixed(1)} km`;
-}
 
 interface PoiRowProps {
   poi: PoiResponse;
