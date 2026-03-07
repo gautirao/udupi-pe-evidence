@@ -163,9 +163,16 @@ export default function DealerListings() {
         )}
 
         {!listingsLoading && !isError && data?.listings.length === 0 && (
-          <p className="text-muted-foreground mt-4">
-            You have no listings yet. Create your first listing to get started.
-          </p>
+          <div className="text-center py-12 space-y-3">
+            <Building2 className="h-8 w-8 text-muted-foreground/50 mx-auto" />
+            <p className="text-sm font-medium text-muted-foreground">No listings yet</p>
+            <p className="text-xs text-muted-foreground">
+              Create your first listing to start reaching buyers.
+            </p>
+            <Button size="sm" asChild>
+              <Link to="/dealer/listings/new">Create your first listing</Link>
+            </Button>
+          </div>
         )}
 
         {!listingsLoading && !isError && data && data.listings.length > 0 && (
