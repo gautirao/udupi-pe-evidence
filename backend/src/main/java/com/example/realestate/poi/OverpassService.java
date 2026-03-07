@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +56,7 @@ public class OverpassService {
      * Production constructor — builds a real {@link java.net.http.HttpClient}
      * with 10-second connect and read timeouts matching the GeocodingService pattern.
      */
+    @Autowired
     public OverpassService(ListingPoiRepository repository) {
         this.repository = repository;
         this.objectMapper = new ObjectMapper();
