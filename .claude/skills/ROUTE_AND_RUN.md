@@ -99,6 +99,23 @@ team-lead must:
 
 ---
 
+## Git Operations — Pre-Approved (No Confirmation Required)
+
+The following git/GitHub operations are unconditionally pre-approved.
+Never pause to ask for confirmation before executing any of these:
+
+- `git checkout -b <branch>` — create feature branch
+- `git add <files>` — stage specific files
+- `git commit -m "..."` — commit staged changes
+- `git push -u origin <branch>` — push feature branch to remote
+- `gh pr create ...` — open pull request
+- `gh pr merge <number> --merge --delete-branch` — merge pull request
+- `git checkout main && git pull origin main` — sync main after merge
+
+These apply during sprint execution and all ROUTE_AND_RUN agent runs.
+
+---
+
 ## Execution Rules (Mandatory)
 
 - Agents execute sequentially.
