@@ -182,7 +182,7 @@ export default function DealerListings() {
                 {listing.firstImageUrl ? (
                   <img
                     src={listing.firstImageUrl}
-                    alt=""
+                    alt={listing.title ?? 'Property listing image'}
                     className="w-full h-32 object-cover rounded-t-lg"
                   />
                 ) : (
@@ -202,7 +202,7 @@ export default function DealerListings() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-4">
-                    <span>{listing.propertyType}</span>
+                    <Badge variant="secondary" className="capitalize text-xs">{listing.propertyType}</Badge>
                     {listing.locality && <span>· {listing.locality}</span>}
                     {listing.price != null && (
                       <span>· &#8377;{listing.price.toLocaleString('en-IN')}</span>
@@ -230,7 +230,7 @@ export default function DealerListings() {
                         ) : (
                           <Button size="sm" asChild>
                             <Link to={`/dealer/listings/${listing.id}/edit`}>
-                              Submit for Review
+                              Edit &amp; Resubmit
                             </Link>
                           </Button>
                         )}
@@ -257,6 +257,7 @@ export default function DealerListings() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               onClick={() => {
                                 deleteListingMutation.mutate(listing.id, {
                                   onSuccess: () => {
