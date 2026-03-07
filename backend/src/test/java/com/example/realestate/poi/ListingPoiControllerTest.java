@@ -1,5 +1,7 @@
 package com.example.realestate.poi;
 
+import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.listing.ListingService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -41,6 +43,12 @@ class ListingPoiControllerTest {
 
     @MockitoBean
     ListingPoiService service;
+    @MockitoBean
+    OverpassService overpassService;
+    @MockitoBean
+    ListingService listingService;
+    @MockitoBean
+    ListingRepository listingRepository;
 
     private static final UUID LISTING_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
