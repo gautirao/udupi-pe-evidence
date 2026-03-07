@@ -19,6 +19,7 @@ import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
 import { SimilarListings } from '@/components/listing/SimilarListings';
+import { NearbyPois } from '@/components/poi/NearbyPois';
 
 const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
   land: { label: 'Land', badgeClass: 'bg-green-100 text-green-800 border-0' },
@@ -356,6 +357,8 @@ export default function ListingDetail() {
                 </CardContent>
               </Card>
             )}
+
+            <NearbyPois listingId={listing.id} />
 
             {/* Posted Date */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
