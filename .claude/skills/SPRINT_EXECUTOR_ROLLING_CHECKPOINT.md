@@ -5,6 +5,8 @@ Execute a sprint plan PR-by-PR using ROUTE_AND_RUN with resumable rolling checkp
 
 Checkpoint is the single source of truth.
 
+**Authority:** `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` is the single source of truth for sprint execution state, rolling checkpoints, PR lifecycle, and resume behavior. It delegates per-PR execution to `ROUTE_AND_RUN`, which owns routing logic, agent invocation rules, and the default E2E validation policy.
+
 ---
 
 ## Operating Mode
@@ -29,7 +31,11 @@ Before the first PR:
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
    - If team-lead flags spec gaps: surface them to the user and **pause for confirmation** before starting execution. If the gap is in acceptance criteria or ambiguous scope, do not proceed until resolved or explicitly waived by the user.
 4. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
-5. Do NOT re-fetch individual issues each PR unless the checkpoint is stale. Use cached descriptions from step 2.
+5. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
+   - The cached issue description is missing or truncated to fewer than 50 characters
+   - The issue title in the checkpoint does not match the issue title in Linear
+   - The execution order in the checkpoint does not match the current Linear sprint order
+   - The repo is not on the expected branch or has unexpected uncommitted changes on main
 
 ---
 
@@ -37,22 +43,22 @@ Before the first PR:
 
 For each Linear issue (PR N):
 
-1. **Use cached spec** — use the description cached during Sprint Start step 2. Only call `get_issue` again if the checkpoint is marked stale or this is a resumed sprint with no cached description. State issue id + title (1 line); capture first 300 chars of description into checkpoint `issue_description` field.
+1. **Use cached spec** — use the description cached during Sprint Start step 2. Only call `get_issue` again if the checkpoint is stale (see Sprint Start step 5). State issue id + title (1 line); capture first 300 chars of description into checkpoint `issue_description` field.
 2. **Mark In Progress** — `save_issue state=In Progress`
 3. **Bug fix gate** — if issue type is bugfix (Linear issue type = Bug, or title starts with `fix:`/`bug:`, or description explicitly says "bug" or "defect"):
    - Reproduce the defect with a targeted test or manual step. Confirm it fails. Document in checkpoint.
    - Do NOT proceed to engineer until failure is confirmed.
-4. **Run ROUTE_AND_RUN** — invoke each agent via Task tool in the routed order:
-   - `qa-fast` first: pass issue description as context with prompt:
-     > "Review the codebase and identify risks for this planned change: [issue description]. The feature does not exist yet."
-   - Engineer agent(s) next: implement the change. Include in every engineer Task prompt:
-     > 1. Read every file you will modify before writing any changes. Do not assume file contents.
-     > 2. Output diffs or targeted snippets only — never rewrite an entire file unless it is new.
-     > 3. Run existing tests relevant to the changed files after implementing. Report pass/fail.
-   - `code-reviewer` after implementation (skip only if: risk=low AND single-file AND no logic change)
-   - `security-reviewer` last if Security Gate (F) applies
-5. **E2E validation** — run ROUTE_AND_RUN Step 3 (e2e suite) before committing. If e2e fails, stop and surface to user. Do NOT auto-fix.
-   Skip E2E (same as doc-only) when the PR touches only: SQL reference copies in `supabase-rpcs/`, `*.md` files, or `docs/` — no local frontend/backend behavior changes.
+4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`. Routing logic, agent invocation rules, code-reviewer skip conditions, and Security Gate triggers are all defined in `ROUTE_AND_RUN.md` — do not re-derive them here.
+
+   Sprint-specific context for `qa-fast` — always pass this prompt:
+   > "Review the codebase and identify risks for this planned change: [issue description]. The feature does not exist yet."
+
+   Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
+
+5. **E2E validation** — run `ROUTE_AND_RUN` Step 3 (E2E Validation Policy). All E2E rules, failure handling, and the default doc-only skip are owned by `ROUTE_AND_RUN`.
+
+   Sprint-layer skip override (extends `ROUTE_AND_RUN` doc-only skip): also skip E2E when the PR touches only SQL reference copies in `supabase-rpcs/` — these have no local frontend/backend behavior change and share the same profile as doc-only changes.
+
 6. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
    - Verify no uncommitted changes on main: `git status --short`

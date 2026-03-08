@@ -7,6 +7,8 @@ Do NOT redefine agents.
 Do NOT merge agent outputs.
 Process: triage → route → sequential agent execution → STOP.
 
+**Authority:** `ROUTE_AND_RUN` is the single source of truth for routing logic, agent invocation rules, and the default E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` invokes this skill for per-PR execution and may declare sprint-layer overrides on top of it — but does not redefine its core rules.
+
 ## Agents
 qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
 
@@ -124,6 +126,9 @@ team-lead must:
 - Confirm decomposition is warranted (not just a large single-stream task)
 - Produce a decomposition plan with subtasks, owners, non-goals, and gates
 - Delegate to the appropriate specialist agents
+- Verify integration across subtasks before declaring complete (team-lead Mode 2 Step 6)
+
+**E2E for team-lead work:** run E2E only after team-lead has completed integration verification (Mode 2 Step 6), not after each individual subtask. The final E2E covers the fully assembled change.
 
 Note: sprint kickoff analysis (team-lead Mode 1) is handled by SPRINT_EXECUTOR, not here.
 
@@ -179,6 +184,8 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   > 2. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
   > 3. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
 
+- When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
+
 - `code-reviewer` runs AFTER the engineer completes the implementation.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
@@ -188,8 +195,9 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 
 ---
 
+## Step 3 — E2E Validation Policy (Authoritative)
 
-## Step 3 — E2E Validation (Mandatory after all agents complete)
+This is the default E2E policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` inherits this policy and may extend it with sprint-layer skip overrides — but this section is the single source of truth for E2E behavior and the E2E script.
 
 After the final routed agent completes, run the full e2e suite locally before committing:
 
@@ -222,7 +230,8 @@ Rules:
 - Run this after code-reviewer (and security-reviewer if applicable) APPROVE.
 - If e2e fails: surface the failure to the user and stop. Do NOT auto-fix and re-run.
 - If backend or frontend fails to start within 60s: surface the error log and stop.
-- Skip this step ONLY for doc-only changes (*.md, docs/) — never skip for code changes.
+- **Default skip:** doc-only changes (`*.md`, `docs/`, non-behavioral config) — never skip for code changes.
+- Sprint-layer callers may declare additional skip overrides — see `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`.
 
 ---
 
