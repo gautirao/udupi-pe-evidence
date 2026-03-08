@@ -225,7 +225,7 @@ export function AddressPicker({
   // --- geolocation: use browser location to place pin ---
   const handleUseMyLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      toast({ title: 'Not supported', description: 'Geolocation is not supported by your browser.', variant: 'destructive' });
+      toast({ title: 'Not supported', description: 'Geolocation is not supported by your browser.' });
       return;
     }
     setGeolocating(true);
@@ -263,7 +263,7 @@ export function AddressPicker({
           variant: 'destructive',
         });
       },
-      { timeout: 10000, maximumAge: 60000 },
+      { timeout: 10000 },
     );
   }, [toast]);
 
@@ -325,7 +325,7 @@ export function AddressPicker({
       </div>
 
       {/* Use my location button */}
-      {typeof navigator !== 'undefined' && !!navigator.geolocation && (
+      {!!navigator.geolocation && (
         <div className="flex justify-end">
           <Button
             type="button"
