@@ -156,7 +156,7 @@ Check specifically:
 - Consistent spacing? Orphaned elements?
 
 ### 6. Component and design-system correctness
-- Are the right shadcn primitives being used? (e.g., `<div>` where `<Card>` belongs)
+- Are the right shadcn primitives being used? (e.g., a generic container where an established primitive would improve hierarchy and consistency)
 - Are `Badge` variants matching the status semantics defined in Design Principle 8?
 - Are `Button`, `Select`, `Input` using the correct variant and size?
 - Are Tailwind tokens within the standard scale?
@@ -230,7 +230,7 @@ Stop when findings become low-signal. Do not pad.]
 Before finalizing:
 - [ ] Did I read the target file(s) before proposing?
 - [ ] Did I check installed shadcn components before proposing new ones?
-- [ ] Did I check all four states (loading, empty, error, data)?
+- [ ] Did I check all four states where the reviewed screen/component has async loading, empty, error, or data states?
 - [ ] Did I check role-gated actions against the permission matrix?
 - [ ] Are my top findings ordered by user impact, not ease of spotting?
 - [ ] Did I stop before padding with low-signal style nits?
