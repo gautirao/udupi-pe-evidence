@@ -86,6 +86,8 @@ Routing: qa-fast → supabase-engineer → security-reviewer
 RPCs or edge function maintenance (no access control change):
 Routing: qa-fast → supabase-engineer → code-reviewer
 
+Note: RLS and storage policy routes already end with `security-reviewer` — section F does not need to be separately applied for those cases.
+
 ---
 
 ### F) Security Gate (Non-negotiable)
@@ -102,15 +104,28 @@ Routing: qa-fast → architect → backend-engineer → code-reviewer → securi
 
 ---
 
-### G) Heavy Multi-Stream Work
+### G) Doc-only / read-only changes
 
-If >3 parallel subtasks or cross-domain:
+If the task touches only documentation, comments, or non-code config (e.g. `*.md`, `docs/`, `*.toml` with no behavioral change):
 
-Routing: team-lead
+Routing: (none — no agents needed)
+
+Skip qa-fast, engineer, code-reviewer, and E2E validation. Commit directly.
+
+---
+
+### H) Heavy Multi-Stream Work
+
+If the task genuinely requires multiple parallel workstreams that cannot be safely handled by a single agent pass (e.g. new backend endpoint + Flyway migration + frontend wiring, or supabase schema change + RLS + Spring Boot service changes):
+
+Routing: team-lead (Mode 2: Complex PR Decomposition)
 
 team-lead must:
-- Produce decomposition plan
-- Then delegate to appropriate agents
+- Confirm decomposition is warranted (not just a large single-stream task)
+- Produce a decomposition plan with subtasks, owners, non-goals, and gates
+- Delegate to the appropriate specialist agents
+
+Note: sprint kickoff analysis (team-lead Mode 1) is handled by SPRINT_EXECUTOR, not here.
 
 ---
 
@@ -159,7 +174,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   > "Review the codebase and identify risks for this planned change: [paste issue/PR description].
   > The feature does not exist yet — scan the surrounding codebase and flag what could go wrong."
 
-- Engineer agents (`frontend-engineer`, `backend-engineer`) MUST follow these rules — include them verbatim in every engineer Task prompt:
+- Engineer agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`) MUST follow these rules — include them verbatim in every engineer Task prompt:
   > 1. **Read every file you will modify before writing any changes.** Do not assume file contents.
   > 2. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
   > 3. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
@@ -168,7 +183,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: stop and surface to user.
-- `security-reviewer` always runs last when the Security Gate (E) applies.
+- `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
 
 ---

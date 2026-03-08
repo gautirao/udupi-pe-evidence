@@ -27,7 +27,7 @@ Before the first PR:
    - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
    - Store the recommended execution order in the checkpoint preamble as `Execution order:`.
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
-   - If team-lead flags spec gaps, surface them to the user before starting execution.
+   - If team-lead flags spec gaps: surface them to the user and **pause for confirmation** before starting execution. If the gap is in acceptance criteria or ambiguous scope, do not proceed until resolved or explicitly waived by the user.
 4. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
 5. Do NOT re-fetch individual issues each PR unless the checkpoint is stale. Use cached descriptions from step 2.
 
@@ -37,9 +37,9 @@ Before the first PR:
 
 For each Linear issue (PR N):
 
-1. **Fetch spec** — `get_issue` from Linear; capture full description into checkpoint `issue_description` field (first 300 chars). State issue id + title (1 line).
+1. **Use cached spec** — use the description cached during Sprint Start step 2. Only call `get_issue` again if the checkpoint is marked stale or this is a resumed sprint with no cached description. State issue id + title (1 line); capture first 300 chars of description into checkpoint `issue_description` field.
 2. **Mark In Progress** — `save_issue state=In Progress`
-3. **Bug fix gate** — if issue type is bugfix (title starts with `fix` or `bug`):
+3. **Bug fix gate** — if issue type is bugfix (Linear issue type = Bug, or title starts with `fix:`/`bug:`, or description explicitly says "bug" or "defect"):
    - Reproduce the defect with a targeted test or manual step. Confirm it fails. Document in checkpoint.
    - Do NOT proceed to engineer until failure is confirmed.
 4. **Run ROUTE_AND_RUN** — invoke each agent via Task tool in the routed order:
@@ -50,8 +50,9 @@ For each Linear issue (PR N):
      > 2. Output diffs or targeted snippets only — never rewrite an entire file unless it is new.
      > 3. Run existing tests relevant to the changed files after implementing. Report pass/fail.
    - `code-reviewer` after implementation (skip only if: risk=low AND single-file AND no logic change)
-   - `security-reviewer` last if Security Gate (E) applies
+   - `security-reviewer` last if Security Gate (F) applies
 5. **E2E validation** — run ROUTE_AND_RUN Step 3 (e2e suite) before committing. If e2e fails, stop and surface to user. Do NOT auto-fix.
+   Skip E2E (same as doc-only) when the PR touches only: SQL reference copies in `supabase-rpcs/`, `*.md` files, or `docs/` — no local frontend/backend behavior changes.
 6. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
    - Verify no uncommitted changes on main: `git status --short`
@@ -83,6 +84,7 @@ Status: <DONE|BLOCKED>
 Issue description (last PR, first 300 chars):
   <truncated spec text or NONE>
 Bugfix reproduced: <YES|NO|N/A>
+Routing used: <agent chain, e.g. qa-fast → backend-engineer → code-reviewer>
 Tests passed: <YES|NO|N/A>
 E2E passed: <YES|SKIPPED(doc-only)|BLOCKED — reason>
 Touched files:
@@ -116,6 +118,7 @@ When user pastes checkpoint + says resume:
 - Do NOT re-triage completed PRs.
 - Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from Linear.
 - Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
+- Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.
 - Immediately start on "Next PR".
 - Re-run ROUTE_AND_RUN only for that PR.
 
