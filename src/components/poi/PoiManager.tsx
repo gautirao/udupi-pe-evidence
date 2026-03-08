@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { searchNominatim, type NominatimResult } from '@/lib/geocode';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Pin, Trash2, PinOff } from 'lucide-react';
+import { Pin, Trash2, PinOff, MapPin, Loader2, Search, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { CATEGORY_LABELS, formatDistance } from '@/lib/poi-categories';
 
@@ -128,16 +129,66 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
   const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationResults, setLocationResults] = useState<NominatimResult[]>([]);
+  const [locationSearching, setLocationSearching] = useState(false);
+  const [locationChip, setLocationChip] = useState<{ name: string; lat: number; lon: number } | null>(null);
+  const [showLocationResults, setShowLocationResults] = useState(false);
+  const locationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (locationWrapperRef.current && !locationWrapperRef.current.contains(e.target as Node)) {
+        setShowLocationResults(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLocationSearch = (value: string) => {
+    setLocationQuery(value);
+    setLocationChip(null);
+    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
+    if (!value.trim()) {
+      setLocationResults([]);
+      setShowLocationResults(false);
+      return;
+    }
+    locationDebounceRef.current = setTimeout(async () => {
+      setLocationSearching(true);
+      try {
+        const res = await searchNominatim(value);
+        setLocationResults(res);
+        setShowLocationResults(res.length > 0);
+      } catch {
+        setLocationResults([]);
+      } finally {
+        setLocationSearching(false);
+      }
+    }, 400);
+  };
+
+  const handleLocationSelect = (result: NominatimResult) => {
+    setLocationChip({ name: result.display_name, lat: result.lat, lon: result.lon });
+    setLocationQuery(result.display_name);
+    setShowLocationResults(false);
+  };
+
+  const handleLocationClear = () => {
+    setLocationChip(null);
+    setLocationQuery('');
+    setLocationResults([]);
+  };
 
   const addMutation = useMutation({
     mutationFn: () =>
       api.post(`/api/listings/${listingId}/pois/manual`, {
         name: name.trim(),
         category,
-        latitude: latitude !== '' ? parseFloat(latitude) : undefined,
-        longitude: longitude !== '' ? parseFloat(longitude) : undefined,
+        latitude: locationChip?.lat,
+        longitude: locationChip?.lon,
       }),
     onSettled: () => {
       // Invalidates the dealer suggestions cache. The public POI cache
@@ -147,8 +198,9 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
     onSuccess: () => {
       setName('');
       setCategory('');
-      setLatitude('');
-      setLongitude('');
+      setLocationQuery('');
+      setLocationChip(null);
+      setLocationResults([]);
       onAdded();
     },
   });
@@ -188,29 +240,63 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="poi-lat">Latitude (optional)</Label>
-          <Input
-            id="poi-lat"
-            type="number"
-            step="any"
-            placeholder="e.g. 13.3409"
-            value={latitude}
-            onChange={(e) => setLatitude(e.target.value)}
-          />
+      <div className="space-y-1">
+        <Label htmlFor="poi-location">Location (optional)</Label>
+        <div className="relative" ref={locationWrapperRef}>
+          {locationChip ? (
+            /* Location chip */
+            <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 text-sm">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <span className="flex-1 truncate">{locationChip.name}</span>
+              <button
+                type="button"
+                onClick={handleLocationClear}
+                aria-label="Clear location"
+                className="shrink-0 rounded-sm hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            /* Search input */
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              {locationSearching && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+              <Input
+                id="poi-location"
+                placeholder="Search for a location…"
+                value={locationQuery}
+                onChange={(e) => handleLocationSearch(e.target.value)}
+                onFocus={() => locationResults.length > 0 && setShowLocationResults(true)}
+                className="pl-9 pr-9"
+              />
+            </div>
+          )}
+          {/* Dropdown results */}
+          {showLocationResults && locationResults.length > 0 && (
+            <ul className="absolute z-[1100] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+              {locationResults.map((r, i) => (
+                <li
+                  key={`${r.lat}-${r.lon}-${i}`}
+                  className="px-3 py-2 text-sm cursor-pointer hover:bg-accent truncate"
+                  onClick={() => handleLocationSelect(r)}
+                >
+                  <MapPin className="inline-block h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                  {r.display_name}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <div className="space-y-1">
-          <Label htmlFor="poi-lon">Longitude (optional)</Label>
-          <Input
-            id="poi-lon"
-            type="number"
-            step="any"
-            placeholder="e.g. 74.7421"
-            value={longitude}
-            onChange={(e) => setLongitude(e.target.value)}
-          />
-        </div>
+        <button
+          type="button"
+          className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+          onClick={handleLocationClear}
+        >
+          Add without location
+        </button>
       </div>
 
       {addMutation.isError && (
