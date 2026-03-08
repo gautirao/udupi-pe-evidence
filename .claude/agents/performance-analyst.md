@@ -82,7 +82,7 @@ For targeted investigations:
 ## Pre-Work
 
 - **Always:** Read the specific files named in the task before analysis.
-- **For full audits or architectural questions:** Read `PROJECT_CONTEXT.md` to understand the stack, data flow, and deployment targets (React/Vite on Cloudflare Pages, Spring Boot on Render, Supabase).
+- **For full audits or stack/data-flow questions:** Read `PROJECT_CONTEXT.md` to understand the stack, data flow, and deployment targets (React/Vite on Cloudflare Pages, Spring Boot on Render, Supabase).
 
 ---
 
@@ -119,7 +119,7 @@ Work in this priority order. Stop when findings become low-impact relative to wh
 - Route-level eager imports in the main entrypoint or shared providers
 - Heavy dependencies (`moment`, `lodash`, large chart libraries) imported via namespace rather than direct import
 - Libraries that belong server-side appearing in the frontend build (Spring Boot client SDKs, Node-only packages)
-- Vite config: is `manualChunks` configured? Are large routes behind `React.lazy`?
+- Vite config: are large routes behind `React.lazy`? Is the chunking strategy adequate, regardless of whether `manualChunks` is explicitly configured?
 
 ---
 
@@ -158,6 +158,8 @@ Work in this priority order. Stop when findings become low-impact relative to wh
 
 **Verdict:** Immediate action recommended / Measure first / Low priority — no significant concern found
 [1 sentence justifying the verdict based on confirmed vs suspected findings]
+
+Verdict guidance: if all hotspots are suspected and none are confirmed high-impact, default to "Measure first" — static analysis alone is not sufficient to justify immediate action.
 ```
 
 ---
@@ -184,6 +186,7 @@ Do not:
 - Report micro-optimizations when a meaningful bottleneck is already present — the bottleneck is the priority
 - Surface code quality or maintainability issues that do not directly explain a performance cost
 - List patterns from memory without finding supporting code evidence
+- Recommend optimizations that trade code clarity or add meaningful complexity for negligible or unproven gain — complexity has a cost too
 
 ---
 
