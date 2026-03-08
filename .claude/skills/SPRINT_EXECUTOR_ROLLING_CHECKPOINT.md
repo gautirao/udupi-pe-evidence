@@ -34,7 +34,7 @@ Before the first PR:
 5. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
    - The cached issue description is missing or truncated to fewer than 50 characters
    - The issue title in the checkpoint does not match the issue title in Linear
-   - The execution order in the checkpoint does not match the current Linear sprint order
+   - The execution order in the checkpoint does not match the current approved execution order for this sprint (team-lead-derived order if pre-flight ran, or original Linear order if no reorder was applied)
    - The repo is not on the expected branch or has unexpected uncommitted changes on main
 
 ---
@@ -57,7 +57,9 @@ For each Linear issue (PR N):
 
 5. **E2E validation** — run `ROUTE_AND_RUN` Step 3 (E2E Validation Policy). All E2E rules, failure handling, and the default doc-only skip are owned by `ROUTE_AND_RUN`.
 
-   Sprint-layer skip override (extends `ROUTE_AND_RUN` doc-only skip): also skip E2E when the PR touches only SQL reference copies in `supabase-rpcs/` — these have no local frontend/backend behavior change and share the same profile as doc-only changes.
+   Sprint-layer skip override (extends `ROUTE_AND_RUN` doc-only skip): also skip E2E when the PR touches only non-runtime reference artifacts that produce no local frontend/backend behavior change (e.g., SQL reference copies in `supabase-rpcs/`). Do not extend this override to files that affect runtime behavior.
+
+   **Sprint-layer override boundary:** any sprint-layer override declared here must be narrow, additive, and state-related (e.g., skip conditions, caching, checkpoint fields). Sprint-layer overrides must not redefine routing logic, reviewer gates, invocation rules, or E2E script behavior — those are owned by `ROUTE_AND_RUN`.
 
 6. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)

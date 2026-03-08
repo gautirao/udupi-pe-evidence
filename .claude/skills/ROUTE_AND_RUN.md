@@ -147,7 +147,7 @@ Never pause to ask for confirmation before executing any of these:
 - `gh pr merge <number> --merge --delete-branch` — merge pull request
 - `git checkout main && git pull origin main` — sync main after merge
 
-These apply during sprint execution and all ROUTE_AND_RUN agent runs.
+These pre-approvals apply to git operations performed within `ROUTE_AND_RUN`'s execution scope. The full sprint PR lifecycle — branch creation, commit, push, PR creation, CI monitoring, merge, and post-merge checkout — is owned by `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, not by this skill.
 
 ---
 
