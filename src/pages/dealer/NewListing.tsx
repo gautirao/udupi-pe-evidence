@@ -119,6 +119,38 @@ export default function NewListing() {
               Fill in the basic details. You can add images and address later.
             </CardDescription>
           </CardHeader>
+          {/* Step indicator */}
+          <div className="flex items-center justify-center gap-0 px-6 pb-4">
+            {[
+              { n: 1, label: 'Basic Info' },
+              { n: 2, label: 'Images' },
+              { n: 3, label: 'Location & Submit' },
+            ].map((step, i, arr) => (
+              <div key={step.n} className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
+                      step.n === 1
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {step.n}
+                  </div>
+                  <span
+                    className={`mt-1 text-xs ${
+                      step.n === 1 ? 'text-primary font-medium' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="w-12 h-px bg-border mx-2 mb-4" />
+                )}
+              </div>
+            ))}
+          </div>
           <CardContent className="space-y-6">
             {/* Property Type */}
             <div className="space-y-2">
@@ -235,7 +267,7 @@ export default function NewListing() {
                   {createListing.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Save as Draft
+                  {createListing.isPending ? 'Saving…' : 'Continue to Images & Location'}
                 </Button>
               </div>
             )}
