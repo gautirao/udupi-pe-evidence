@@ -35,10 +35,13 @@ Routing: A → B → C
 Choose the smallest valid path.
 
 ### A) Backend bugfix / small change
-Low risk:
+Low risk, single-file, no logic change (e.g. config value, constant, label):
 Routing: qa-fast → backend-engineer
 
-Medium/high risk (data integrity, transactions, concurrency, auth, money):
+Low/medium risk with logic change:
+Routing: qa-fast → backend-engineer → code-reviewer
+
+High risk (data integrity, transactions, concurrency, auth, money):
 Routing: qa-fast → backend-engineer → code-reviewer
 
 ---
@@ -142,7 +145,14 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   When invoking pre-implementation, use this Task prompt pattern:
   > "Review the codebase and identify risks for this planned change: [paste issue/PR description].
   > The feature does not exist yet — scan the surrounding codebase and flag what could go wrong."
+
+- Engineer agents (`frontend-engineer`, `backend-engineer`) MUST follow these rules — include them verbatim in every engineer Task prompt:
+  > 1. **Read every file you will modify before writing any changes.** Do not assume file contents.
+  > 2. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
+  > 3. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
+
 - `code-reviewer` runs AFTER the engineer completes the implementation.
+- Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: stop and surface to user.
 - `security-reviewer` always runs last when the Security Gate (E) applies.
@@ -151,11 +161,48 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 ---
 
 
+## Step 3 — E2E Validation (Mandatory after all agents complete)
+
+After the final routed agent completes, run the full e2e suite locally before committing:
+
+```bash
+# 1. Start backend via run-local.sh in background
+./backend/run-local.sh > /tmp/backend-e2e.log 2>&1 &
+BACKEND_PID=$!
+
+# 2. Start frontend (Vite) in background
+npm run dev > /tmp/frontend-e2e.log 2>&1 &
+FRONTEND_PID=$!
+
+# 3. Wait for both to be ready (poll until responding)
+VITE_PORT=${VITE_PORT:-5173}
+echo "Waiting for backend..." && until curl -sf http://localhost:8085/actuator/health > /dev/null 2>&1; do sleep 2; done
+echo "Waiting for frontend..." && until curl -sf http://localhost:${VITE_PORT} > /dev/null 2>&1; do sleep 2; done
+
+# 4. Run e2e
+npm run test:e2e:local
+E2E_EXIT=$?
+
+# 5. Stop servers
+kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+
+# 6. Fail the task if e2e failed
+[ $E2E_EXIT -eq 0 ] || exit 1
+```
+
+Rules:
+- Run this after code-reviewer (and security-reviewer if applicable) APPROVE.
+- If e2e fails: surface the failure to the user and stop. Do NOT auto-fix and re-run.
+- If backend or frontend fails to start within 60s: surface the error log and stop.
+- Skip this step ONLY for doc-only changes (*.md, docs/) — never skip for code changes.
+
+---
+
 ## Execution Rules (Mandatory)
 
 - Agents execute sequentially.
 - Do NOT merge agent outputs.
-- After final routed agent completes, STOP.
+- After final routed agent completes, run Step 3 (E2E Validation), then STOP.
 - Do NOT suggest improvements beyond scope.
 - One pass only.
 - Only re-run if code-reviewer or security-reviewer marks BLOCKING.

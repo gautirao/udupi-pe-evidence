@@ -17,31 +17,48 @@ Checkpoint is the single source of truth.
 
 ---
 
+## Sprint Start (Once per sprint, not per PR)
+
+Before the first PR:
+1. Fetch all sprint issue IDs + titles in one Linear call — store in checkpoint preamble as `Sprint issues:` list.
+2. Do NOT re-fetch individual issues each PR unless the checkpoint is stale. Use the cached title to identify the issue; fetch full description only when needed for implementation context.
+
+---
+
 ## Execution Loop (Mandatory)
 
 For each Linear issue (PR N):
 
-1. **Fetch spec** — `get_issue` from Linear; state issue id + title (1 line)
+1. **Fetch spec** — `get_issue` from Linear; capture full description into checkpoint `issue_description` field (first 300 chars). State issue id + title (1 line).
 2. **Mark In Progress** — `save_issue state=In Progress`
-3. **Run ROUTE_AND_RUN** — invoke each agent via Task tool in the routed order:
+3. **Bug fix gate** — if issue type is bugfix (title starts with `fix` or `bug`):
+   - Reproduce the defect with a targeted test or manual step. Confirm it fails. Document in checkpoint.
+   - Do NOT proceed to engineer until failure is confirmed.
+4. **Run ROUTE_AND_RUN** — invoke each agent via Task tool in the routed order:
    - `qa-fast` first: pass issue description as context with prompt:
      > "Review the codebase and identify risks for this planned change: [issue description]. The feature does not exist yet."
-   - Engineer agent(s) next: implement the change
-   - `code-reviewer` after implementation
+   - Engineer agent(s) next: implement the change. Include in every engineer Task prompt:
+     > 1. Read every file you will modify before writing any changes. Do not assume file contents.
+     > 2. Output diffs or targeted snippets only — never rewrite an entire file unless it is new.
+     > 3. Run existing tests relevant to the changed files after implementing. Report pass/fail.
+   - `code-reviewer` after implementation (skip only if: risk=low AND single-file AND no logic change)
    - `security-reviewer` last if Security Gate (E) applies
-4. **Git + PR**
+5. **E2E validation** — run ROUTE_AND_RUN Step 3 (e2e suite) before committing. If e2e fails, stop and surface to user. Do NOT auto-fix.
+6. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
+   - Verify no uncommitted changes on main: `git status --short`
    - `git checkout -b <type>/pr-<id>-<short-slug>`
-   - Run minimal checks (tests/lint) relevant to the change
-   - `git add <files>` (specific files only)
+   - `git add <files>` (specific files only — never `git add .`)
    - `git commit -m "<type>(<scope>): <description> (PR-<id>)"`
    - `git push -u origin <branch>`
    - `gh pr create --title "..." --body "..." --base main`
-   - Merge PR (wait for CI green)
+   - Wait for CI: `gh pr checks <pr-number> --watch --timeout 600`
+   - If CI fails: stop, surface failure log to user, emit BLOCKED checkpoint.
+   - If CI green: merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
-5. **Close issue** — `save_issue state=Done`
-6. **Play chime** — `afplay /System/Library/Sounds/Hero.aiff`
-7. **Emit checkpoint**, then auto-advance to next issue
+7. **Close issue** — `save_issue state=Done`
+8. **Play chime** — `afplay /System/Library/Sounds/Hero.aiff`
+9. **Emit checkpoint**, then auto-advance to next issue
 
 ---
 
@@ -51,11 +68,19 @@ Output exactly:
 
 === ROLLING CHECKPOINT START ===
 Sprint: <name/id>
+Sprint issues: <RE-XX Title | RE-XX Title | ...> (all issues, one line)
 Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
+Issue description (last PR, first 300 chars):
+  <truncated spec text or NONE>
+Bugfix reproduced: <YES|NO|N/A>
+Tests passed: <YES|NO|N/A>
+E2E passed: <YES|SKIPPED(doc-only)|BLOCKED — reason>
 Touched files:
 - <file1>
 - <file2>
+Key files read (context):
+- <file read for context, not modified — or NONE>
 Key decisions:
 - <decision or NONE>
 Risks:
@@ -80,6 +105,8 @@ When user pastes checkpoint + says resume:
 - Treat checkpoint as authoritative state (it overrides conversational memory).
 - Do NOT infer prior context outside checkpoint.
 - Do NOT re-triage completed PRs.
+- Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from Linear.
+- Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
 - Immediately start on "Next PR".
 - Re-run ROUTE_AND_RUN only for that PR.
 
