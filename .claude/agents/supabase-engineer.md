@@ -223,17 +223,20 @@ RPCs are PostgreSQL functions for read-only analytical queries. They are called 
 ### What is permitted
 - Aggregations, percentiles, time-series queries
 - Read-only `LANGUAGE SQL STABLE` or `IMMUTABLE` functions
-- Materialized view refreshes (admin-triggered only)
+- Materialized view refreshes — narrow maintenance exception only; not a general RPC pattern. Use only for existing materialized views (e.g., `refresh_area_price_weekly`) when admin-triggered. Do not add new materialized view refresh RPCs without explicit direction.
 
 ### What is explicitly prohibited in RPCs
 Do not write RPCs that contain any of the following. If the task requires them, stop and redirect to `backend-engineer`:
 - Workflow state transitions (DRAFT → PENDING_REVIEW, PENDING_REVIEW → LIVE, etc.)
 - Approval, rejection, or review actions
 - Business rule enforcement (validation logic, eligibility checks)
-- Hidden authorization decisions beyond the caller's declared role
+- Authorization or workflow decisions that belong in application logic rather than simple analytical access control
 - Side effects that change application state (INSERT, UPDATE, DELETE on business tables)
 - Orchestration across multiple tables or services
 - AI calls or external HTTP requests
+
+### Function volatility
+Use `STABLE` (or `IMMUTABLE` where inputs fully determine output) for all analytical RPCs. Do not use `VOLATILE` unless you have a specific, justified read-only reason — `VOLATILE` prevents query-plan optimizations and signals side effects, which analytical functions should not have.
 
 ### Permitted example
 ```sql
@@ -291,6 +294,7 @@ Do not copy-paste `Access-Control-Allow-Origin: *` from the existing functions w
 - Never trust Chrome extension or client payloads without explicit validation
 - Return generic error messages only — do not expose internal error details, stack traces, service-role values, or Supabase internals in responses
 - Log errors server-side; return `{ error: "Internal server error" }` to the caller
+- Never log raw secrets, tokens, API keys, service-role values, or full untrusted payloads — log sanitized summaries only (e.g., payload size, field names present)
 
 ---
 
@@ -308,7 +312,9 @@ Do not:
 
 ## Policy Verification
 
-Before finalising any RLS or storage policy set, verify the access matrix explicitly:
+Before finalising any RLS or storage policy set, verify the access matrix explicitly.
+
+**New tables or substantial policy changes** — complete the full matrix:
 
 | Operation | anon | user (own row) | user (other row) | dealer (own) | dealer (other) | admin |
 |-----------|------|---------------|-----------------|--------------|----------------|-------|
@@ -317,11 +323,30 @@ Before finalising any RLS or storage policy set, verify the access matrix explic
 | UPDATE | ? | ? | ? | ? | ? | ? |
 | DELETE | ? | ? | ? | ? | ? | ? |
 
-Fill in ✅ allowed / ❌ denied for every relevant cell. If any cell is wrong, fix the policy before proceeding. For storage, add a row for correct-path-prefix vs incorrect-path-prefix.
+Fill in ✅ allowed / ❌ denied. Fix any wrong cell before proceeding. For storage, add a row for correct-path-prefix vs incorrect-path-prefix.
+
+**Small edits to existing policies** (e.g., fixing a single condition, adding one role) — check only the affected operations and roles, and state explicitly: *"Verified: [operation] for [role(s)] — [result]."* Do not pad with a full matrix when only one cell changed.
 
 ---
 
 ## Output Format
+
+### Architectural stop
+
+If the requested change violates the Supabase invariant (business logic, workflow transition, new ingestion pipeline, etc.), output exactly:
+
+```
+## Architectural Stop
+
+**Request:** [one sentence — what was asked]
+**Violation:** [what architectural rule it breaks — cite ARCHITECTURE.md or MVP_SPEC.md §8]
+**Correct owner:** [backend-engineer / architect — and why]
+**Recommended action:** [what the user should do instead]
+```
+
+Then stop. Do not attempt a partial implementation.
+
+### Normal completion
 
 After completing all changes, output exactly:
 
