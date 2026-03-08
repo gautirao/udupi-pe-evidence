@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, Check, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 // Fix default marker icons in Leaflet (same fix as PropertyMap)
 delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl;
@@ -59,6 +60,12 @@ function MapFlyTo({ position }: { position: L.LatLngExpression | null }) {
       map.flyTo(position, 16, { duration: 0.8 });
     }
   }, [position, map]);
+  return null;
+}
+
+/** Forward map click events to a callback. */
+function MapClickHandler({ onClick }: { onClick: (latlng: L.LatLng) => void }) {
+  useMapEvents({ click: (e) => onClick(e.latlng) });
   return null;
 }
 
@@ -110,6 +117,10 @@ export function AddressPicker({
 
   // Parsed address fields for display and confirm output
   const [parsedAddress, setParsedAddress] = useState<ParsedAddress>({ address_line1: '' });
+
+  const [geolocating, setGeolocating] = useState(false);
+
+  const { toast } = useToast();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -191,6 +202,71 @@ export function AddressPicker({
     }
   }, []);
 
+  // --- map click → place/move pin, require explicit confirm ---
+  const handleMapClick = useCallback(async (latlng: L.LatLng) => {
+    const pos: L.LatLngTuple = [latlng.lat, latlng.lng];
+    setPinPosition(pos);
+    setConfirmed(false);
+    setDragged(true);
+
+    try {
+      const rev = await reverseGeocode(latlng.lat, latlng.lng);
+      if (rev) {
+        const parsed = parseAddress(rev.address);
+        setParsedAddress(parsed);
+        setDisplayName(rev.display_name);
+        setQuery(rev.display_name);
+      }
+    } catch {
+      // keep existing display name on failure
+    }
+  }, []);
+
+  // --- geolocation: use browser location to place pin ---
+  const handleUseMyLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast({ title: 'Not supported', description: 'Geolocation is not supported by your browser.' });
+      return;
+    }
+    setGeolocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const pos: L.LatLngTuple = [latitude, longitude];
+        setPinPosition(pos);
+        setConfirmed(false);
+        setDragged(true);
+        try {
+          const rev = await reverseGeocode(latitude, longitude);
+          if (rev) {
+            const parsed = parseAddress(rev.address);
+            setParsedAddress(parsed);
+            setDisplayName(rev.display_name);
+            setQuery(rev.display_name);
+          }
+        } catch {
+          // keep existing display name
+        } finally {
+          setGeolocating(false);
+        }
+      },
+      (error) => {
+        setGeolocating(false);
+        const messages: Record<number, string> = {
+          1: 'Location access denied. Please allow location access in your browser settings.',
+          2: 'Location unavailable. Please try searching manually.',
+          3: 'Location request timed out. Please try again.',
+        };
+        toast({
+          title: 'Could not get location',
+          description: messages[error.code] ?? 'An unknown error occurred.',
+          variant: 'destructive',
+        });
+      },
+      { timeout: 10000 },
+    );
+  }, [toast]);
+
   // --- explicit confirm after drag ---
   const handleConfirmClick = useCallback(() => {
     if (!pinPosition) return;
@@ -248,6 +324,32 @@ export function AddressPicker({
         )}
       </div>
 
+      {/* Use my location button */}
+      {!!navigator.geolocation && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleUseMyLocation}
+            disabled={geolocating}
+          >
+            {geolocating ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                Getting location…
+              </>
+            ) : (
+              <>
+                <MapPin className="h-3 w-3 mr-1" />
+                Use my location
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* Map */}
       <div className="h-[300px] rounded-lg overflow-hidden border">
         <MapContainer
@@ -261,6 +363,7 @@ export function AddressPicker({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MapFlyTo position={pinPosition} />
+          <MapClickHandler onClick={handleMapClick} />
           {pinPosition && (
             <Marker
               position={pinPosition}
@@ -318,7 +421,7 @@ export function AddressPicker({
 
       {!pinPosition && (
         <p className="text-sm text-muted-foreground">
-          Search for a location above, then drag the pin to the exact spot.
+          Search for a location above, click the map to place a pin, or use "Use my location".
         </p>
       )}
     </div>
