@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Pin, Trash2, PinOff } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import { CATEGORY_LABELS, formatDistance } from '@/lib/poi-categories';
 
 interface PoiResponse {
@@ -235,7 +236,7 @@ interface PoiManagerProps {
 
 export function PoiManager({ listingId }: PoiManagerProps) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('suggestions');
+  const [activeTab, setActiveTab] = useState('nearby');
 
   const {
     data: pois,
@@ -270,6 +271,8 @@ export function PoiManager({ listingId }: PoiManagerProps) {
     },
   });
 
+  const unapprovedPois = (pois ?? []).filter((p) => !p.approved);
+
   const approvedPois = (pois ?? [])
     .filter((p) => p.approved)
     .sort((a, b) => {
@@ -287,13 +290,19 @@ export function PoiManager({ listingId }: PoiManagerProps) {
       <CardContent>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
-            <TabsTrigger value="suggestions">Suggestions</TabsTrigger>
-            <TabsTrigger value="approved">Approved</TabsTrigger>
-            <TabsTrigger value="add">Add Manual</TabsTrigger>
+            <TabsTrigger value="nearby">Nearby Places</TabsTrigger>
+            <TabsTrigger value="approved">
+              Approved
+              {approvedPois.length > 0 && (
+                <span className="ml-1 rounded-full bg-primary text-primary-foreground text-xs px-1.5 py-0.5">
+                  {approvedPois.length}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
 
-          {/* Suggestions tab */}
-          <TabsContent value="suggestions">
+          {/* Nearby Places tab */}
+          <TabsContent value="nearby">
             {isLoading && <SkeletonRows />}
             {isError && (
               <Alert variant="destructive">
@@ -302,18 +311,18 @@ export function PoiManager({ listingId }: PoiManagerProps) {
                 </AlertDescription>
               </Alert>
             )}
-            {!isLoading && !isError && (pois ?? []).length === 0 && (
+            {!isLoading && !isError && unapprovedPois.length === 0 && (
               <p className="text-sm text-muted-foreground py-4 text-center">
-                No POI suggestions found for this listing.
+                No nearby places found for this listing.
               </p>
             )}
-            {!isLoading && !isError && (pois ?? []).length > 0 && (
+            {!isLoading && !isError && unapprovedPois.length > 0 && (
               <div>
-                {(pois ?? []).map((poi) => (
+                {unapprovedPois.map((poi) => (
                   <PoiRow
                     key={poi.id}
                     poi={poi}
-                    showApprove={!poi.approved}
+                    showApprove={true}
                     onApprove={(id) => approveMutation.mutate(id)}
                     onPin={(id) => pinMutation.mutate(id)}
                     onDelete={(id) => deleteMutation.mutate(id)}
@@ -355,11 +364,9 @@ export function PoiManager({ listingId }: PoiManagerProps) {
                 ))}
               </div>
             )}
-          </TabsContent>
-
-          {/* Add Manual tab */}
-          <TabsContent value="add">
-            <AddManualForm listingId={listingId} onAdded={() => setActiveTab('approved')} />
+            <Separator className="my-4" />
+            <p className="text-sm font-medium mb-3">Add manually</p>
+            <AddManualForm listingId={listingId} onAdded={() => {}} />
           </TabsContent>
         </Tabs>
 
