@@ -21,7 +21,15 @@ Checkpoint is the single source of truth.
 
 Before the first PR:
 1. Fetch all sprint issue IDs + titles in one Linear call — store in checkpoint preamble as `Sprint issues:` list.
-2. Do NOT re-fetch individual issues each PR unless the checkpoint is stale. Use the cached title to identify the issue; fetch full description only when needed for implementation context.
+2. Fetch full descriptions for all issues (one `get_issue` call each) — needed for team-lead pre-flight.
+3. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, and descriptions as context:
+   > "Sprint issues: [paste all issue IDs + titles + descriptions]. Run Mode 1: Sprint Kickoff Analysis."
+   - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
+   - Store the recommended execution order in the checkpoint preamble as `Execution order:`.
+   - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
+   - If team-lead flags spec gaps, surface them to the user before starting execution.
+4. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
+5. Do NOT re-fetch individual issues each PR unless the checkpoint is stale. Use cached descriptions from step 2.
 
 ---
 
@@ -69,6 +77,7 @@ Output exactly:
 === ROLLING CHECKPOINT START ===
 Sprint: <name/id>
 Sprint issues: <RE-XX Title | RE-XX Title | ...> (all issues, one line)
+Execution order: <RE-XX | RE-XX | ...> (team-lead recommended order, or ORIGINAL if no reorder)
 Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Issue description (last PR, first 300 chars):
