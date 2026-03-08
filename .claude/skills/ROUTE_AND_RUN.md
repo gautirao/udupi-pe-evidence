@@ -8,7 +8,7 @@ Do NOT merge agent outputs.
 Process: triage → route → sequential agent execution → STOP.
 
 ## Agents
-qa-fast, backend-engineer, frontend-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
+qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
 
 ---
 
@@ -76,7 +76,19 @@ Routing: qa-fast → backend-engineer → frontend-engineer → code-reviewer
 
 ---
 
-### E) Security Gate (Non-negotiable)
+### E) Supabase layer work
+
+If task touches RLS policies, Supabase Storage policies, PostgreSQL RPCs (supabase-rpcs/), or existing Supabase Edge Functions:
+
+RLS or storage policies (access control changes):
+Routing: qa-fast → supabase-engineer → security-reviewer
+
+RPCs or edge function maintenance (no access control change):
+Routing: qa-fast → supabase-engineer → code-reviewer
+
+---
+
+### F) Security Gate (Non-negotiable)
 
 If task touches:
 auth/authz/JWT, secrets, PII, payments, permission changes, CORS/CSP, destructive migrations
@@ -90,7 +102,7 @@ Routing: qa-fast → architect → backend-engineer → code-reviewer → securi
 
 ---
 
-### F) Heavy Multi-Stream Work
+### G) Heavy Multi-Stream Work
 
 If >3 parallel subtasks or cross-domain:
 
@@ -131,6 +143,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 | `qa-fast` | `.claude/agents/qa-fast.md` | Pre-implementation risk scan | Critical Paths, Edge Cases, Smoke Script, Risks |
 | `backend-engineer` | `.claude/agents/backend-engineer.md` | Implements backend code | Working code + tests |
 | `frontend-engineer` | `.claude/agents/frontend-engineer.md` | Implements frontend UI code | Working UI code |
+| `supabase-engineer` | `.claude/agents/supabase-engineer.md` | RLS policies, storage policies, RPCs, edge function maintenance | Working SQL / TypeScript |
 | `code-reviewer` | `.claude/agents/code-reviewer.md` | Reviews completed implementation | APPROVE or REQUEST CHANGES table |
 | `architect` | `.claude/agents/architect.md` | API/schema/design decisions | Read-only design output |
 | `performance-analyst` | `.claude/agents/performance-analyst.md` | Query/perf analysis | Read-only analysis |
