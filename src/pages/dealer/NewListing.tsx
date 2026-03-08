@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { PriceField } from '@/components/dealer/PriceField';
 import {
   Select,
   SelectContent,
@@ -37,7 +38,7 @@ export default function NewListing() {
 
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
   const [title, setTitle] = useState('');
-  const [price, setPrice] = useState('');
+  const [priceRupees, setPriceRupees] = useState<number | null>(null);
   const [description, setDescription] = useState('');
 
   // Conditional field state (captured for UX; persisted on edit page via PUT)
@@ -60,13 +61,12 @@ export default function NewListing() {
   }
 
   const isCommercial = propertyType === 'commercial';
-  const canSubmit = propertyType !== '' && !isCommercial && price !== '';
+  const canSubmit = propertyType !== '' && !isCommercial && priceRupees != null && priceRupees > 0;
 
   const handleSaveDraft = async () => {
     if (!propertyType || isCommercial) return;
 
-    const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum <= 0) {
+    if (!priceRupees || priceRupees <= 0) {
       toast({
         title: 'Invalid price',
         description: 'Please enter a valid price greater than 0.',
@@ -82,7 +82,7 @@ export default function NewListing() {
       {
         propertyType,
         title: title.trim() || undefined,
-        price: priceNum,
+        price: priceRupees,
         description: description.trim() || undefined,
         landArea: landAreaNum && !isNaN(landAreaNum) ? landAreaNum : undefined,
         bedrooms: bedroomsNum && !isNaN(bedroomsNum) ? bedroomsNum : undefined,
@@ -201,17 +201,12 @@ export default function NewListing() {
                 </div>
 
                 {/* Price */}
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price (INR) *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    min="1"
-                    placeholder="e.g. 2500000"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                </div>
+                <PriceField
+                  id="price"
+                  initialRupees={null}
+                  onChange={setPriceRupees}
+                  required
+                />
 
                 {/* Description */}
                 <div className="space-y-2">
