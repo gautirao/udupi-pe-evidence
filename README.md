@@ -50,6 +50,47 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
+## Testing
+
+### Unit tests (Vitest)
+
+```sh
+npm run test          # single run
+npm run test:watch    # watch mode — re-runs on save
+npx vitest --ui       # browser UI at localhost:51204 with test explorer + diffs
+```
+
+Tests live in `src/**/*.test.tsx`.
+
+### E2E tests (Playwright)
+
+By default e2e runs headless against production. To run locally against the dev server:
+
+```sh
+# Terminal 1
+npm run dev
+
+# Terminal 2 — interactive UI mode (recommended)
+PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test --ui
+
+# Or headed (watch the browser)
+PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test --headed
+
+# View the HTML report after any run
+npx playwright show-report
+```
+
+Tests live in `e2e/`.
+
+### Before merging a PR
+
+```sh
+npm run test          # unit tests must pass
+npm run test:e2e      # e2e must pass
+```
+
+---
+
 ## What technologies are used for this project?
 
 This project is built with:

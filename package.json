@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:local": "bash scripts/run-e2e-local.sh",
+    "prepare": "chmod +x scripts/run-e2e-local.sh .githooks/pre-push && git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
