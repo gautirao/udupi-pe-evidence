@@ -166,6 +166,21 @@
     .hidden {
       display: none !important;
     }
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #333;
+      border-radius: 6px;
+      background: #0f0f23;
+      color: #fff;
+      font-size: 13px;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    select:focus {
+      outline: none;
+      border-color: #0ea5e9;
+    }
   </style>
 </head>
 <body>
@@ -206,6 +221,18 @@
     <button class="btn btn-secondary" id="autoScrollBtn">📜 Load More Posts (Auto-Scroll)</button>
     <button class="btn btn-danger hidden" id="stopScrollBtn">⏹️ Stop Scrolling</button>
     <button class="btn btn-secondary" id="selectAllBtn">Select All Posts</button>
+    <div class="section" style="margin-bottom: 8px; padding: 10px 12px;">
+      <div class="section-title">Smart Select District</div>
+      <select id="districtSelect">
+        <option value="udupi">Udupi</option>
+        <option value="dakshina_kannada">Dakshina Kannada (Mangalore)</option>
+        <option value="uttara_kannada">Uttara Kannada (Karwar)</option>
+        <option value="bangalore">Bangalore</option>
+        <option value="mysuru">Mysuru (Mysore)</option>
+        <option value="shimoga">Shivamogga (Shimoga)</option>
+        <option value="all">All Districts</option>
+      </select>
+    </div>
     <button class="btn btn-smart" id="smartSelectBtn">✨ Smart Select</button>
     <div id="smartResult"></div>
     <button class="btn btn-primary" id="extractBtn" disabled>Extract Selected</button>

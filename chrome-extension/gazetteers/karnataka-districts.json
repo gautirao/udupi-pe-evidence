@@ -1,0 +1,191 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Locality gazetteer for Karnataka property post smart-select filter. Covers 6 districts across coastal Karnataka + inland expansion targets.",
+    "districts": 6,
+    "usage": "Load into chrome.storage.local on first run. Keys match DISTRICT_GAZETTEERS in content.js.",
+    "adding_district": "Add a new entry under 'districts' with displayName, canonical (>=50 entries), and aliases. Reload the extension or update chrome.storage.local to apply."
+  },
+  "districts": {
+    "udupi": {
+      "displayName": "Udupi",
+      "canonical": [
+        "udupi", "manipal", "brahmavar", "barkur", "katapady", "padubidri", "shirva",
+        "kundapur", "kundapura", "byndoor", "navunda", "hebri", "karkala", "nitte",
+        "moodabidri", "mudabidri", "kaup", "malpe", "saligrama", "hejamadi", "alevoor",
+        "kemmannu", "santhekatte", "ambalpady", "bannanje", "shivally", "shivalli",
+        "kodavoor", "mulky", "mulki", "kadekar", "kalsanka", "nanthur", "biloor",
+        "thonse", "parkala", "pangala", "sanoor", "uchila", "hiriadka", "perdur",
+        "indrali", "kuntikana", "ajjarkad", "kunjibettu", "car street", "padu", "nada",
+        "pavanje", "hejamadi cross", "saligrama junction", "manipal road", "malpe road",
+        "kundapur road", "brahmavar road", "karkala road", "padubidri road",
+        "udupi bypass", "bypass road", "nh 66", "nh66", "nh 17", "tiger circle",
+        "end point", "manipal junction", "manipal main road", "100 feet road",
+        "60 feet road", "40 feet road", "main road", "bajpe", "kotathattu", "nagara",
+        "nalir", "thottam", "kemmannu bridge", "new town", "uppoor", "kota", "koteshwara"
+      ],
+      "aliases": {
+        "udpi": "udupi", "manipalu": "manipal", "mit": "manipal", "mahe": "manipal",
+        "kmc": "manipal", "kasturba": "manipal", "bramhavar": "brahmavar",
+        "kundapoor": "kundapur", "karkal": "karkala", "saligram": "saligrama",
+        "katpadi": "katapady", "hejamady": "hejamadi", "shivalli": "shivally"
+      },
+      "positionalHints": [
+        "near manipal", "behind college", "opposite udupi", "near tiger circle",
+        "manipal road side", "malpe beach area", "nh 66 side", "bypass road area"
+      ]
+    },
+    "dakshina_kannada": {
+      "displayName": "Dakshina Kannada",
+      "canonical": [
+        "mangalore", "mangaluru", "bantwal", "belthangady", "puttur", "sullia",
+        "moodabidri", "vitla", "uppinangady", "kadaba", "subramanya", "dharmasthala",
+        "kinnigoli", "kateel", "ullal", "surathkal", "talapady", "bajpe", "mudipu",
+        "pumpwell", "kankanady", "falnir", "hampankatta", "kottara", "urwa", "balmatta",
+        "kadri", "bejai", "bondel", "attavar", "pandeshwar", "lalbagh", "derebail",
+        "kulur", "kavoor", "vamanjoor", "konchady", "maryhill", "bendoorwell",
+        "kodialbail", "ballalbagh", "mannagudda", "dongerkery", "nanthoor",
+        "shaktinagar", "maroli", "pachanady", "jeppoo", "bunder", "padil", "chilimbi",
+        "bikarnakatte", "morgans gate", "bunts hostel", "ashok nagar", "jyothi circle",
+        "boloor", "milagres", "kpt colony", "mahaveer circle", "kudroli", "pumpwell circle",
+        "mangalore port", "panambur", "tannirbhavi", "baikampady", "kulshekar",
+        "bondel circle", "kadri hills", "light house hill", "bejai kapikad",
+        "mangalore south", "mangalore north"
+      ],
+      "aliases": {
+        "mangaluru": "mangalore", "mangaloor": "mangalore", "mng": "mangalore",
+        "belthangadi": "belthangady", "mudbidri": "moodabidri",
+        "moodubidri": "moodabidri", "buntwal": "bantwal", "banthwal": "bantwal",
+        "dk": "dakshina kannada", "d k": "dakshina kannada"
+      },
+      "positionalHints": [
+        "near mangalore", "hampankatta side", "pumpwell area", "kankanady area",
+        "mangalore city", "mangaluru city"
+      ]
+    },
+    "uttara_kannada": {
+      "displayName": "Uttara Kannada",
+      "canonical": [
+        "karwar", "ankola", "kumta", "honavar", "honnavar", "sirsi", "siddapur",
+        "yellapur", "haliyal", "dandeli", "joida", "bhatkal", "gokarna", "murudeshwara",
+        "murdeshwar", "mirjan", "baad", "halga", "shirali", "kasarkod", "kadwad",
+        "belekeri", "sadashivgad", "idagunji", "banki", "bilagi", "supa", "mundgod",
+        "talaguppa", "majali", "shirur", "tadri", "kagal", "karbha", "mallapur",
+        "shastri nagar", "belekeri port", "kaiga", "gokarna beach", "om beach",
+        "karwar port", "kumta town", "ankola town", "huliyar", "tilmatii",
+        "devgad", "gangavali", "kali river", "udgiri", "ramgad", "aghanashini",
+        "bedti", "apmc karwar", "ambikanagara", "ravindra nagar karwar",
+        "karwar city", "haliyala", "dandeli forest", "castlerock",
+        "yellapur taluk", "siddapur taluk"
+      ],
+      "aliases": {
+        "murdeshwar": "murudeshwara", "murdeshwara": "murudeshwara",
+        "bhatkala": "bhatkal", "bhatkhala": "bhatkal",
+        "siddapura": "siddapur", "yellapura": "yellapur",
+        "haliyal": "haliyal", "haliyala": "haliyal",
+        "uk": "uttara kannada", "uttar kannada": "karwar"
+      },
+      "positionalHints": [
+        "near karwar", "gokarna side", "murudeshwara area", "sirsi taluk",
+        "bhatkal side", "near dandeli"
+      ]
+    },
+    "bangalore": {
+      "displayName": "Bangalore",
+      "canonical": [
+        "indiranagar", "whitefield", "hebbal", "sarjapur", "hsr layout", "electronic city",
+        "yelahanka", "jayanagar", "jp nagar", "bannerghatta road", "kengeri",
+        "rajajinagar", "malleshwaram", "rt nagar", "marathahalli", "banashankari",
+        "kr puram", "devanahalli", "hoskote", "nelamangala", "koramangala",
+        "btm layout", "bellandur", "varthur", "domlur", "richmond town", "vasanth nagar",
+        "sadashivanagar", "basavanagudi", "padmanabhanagar", "vijayanagar", "magadi road",
+        "tumkur road", "mysore road", "hosur road", "outer ring road", "hennur",
+        "horamavu", "kr market", "mg road", "brigade road", "chamrajpet",
+        "wilson garden", "shivajinagar", "lingarajapuram", "frazer town", "benson town",
+        "cox town", "tasker town", "ulsoor", "kadugodi", "mahadevapura", "ejipura",
+        "banaswadi", "kammanahalli", "cv raman nagar", "hal", "old airport road",
+        "pai layout", "jeevan bhima nagar", "rr nagar", "uttarahalli", "gottigere",
+        "hulimavu", "bilekahalli", "arekere", "hongasandra", "begur", "haralur",
+        "ramamurthy nagar", "nagarbhavi", "bannerghatta", "itpl", "aecs layout",
+        "sarjapur road", "whitefield road", "kr puram bridge", "electronic city phase 1",
+        "electronic city phase 2", "hsr 5th sector", "hsr 6th sector",
+        "jp nagar 7th phase", "banashankari 3rd stage"
+      ],
+      "aliases": {
+        "bengaluru": "bangalore", "blr": "bangalore", "bnglr": "bangalore",
+        "b'lore": "bangalore", "bangalore south": "bangalore",
+        "bangalore north": "bangalore", "bangalore east": "bangalore",
+        "bangalore urban": "bangalore", "bangalore rural": "bangalore",
+        "hsr": "hsr layout", "jpnagar": "jp nagar", "rtnagar": "rt nagar",
+        "whitfield": "whitefield", "e city": "electronic city",
+        "ecity": "electronic city", "ecil": "electronic city"
+      },
+      "positionalHints": [
+        "near whitefield", "hsr layout area", "electronic city side",
+        "sarjapur road area", "outer ring road", "near koramangala",
+        "bannerghatta road side", "old airport road area"
+      ]
+    },
+    "mysuru": {
+      "displayName": "Mysuru (Mysore)",
+      "canonical": [
+        "mysore", "mysuru", "vijayanagar", "kuvempunagar", "hebbal", "gokulam",
+        "nazarbad", "yadavagiri", "rajivnagar", "hunsur", "nanjangud", "t narasipur",
+        "periyapatna", "kr nagar", "krishnaraja sagar", "vontikoppal",
+        "jayalakshmipuram", "lakshmipuram", "bogadi", "ittigegud", "hootagalli",
+        "metagalli", "dattagalli", "ramakrishnanagar", "saraswathipuram",
+        "kalidasa road", "bannimantap", "mandi mohalla", "devaraja market",
+        "chamundeshwari", "kesare", "siddalingapura", "srirampura", "vidyaranyapura",
+        "lingambudhi", "srirangapatna", "hunsur road", "nanjangud road", "ring road",
+        "jlb road", "bamboo bazar", "krs road", "chamaraja road", "ashoka road",
+        "hanumanthanagar", "pushpagiri", "paduvarahalli", "jayachamarajendra road",
+        "mysore palace", "mysore university", "ksrtc bus stand", "nazarbad mohalla",
+        "chamundi hills", "brindavan gardens", "hebbal lake", "t narasipur road",
+        "manandavadi road", "k r nagar", "kuvempu circle", "jp nagar mysore",
+        "n r mohalla", "mandi mohalla area", "lashkar mohalla"
+      ],
+      "aliases": {
+        "mysuru": "mysore", "mys": "mysore", "mysore city": "mysore",
+        "krs": "krishnaraja sagar", "krishnarajasagara": "krishnaraja sagar",
+        "srirangapatnam": "srirangapatna", "seringapatam": "srirangapatna",
+        "t narasipura": "t narasipur", "tnarasipur": "t narasipur",
+        "periapatna": "periyapatna", "k r nagar": "kr nagar",
+        "kuvempu nagar": "kuvempunagar", "vijaynagar": "vijayanagar"
+      },
+      "positionalHints": [
+        "near mysore palace", "gokulam area", "vijayanagar mysore",
+        "kuvempunagar area", "nanjangud road side", "hunsur road area",
+        "ring road mysore", "near chamundi hills"
+      ]
+    },
+    "shimoga": {
+      "displayName": "Shivamogga (Shimoga)",
+      "canonical": [
+        "shimoga", "shivamogga", "sagar", "soraba", "shikaripura", "bhadravati",
+        "thirthahalli", "hosanagara", "shivappa nayaka circle", "gajanur",
+        "teerthahalli", "anandapuram", "kelageri", "vinoba nagar", "nehru nagar",
+        "ghantikeri", "shivaji road", "km road", "durgigudi", "nuggikeri",
+        "agumbe", "kuvempu nagar", "mandli", "rpc layout", "sapthagiri nagar",
+        "mcc block", "navule", "honnali", "channagiri", "nyamathi", "jagalur",
+        "bhadra dam", "jog falls road", "keladi", "ikkeri", "anagodu", "talaguppa",
+        "kargal", "holehonnur", "ayanur", "shimoga bypass", "bh road", "bharat nagar",
+        "gandhi nagar", "akkamahadevi road", "jawaharlal nehru road", "maruthi nagar",
+        "dharmapur", "kodachadri", "jog", "sakrebyle", "sagara", "balehonnur",
+        "sorab", "harangi", "devalapur", "thadagola", "police station circle",
+        "shimoga city", "bhadravathi", "shikaripura road", "sagar road"
+      ],
+      "aliases": {
+        "shivamogga": "shimoga", "shivamoga": "shimoga", "shivamoggha": "shimoga",
+        "shimogha": "shimoga", "sagara": "sagar", "sorab": "soraba",
+        "teerthahalli": "thirthahalli", "teertha halli": "thirthahalli",
+        "bhadrawathi": "bhadravati", "kuvempu nagara": "kuvempu nagar",
+        "hosanagar": "hosanagara"
+      },
+      "positionalHints": [
+        "near shimoga", "bhadravati area", "sagar road side",
+        "shivappa nayaka circle area", "near bhadra dam", "jog falls side",
+        "thirthahalli taluk"
+      ]
+    }
+  }
+}

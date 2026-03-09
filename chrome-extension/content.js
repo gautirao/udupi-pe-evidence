@@ -726,29 +726,160 @@
     'hiring', 'vacancy', 'lost', 'found', 'missing', 'giveaway', 'donate'
   ];
 
-  // Udupi district locality gazetteer
-  const UDUPI_CANONICAL = [
-    'udupi', 'manipal', 'brahmavar', 'barkur', 'katapady', 'padubidri', 'shirva',
-    'kundapur', 'kundapura', 'byndoor', 'navunda', 'hebri', 'karkala', 'nitte',
-    'moodabidri', 'mudabidri', 'kaup', 'malpe', 'saligrama', 'hejamadi', 'alevoor',
-    'kemmannu', 'santhekatte', 'ambalpady', 'bannanje', 'shivally', 'shivalli',
-    'kodavoor', 'mulky', 'mulki', 'kadekar', 'kalsanka', 'nanthur', 'biloor',
-    'thonse', 'parkala', 'pangala', 'sanoor', 'uchila', 'hiriadka', 'perdur',
-    'indrali', 'kuntikana', 'ajjarkad', 'kunjibettu', 'car street', 'padu', 'nada',
-    'pavanje', 'hejamadi cross', 'saligrama junction', 'manipal road', 'malpe road',
-    'kundapur road', 'brahmavar road', 'karkala road', 'padubidri road',
-    'udupi bypass', 'bypass road', 'nh 66', 'nh66', 'nh 17', 'tiger circle',
-    'end point', 'manipal junction', 'manipal main road', '100 feet road',
-    '60 feet road', '40 feet road', 'main road', 'bajpe', 'kotathattu', 'nagara',
-    'nalir', 'thottam', 'kemmannu bridge', 'new town', 'uppoor', 'kota',
-    'koteshwara'
-  ];
-
-  const UDUPI_ALIASES = {
-    'udpi': 'udupi', 'manipalu': 'manipal', 'mit': 'manipal', 'mahe': 'manipal',
-    'kmc': 'manipal', 'kasturba': 'manipal', 'bramhavar': 'brahmavar',
-    'kundapoor': 'kundapur', 'karkal': 'karkala', 'saligram': 'saligrama',
-    'katpadi': 'katapady', 'hejamady': 'hejamadi', 'shivalli': 'shivally'
+  // Multi-district locality gazetteer for Karnataka property posts.
+  // Add new districts by extending this object. The popup district selector
+  // uses the keys; scorePost() uses the canonical + aliases arrays.
+  const DISTRICT_GAZETTEERS = {
+    udupi: {
+      displayName: 'Udupi',
+      canonical: [
+        'udupi', 'manipal', 'brahmavar', 'barkur', 'katapady', 'padubidri', 'shirva',
+        'kundapur', 'kundapura', 'byndoor', 'navunda', 'hebri', 'karkala', 'nitte',
+        'moodabidri', 'mudabidri', 'kaup', 'malpe', 'saligrama', 'hejamadi', 'alevoor',
+        'kemmannu', 'santhekatte', 'ambalpady', 'bannanje', 'shivally', 'shivalli',
+        'kodavoor', 'mulky', 'mulki', 'kadekar', 'kalsanka', 'nanthur', 'biloor',
+        'thonse', 'parkala', 'pangala', 'sanoor', 'uchila', 'hiriadka', 'perdur',
+        'indrali', 'kuntikana', 'ajjarkad', 'kunjibettu', 'car street', 'padu', 'nada',
+        'pavanje', 'hejamadi cross', 'saligrama junction', 'manipal road', 'malpe road',
+        'kundapur road', 'brahmavar road', 'karkala road', 'padubidri road',
+        'udupi bypass', 'bypass road', 'nh 66', 'nh66', 'nh 17', 'tiger circle',
+        'end point', 'manipal junction', 'manipal main road', '100 feet road',
+        '60 feet road', '40 feet road', 'main road', 'bajpe', 'kotathattu', 'nagara',
+        'nalir', 'thottam', 'kemmannu bridge', 'new town', 'uppoor', 'kota', 'koteshwara'
+      ],
+      aliases: {
+        'udpi': 'udupi', 'manipalu': 'manipal', 'mit': 'manipal', 'mahe': 'manipal',
+        'kmc': 'manipal', 'kasturba': 'manipal', 'bramhavar': 'brahmavar',
+        'kundapoor': 'kundapur', 'karkal': 'karkala', 'saligram': 'saligrama',
+        'katpadi': 'katapady', 'hejamady': 'hejamadi', 'shivalli': 'shivally'
+      }
+    },
+    dakshina_kannada: {
+      displayName: 'Dakshina Kannada',
+      canonical: [
+        'mangalore', 'mangaluru', 'bantwal', 'belthangady', 'puttur', 'sullia',
+        'moodabidri', 'vitla', 'uppinangady', 'kadaba', 'subramanya', 'dharmasthala',
+        'kinnigoli', 'kateel', 'ullal', 'surathkal', 'talapady', 'bajpe', 'mudipu',
+        'pumpwell', 'kankanady', 'falnir', 'hampankatta', 'kottara', 'urwa', 'balmatta',
+        'kadri', 'bejai', 'bondel', 'attavar', 'pandeshwar', 'lalbagh', 'derebail',
+        'kulur', 'kavoor', 'vamanjoor', 'konchady', 'maryhill', 'bendoorwell',
+        'kodialbail', 'ballalbagh', 'mannagudda', 'dongerkery', 'nanthoor',
+        'shaktinagar', 'maroli', 'pachanady', 'jeppoo', 'bunder', 'padil', 'chilimbi',
+        'bikarnakatte', 'morgans gate', 'bunts hostel', 'ashok nagar', 'jyothi circle',
+        'boloor', 'milagres', 'kpt colony', 'mahaveer circle', 'kudroli',
+        'pumpwell circle', 'mangalore port', 'panambur', 'tannirbhavi', 'baikampady',
+        'kulshekar', 'bondel circle', 'kadri hills', 'light house hill',
+        'mangalore south', 'mangalore north'
+      ],
+      aliases: {
+        'mangaluru': 'mangalore', 'mangaloor': 'mangalore', 'mng': 'mangalore',
+        'belthangadi': 'belthangady', 'mudbidri': 'moodabidri',
+        'moodubidri': 'moodabidri', 'buntwal': 'bantwal', 'banthwal': 'bantwal',
+        'dk': 'dakshina kannada'
+      }
+    },
+    uttara_kannada: {
+      displayName: 'Uttara Kannada',
+      canonical: [
+        'karwar', 'ankola', 'kumta', 'honavar', 'honnavar', 'sirsi', 'siddapur',
+        'yellapur', 'haliyal', 'dandeli', 'joida', 'bhatkal', 'gokarna', 'murudeshwara',
+        'murdeshwar', 'mirjan', 'baad', 'halga', 'shirali', 'kasarkod', 'kadwad',
+        'belekeri', 'sadashivgad', 'idagunji', 'banki', 'bilagi', 'supa', 'mundgod',
+        'talaguppa', 'majali', 'shirur', 'tadri', 'kagal', 'karbha', 'mallapur',
+        'shastri nagar', 'belekeri port', 'kaiga', 'gokarna beach', 'om beach',
+        'karwar port', 'kumta town', 'ankola town', 'huliyar', 'tilmatii',
+        'devgad', 'gangavali', 'kali river', 'udgiri', 'aghanashini', 'bedti',
+        'ambikanagara', 'karwar city', 'haliyala', 'dandeli forest', 'castlerock',
+        'yellapur taluk', 'siddapur taluk', 'ramgad'
+      ],
+      aliases: {
+        'murdeshwar': 'murudeshwara', 'murdeshwara': 'murudeshwara',
+        'bhatkala': 'bhatkal', 'bhatkhala': 'bhatkal',
+        'siddapura': 'siddapur', 'yellapura': 'yellapur',
+        'haliyala': 'haliyal', 'uk': 'karwar', 'uttar kannada': 'karwar'
+      }
+    },
+    bangalore: {
+      displayName: 'Bangalore',
+      canonical: [
+        'indiranagar', 'whitefield', 'hebbal', 'sarjapur', 'hsr layout', 'electronic city',
+        'yelahanka', 'jayanagar', 'jp nagar', 'bannerghatta road', 'kengeri',
+        'rajajinagar', 'malleshwaram', 'rt nagar', 'marathahalli', 'banashankari',
+        'kr puram', 'devanahalli', 'hoskote', 'nelamangala', 'koramangala',
+        'btm layout', 'bellandur', 'varthur', 'domlur', 'richmond town', 'vasanth nagar',
+        'sadashivanagar', 'basavanagudi', 'padmanabhanagar', 'vijayanagar', 'magadi road',
+        'tumkur road', 'mysore road', 'hosur road', 'outer ring road', 'hennur',
+        'horamavu', 'kr market', 'mg road', 'brigade road', 'chamrajpet',
+        'wilson garden', 'shivajinagar', 'lingarajapuram', 'frazer town', 'benson town',
+        'cox town', 'tasker town', 'ulsoor', 'kadugodi', 'mahadevapura', 'ejipura',
+        'banaswadi', 'kammanahalli', 'cv raman nagar', 'hal', 'old airport road',
+        'pai layout', 'jeevan bhima nagar', 'rr nagar', 'uttarahalli', 'gottigere',
+        'hulimavu', 'bilekahalli', 'arekere', 'hongasandra', 'begur', 'haralur',
+        'ramamurthy nagar', 'nagarbhavi', 'bannerghatta', 'itpl', 'aecs layout',
+        'sarjapur road', 'whitefield road', 'electronic city phase 1',
+        'electronic city phase 2', 'hsr 5th sector', 'hsr 6th sector'
+      ],
+      aliases: {
+        'bengaluru': 'bangalore', 'blr': 'bangalore', 'bnglr': 'bangalore',
+        'bangalore south': 'bangalore', 'bangalore north': 'bangalore',
+        'bangalore east': 'bangalore', 'bangalore urban': 'bangalore',
+        'bangalore rural': 'bangalore', "b'lore": 'bangalore',
+        'hsr': 'hsr layout', 'jpnagar': 'jp nagar', 'rtnagar': 'rt nagar',
+        'whitfield': 'whitefield', 'e city': 'electronic city',
+        'ecity': 'electronic city'
+      }
+    },
+    mysuru: {
+      displayName: 'Mysuru (Mysore)',
+      canonical: [
+        'mysore', 'mysuru', 'vijayanagar', 'kuvempunagar', 'hebbal', 'gokulam',
+        'nazarbad', 'yadavagiri', 'rajivnagar', 'hunsur', 'nanjangud', 't narasipur',
+        'periyapatna', 'kr nagar', 'krishnaraja sagar', 'vontikoppal',
+        'jayalakshmipuram', 'lakshmipuram', 'bogadi', 'ittigegud', 'hootagalli',
+        'metagalli', 'dattagalli', 'ramakrishnanagar', 'saraswathipuram',
+        'kalidasa road', 'bannimantap', 'mandi mohalla', 'devaraja market',
+        'chamundeshwari', 'kesare', 'siddalingapura', 'srirampura', 'vidyaranyapura',
+        'lingambudhi', 'srirangapatna', 'hunsur road', 'nanjangud road', 'ring road',
+        'jlb road', 'bamboo bazar', 'krs road', 'chamaraja road', 'ashoka road',
+        'hanumanthanagar', 'pushpagiri', 'paduvarahalli', 'jayachamarajendra road',
+        'mysore palace', 'mysore university', 'ksrtc bus stand', 'nazarbad mohalla',
+        'chamundi hills', 'brindavan gardens', 'hebbal lake', 't narasipur road',
+        'manandavadi road', 'k r nagar', 'kuvempu circle', 'jp nagar mysore',
+        'n r mohalla', 'lashkar mohalla'
+      ],
+      aliases: {
+        'mysuru': 'mysore', 'mys': 'mysore', 'mysore city': 'mysore',
+        'krs': 'krishnaraja sagar', 'krishnarajasagara': 'krishnaraja sagar',
+        'srirangapatnam': 'srirangapatna', 'seringapatam': 'srirangapatna',
+        't narasipura': 't narasipur', 'tnarasipur': 't narasipur',
+        'periapatna': 'periyapatna', 'k r nagar': 'kr nagar',
+        'kuvempu nagar': 'kuvempunagar', 'vijaynagar': 'vijayanagar'
+      }
+    },
+    shimoga: {
+      displayName: 'Shivamogga (Shimoga)',
+      canonical: [
+        'shimoga', 'shivamogga', 'sagar', 'soraba', 'shikaripura', 'bhadravati',
+        'thirthahalli', 'hosanagara', 'shivappa nayaka circle', 'gajanur',
+        'teerthahalli', 'anandapuram', 'kelageri', 'vinoba nagar', 'nehru nagar',
+        'ghantikeri', 'shivaji road', 'km road', 'durgigudi', 'nuggikeri',
+        'agumbe', 'kuvempu nagar', 'mandli', 'rpc layout', 'sapthagiri nagar',
+        'mcc block', 'navule', 'honnali', 'channagiri', 'nyamathi', 'jagalur',
+        'bhadra dam', 'jog falls road', 'keladi', 'ikkeri', 'anagodu', 'talaguppa',
+        'kargal', 'holehonnur', 'ayanur', 'shimoga bypass', 'bh road', 'bharat nagar',
+        'gandhi nagar', 'akkamahadevi road', 'jawaharlal nehru road', 'maruthi nagar',
+        'dharmapur', 'kodachadri', 'jog', 'sakrebyle', 'balehonnur', 'sorab',
+        'harangi', 'devalapur', 'thadagola', 'police station circle',
+        'shimoga city', 'bhadravathi', 'shikaripura road', 'sagar road'
+      ],
+      aliases: {
+        'shivamogga': 'shimoga', 'shivamoga': 'shimoga', 'shivamoggha': 'shimoga',
+        'shimogha': 'shimoga', 'sagara': 'sagar', 'sorab': 'soraba',
+        'teerthahalli': 'thirthahalli', 'teertha halli': 'thirthahalli',
+        'bhadrawathi': 'bhadravati', 'kuvempu nagara': 'kuvempu nagar',
+        'hosanagar': 'hosanagara'
+      }
+    }
   };
 
   // Positional patterns (contribute +1 to locationScore)
@@ -759,10 +890,15 @@
   ];
 
   /**
-   * Scores a post text for real estate relevance and Udupi location mention.
+   * Scores a post text for real estate relevance and location mention.
+   * @param {string} text - Post text to score
+   * @param {string} [districtKey] - District key from DISTRICT_GAZETTEERS ('udupi', 'bangalore', etc.)
+   *   Pass 'all' to match against any district's localities (useful for mixed-district groups).
+   *   Defaults to 'udupi'.
    * Returns { realEstateScore, locationScore, totalScore, matchedKeywords, matchedLocalities }
    */
-  function scorePost(text) {
+  function scorePost(text, districtKey) {
+    districtKey = districtKey || 'udupi';
     const lower = text.toLowerCase();
     const matchedKeywords = [];
     const matchedLocalities = [];
@@ -809,25 +945,33 @@
     });
     realEstateScore = Math.max(0, realEstateScore - penalty);
 
-    // Location scoring
+    // Location scoring — check the selected district(s) from DISTRICT_GAZETTEERS
+    const districtsToScore = districtKey === 'all'
+      ? Object.values(DISTRICT_GAZETTEERS)
+      : [DISTRICT_GAZETTEERS[districtKey] || DISTRICT_GAZETTEERS.udupi];
+
     let locationScore = 0;
 
-    // Check canonical localities
-    UDUPI_CANONICAL.forEach(loc => {
-      if (lower.includes(loc)) {
-        locationScore = Math.min(2, locationScore + 2);
-        matchedLocalities.push(loc);
+    for (const district of districtsToScore) {
+      // Check canonical localities
+      for (const loc of district.canonical) {
+        if (lower.includes(loc)) {
+          locationScore = Math.min(2, locationScore + 2);
+          matchedLocalities.push(loc);
+          if (locationScore >= 2) break;
+        }
       }
-    });
+      if (locationScore >= 2) break;
 
-    // Check aliases
-    if (locationScore < 2) {
-      Object.keys(UDUPI_ALIASES).forEach(alias => {
+      // Check aliases
+      for (const alias of Object.keys(district.aliases)) {
         if (lower.includes(alias)) {
           locationScore = Math.min(2, locationScore + 2);
-          matchedLocalities.push(`${alias}→${UDUPI_ALIASES[alias]}`);
+          matchedLocalities.push(`${alias}→${district.aliases[alias]}`);
+          if (locationScore >= 2) break;
         }
-      });
+      }
+      if (locationScore >= 2) break;
     }
 
     // Positional patterns (add 1, cap at 2)
@@ -1028,6 +1172,7 @@
         let selected = 0;
         let totalScanned = 0;
         let skipped = 0;
+        const smartDistrictKey = message.districtKey || 'udupi';
 
         postsOnPage.forEach((post, index) => {
           const text = getPostText(post);
@@ -1042,7 +1187,7 @@
             return;
           }
 
-          const result = scorePost(text);
+          const result = scorePost(text, smartDistrictKey);
           const isMatch =
             (result.realEstateScore >= SMART_SELECT_RE_THRESHOLD && result.locationScore >= SMART_SELECT_LOC_THRESHOLD) ||
             result.totalScore >= SMART_SELECT_TOTAL_THRESHOLD;
