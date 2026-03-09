@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PriceField } from '@/components/dealer/PriceField';
+import { StepIndicator } from '@/components/dealer/StepIndicator';
 import {
   Select,
   SelectContent,
@@ -44,6 +45,9 @@ export default function NewListing() {
   // Conditional field state (captured for UX; persisted on edit page via PUT)
   const [landArea, setLandArea] = useState('');
   const [bedrooms, setBedrooms] = useState('');
+
+  // TODO RE-31: expand to 4 steps and gate per-step content rendering
+  const [currentStep, setCurrentStep] = useState(1);
 
   // Dealer-only guard: allow dealer and admin roles
   const role = userRole as string | null;
@@ -120,37 +124,18 @@ export default function NewListing() {
             </CardDescription>
           </CardHeader>
           {/* Step indicator */}
-          <div className="flex items-center justify-center gap-0 px-6 pb-4">
-            {[
-              { n: 1, label: 'Describe' },
-              { n: 2, label: 'Add Photos' },
-              { n: 3, label: 'Pin Location' },
-            ].map((step, i, arr) => (
-              <div key={step.n} className="flex items-center">
-                <div className="flex flex-col items-center">
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                      step.n === 1
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                  >
-                    {step.n}
-                  </div>
-                  <span
-                    className={`mt-1 text-xs ${
-                      step.n === 1 ? 'text-primary font-medium' : 'text-muted-foreground'
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </div>
-                {i < arr.length - 1 && (
-                  <div className="w-12 h-px bg-border mx-2 mb-4" />
-                )}
-              </div>
-            ))}
-          </div>
+          <StepIndicator
+            steps={[
+              {
+                label: 'Describe',
+                isComplete: propertyType !== '' && (priceRupees ?? 0) > 0 && !isCommercial,
+              },
+              { label: 'Add Photos', isComplete: false },
+              { label: 'Pin Location', isComplete: false },
+            ]}
+            currentStep={currentStep}
+            onStepClick={(n) => { if (n <= 1) setCurrentStep(n); }}
+          />
           <CardContent className="space-y-6">
             {/* Property Type */}
             <div className="space-y-2">
