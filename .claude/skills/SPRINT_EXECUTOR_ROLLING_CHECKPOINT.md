@@ -29,7 +29,7 @@ Before the first PR:
    - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
    - Store the recommended execution order in the checkpoint preamble as `Execution order:`.
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
-   - If team-lead flags spec gaps: surface them to the user and **pause for confirmation** before starting execution. If the gap is in acceptance criteria or ambiguous scope, do not proceed until resolved or explicitly waived by the user.
+   - If team-lead flags spec gaps: play `afplay /System/Library/Sounds/Ping.aiff`, surface them to the user and **pause for confirmation** before starting execution. If the gap is in acceptance criteria or ambiguous scope, do not proceed until resolved or explicitly waived by the user.
 4. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
 5. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
    - The cached issue description is missing or truncated to fewer than 50 characters
@@ -59,6 +59,8 @@ For each Linear issue (PR N):
 
    Sprint-layer skip override (extends `ROUTE_AND_RUN` doc-only skip): also skip E2E when the PR touches only non-runtime reference artifacts that produce no local frontend/backend behavior change (e.g., SQL reference copies in `supabase-rpcs/`). Do not extend this override to files that affect runtime behavior.
 
+   If e2e fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
+
    **Sprint-layer override boundary:** any sprint-layer override declared here must be narrow, additive, and state-related (e.g., skip conditions, caching, checkpoint fields). Sprint-layer overrides must not redefine routing logic, reviewer gates, invocation rules, or E2E script behavior — those are owned by `ROUTE_AND_RUN`.
 
 6. **Git + PR**
@@ -70,7 +72,7 @@ For each Linear issue (PR N):
    - `git push -u origin <branch>`
    - `gh pr create --title "..." --body "..." --base main`
    - Wait for CI: `gh pr checks <pr-number> --watch --timeout 600`
-   - If CI fails: stop, surface failure log to user, emit BLOCKED checkpoint.
+   - If CI fails: play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint.
    - If CI green: merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
 7. **Close issue** — `save_issue state=Done`

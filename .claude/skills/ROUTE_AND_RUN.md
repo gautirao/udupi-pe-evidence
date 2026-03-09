@@ -189,7 +189,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - `code-reviewer` runs AFTER the engineer completes the implementation.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
-- If still REQUEST CHANGES after one re-run: stop and surface to user.
+- If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop and surface to user.
 - `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
 
@@ -228,8 +228,8 @@ kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
 
 Rules:
 - Run this after code-reviewer (and security-reviewer if applicable) APPROVE.
-- If e2e fails: surface the failure to the user and stop. Do NOT auto-fix and re-run.
-- If backend or frontend fails to start within 60s: surface the error log and stop.
+- If e2e fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix and re-run.
+- If backend or frontend fails to start within 60s: play `afplay /System/Library/Sounds/Basso.aiff`, surface the error log and stop.
 - **Default skip:** doc-only changes (`*.md`, `docs/`, non-behavioral config) — never skip for code changes.
 - Sprint-layer callers may declare additional skip overrides — see `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`.
 
@@ -239,7 +239,7 @@ Rules:
 
 - Agents execute sequentially.
 - Do NOT merge agent outputs.
-- After final routed agent completes, run Step 3 (E2E Validation), then STOP.
+- After final routed agent completes, run Step 3 (E2E Validation), then play `afplay /System/Library/Sounds/Hero.aiff` and STOP.
 - Do NOT suggest improvements beyond scope.
 - One pass only.
 - Only re-run if code-reviewer or security-reviewer marks BLOCKING.
