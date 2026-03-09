@@ -21,6 +21,37 @@ echo "e2e target: $PLAYWRIGHT_BASE_URL"
 echo "backend:    $BACKEND_BASE_URL"
 echo ""
 
+# Abort if required ports are already in use — running e2e against the wrong
+# server produces confusing failures (e.g. redirects to /login from Spring Boot).
+port_of() { echo "${1##*:}"; }  # extract port from URL like http://localhost:8080
+FRONTEND_PORT="$(port_of "$PLAYWRIGHT_BASE_URL")"
+BACKEND_PORT="$(port_of "$BACKEND_BASE_URL")"
+
+port_in_use() { lsof -ti:"$1" >/dev/null 2>&1; }
+
+if port_in_use "$FRONTEND_PORT"; then
+  echo "ERROR: Port $FRONTEND_PORT is already in use (needed for Vite frontend)."
+  echo "Stop whatever is running on port $FRONTEND_PORT before running e2e tests."
+  exit 1
+fi
+if port_in_use "$BACKEND_PORT"; then
+  echo "ERROR: Port $BACKEND_PORT is already in use (needed for backend)."
+  echo "Stop whatever is running on port $BACKEND_PORT before running e2e tests."
+  exit 1
+fi
+
+# Warn if .env.e2e still has placeholder credentials
+if [[ "${SMOKE_USER_EMAIL:-}" == *"@example.com"* ]] || \
+   [[ "${DEALER_EMAIL:-}" == *"@example.com"* ]] || \
+   [[ "${ADMIN_EMAIL:-}" == *"@example.com"* ]]; then
+  echo "WARNING: .env.e2e contains placeholder credentials (*@example.com)."
+  echo "Auth-dependent tests will skip instead of running."
+  echo "To run them, replace placeholder values with real Supabase test user"
+  echo "credentials. See docs/TESTING.md for setup instructions."
+  echo ""
+fi
+
+
 # Start backend via run-local.sh
 echo "[e2e] Starting backend..."
 "$SCRIPT_DIR/../backend/run-local.sh" > /tmp/backend-e2e.log 2>&1 &

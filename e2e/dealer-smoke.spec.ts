@@ -14,11 +14,12 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 
 const dealerEmail = process.env.DEALER_EMAIL ?? '';
 const dealerPassword = process.env.DEALER_PASSWORD ?? '';
 
-const hasDealerCreds = Boolean(dealerEmail && dealerPassword);
+const hasDealerCreds = hasRealCredentials(dealerEmail, dealerPassword);
 
 /** Log in as the test dealer and wait for redirect away from /auth. */
 async function loginAsDealer(page: import('@playwright/test').Page): Promise<void> {

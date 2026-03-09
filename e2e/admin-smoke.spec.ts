@@ -15,10 +15,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 
 const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
-const hasAdminCreds = Boolean(adminEmail && adminPassword);
+const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 
 async function loginAsAdmin(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/auth');

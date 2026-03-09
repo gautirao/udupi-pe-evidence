@@ -17,6 +17,7 @@ import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { hasRealCredentials } from './helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -27,6 +28,7 @@ const BACKEND =
 
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
+const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
 /**
  * Resolve the listing ID for Q7.
@@ -91,10 +93,7 @@ test('Q2 — /dealer/listings/new redirects to /auth when not logged in', async 
 // Q3 — Login with valid credentials succeeds (skipped if creds not set)
 // ---------------------------------------------------------------------------
 test('Q3 — login with valid credentials succeeds', async ({ page }) => {
-  test.skip(
-    !userEmail || !userPassword,
-    'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping Q3',
-  );
+  test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set or placeholder — skipping Q3');
 
   await page.goto('/auth');
   await page.waitForLoadState('domcontentloaded');
@@ -214,10 +213,7 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
 //      Skipped if SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set
 // ---------------------------------------------------------------------------
 test('Q7 — duplicate booking request is rejected', async ({ page }) => {
-  test.skip(
-    !userEmail || !userPassword || !smokListingId,
-    'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set — skipping Q7',
-  );
+  test.skip(!hasUserCreds || !smokListingId, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set or placeholder, or SMOKE_LISTING_ID missing — skipping Q7');
   test.skip(
     smokeListingStatus !== 'LIVE',
     'Test listing is not LIVE (admin approval required for bookings) — skipping Q7',

@@ -14,10 +14,11 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
-const hasUserCreds = Boolean(userEmail && userPassword);
+const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
 async function loginAsUser(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/auth');

@@ -15,6 +15,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -55,8 +56,8 @@ const dealerPassword = process.env.DEALER_PASSWORD ?? '';
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 
-const hasDealerCreds = Boolean(dealerEmail && dealerPassword);
-const hasUserCreds = Boolean(userEmail && userPassword);
+const hasDealerCreds = hasRealCredentials(dealerEmail, dealerPassword);
+const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
 /** Log in as dealer via the UI and wait for redirect away from /auth. */
 async function loginAsDealer(page: import('@playwright/test').Page): Promise<void> {

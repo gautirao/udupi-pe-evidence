@@ -4,7 +4,7 @@
 set -e
 
 # Patterns that count as code (anything NOT matching the doc exclusion below)
-DOC_PATTERN='^(docs/|README|CLAUDE|\.githooks/|\.claude/|e2e/|.*\.md$)'
+DOC_PATTERN='^(docs/|README|CLAUDE|\.githooks/|\.claude/|e2e/|\.github/|scripts/|.*\.md$)'
 
 while read -r local_ref local_sha remote_ref remote_sha; do
   # Branch deletion — nothing to check

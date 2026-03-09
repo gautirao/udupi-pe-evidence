@@ -75,47 +75,11 @@ jobs:
           AI_API_KEY: ci-placeholder
 
   # ── E2E ─────────────────────────────────────────────────────────────────────
-  # Runs only after a successful merge to main (not on PRs).
-  # Uses Playwright against the deployed production URL.
-  # All required credentials are stored as repository secrets.
-  e2e:
-    name: E2E (Playwright)
-    needs: [frontend, backend]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
-
-      - name: Run E2E tests
-        run: npm run test:e2e
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL }}
-          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
-          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-          DEALER_EMAIL: ${{ secrets.DEALER_EMAIL }}
-          DEALER_PASSWORD: ${{ secrets.DEALER_PASSWORD }}
-          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-
-      - name: Upload Playwright report on failure
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report-${{ github.run_id }}
-          path: playwright-report/
-          retention-days: 7
+  # E2E tests are NOT run in CI because the deployment URLs (Cloudflare Pages,
+  # Render) are only live after the merge completes — running e2e here would
+  # test the previous deployed version, not the new code.
+  #
+  # E2E gate: the pre-push hook (.githooks/pre-push) runs Playwright locally
+  # against a locally-started backend + frontend before each push.
+  # Setup: npm run prepare  (sets hooksPath once per clone)
+  # Run:   npm run test:e2e:local  (or just git push — hook triggers automatically)

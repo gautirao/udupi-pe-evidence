@@ -14,14 +14,15 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
 
-const hasUserCreds = Boolean(userEmail && userPassword);
-const hasAdminCreds = Boolean(adminEmail && adminPassword);
+const hasUserCreds = hasRealCredentials(userEmail, userPassword);
+const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 
 async function loginAs(
   page: import('@playwright/test').Page,

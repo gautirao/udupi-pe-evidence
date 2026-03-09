@@ -15,6 +15,7 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -23,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
-const hasUserCreds = Boolean(userEmail && userPassword);
+const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
 const ID_FILE = path.join(__dirname, '.test-listing-id');
 
