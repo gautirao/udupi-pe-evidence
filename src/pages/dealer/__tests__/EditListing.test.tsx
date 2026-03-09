@@ -113,8 +113,8 @@ vi.mock('@/components/dealer/AddressPicker', () => ({
     ),
 }));
 
-vi.mock('@/components/poi/PoiManager', () => ({
-  PoiManager: () => React.createElement('div', { 'data-testid': 'poi-manager' }),
+vi.mock('@/components/dealer/StepIndicator', () => ({
+  StepIndicator: () => React.createElement('div', { 'data-testid': 'step-indicator' }),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -139,6 +139,8 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => mockNavigate,
     useParams: () => ({ id: 'listing-123' }),
+    // Return a stable useSearchParams mock: no ?step= param by default
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
   };
 });
 
@@ -159,6 +161,8 @@ function makeListing(overrides: Partial<ListingResponse>): ListingResponse {
     latitude: null,
     longitude: null,
     addressConfirmed: false,
+    imageCount: 0,
+    firstImageUrl: null,
     rejectionReason: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-02T00:00:00Z',
@@ -207,24 +211,21 @@ describe('EditListing page', () => {
 
     renderEditListing();
 
-    // Title field shows the listing's title
+    // Step 1 is shown by default. Title, price, locality, description should be pre-filled.
     const titleInput = screen.getByLabelText('Title') as HTMLInputElement;
     expect(titleInput.value).toBe('Cozy 2BHK in Manipal');
 
-    // Price field shows the listing's price
     const priceInput = screen.getByLabelText('Price (INR)') as HTMLInputElement;
     expect(priceInput.value).toBe('3500000');
 
-    // Locality field shows the listing's locality
     const localityInput = screen.getByLabelText('Locality') as HTMLInputElement;
     expect(localityInput.value).toBe('Manipal');
 
-    // Description textarea shows the listing's description
     const descriptionInput = screen.getByLabelText('Description') as HTMLTextAreaElement;
     expect(descriptionInput.value).toBe('A nice apartment near the university.');
 
-    // Save Changes button is present
-    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+    // Step 1 has a "Save & Continue" button (not "Save Changes")
+    expect(screen.getByRole('button', { name: /Save & Continue/i })).toBeInTheDocument();
   });
 
   it('showsLockedMessage_forPendingReviewListing', () => {
@@ -242,7 +243,7 @@ describe('EditListing page', () => {
     // No form inputs (title, price inputs should not exist)
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Price (INR)')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Save & Continue/i })).not.toBeInTheDocument();
   });
 
   it('showsLockedMessage_forLiveListing', () => {
@@ -260,19 +261,19 @@ describe('EditListing page', () => {
     // No form inputs
     expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Price (INR)')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Save & Continue/i })).not.toBeInTheDocument();
   });
 
-  it('savesChanges_staysOnPage', async () => {
+  it('savesStep1_advancesToStep2', async () => {
     vi.mocked(useGetListing).mockReturnValue({
       data: makeListing({ status: 'DRAFT' }),
       isLoading: false,
       isError: false,
     } as ReturnType<typeof useGetListing>);
 
-    const mutateFn = vi.fn((_data, { onSuccess }) => {
+    const mutateFn = vi.fn((_data, options: { onSuccess?: () => void }) => {
       // Simulate successful mutation
-      onSuccess?.();
+      options?.onSuccess?.();
     });
     vi.mocked(useUpdateListing).mockReturnValue({
       mutate: mutateFn,
@@ -285,8 +286,8 @@ describe('EditListing page', () => {
     const titleInput = screen.getByLabelText('Title') as HTMLInputElement;
     fireEvent.change(titleInput, { target: { value: 'Updated Title' } });
 
-    // Submit the form
-    const saveButton = screen.getByRole('button', { name: /Save Changes/i });
+    // Click "Save & Continue" on step 1
+    const saveButton = screen.getByRole('button', { name: /Save & Continue/i });
     fireEvent.click(saveButton);
 
     // mutate should have been called with the updated title
@@ -297,7 +298,15 @@ describe('EditListing page', () => {
       );
     });
 
-    // Save Changes must NOT navigate away — user stays on the edit page
+    // After save, the component advances to step 2.
+    // jsdom does not evaluate inline style visibility for toBeVisible(), so we
+    // assert the display values directly on the step panel wrapper divs.
+    await waitFor(() => {
+      expect(screen.getByTestId('step-1-panel')).toHaveStyle('display: none');
+      expect(screen.getByTestId('step-2-panel')).toHaveStyle('display: block');
+    });
+
+    // Must NOT navigate away from the page
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -316,7 +325,8 @@ describe('EditListing page', () => {
 
     renderEditListing();
 
-    // The mock renders a "Change" button when initialConfirmed=true
+    // The mock renders a "Change" button when initialConfirmed=true.
+    // AddressPicker is always mounted (CSS display toggle), so it's findable even on step 1.
     const changeButton = await screen.findByTestId('address-picker-change');
     fireEvent.click(changeButton);
 

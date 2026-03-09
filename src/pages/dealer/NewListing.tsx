@@ -20,7 +20,6 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
@@ -45,9 +44,6 @@ export default function NewListing() {
   // Conditional field state (captured for UX; persisted on edit page via PUT)
   const [landArea, setLandArea] = useState('');
   const [bedrooms, setBedrooms] = useState('');
-
-  // TODO RE-31: expand to 4 steps and gate per-step content rendering
-  const [currentStep, setCurrentStep] = useState(1);
 
   // Dealer-only guard: allow dealer and admin roles
   const role = userRole as string | null;
@@ -94,20 +90,7 @@ export default function NewListing() {
       {
         onSuccess: (data) => {
           toast({ title: 'Draft saved', description: 'Your listing has been created as a draft.' });
-          navigate(`/dealer/listings/${data.id}/edit`);
-        },
-        onError: (error: Error) => {
-          const apiErr = error as ApiError;
-          const body = apiErr.body as Record<string, unknown> | undefined;
-          const message =
-            (body?.message as string) ??
-            (body?.error as string) ??
-            'Failed to save draft. Please try again.';
-          toast({
-            title: 'Save failed',
-            description: message,
-            variant: 'destructive',
-          });
+          navigate(`/dealer/listings/${data.id}/edit?step=2`);
         },
       },
     );
@@ -123,7 +106,7 @@ export default function NewListing() {
               Price and property type are required. You'll add photos and location next.
             </CardDescription>
           </CardHeader>
-          {/* Step indicator */}
+          {/* Step indicator — step 1 only; steps 2–4 are gated until listing is created */}
           <StepIndicator
             steps={[
               {
@@ -132,9 +115,10 @@ export default function NewListing() {
               },
               { label: 'Add Photos', isComplete: false },
               { label: 'Pin Location', isComplete: false },
+              { label: 'Review & Submit', isComplete: false },
             ]}
-            currentStep={currentStep}
-            onStepClick={(n) => { if (n <= 1) setCurrentStep(n); }}
+            currentStep={1}
+            onStepClick={(n) => { if (n <= 1) { /* no-op: only step 1 available */ } }}
           />
           <CardContent className="space-y-6">
             {/* Property Type */}
