@@ -351,7 +351,7 @@ export function AddressPicker({
       )}
 
       {/* Map */}
-      <div className="h-[300px] rounded-lg overflow-hidden border">
+      <div className="h-[300px] sm:h-[360px] rounded-lg overflow-hidden border">
         <MapContainer
           center={pinPosition ?? UDUPI_CENTER}
           zoom={pinPosition ? 16 : DEFAULT_ZOOM}
