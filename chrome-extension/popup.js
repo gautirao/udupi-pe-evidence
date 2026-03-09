@@ -1,8 +1,9 @@
 // Load saved configuration
 document.addEventListener('DOMContentLoaded', async () => {
-  const config = await chrome.storage.local.get(['apiUrl', 'apiKey']);
+  const config = await chrome.storage.local.get(['apiUrl', 'apiKey', 'activeDistrict']);
   if (config.apiUrl) document.getElementById('apiUrl').value = config.apiUrl;
   if (config.apiKey) document.getElementById('apiKey').value = config.apiKey;
+  if (config.activeDistrict) document.getElementById('districtSelect').value = config.activeDistrict;
 
   // Check if we're on a Facebook group page
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -29,6 +30,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Content script not ready, may need to refresh the page');
     }
   }
+});
+
+// Persist active district selection
+document.getElementById('districtSelect').addEventListener('change', async (e) => {
+  await chrome.storage.local.set({ activeDistrict: e.target.value });
 });
 
 // Save configuration
@@ -124,7 +130,8 @@ document.getElementById('smartSelectBtn').addEventListener('click', async () => 
   smartResult.textContent = 'Scanning…';
 
   try {
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'smartSelect' });
+    const districtKey = document.getElementById('districtSelect').value;
+    const response = await chrome.tabs.sendMessage(tab.id, { action: 'smartSelect', districtKey });
     if (response) {
       document.getElementById('postsSelected').textContent = response.selected;
       document.getElementById('extractBtn').disabled = response.selected === 0;
