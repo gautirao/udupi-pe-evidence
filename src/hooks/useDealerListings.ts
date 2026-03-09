@@ -27,6 +27,8 @@ export interface UpdateListingRequest {
   latitude?: number;
   longitude?: number;
   addressConfirmed?: boolean;
+  videoUrl?: string | null;
+  applyVideoUrl?: boolean;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -47,6 +49,7 @@ export interface ListingResponse {
   imageCount: number;
   firstImageUrl: string | null;
   rejectionReason: string | null;
+  videoUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }

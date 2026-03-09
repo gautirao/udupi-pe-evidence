@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X } from 'lucide-react';
+import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X, Link } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { PriceField } from '@/components/dealer/PriceField';
@@ -25,6 +26,20 @@ import { AddressPicker } from '@/components/dealer/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/dealer/StepIndicator';
 import { ApiError } from '@/lib/api';
+
+const VIDEO_URL_REGEX =
+  /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
+
+function extractYouTubeId(url: string): string | null {
+  const shortMatch = url.match(/youtu\.be\/([^?&\s]+)/);
+  if (shortMatch) return shortMatch[1];
+  const longMatch = url.match(/[?&]v=([^&\s]+)/);
+  return longMatch ? longMatch[1] : null;
+}
+
+function isInstagramUrl(url: string): boolean {
+  return /instagram\.com\/(reel|p)\//.test(url);
+}
 
 const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
@@ -69,6 +84,8 @@ export default function EditListing() {
   const [builtArea, setBuiltArea] = useState('');
   // Tracks whether image uploader has >= 3 images (drives step 2 completion + submit gate)
   const [canSubmitImages, setCanSubmitImages] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoUrlError, setVideoUrlError] = useState('');
 
   // Pre-populate form once listing loads
   useEffect(() => {
@@ -81,6 +98,7 @@ export default function EditListing() {
     setLandArea(listing.landArea != null ? String(listing.landArea) : '');
     setBedrooms(listing.bedrooms != null ? String(listing.bedrooms) : '');
     setBuiltArea(listing.builtArea != null ? String(listing.builtArea) : '');
+    setVideoUrl(listing.videoUrl ?? '');
   }, [listing]);
 
   // Auth guard
@@ -210,13 +228,29 @@ export default function EditListing() {
     );
   };
 
-  const handleStep2Continue = () => {
-    if (cameFromReview) {
-      setCameFromReview(false);
-      setCurrentStep(4);
-    } else {
-      setCurrentStep(3);
+  const handleVideoUrlChange = (value: string) => {
+    setVideoUrl(value);
+    setVideoUrlError('');
+    if (value && !VIDEO_URL_REGEX.test(value)) {
+      setVideoUrlError('Please enter a YouTube or Instagram Reel URL');
     }
+  };
+
+  const handleStep2Continue = () => {
+    // Persist video URL before advancing; hook-level onError toast handles failures
+    updateListing.mutate(
+      { videoUrl: videoUrl.trim() || null, applyVideoUrl: true },
+      {
+        onSuccess: () => {
+          if (cameFromReview) {
+            setCameFromReview(false);
+            setCurrentStep(4);
+          } else {
+            setCurrentStep(3);
+          }
+        },
+      },
+    );
   };
 
   const handleStep3Continue = () => {
@@ -424,6 +458,40 @@ export default function EditListing() {
               <CardContent className="space-y-4">
                 {/* ImageUploader is always mounted (CSS visibility) so upload state is preserved */}
                 <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
+
+                {/* Video link section */}
+                <Separator className="my-4" />
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Property Video (optional)</Label>
+                  <p className="text-xs text-muted-foreground">YouTube or Instagram Reel link</p>
+                  <Input
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={videoUrl}
+                    onChange={(e) => handleVideoUrlChange(e.target.value)}
+                  />
+                  {videoUrlError && (
+                    <p className="text-sm text-destructive">{videoUrlError}</p>
+                  )}
+                  {/* YouTube thumbnail preview */}
+                  {videoUrl && !videoUrlError && extractYouTubeId(videoUrl) && (
+                    <img
+                      src={`https://img.youtube.com/vi/${extractYouTubeId(videoUrl)}/mqdefault.jpg`}
+                      alt="Video thumbnail"
+                      className="rounded-md w-48 h-auto border"
+                    />
+                  )}
+                  {/* Instagram confirmed state */}
+                  {videoUrl && !videoUrlError && isInstagramUrl(videoUrl) && (
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <Link className="h-4 w-4" />
+                      <span>instagram.com</span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-end pt-4 border-t">
                   <Button type="button" onClick={handleStep2Continue}>
                     Save & Continue

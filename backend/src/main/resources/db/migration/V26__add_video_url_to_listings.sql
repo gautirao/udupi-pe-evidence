@@ -1,0 +1,1 @@
+ALTER TABLE property_listings ADD COLUMN IF NOT EXISTS video_url VARCHAR(500);

@@ -14,6 +14,7 @@ import {
 // ─── Hoisted mock handles ──────────────────────────────────────────────────────
 
 const mockNavigate = vi.hoisted(() => vi.fn());
+const mockUseSearchParams = vi.hoisted(() => vi.fn());
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -139,8 +140,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => mockNavigate,
     useParams: () => ({ id: 'listing-123' }),
-    // Return a stable useSearchParams mock: no ?step= param by default
-    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    useSearchParams: mockUseSearchParams,
   };
 });
 
@@ -164,6 +164,7 @@ function makeListing(overrides: Partial<ListingResponse>): ListingResponse {
     imageCount: 0,
     firstImageUrl: null,
     rejectionReason: null,
+    videoUrl: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-02T00:00:00Z',
     ...overrides,
@@ -189,6 +190,8 @@ function renderEditListing() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: no ?step= param — component starts at step 1
+  mockUseSearchParams.mockReturnValue([new URLSearchParams(), vi.fn()]);
   // Default update mutation stub (non-pending)
   vi.mocked(useUpdateListing).mockReturnValue({
     mutate: vi.fn(),
@@ -308,6 +311,59 @@ describe('EditListing page', () => {
 
     // Must NOT navigate away from the page
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('savesStep2_withApplyVideoUrl_advancesToStep3', async () => {
+    // Start the component at step 2
+    mockUseSearchParams.mockReturnValue([new URLSearchParams('step=2'), vi.fn()]);
+
+    vi.mocked(useGetListing).mockReturnValue({
+      data: makeListing({ status: 'DRAFT', videoUrl: null }),
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useGetListing>);
+
+    const mutateFn = vi.fn((_data, options: { onSuccess?: () => void }) => {
+      options?.onSuccess?.();
+    });
+    vi.mocked(useUpdateListing).mockReturnValue({
+      mutate: mutateFn,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateListing>);
+
+    renderEditListing();
+
+    // Step 2 panel should be visible from the start
+    expect(screen.getByTestId('step-2-panel')).toHaveStyle('display: block');
+
+    // Find the video URL input by its placeholder
+    const videoInput = screen.getByPlaceholderText(
+      'https://www.youtube.com/watch?v=...',
+    ) as HTMLInputElement;
+    fireEvent.change(videoInput, {
+      target: { value: 'https://www.youtube.com/watch?v=abc123' },
+    });
+
+    // Click "Save & Continue" on step 2
+    // Multiple "Save & Continue" buttons exist (step 1 and step 2 are both mounted).
+    // The step 2 button is inside the visible step-2-panel.
+    const step2Panel = screen.getByTestId('step-2-panel');
+    const saveButton = step2Panel.querySelector('button[type="button"]') as HTMLButtonElement;
+    fireEvent.click(saveButton);
+
+    // mutate should be called with videoUrl and applyVideoUrl: true
+    await waitFor(() => {
+      expect(mutateFn).toHaveBeenCalledWith(
+        { videoUrl: 'https://www.youtube.com/watch?v=abc123', applyVideoUrl: true },
+        expect.objectContaining({ onSuccess: expect.any(Function) }),
+      );
+    });
+
+    // After successful save, component advances to step 3
+    await waitFor(() => {
+      expect(screen.getByTestId('step-2-panel')).toHaveStyle('display: none');
+      expect(screen.getByTestId('step-3-panel')).toHaveStyle('display: block');
+    });
   });
 
   it('calls mutate with addressConfirmed false when Change is clicked on a confirmed listing', async () => {
