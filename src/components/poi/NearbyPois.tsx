@@ -21,7 +21,7 @@ interface NearbyPoisProps {
 export function NearbyPois({ listingId }: NearbyPoisProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['pois', listingId],
-    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`, { skipAuth: true }),
+    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`),
   });
 
   if (isLoading) return null;
