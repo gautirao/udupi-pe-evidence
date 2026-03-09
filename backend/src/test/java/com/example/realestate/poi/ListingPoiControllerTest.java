@@ -7,7 +7,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -18,13 +17,14 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * WebMvcTest for {@link ListingPoiController}.
- * Verifies public GET /api/listings/{listingId}/pois: ordering, empty list, and no-auth access.
+ * Verifies GET /api/listings/{listingId}/pois: ordering, empty list, and auth enforcement.
  */
 @WebMvcTest(
         controllers = ListingPoiController.class,
@@ -37,15 +37,20 @@ class ListingPoiControllerTest {
 
     private static final UUID LISTING_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
 
-    /** Security config matching real JwtConfig: GET /api/listings/{id}/pois is permitAll. */
+    /**
+     * Security config matching real JwtConfig: all requests require authentication.
+     * The exceptionHandling entry point returns 401 (not Spring's default 403) to mirror
+     * production behaviour where oauth2ResourceServer sends WWW-Authenticate: Bearer.
+     */
     static class TestConfig {
         @Bean
         public SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
             return http
                     .csrf(AbstractHttpConfigurer::disable)
                     .authorizeHttpRequests(auth -> auth
-                            .requestMatchers(HttpMethod.GET, "/api/listings/*/pois").permitAll()
                             .anyRequest().authenticated())
+                    .exceptionHandling(ex -> ex
+                            .authenticationEntryPoint((req, res, authEx) -> res.setStatus(401)))
                     .build();
         }
     }
@@ -66,7 +71,7 @@ class ListingPoiControllerTest {
         PoiResponse poi2 = new PoiResponse("id-2", "St. Mary's School", "SCHOOL", 300, 13.3420, 74.7440, false, true);
         when(service.getApproved(LISTING_ID)).thenReturn(List.of(poi1, poi2));
 
-        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
+        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].id").value("id-1"))
@@ -84,7 +89,7 @@ class ListingPoiControllerTest {
         PoiResponse pinned   = new PoiResponse("id-pinned",   "Featured Park", "PARK",   200, 13.3430, 74.7450, true,  true);
         when(service.getApproved(LISTING_ID)).thenReturn(List.of(pinned, unpinned));
 
-        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
+        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].pinned").value(true))
@@ -99,19 +104,17 @@ class ListingPoiControllerTest {
     void getApproved_emptyList_returns200() throws Exception {
         when(service.getApproved(LISTING_ID)).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
+        mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID).with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
-    // ==================== Test 4: no Authorization header → 200, not 401 ====================
+    // ==================== Test 4: no Authorization header → 401 ====================
 
     @Test
-    void getApproved_noAuthRequired() throws Exception {
-        when(service.getApproved(LISTING_ID)).thenReturn(List.of());
-
-        // Deliberately omit Authorization header — endpoint must be publicly accessible.
+    void getApproved_withoutAuth_returns401() throws Exception {
+        // Deliberately omit Authorization header — endpoint requires authentication.
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
-                .andExpect(status().isOk());
+                .andExpect(status().isUnauthorized());
     }
 }
