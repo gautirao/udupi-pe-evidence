@@ -113,6 +113,19 @@
     .btn-danger:hover {
       opacity: 0.9;
     }
+    .btn-smart {
+      background: linear-gradient(135deg, #0ea5e9, #7c3aed);
+      color: white;
+    }
+    .btn-smart:hover {
+      opacity: 0.9;
+    }
+    #smartResult {
+      font-size: 12px;
+      color: #10b981;
+      margin-top: 4px;
+      min-height: 16px;
+    }
     .status {
       padding: 8px 12px;
       border-radius: 6px;
@@ -193,6 +206,8 @@
     <button class="btn btn-secondary" id="autoScrollBtn">📜 Load More Posts (Auto-Scroll)</button>
     <button class="btn btn-danger hidden" id="stopScrollBtn">⏹️ Stop Scrolling</button>
     <button class="btn btn-secondary" id="selectAllBtn">Select All Posts</button>
+    <button class="btn btn-smart" id="smartSelectBtn">✨ Smart Select</button>
+    <div id="smartResult"></div>
     <button class="btn btn-primary" id="extractBtn" disabled>Extract Selected</button>
     
     <p class="tip">💡 Click "Load More Posts" to auto-scroll and load ~100+ posts</p>

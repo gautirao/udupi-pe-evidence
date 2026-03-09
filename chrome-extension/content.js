@@ -677,6 +677,173 @@
     return groupNameEl ? groupNameEl.textContent.trim() : 'Unknown Group';
   }
 
+  // ── Smart Select: keyword scoring + Udupi gazetteer ─────────────────────────
+
+  // Threshold constants (tweak here for precision/recall trade-off)
+  const SMART_SELECT_RE_THRESHOLD = 3;    // minimum realEstateScore
+  const SMART_SELECT_LOC_THRESHOLD = 1;   // minimum locationScore
+  const SMART_SELECT_TOTAL_THRESHOLD = 6; // OR-gate: strong aggregate score
+
+  // Tier 1 — Transaction Intent (weight 3)
+  const TIER1_KEYWORDS = [
+    'sale', 'sell', 'selling', 'for sale', 'available', 'rent', 'to let',
+    'let out', 'lease', 'on rent', 'for rent', 'available for rent', 'to lease',
+    'urgently selling', 'immediate possession', 'ready to move', 'owner direct',
+    'direct owner', 'marata', 'marata ide', 'baadige', 'baadigege', 'baadigeye',
+    'manethu', 'maraate', 'marata madabeku', 'baadigege ide', 'looking for tenant',
+    'need tenant', 'tenant required'
+  ];
+
+  // Tier 2 — Property Type (weight 2)
+  const TIER2_KEYWORDS = [
+    'house', 'mane', 'home', 'flat', 'apartment', 'villa', 'bungalow', 'plot',
+    'site', 'land', 'property', 'compound', 'commercial', 'shop', 'office',
+    'godown', 'warehouse', 'bhumi', 'neele', 'neele jaaga', 'jaaga', 'building',
+    'independent house', 'duplex', 'row house', 'penthouse', 'layout',
+    'corner site', 'east facing', 'west facing', 'north facing', 'south facing',
+    'residential', 'agricultural', 'farm', 'site layout', 'gated community',
+    'gated layout'
+  ];
+
+  // Tier 3 — Measurements & Price (weight 2)
+  const TIER3_KEYWORDS = [
+    'bhk', '1bhk', '2bhk', '3bhk', 'sqft', 'sq ft', 'sft', 'square feet',
+    'cent', 'cents', 'gunta', 'guntha', 'grounds', 'acre', 'acres', 'sqm',
+    'lakh', 'lakhs', 'crore', 'cr', 'ground floor', 'first floor', 'second floor',
+    'top floor', 'total area', 'land area', 'built up', 'carpet area', 'super built'
+  ];
+
+  // Tier 4 — Contact Signals (weight 1)
+  const TIER4_KEYWORDS = [
+    'contact', 'call', 'whatsapp', 'dm', 'message', 'reach', 'mob', 'mobile',
+    'interested', 'ping', 'inbox', '+91'
+  ];
+
+  // Tier 5 — Negative Signals (subtract 2 each, cap penalty at -6)
+  const TIER5_NEGATIVE = [
+    'roommate', 'pg', 'paying guest', 'furniture', 'interior', 'renovation',
+    'civil work', 'plumber', 'electrician', 'cleaning', 'catering', 'job',
+    'hiring', 'vacancy', 'lost', 'found', 'missing', 'giveaway', 'donate'
+  ];
+
+  // Udupi district locality gazetteer
+  const UDUPI_CANONICAL = [
+    'udupi', 'manipal', 'brahmavar', 'barkur', 'katapady', 'padubidri', 'shirva',
+    'kundapur', 'kundapura', 'byndoor', 'navunda', 'hebri', 'karkala', 'nitte',
+    'moodabidri', 'mudabidri', 'kaup', 'malpe', 'saligrama', 'hejamadi', 'alevoor',
+    'kemmannu', 'santhekatte', 'ambalpady', 'bannanje', 'shivally', 'shivalli',
+    'kodavoor', 'mulky', 'mulki', 'kadekar', 'kalsanka', 'nanthur', 'biloor',
+    'thonse', 'parkala', 'pangala', 'sanoor', 'uchila', 'hiriadka', 'perdur',
+    'indrali', 'kuntikana', 'ajjarkad', 'kunjibettu', 'car street', 'padu', 'nada',
+    'pavanje', 'hejamadi cross', 'saligrama junction', 'manipal road', 'malpe road',
+    'kundapur road', 'brahmavar road', 'karkala road', 'padubidri road',
+    'udupi bypass', 'bypass road', 'nh 66', 'nh66', 'nh 17', 'tiger circle',
+    'end point', 'manipal junction', 'manipal main road', '100 feet road',
+    '60 feet road', '40 feet road', 'main road', 'bajpe', 'kotathattu', 'nagara',
+    'nalir', 'thottam', 'kemmannu bridge', 'new town', 'uppoor', 'kota',
+    'koteshwara'
+  ];
+
+  const UDUPI_ALIASES = {
+    'udpi': 'udupi', 'manipalu': 'manipal', 'mit': 'manipal', 'mahe': 'manipal',
+    'kmc': 'manipal', 'kasturba': 'manipal', 'bramhavar': 'brahmavar',
+    'kundapoor': 'kundapur', 'karkal': 'karkala', 'saligram': 'saligrama',
+    'katpadi': 'katapady', 'hejamady': 'hejamadi', 'shivalli': 'shivally'
+  };
+
+  // Positional patterns (contribute +1 to locationScore)
+  const POSITIONAL_PATTERNS = [
+    /near\s+\w+/i, /at\s+\w+\s+area/i, /in\s+\w+\s+area/i,
+    /behind\s+\w+/i, /opposite\s+\w+/i, /beside\s+\w+/i,
+    /close\s+to\s+\w+/i, /\w+\s+junction/i, /\w+\s+cross/i
+  ];
+
+  /**
+   * Scores a post text for real estate relevance and Udupi location mention.
+   * Returns { realEstateScore, locationScore, totalScore, matchedKeywords, matchedLocalities }
+   */
+  function scorePost(text) {
+    const lower = text.toLowerCase();
+    const matchedKeywords = [];
+    const matchedLocalities = [];
+    let realEstateScore = 0;
+
+    // Tier 1 (weight 3)
+    TIER1_KEYWORDS.forEach(kw => {
+      if (lower.includes(kw)) {
+        realEstateScore += 3;
+        matchedKeywords.push(kw);
+      }
+    });
+
+    // Tier 2 (weight 2)
+    TIER2_KEYWORDS.forEach(kw => {
+      if (lower.includes(kw)) {
+        realEstateScore += 2;
+        matchedKeywords.push(kw);
+      }
+    });
+
+    // Tier 3 (weight 2)
+    TIER3_KEYWORDS.forEach(kw => {
+      if (lower.includes(kw)) {
+        realEstateScore += 2;
+        matchedKeywords.push(kw);
+      }
+    });
+
+    // Tier 4 (weight 1)
+    TIER4_KEYWORDS.forEach(kw => {
+      if (lower.includes(kw)) {
+        realEstateScore += 1;
+        matchedKeywords.push(kw);
+      }
+    });
+
+    // Tier 5 — negative signals (subtract 2, cap at -6)
+    let penalty = 0;
+    TIER5_NEGATIVE.forEach(kw => {
+      if (lower.includes(kw) && penalty < 6) {
+        penalty += 2;
+      }
+    });
+    realEstateScore = Math.max(0, realEstateScore - penalty);
+
+    // Location scoring
+    let locationScore = 0;
+
+    // Check canonical localities
+    UDUPI_CANONICAL.forEach(loc => {
+      if (lower.includes(loc)) {
+        locationScore = Math.min(2, locationScore + 2);
+        matchedLocalities.push(loc);
+      }
+    });
+
+    // Check aliases
+    if (locationScore < 2) {
+      Object.keys(UDUPI_ALIASES).forEach(alias => {
+        if (lower.includes(alias)) {
+          locationScore = Math.min(2, locationScore + 2);
+          matchedLocalities.push(`${alias}→${UDUPI_ALIASES[alias]}`);
+        }
+      });
+    }
+
+    // Positional patterns (add 1, cap at 2)
+    if (locationScore < 2) {
+      POSITIONAL_PATTERNS.forEach(pattern => {
+        if (pattern.test(lower)) {
+          locationScore = Math.min(2, locationScore + 1);
+        }
+      });
+    }
+
+    const totalScore = realEstateScore + locationScore;
+
+    return { realEstateScore, locationScore, totalScore, matchedKeywords, matchedLocalities };
+  }
+
   // Message handler for popup communication
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     switch (message.action) {
@@ -856,6 +1023,58 @@
           });
         })();
         return true; // Keep channel open for async response
+
+      case 'smartSelect': {
+        let selected = 0;
+        let totalScanned = 0;
+        let skipped = 0;
+
+        postsOnPage.forEach((post, index) => {
+          const text = getPostText(post);
+          totalScanned++;
+
+          if (!text) {
+            skipped++;
+            const checkbox = post.querySelector('.udupi-post-checkbox');
+            if (checkbox) checkbox.checked = false;
+            selectedPosts.delete(String(index));
+            post.classList.remove('udupi-selected');
+            return;
+          }
+
+          const result = scorePost(text);
+          const isMatch =
+            (result.realEstateScore >= SMART_SELECT_RE_THRESHOLD && result.locationScore >= SMART_SELECT_LOC_THRESHOLD) ||
+            result.totalScore >= SMART_SELECT_TOTAL_THRESHOLD;
+
+          const checkbox = post.querySelector('.udupi-post-checkbox');
+          const label = post.querySelector('.udupi-label');
+
+          if (isMatch) {
+            selectedPosts.add(String(index));
+            post.classList.add('udupi-selected');
+            if (checkbox) checkbox.checked = true;
+            // Set hover tooltip showing matched signals
+            if (label) {
+              const hints = [];
+              if (result.matchedKeywords.length > 0) hints.push(`Keywords: ${result.matchedKeywords.slice(0, 5).join(', ')}`);
+              if (result.matchedLocalities.length > 0) hints.push(`Location: ${result.matchedLocalities.join(', ')}`);
+              hints.push(`Score: RE=${result.realEstateScore} Loc=${result.locationScore}`);
+              label.title = hints.join(' | ');
+            }
+            selected++;
+          } else {
+            selectedPosts.delete(String(index));
+            post.classList.remove('udupi-selected');
+            if (checkbox) checkbox.checked = false;
+            if (label) label.title = `Score: RE=${result.realEstateScore} Loc=${result.locationScore} (not selected)`;
+          }
+        });
+
+        console.log(`[Udupi Tracker] Smart Select: ${selected}/${totalScanned} posts selected, ${skipped} skipped (no text)`);
+        sendResponse({ selected, totalScanned, skipped });
+        break;
+      }
     }
     return true; // Keep channel open for async response
   });

@@ -114,6 +114,30 @@ document.getElementById('selectAllBtn').addEventListener('click', async () => {
   }
 });
 
+// Smart Select — auto-check only real estate posts with location mentions
+document.getElementById('smartSelectBtn').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const smartSelectBtn = document.getElementById('smartSelectBtn');
+  const smartResult = document.getElementById('smartResult');
+
+  smartSelectBtn.disabled = true;
+  smartResult.textContent = 'Scanning…';
+
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { action: 'smartSelect' });
+    if (response) {
+      document.getElementById('postsSelected').textContent = response.selected;
+      document.getElementById('extractBtn').disabled = response.selected === 0;
+      smartResult.textContent = `Smart Select: ${response.selected} of ${response.totalScanned} posts selected`;
+    }
+  } catch (error) {
+    smartResult.textContent = 'Error: could not scan posts';
+    showStatus(`Smart Select error: ${error.message}`, 'error');
+  }
+
+  smartSelectBtn.disabled = false;
+});
+
 // Extract posts from last 2 days - ONE CLICK SOLUTION
 document.getElementById('extractRecentBtn').addEventListener('click', async () => {
   const apiUrl = document.getElementById('apiUrl').value.trim();
