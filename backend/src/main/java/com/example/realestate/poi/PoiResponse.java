@@ -1,26 +1,29 @@
 package com.example.realestate.poi;
 
-import java.util.UUID;
-
-/** Public-facing POI DTO — only approved, non-sensitive fields. */
+/**
+ * Public read-only view of a {@link ListingPoi}.
+ * Returned by the public GET /api/listings/{listingId}/pois endpoint.
+ */
 public record PoiResponse(
-        UUID id,
+        String id,
         String name,
         String category,
-        int distanceMeters,
-        double latitude,
-        double longitude,
-        boolean pinned
+        Integer distanceMeters,
+        Double latitude,
+        Double longitude,
+        boolean pinned,
+        boolean approved
 ) {
-    static PoiResponse from(ListingPoi p) {
+    public static PoiResponse from(ListingPoi p) {
         return new PoiResponse(
-                p.getId(),
+                p.getId().toString(),
                 p.getName(),
                 p.getCategory(),
-                p.getDistanceMeters() != null ? p.getDistanceMeters() : 0,
-                p.getLatitude() != null ? p.getLatitude() : 0.0,
-                p.getLongitude() != null ? p.getLongitude() : 0.0,
-                p.isPinned()
+                p.getDistanceMeters(),
+                p.getLatitude(),
+                p.getLongitude(),
+                Boolean.TRUE.equals(p.getPinned()),
+                Boolean.TRUE.equals(p.getApproved())
         );
     }
 }

@@ -1,9 +1,12 @@
 package com.example.realestate.poi;
 
-/** Request body for dealer-added manual POIs. */
+/**
+ * Request DTO for POST /api/listings/{listingId}/pois/manual.
+ * All fields are nullable at the record level; validation is performed in the controller.
+ */
 public record ManualPoiRequest(
         String name,
         String category,
-        double latitude,
-        double longitude
+        Double latitude,
+        Double longitude
 ) {}

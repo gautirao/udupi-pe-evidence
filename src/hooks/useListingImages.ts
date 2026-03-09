@@ -59,6 +59,7 @@ export function useListingImages(listingId: string | undefined) {
     queryKey,
     queryFn: () => api.get<ListingImage[]>(`/api/listings/${listingId}/images`),
     enabled: !!listingId,
+    staleTime: 30_000,
   });
 
   const imageCount = images.length;

@@ -358,12 +358,7 @@ export default function ListingDetail() {
               </Card>
             )}
 
-            {/* Nearby POIs */}
-            <Card>
-              <CardContent className="p-4">
-                <NearbyPois listingId={listing.id} />
-              </CardContent>
-            </Card>
+            <NearbyPois listingId={listing.id} />
 
             {/* Posted Date */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

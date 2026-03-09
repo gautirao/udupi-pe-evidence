@@ -38,6 +38,10 @@ vi.mock('@/components/listing/SimilarListings', () => ({
   SimilarListings: () => React.createElement('div', { 'data-testid': 'similar-listings' }),
 }));
 
+vi.mock('@/components/poi/NearbyPois', () => ({
+  NearbyPois: () => React.createElement('div', { 'data-testid': 'nearby-pois' }),
+}));
+
 vi.mock('@/components/listing/RequestViewingModal', () => ({
   RequestViewingModal: () => React.createElement('div', { 'data-testid': 'request-viewing-modal' }),
 }));

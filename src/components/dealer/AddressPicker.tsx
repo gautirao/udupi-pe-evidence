@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, Check, Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 // Fix default marker icons in Leaflet (same fix as PropertyMap)
 delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl;
@@ -46,7 +47,9 @@ export interface AddressPickerProps {
   initialLatitude?: number | null;
   initialLongitude?: number | null;
   initialLocality?: string | null;
+  initialConfirmed?: boolean;
   onConfirm: (address: AddressPickerValue) => void;
+  onUnconfirm?: () => void;
 }
 
 /** Fly the map to a given position when it changes. */
@@ -57,6 +60,12 @@ function MapFlyTo({ position }: { position: L.LatLngExpression | null }) {
       map.flyTo(position, 16, { duration: 0.8 });
     }
   }, [position, map]);
+  return null;
+}
+
+/** Forward map click events to a callback. */
+function MapClickHandler({ onClick }: { onClick: (latlng: L.LatLng) => void }) {
+  useMapEvents({ click: (e) => onClick(e.latlng) });
   return null;
 }
 
@@ -83,7 +92,9 @@ export function AddressPicker({
   initialLatitude,
   initialLongitude,
   initialLocality,
+  initialConfirmed,
   onConfirm,
+  onUnconfirm,
 }: AddressPickerProps) {
   // --- state ---
   const [query, setQuery] = useState(initialLocality ?? '');
@@ -101,11 +112,15 @@ export function AddressPicker({
     hasInitial ? [initialLatitude!, initialLongitude!] : null,
   );
   const [displayName, setDisplayName] = useState(initialLocality ?? '');
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmed, setConfirmed] = useState(initialConfirmed ?? false);
   const [dragged, setDragged] = useState(false);
 
-  // Keep the latest parsed address for confirm-after-drag
-  const parsedRef = useRef<ParsedAddress>({ address_line1: '' });
+  // Parsed address fields for display and confirm output
+  const [parsedAddress, setParsedAddress] = useState<ParsedAddress>({ address_line1: '' });
+
+  const [geolocating, setGeolocating] = useState(false);
+
+  const { toast } = useToast();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -152,7 +167,7 @@ export function AddressPicker({
     (result: NominatimResult) => {
       const pos: L.LatLngTuple = [result.lat, result.lon];
       const parsed = parseAddress(result.address);
-      parsedRef.current = parsed;
+      setParsedAddress(parsed);
 
       setPinPosition(pos);
       setDisplayName(result.display_name);
@@ -178,7 +193,7 @@ export function AddressPicker({
       const rev = await reverseGeocode(latlng.lat, latlng.lng);
       if (rev) {
         const parsed = parseAddress(rev.address);
-        parsedRef.current = parsed;
+        setParsedAddress(parsed);
         setDisplayName(rev.display_name);
         setQuery(rev.display_name);
       }
@@ -187,15 +202,88 @@ export function AddressPicker({
     }
   }, []);
 
+  // --- map click → place/move pin, require explicit confirm ---
+  const handleMapClick = useCallback(async (latlng: L.LatLng) => {
+    const pos: L.LatLngTuple = [latlng.lat, latlng.lng];
+    setPinPosition(pos);
+    setConfirmed(false);
+    setDragged(true);
+
+    try {
+      const rev = await reverseGeocode(latlng.lat, latlng.lng);
+      if (rev) {
+        const parsed = parseAddress(rev.address);
+        setParsedAddress(parsed);
+        setDisplayName(rev.display_name);
+        setQuery(rev.display_name);
+      }
+    } catch {
+      // keep existing display name on failure
+    }
+  }, []);
+
+  // --- geolocation: use browser location to place pin ---
+  const handleUseMyLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      toast({ title: 'Not supported', description: 'Geolocation is not supported by your browser.' });
+      return;
+    }
+    setGeolocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const pos: L.LatLngTuple = [latitude, longitude];
+        setPinPosition(pos);
+        setConfirmed(false);
+        setDragged(true);
+        try {
+          const rev = await reverseGeocode(latitude, longitude);
+          if (rev) {
+            const parsed = parseAddress(rev.address);
+            setParsedAddress(parsed);
+            setDisplayName(rev.display_name);
+            setQuery(rev.display_name);
+          }
+        } catch {
+          // keep existing display name
+        } finally {
+          setGeolocating(false);
+        }
+      },
+      (error) => {
+        setGeolocating(false);
+        const messages: Record<number, string> = {
+          1: 'Location access denied. Please allow location access in your browser settings.',
+          2: 'Location unavailable. Please try searching manually.',
+          3: 'Location request timed out. Please try again.',
+        };
+        toast({
+          title: 'Could not get location',
+          description: messages[error.code] ?? 'An unknown error occurred.',
+          variant: 'destructive',
+        });
+      },
+      { timeout: 10000 },
+    );
+  }, [toast]);
+
   // --- explicit confirm after drag ---
   const handleConfirmClick = useCallback(() => {
     if (!pinPosition) return;
     setConfirmed(true);
     setDragged(false);
-    onConfirm(
-      buildOutput(pinPosition[0], pinPosition[1], parsedRef.current, true),
-    );
-  }, [pinPosition, onConfirm]);
+    onConfirm(buildOutput(pinPosition[0], pinPosition[1], parsedAddress, true));
+  }, [pinPosition, onConfirm, parsedAddress]);
+
+  // --- change location: reset confirmed state, preserve pin position ---
+  const handleChangeLocation = useCallback(() => {
+    setConfirmed(false);
+    setDragged(false);
+    setQuery('');
+    setDisplayName('');
+    setParsedAddress({ address_line1: '' });
+    onUnconfirm?.();
+  }, [onUnconfirm]);
 
   const markerEventHandlers = { dragend: handleMarkerDragEnd };
 
@@ -236,6 +324,32 @@ export function AddressPicker({
         )}
       </div>
 
+      {/* Use my location button */}
+      {!!navigator.geolocation && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleUseMyLocation}
+            disabled={geolocating}
+          >
+            {geolocating ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                Getting location…
+              </>
+            ) : (
+              <>
+                <MapPin className="h-3 w-3 mr-1" />
+                Use my location
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
       {/* Map */}
       <div className="h-[300px] rounded-lg overflow-hidden border">
         <MapContainer
@@ -249,6 +363,7 @@ export function AddressPicker({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MapFlyTo position={pinPosition} />
+          <MapClickHandler onClick={handleMapClick} />
           {pinPosition && (
             <Marker
               position={pinPosition}
@@ -272,17 +387,41 @@ export function AddressPicker({
               Confirm Location
             </Button>
           ) : confirmed ? (
-            <span className="inline-flex items-center gap-1 text-sm text-green-600 font-medium whitespace-nowrap pt-0.5">
-              <Check className="h-4 w-4" />
-              Confirmed
-            </span>
+            <div className="flex items-center justify-between rounded-md border border-green-200 bg-green-50 px-3 py-2">
+              <div className="flex items-center gap-2 text-sm text-green-700 font-medium">
+                <Check className="h-4 w-4 flex-shrink-0" />
+                <span>Location confirmed</span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground h-7 px-2 text-xs"
+                onClick={handleChangeLocation}
+              >
+                Change
+              </Button>
+            </div>
           ) : null}
+        </div>
+      )}
+
+      {confirmed && (parsedAddress.address_line1 || parsedAddress.city || parsedAddress.postcode) && (
+        <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm space-y-0.5">
+          {parsedAddress.address_line1 && (
+            <p className="font-medium">{parsedAddress.address_line1}</p>
+          )}
+          {(parsedAddress.city || parsedAddress.postcode) && (
+            <p className="text-muted-foreground">
+              {[parsedAddress.city, parsedAddress.postcode].filter(Boolean).join(', ')}
+            </p>
+          )}
         </div>
       )}
 
       {!pinPosition && (
         <p className="text-sm text-muted-foreground">
-          Search for a location above, then drag the pin to the exact spot.
+          Search for a location above, click the map to place a pin, or use "Use my location".
         </p>
       )}
     </div>

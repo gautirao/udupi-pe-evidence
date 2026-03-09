@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { PriceField } from '@/components/dealer/PriceField';
 import {
   Select,
   SelectContent,
@@ -18,6 +19,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
@@ -36,7 +38,7 @@ export default function NewListing() {
 
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
   const [title, setTitle] = useState('');
-  const [price, setPrice] = useState('');
+  const [priceRupees, setPriceRupees] = useState<number | null>(null);
   const [description, setDescription] = useState('');
 
   // Conditional field state (captured for UX; persisted on edit page via PUT)
@@ -59,13 +61,12 @@ export default function NewListing() {
   }
 
   const isCommercial = propertyType === 'commercial';
-  const canSubmit = propertyType !== '' && !isCommercial && price !== '';
+  const canSubmit = propertyType !== '' && !isCommercial && priceRupees != null && priceRupees > 0;
 
   const handleSaveDraft = async () => {
     if (!propertyType || isCommercial) return;
 
-    const priceNum = parseFloat(price);
-    if (isNaN(priceNum) || priceNum <= 0) {
+    if (!priceRupees || priceRupees <= 0) {
       toast({
         title: 'Invalid price',
         description: 'Please enter a valid price greater than 0.',
@@ -81,7 +82,7 @@ export default function NewListing() {
       {
         propertyType,
         title: title.trim() || undefined,
-        price: priceNum,
+        price: priceRupees,
         description: description.trim() || undefined,
         landArea: landAreaNum && !isNaN(landAreaNum) ? landAreaNum : undefined,
         bedrooms: bedroomsNum && !isNaN(bedroomsNum) ? bedroomsNum : undefined,
@@ -90,6 +91,19 @@ export default function NewListing() {
         onSuccess: (data) => {
           toast({ title: 'Draft saved', description: 'Your listing has been created as a draft.' });
           navigate(`/dealer/listings/${data.id}/edit`);
+        },
+        onError: (error: Error) => {
+          const apiErr = error as ApiError;
+          const body = apiErr.body as Record<string, unknown> | undefined;
+          const message =
+            (body?.message as string) ??
+            (body?.error as string) ??
+            'Failed to save draft. Please try again.';
+          toast({
+            title: 'Save failed',
+            description: message,
+            variant: 'destructive',
+          });
         },
       },
     );
@@ -105,6 +119,38 @@ export default function NewListing() {
               Fill in the basic details. You can add images and address later.
             </CardDescription>
           </CardHeader>
+          {/* Step indicator */}
+          <div className="flex items-center justify-center gap-0 px-6 pb-4">
+            {[
+              { n: 1, label: 'Basic Info' },
+              { n: 2, label: 'Images' },
+              { n: 3, label: 'Location & Submit' },
+            ].map((step, i, arr) => (
+              <div key={step.n} className="flex items-center">
+                <div className="flex flex-col items-center">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
+                      step.n === 1
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground'
+                    }`}
+                  >
+                    {step.n}
+                  </div>
+                  <span
+                    className={`mt-1 text-xs ${
+                      step.n === 1 ? 'text-primary font-medium' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className="w-12 h-px bg-border mx-2 mb-4" />
+                )}
+              </div>
+            ))}
+          </div>
           <CardContent className="space-y-6">
             {/* Property Type */}
             <div className="space-y-2">
@@ -128,8 +174,8 @@ export default function NewListing() {
 
             {/* Commercial disabled notice */}
             {isCommercial && (
-              <Alert variant="destructive">
-                <AlertTriangle className="h-4 w-4" />
+              <Alert>
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
                 <AlertDescription>
                   Commercial listings are not supported yet. Please select a different property type.
                 </AlertDescription>
@@ -187,17 +233,12 @@ export default function NewListing() {
                 </div>
 
                 {/* Price */}
-                <div className="space-y-2">
-                  <Label htmlFor="price">Price (INR) *</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 2500000"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
-                </div>
+                <PriceField
+                  id="price"
+                  initialRupees={null}
+                  onChange={setPriceRupees}
+                  required
+                />
 
                 {/* Description */}
                 <div className="space-y-2">
@@ -216,7 +257,7 @@ export default function NewListing() {
             {/* Actions */}
             {propertyType && !isCommercial && (
               <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => navigate(-1)}>
+                <Button variant="outline" onClick={() => navigate('/dealer/listings')}>
                   Cancel
                 </Button>
                 <Button
@@ -226,7 +267,7 @@ export default function NewListing() {
                   {createListing.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Save as Draft
+                  {createListing.isPending ? 'Saving…' : 'Continue to Images & Location'}
                 </Button>
               </div>
             )}

@@ -1,11 +1,14 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useRef, useEffect } from 'react';
+import { searchNominatim, type NominatimResult } from '@/lib/geocode';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -13,336 +16,454 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Pin, Trash2, Check, MapPin } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { Pin, Trash2, PinOff, MapPin, Loader2, Search, X } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
+import { CATEGORY_LABELS, formatDistance } from '@/lib/poi-categories';
 
-// ---- Types ----------------------------------------------------------------
-
-interface PoiItem {
+interface PoiResponse {
   id: string;
   name: string;
   category: string;
-  distanceMeters: number;
-  latitude: number;
-  longitude: number;
+  distanceMeters: number | null;
+  latitude: number | null;
+  longitude: number | null;
   pinned: boolean;
-  approved?: boolean;
-  source?: string;
+  approved: boolean;
 }
 
-const POI_CATEGORIES = [
-  'WORSHIP', 'HOSPITAL', 'SCHOOL', 'HOTEL', 'TRANSPORT', 'AIRPORT', 'GROCERY',
-] as const;
+const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
 
-const CATEGORY_LABELS: Record<string, string> = {
-  WORSHIP: 'Place of Worship',
-  HOSPITAL: 'Hospital / Clinic',
-  SCHOOL: 'School / University',
-  HOTEL: 'Hotel / Guest House',
-  TRANSPORT: 'Bus / Train Station',
-  AIRPORT: 'Airport',
-  GROCERY: 'Supermarket / Market',
-};
-
-// ---- Query keys -----------------------------------------------------------
-
-const suggestionsKey = (listingId: string) => ['poi-suggestions', listingId] as const;
-
-// ---- Sub-components -------------------------------------------------------
-
-function DistanceBadge({ meters }: { meters: number }) {
-  const label = meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${meters} m`;
-  return <span className="text-xs text-muted-foreground">{label}</span>;
+interface PoiRowProps {
+  poi: PoiResponse;
+  showApprove?: boolean;
+  onApprove?: (id: string) => void;
+  onPin: (id: string) => void;
+  onDelete: (id: string) => void;
+  isPinPending: boolean;
+  isDeletePending: boolean;
+  isApprovePending?: boolean;
 }
 
-function CategoryBadge({ category }: { category: string }) {
+function PoiRow({
+  poi,
+  showApprove,
+  onApprove,
+  onPin,
+  onDelete,
+  isPinPending,
+  isDeletePending,
+  isApprovePending,
+}: PoiRowProps) {
   return (
-    <Badge variant="secondary" className="text-xs">
-      {CATEGORY_LABELS[category] ?? category}
-    </Badge>
-  );
-}
-
-// ---- Main component -------------------------------------------------------
-
-interface PoiManagerProps {
-  listingId: string;
-}
-
-export function PoiManager({ listingId }: PoiManagerProps) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  // Fetch suggestions (triggers Overpass if cache miss)
-  const { data: allPois = [], isLoading: loading } = useQuery({
-    queryKey: suggestionsKey(listingId),
-    queryFn: () => api.get<PoiItem[]>(`/api/listings/${listingId}/pois/suggestions`),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const unapproved = allPois.filter((p) => !p.approved);
-  const approved = allPois.filter((p) => p.approved);
-
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: suggestionsKey(listingId) });
-
-  // Approve
-  const approveMutation = useMutation({
-    mutationFn: (poiId: string) =>
-      api.patch(`/api/listings/${listingId}/pois/${poiId}/approve`),
-    onSuccess: () => { invalidate(); toast({ title: 'POI approved' }); },
-    onError: () => toast({ title: 'Approve failed', variant: 'destructive' }),
-  });
-
-  // Pin toggle
-  const pinMutation = useMutation({
-    mutationFn: (poiId: string) =>
-      api.patch(`/api/listings/${listingId}/pois/${poiId}/pin`),
-    onSuccess: () => { invalidate(); },
-    onError: () => toast({ title: 'Pin update failed', variant: 'destructive' }),
-  });
-
-  // Delete
-  const deleteMutation = useMutation({
-    mutationFn: (poiId: string) =>
-      api.delete(`/api/listings/${listingId}/pois/${poiId}`),
-    onSuccess: () => { invalidate(); toast({ title: 'POI removed' }); },
-    onError: () => toast({ title: 'Delete failed', variant: 'destructive' }),
-  });
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MapPin className="h-4 w-4" />
-          Nearby POIs
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Fetching nearby places…
-          </div>
-        ) : (
-          <Tabs defaultValue="suggestions">
-            <TabsList className="mb-4">
-              <TabsTrigger value="suggestions">
-                Suggestions {unapproved.length > 0 && `(${unapproved.length})`}
-              </TabsTrigger>
-              <TabsTrigger value="approved">
-                Approved {approved.length > 0 && `(${approved.length})`}
-              </TabsTrigger>
-              <TabsTrigger value="manual">Add Manual</TabsTrigger>
-            </TabsList>
-
-            {/* ---- Suggestions tab ---- */}
-            <TabsContent value="suggestions">
-              {unapproved.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  No pending suggestions. All OSM results have been reviewed.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {unapproved.map((poi) => (
-                    <li
-                      key={poi.id}
-                      className="flex items-center justify-between rounded border px-3 py-2"
-                    >
-                      <div className="flex flex-col gap-1">
-                        <span className="text-sm font-medium">{poi.name}</span>
-                        <div className="flex items-center gap-2">
-                          <CategoryBadge category={poi.category} />
-                          <DistanceBadge meters={poi.distanceMeters} />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => approveMutation.mutate(poi.id)}
-                          disabled={approveMutation.isPending}
-                        >
-                          <Check className="h-3 w-3 mr-1" />
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteMutation.mutate(poi.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </TabsContent>
-
-            {/* ---- Approved tab ---- */}
-            <TabsContent value="approved">
-              {approved.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  No approved POIs yet. Approve suggestions or add manual entries.
-                </p>
-              ) : (
-                <ul className="space-y-2">
-                  {approved.map((poi) => (
-                    <li
-                      key={poi.id}
-                      className="flex items-center justify-between rounded border px-3 py-2"
-                    >
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{poi.name}</span>
-                          {poi.pinned && (
-                            <Badge className="text-xs py-0 px-1">Pinned</Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <CategoryBadge category={poi.category} />
-                          <DistanceBadge meters={poi.distanceMeters} />
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={poi.pinned ? 'default' : 'outline'}
-                          onClick={() => pinMutation.mutate(poi.id)}
-                          disabled={pinMutation.isPending}
-                          title={poi.pinned ? 'Unpin' : 'Pin to top'}
-                        >
-                          <Pin className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => deleteMutation.mutate(poi.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </TabsContent>
-
-            {/* ---- Add Manual tab ---- */}
-            <TabsContent value="manual">
-              <ManualPoiForm listingId={listingId} onAdded={invalidate} />
-            </TabsContent>
-          </Tabs>
+    <div className="flex items-center gap-3 py-2 border-b last:border-b-0">
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{poi.name}</p>
+        <p className="text-xs text-muted-foreground">
+          {CATEGORY_LABELS[poi.category] ?? poi.category} &middot;{' '}
+          {formatDistance(poi.distanceMeters)}
+        </p>
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        {showApprove && onApprove && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onApprove(poi.id)}
+            disabled={isApprovePending}
+            aria-label={`Approve ${poi.name}`}
+          >
+            Approve
+          </Button>
         )}
-      </CardContent>
-    </Card>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => onPin(poi.id)}
+          disabled={isPinPending}
+          aria-label={poi.pinned ? `Unpin ${poi.name}` : `Pin ${poi.name}`}
+        >
+          {poi.pinned ? (
+            <Pin className="h-4 w-4 fill-current text-primary" />
+          ) : (
+            <PinOff className="h-4 w-4 text-muted-foreground" />
+          )}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => onDelete(poi.id)}
+          disabled={isDeletePending}
+          aria-label={`Delete ${poi.name}`}
+        >
+          <Trash2 className="h-4 w-4 text-destructive" />
+        </Button>
+      </div>
+    </div>
   );
 }
 
-// ---- Manual add form -------------------------------------------------------
+function SkeletonRows() {
+  return (
+    <div className="space-y-3 py-2">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex items-center gap-3">
+          <div className="flex-1 space-y-1">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+          <Skeleton className="h-8 w-16" />
+          <Skeleton className="h-8 w-8" />
+          <Skeleton className="h-8 w-8" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
-interface ManualPoiFormProps {
+interface AddManualFormProps {
   listingId: string;
   onAdded: () => void;
 }
 
-function ManualPoiForm({ listingId, onAdded }: ManualPoiFormProps) {
-  const { toast } = useToast();
+function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
-  const [lat, setLat] = useState('');
-  const [lng, setLng] = useState('');
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationResults, setLocationResults] = useState<NominatimResult[]>([]);
+  const [locationSearching, setLocationSearching] = useState(false);
+  const [locationChip, setLocationChip] = useState<{ name: string; lat: number; lon: number } | null>(null);
+  const [showLocationResults, setShowLocationResults] = useState(false);
+  const locationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (locationWrapperRef.current && !locationWrapperRef.current.contains(e.target as Node)) {
+        setShowLocationResults(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLocationSearch = (value: string) => {
+    setLocationQuery(value);
+    setLocationChip(null);
+    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
+    if (!value.trim()) {
+      setLocationResults([]);
+      setShowLocationResults(false);
+      return;
+    }
+    locationDebounceRef.current = setTimeout(async () => {
+      setLocationSearching(true);
+      try {
+        const res = await searchNominatim(value);
+        setLocationResults(res);
+        setShowLocationResults(res.length > 0);
+      } catch {
+        setLocationResults([]);
+      } finally {
+        setLocationSearching(false);
+      }
+    }, 400);
+  };
+
+  const handleLocationSelect = (result: NominatimResult) => {
+    setLocationChip({ name: result.display_name, lat: result.lat, lon: result.lon });
+    setLocationQuery(result.display_name);
+    setShowLocationResults(false);
+  };
+
+  const handleLocationClear = () => {
+    setLocationChip(null);
+    setLocationQuery('');
+    setLocationResults([]);
+  };
 
   const addMutation = useMutation({
     mutationFn: () =>
       api.post(`/api/listings/${listingId}/pois/manual`, {
-        name,
+        name: name.trim(),
         category,
-        latitude: parseFloat(lat),
-        longitude: parseFloat(lng),
+        latitude: locationChip?.lat,
+        longitude: locationChip?.lon,
       }),
+    onSettled: () => {
+      // Invalidates the dealer suggestions cache. The public POI cache
+      // (['pois', listingId]) is managed separately by PR-15.6 public display.
+      queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
+    },
     onSuccess: () => {
-      toast({ title: 'Manual POI added' });
       setName('');
       setCategory('');
-      setLat('');
-      setLng('');
+      setLocationQuery('');
+      setLocationChip(null);
+      setLocationResults([]);
       onAdded();
     },
-    onError: () => toast({ title: 'Add failed', variant: 'destructive' }),
   });
 
-  const isValid =
-    name.trim().length > 0 &&
-    category.length > 0 &&
-    !isNaN(parseFloat(lat)) &&
-    !isNaN(parseFloat(lng));
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !category) return;
+    addMutation.mutate();
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
+    <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+      <div className="space-y-1">
         <Label htmlFor="poi-name">Name</Label>
         <Input
           id="poi-name"
-          placeholder="e.g. Sri Anantheshwara Temple"
+          placeholder="e.g. Sri Krishna Temple"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          required
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Label htmlFor="poi-category">Category</Label>
-        <Select value={category} onValueChange={setCategory}>
+        <Select value={category} onValueChange={setCategory} required>
           <SelectTrigger id="poi-category">
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
           <SelectContent>
-            {POI_CATEGORIES.map((c) => (
-              <SelectItem key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+            {CATEGORY_KEYS.map((key) => (
+              <SelectItem key={key} value={key}>
+                {CATEGORY_LABELS[key]}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="poi-lat">Latitude</Label>
-          <Input
-            id="poi-lat"
-            type="number"
-            step="any"
-            placeholder="13.3392"
-            value={lat}
-            onChange={(e) => setLat(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="poi-lng">Longitude</Label>
-          <Input
-            id="poi-lng"
-            type="number"
-            step="any"
-            placeholder="74.7464"
-            value={lng}
-            onChange={(e) => setLng(e.target.value)}
-          />
+      <div className="space-y-1">
+        <Label htmlFor="poi-location">Location (optional)</Label>
+        <div ref={locationWrapperRef}>
+          <div className="relative">
+            {locationChip ? (
+              /* Location chip */
+              <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 text-sm">
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="flex-1 truncate">{locationChip.name}</span>
+                <button
+                  type="button"
+                  onClick={handleLocationClear}
+                  aria-label="Clear location"
+                  className="shrink-0 rounded-sm hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              /* Search input */
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                {locationSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                <Input
+                  id="poi-location"
+                  placeholder="Search for a location…"
+                  value={locationQuery}
+                  onChange={(e) => handleLocationSearch(e.target.value)}
+                  onFocus={() => locationResults.length > 0 && setShowLocationResults(true)}
+                  className="pl-9 pr-9"
+                />
+              </div>
+            )}
+            {/* Dropdown results */}
+            {showLocationResults && locationResults.length > 0 && (
+              <ul className="absolute z-[1100] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                {locationResults.map((r, i) => (
+                  <li
+                    key={`${r.lat}-${r.lon}-${i}`}
+                    className="px-3 py-2 text-sm cursor-pointer hover:bg-accent truncate"
+                    onClick={() => handleLocationSelect(r)}
+                  >
+                    <MapPin className="inline-block h-3.5 w-3.5 mr-1.5 text-muted-foreground" />
+                    {r.display_name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {(locationQuery.length > 0 || locationChip !== null) && (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+              onClick={handleLocationClear}
+            >
+              Add without location
+            </button>
+          )}
         </div>
       </div>
 
+      {addMutation.isError && (
+        <Alert variant="destructive">
+          <AlertDescription>Failed to add POI. Please try again.</AlertDescription>
+        </Alert>
+      )}
+
       <Button
-        onClick={() => addMutation.mutate()}
-        disabled={!isValid || addMutation.isPending}
+        type="submit"
+        disabled={addMutation.isPending || !name.trim() || !category || locationSearching}
         className="w-full"
       >
-        {addMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Add POI
+        {addMutation.isPending ? 'Adding…' : 'Add POI'}
       </Button>
-    </div>
+    </form>
+  );
+}
+
+interface PoiManagerProps {
+  listingId: string;
+}
+
+export function PoiManager({ listingId }: PoiManagerProps) {
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('nearby');
+
+  const {
+    data: pois,
+    isLoading,
+    isError,
+  } = useQuery({
+    queryKey: ['pois', 'suggestions', listingId],
+    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois/suggestions`),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (poiId: string) =>
+      api.patch(`/api/listings/${listingId}/pois/${poiId}/approve`),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
+    },
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: (poiId: string) =>
+      api.patch(`/api/listings/${listingId}/pois/${poiId}/pin`),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (poiId: string) =>
+      api.delete(`/api/listings/${listingId}/pois/${poiId}`),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
+    },
+  });
+
+  const unapprovedPois = (pois ?? []).filter((p) => !p.approved);
+
+  const approvedPois = (pois ?? [])
+    .filter((p) => p.approved)
+    .sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const da = a.distanceMeters ?? Infinity;
+      const db = b.distanceMeters ?? Infinity;
+      return da - db;
+    });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Nearby Points of Interest</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="mb-4">
+            <TabsTrigger value="nearby">Nearby Places</TabsTrigger>
+            <TabsTrigger value="approved">
+              Approved
+              {approvedPois.length > 0 && (
+                <span className="ml-1 rounded-full bg-primary text-primary-foreground text-xs px-1.5 py-0.5">
+                  {approvedPois.length}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Nearby Places tab */}
+          <TabsContent value="nearby">
+            {isLoading && <SkeletonRows />}
+            {isError && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Failed to load POI suggestions. Please refresh and try again.
+                </AlertDescription>
+              </Alert>
+            )}
+            {!isLoading && !isError && unapprovedPois.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No nearby places found for this listing.
+              </p>
+            )}
+            {!isLoading && !isError && unapprovedPois.length > 0 && (
+              <div>
+                {unapprovedPois.map((poi) => (
+                  <PoiRow
+                    key={poi.id}
+                    poi={poi}
+                    showApprove={true}
+                    onApprove={(id) => approveMutation.mutate(id)}
+                    onPin={(id) => pinMutation.mutate(id)}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                    isPinPending={pinMutation.isPending && pinMutation.variables === poi.id}
+                    isDeletePending={deleteMutation.isPending && deleteMutation.variables === poi.id}
+                    isApprovePending={approveMutation.isPending && approveMutation.variables === poi.id}
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Approved tab */}
+          <TabsContent value="approved">
+            {isLoading && <SkeletonRows />}
+            {isError && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Failed to load approved POIs. Please refresh and try again.
+                </AlertDescription>
+              </Alert>
+            )}
+            {!isLoading && !isError && approvedPois.length === 0 && (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No approved POIs yet. Approve suggestions to show them here.
+              </p>
+            )}
+            {!isLoading && !isError && approvedPois.length > 0 && (
+              <div>
+                {approvedPois.map((poi) => (
+                  <PoiRow
+                    key={poi.id}
+                    poi={poi}
+                    onPin={(id) => pinMutation.mutate(id)}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                    isPinPending={pinMutation.isPending && pinMutation.variables === poi.id}
+                    isDeletePending={deleteMutation.isPending && deleteMutation.variables === poi.id}
+                  />
+                ))}
+              </div>
+            )}
+            <Separator className="my-4" />
+            <p className="text-sm font-medium mb-3">Add manually</p>
+            <AddManualForm listingId={listingId} onAdded={() => {}} />
+          </TabsContent>
+        </Tabs>
+
+        <p className="text-xs text-muted-foreground mt-4">
+          POI data &copy; OpenStreetMap contributors (ODbL)
+        </p>
+      </CardContent>
+    </Card>
   );
 }

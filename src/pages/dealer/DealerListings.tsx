@@ -10,7 +10,6 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +22,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Building2, Eye, Loader2 } from 'lucide-react';
+import { AlertCircle, Building2, Eye, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
@@ -110,7 +110,7 @@ function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
  */
 export default function DealerListings() {
   const { isDealer, isAdmin, isLoading } = useAuth();
-  const { data, isLoading: listingsLoading, isError } = useDealerMyListings();
+  const { data, isLoading: listingsLoading, isError, refetch } = useDealerMyListings();
   const deleteListingMutation = useDeleteListing();
   const { toast } = useToast();
 
@@ -139,23 +139,40 @@ export default function DealerListings() {
         </div>
 
         {listingsLoading && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="overflow-hidden">
+                <Skeleton className="w-full h-32" />
+                <div className="p-4 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              </Card>
+            ))}
           </div>
         )}
 
         {isError && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Failed to load your listings. Please try again.
-            </AlertDescription>
-          </Alert>
+          <div className="text-center py-8 space-y-2">
+            <AlertCircle className="h-8 w-8 text-destructive mx-auto" />
+            <p className="text-sm text-muted-foreground">Failed to load your listings.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Try again
+            </Button>
+          </div>
         )}
 
         {!listingsLoading && !isError && data?.listings.length === 0 && (
-          <p className="text-muted-foreground mt-4">
-            You have no listings yet. Create your first listing to get started.
-          </p>
+          <div className="text-center py-12 space-y-3">
+            <Building2 className="h-8 w-8 text-muted-foreground/50 mx-auto" />
+            <p className="text-sm font-medium text-muted-foreground">No listings yet</p>
+            <p className="text-xs text-muted-foreground">
+              Create your first listing to start reaching buyers.
+            </p>
+            <Button size="sm" asChild>
+              <Link to="/dealer/listings/new">Create your first listing</Link>
+            </Button>
+          </div>
         )}
 
         {!listingsLoading && !isError && data && data.listings.length > 0 && (
@@ -165,7 +182,7 @@ export default function DealerListings() {
                 {listing.firstImageUrl ? (
                   <img
                     src={listing.firstImageUrl}
-                    alt=""
+                    alt={listing.title ?? 'Property listing image'}
                     className="w-full h-32 object-cover rounded-t-lg"
                   />
                 ) : (
@@ -185,7 +202,7 @@ export default function DealerListings() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-4">
-                    <span>{listing.propertyType}</span>
+                    <Badge variant="secondary" className="capitalize text-xs">{listing.propertyType}</Badge>
                     {listing.locality && <span>· {listing.locality}</span>}
                     {listing.price != null && (
                       <span>· &#8377;{listing.price.toLocaleString('en-IN')}</span>
@@ -213,7 +230,7 @@ export default function DealerListings() {
                         ) : (
                           <Button size="sm" asChild>
                             <Link to={`/dealer/listings/${listing.id}/edit`}>
-                              Submit for Review
+                              Edit &amp; Resubmit
                             </Link>
                           </Button>
                         )}
@@ -240,6 +257,7 @@ export default function DealerListings() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               onClick={() => {
                                 deleteListingMutation.mutate(listing.id, {
                                   onSuccess: () => {

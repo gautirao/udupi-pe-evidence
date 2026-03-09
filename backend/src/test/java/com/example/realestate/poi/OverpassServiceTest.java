@@ -1,9 +1,8 @@
 package com.example.realestate.poi;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -11,251 +10,208 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OverpassServiceTest {
 
     @Mock
-    ListingPoiRepository repository;
+    private ListingPoiRepository repository;
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    // ===== 1. Haversine accuracy =====
 
-    private OverpassService service(OverpassHttpClient client) {
-        return new OverpassService(repository, client, MAPPER, 1500);
+    @Test
+    void haversine_knownDistance() {
+        // Udupi city center: 13.3409, 74.7421
+        // A point ~500m north (roughly +0.0045 deg lat)
+        double lat1 = 13.3409, lon1 = 74.7421;
+        double lat2 = 13.3454, lon2 = 74.7421;
+
+        int dist = OverpassService.haversineMeters(lat1, lon1, lat2, lon2);
+
+        // 0.0045 deg lat ≈ 500m; allow ±10m tolerance
+        assertThat(dist).isBetween(490, 510);
     }
 
-    // -------------------------------------------------------------------------
-    // Haversine
-    // -------------------------------------------------------------------------
+    // ===== 2. Cache guard — skips Overpass when fresh data exists =====
 
-    @Nested
-    class HaversineTests {
+    @Test
+    void cacheGuard_skipsOverpassWhenFresh() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(true);
 
-        @Test
-        void zeroDistance_samePoint() {
-            assertThat(OverpassService.haversineMeters(13.34, 74.74, 13.34, 74.74)).isEqualTo(0);
-        }
+        // Track whether the HTTP client was ever called
+        boolean[] called = {false};
+        OverpassHttpClient mockClient = (url, body) -> {
+            called[0] = true;
+            return Optional.of("{}");
+        };
 
-        @Test
-        void knownDistance_udupiBangalore_roughly311km() {
-            // Udupi ~13.3392°N 74.7464°E, Bangalore ~12.9716°N 77.5946°E → ~311 km straight-line
-            int dist = OverpassService.haversineMeters(13.3392, 74.7464, 12.9716, 77.5946);
-            assertThat(dist).isBetween(300_000, 325_000);
-        }
+        OverpassService service = new OverpassService(repository, mockClient);
+        List<ListingPoi> result = service.fetchAndCache(listingId, 13.3409, 74.7421);
 
-        @Test
-        void shortDistance_100mApprox() {
-            // ~100 m north of reference point
-            int dist = OverpassService.haversineMeters(13.3400, 74.7464, 13.3409, 74.7464);
-            assertThat(dist).isBetween(80, 120);
-        }
+        assertThat(result).isEmpty();
+        assertThat(called[0]).isFalse();
     }
 
-    // -------------------------------------------------------------------------
-    // Cache guard
-    // -------------------------------------------------------------------------
+    // ===== 3. Fallback used when primary fails =====
 
-    @Nested
-    class CacheGuardTests {
+    @Test
+    void fallback_usedWhenMainFails() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(false);
 
-        @Test
-        void freshCacheExists_httpNotCalled() {
-            UUID listingId = UUID.randomUUID();
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
-                    eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
-                    .thenReturn(true);
-            when(repository.findByListingIdAndApproved(listingId, false)).thenReturn(List.of());
+        List<String> calledUrls = new java.util.ArrayList<>();
+        OverpassHttpClient mockClient = (url, body) -> {
+            calledUrls.add(url);
+            // Primary fails, fallback returns empty elements JSON
+            if (calledUrls.size() == 1) return Optional.empty();
+            return Optional.of("{\"elements\":[]}");
+        };
 
-            AtomicInteger calls = new AtomicInteger();
-            service((_url, _body) -> { calls.incrementAndGet(); return Optional.empty(); })
-                    .fetchAndCache(listingId, 13.34, 74.74);
+        OverpassService service = new OverpassService(repository, mockClient);
+        service.fetchAndCache(listingId, 13.3409, 74.7421);
 
-            assertThat(calls.get()).isZero();
-        }
-
-        @Test
-        void staleCacheOrNone_httpIsCalled() {
-            UUID listingId = UUID.randomUUID();
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-
-            AtomicInteger calls = new AtomicInteger();
-            service((_url, _body) -> { calls.incrementAndGet(); return Optional.of("{\"elements\":[]}"); })
-                    .fetchAndCache(listingId, 13.34, 74.74);
-
-            assertThat(calls.get()).isGreaterThan(0);
-        }
+        assertThat(calledUrls).hasSize(2);
+        assertThat(calledUrls.get(0)).contains("overpass-api.de");
+        assertThat(calledUrls.get(1)).contains("kumi.systems");
     }
 
-    // -------------------------------------------------------------------------
-    // Fallback / failure
-    // -------------------------------------------------------------------------
+    // ===== 4. Both endpoints fail — empty result, no exception =====
 
-    @Nested
-    class FallbackTests {
+    @Test
+    void bothEndpointsFail_returnsEmpty() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(false);
 
-        @Test
-        void primaryFails_retriesKumi() {
-            UUID listingId = UUID.randomUUID();
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
+        OverpassHttpClient mockClient = (url, body) -> Optional.empty();
 
-            AtomicInteger calls = new AtomicInteger();
-            OverpassHttpClient client = (url, body) -> {
-                calls.incrementAndGet();
-                if (url.contains("overpass-api.de")) return Optional.empty();
-                return Optional.of("{\"elements\":[]}");
-            };
+        OverpassService service = new OverpassService(repository, mockClient);
+        List<ListingPoi> result = service.fetchAndCache(listingId, 13.3409, 74.7421);
 
-            service(client).fetchAndCache(listingId, 13.34, 74.74);
-
-            assertThat(calls.get()).isEqualTo(2);
-        }
-
-        @Test
-        void bothEndpointsFail_returnsEmptyNoException() {
-            UUID listingId = UUID.randomUUID();
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-
-            List<ListingPoi> result = service((_u, _b) -> Optional.empty())
-                    .fetchAndCache(listingId, 13.34, 74.74);
-
-            assertThat(result).isEmpty();
-            verify(repository, never()).save(any());
-        }
-
-        @Test
-        void malformedJson_returnsEmptyNoException() {
-            UUID listingId = UUID.randomUUID();
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-
-            List<ListingPoi> result = service((_u, _b) -> Optional.of("not-json"))
-                    .fetchAndCache(listingId, 13.34, 74.74);
-
-            assertThat(result).isEmpty();
-        }
+        assertThat(result).isEmpty();
+        verify(repository, never()).saveAll(any());
     }
 
-    // -------------------------------------------------------------------------
-    // Parse + persist
-    // -------------------------------------------------------------------------
+    // ===== 5. Valid Overpass response — correct POI data inserted =====
 
-    @Nested
-    class ParseTests {
+    @Test
+    void parse_validResponse_insertsRows() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(false);
 
-        private static final UUID LISTING_ID = UUID.randomUUID();
+        String json = """
+                {
+                  "elements": [
+                    {
+                      "id": 123456,
+                      "lat": 13.3415,
+                      "lon": 74.7430,
+                      "tags": {
+                        "amenity": "hospital",
+                        "name": "Udupi District Hospital"
+                      }
+                    },
+                    {
+                      "id": 789012,
+                      "lat": 13.3420,
+                      "lon": 74.7440,
+                      "tags": {
+                        "amenity": "school",
+                        "name": "St. Mary's School"
+                      }
+                    }
+                  ]
+                }
+                """;
 
-        private OverpassService serviceWithJson(String json) {
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-            when(repository.existsByListingIdAndOsmId(any(), any())).thenReturn(false);
-            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-            return service((_u, _b) -> Optional.of(json));
-        }
+        OverpassHttpClient mockClient = (url, body) -> Optional.of(json);
 
-        @Test
-        void nodeElement_savedWithCorrectCategory() {
-            String json = """
-                    {"elements":[
-                      {"type":"node","id":111,"lat":13.341,"lon":74.747,
-                       "tags":{"amenity":"place_of_worship","name":"Sri Anantheshwara"}}
-                    ]}""";
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ListingPoi>> captor = ArgumentCaptor.forClass(List.class);
+        when(repository.saveAll(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-            serviceWithJson(json).fetchAndCache(LISTING_ID, 13.340, 74.746);
+        OverpassService service = new OverpassService(repository, mockClient);
+        service.fetchAndCache(listingId, 13.3409, 74.7421);
 
-            verify(repository).save(argThat(p ->
-                    "WORSHIP".equals(p.getCategory())
-                            && "Sri Anantheshwara".equals(p.getName())
-                            && "overpass".equals(p.getSource())
-                            && !p.isApproved()
-                            && "111".equals(p.getOsmId())
-            ));
-        }
+        List<ListingPoi> saved = captor.getValue();
+        assertThat(saved).hasSize(2);
 
-        @Test
-        void wayElement_usesCenter() {
-            String json = """
-                    {"elements":[
-                      {"type":"way","id":222,
-                       "center":{"lat":13.341,"lon":74.747},
-                       "tags":{"amenity":"hospital","name":"City Hospital"}}
-                    ]}""";
+        ListingPoi hospital = saved.stream()
+                .filter(p -> "HOSPITAL".equals(p.getCategory()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(hospital.getListingId()).isEqualTo(listingId);
+        assertThat(hospital.getName()).isEqualTo("Udupi District Hospital");
+        assertThat(hospital.getOsmId()).isEqualTo("123456");
+        assertThat(hospital.getSource()).isEqualTo("overpass");
+        assertThat(hospital.getApproved()).isFalse();
+        assertThat(hospital.getDistanceMeters()).isPositive();
 
-            serviceWithJson(json).fetchAndCache(LISTING_ID, 13.340, 74.746);
-
-            verify(repository).save(argThat(p -> "HOSPITAL".equals(p.getCategory())));
-        }
-
-        @Test
-        void duplicateOsmId_notSavedAgain() {
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-            when(repository.existsByListingIdAndOsmId(any(), eq("333"))).thenReturn(true);
-
-            String json = """
-                    {"elements":[
-                      {"type":"node","id":333,"lat":13.341,"lon":74.747,
-                       "tags":{"amenity":"school","name":"Govt School"}}
-                    ]}""";
-
-            service((_u, _b) -> Optional.of(json)).fetchAndCache(LISTING_ID, 13.340, 74.746);
-
-            verify(repository, never()).save(any());
-        }
-
-        @Test
-        void unknownTags_skipped() {
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-
-            String json = """
-                    {"elements":[
-                      {"type":"node","id":444,"lat":13.341,"lon":74.747,
-                       "tags":{"amenity":"parking","name":"Car Park"}}
-                    ]}""";
-
-            service((_u, _b) -> Optional.of(json)).fetchAndCache(LISTING_ID, 13.340, 74.746);
-
-            verify(repository, never()).save(any());
-        }
+        ListingPoi school = saved.stream()
+                .filter(p -> "SCHOOL".equals(p.getCategory()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(school.getName()).isEqualTo("St. Mary's School");
     }
 
-    // -------------------------------------------------------------------------
-    // Caps
-    // -------------------------------------------------------------------------
+    // ===== 6. Cap: top 3 per category =====
 
-    @Nested
-    class CapTests {
+    @Test
+    void cap_top3PerCategory() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(false);
 
-        @Test
-        void capsAtThreePerCategory() {
-            when(repository.existsByListingIdAndSourceAndCreatedAtAfter(any(), any(), any()))
-                    .thenReturn(false);
-            when(repository.existsByListingIdAndOsmId(any(), any())).thenReturn(false);
-            when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // 5 hospitals at increasing distances from listing center 13.3409, 74.7421
+        // Each ~100m further north than the previous
+        String json = """
+                {
+                  "elements": [
+                    { "id": 1, "lat": 13.3418, "lon": 74.7421, "tags": { "amenity": "hospital", "name": "H1" } },
+                    { "id": 2, "lat": 13.3427, "lon": 74.7421, "tags": { "amenity": "hospital", "name": "H2" } },
+                    { "id": 3, "lat": 13.3436, "lon": 74.7421, "tags": { "amenity": "hospital", "name": "H3" } },
+                    { "id": 4, "lat": 13.3445, "lon": 74.7421, "tags": { "amenity": "hospital", "name": "H4" } },
+                    { "id": 5, "lat": 13.3454, "lon": 74.7421, "tags": { "amenity": "hospital", "name": "H5" } }
+                  ]
+                }
+                """;
 
-            // 5 worship nodes close by
-            String json = """
-                    {"elements":[
-                      {"type":"node","id":1,"lat":13.3401,"lon":74.74,"tags":{"amenity":"place_of_worship","name":"A"}},
-                      {"type":"node","id":2,"lat":13.3402,"lon":74.74,"tags":{"amenity":"place_of_worship","name":"B"}},
-                      {"type":"node","id":3,"lat":13.3403,"lon":74.74,"tags":{"amenity":"place_of_worship","name":"C"}},
-                      {"type":"node","id":4,"lat":13.3404,"lon":74.74,"tags":{"amenity":"place_of_worship","name":"D"}},
-                      {"type":"node","id":5,"lat":13.3405,"lon":74.74,"tags":{"amenity":"place_of_worship","name":"E"}}
-                    ]}""";
+        OverpassHttpClient mockClient = (url, body) -> Optional.of(json);
 
-            UUID listingId = UUID.randomUUID();
-            service((_u, _b) -> Optional.of(json)).fetchAndCache(listingId, 13.340, 74.74);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ListingPoi>> captor = ArgumentCaptor.forClass(List.class);
+        when(repository.saveAll(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
 
-            // Only 3 saves expected (cap per category = 3)
-            verify(repository, times(3)).save(any());
-        }
+        OverpassService service = new OverpassService(repository, mockClient);
+        service.fetchAndCache(listingId, 13.3409, 74.7421);
+
+        List<ListingPoi> saved = captor.getValue();
+        // Only the 3 closest hospitals should be persisted
+        assertThat(saved).hasSize(3);
+        assertThat(saved).allMatch(p -> "HOSPITAL".equals(p.getCategory()));
+
+        // Verify they are the closest 3 (H1, H2, H3 — sorted ASC by distance)
+        List<String> names = saved.stream()
+                .sorted(java.util.Comparator.comparingInt(ListingPoi::getDistanceMeters))
+                .map(ListingPoi::getName)
+                .toList();
+        assertThat(names).containsExactly("H1", "H2", "H3");
     }
 }

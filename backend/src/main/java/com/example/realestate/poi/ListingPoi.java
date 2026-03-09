@@ -1,9 +1,26 @@
 package com.example.realestate.poi;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * JPA entity for the {@code listing_pois} table.
+ * <p>
+ * Stores nearby points of interest (POIs) for a property listing,
+ * sourced from Overpass API (OpenStreetMap) or entered manually.
+ * <p>
+ * Category is stored as a plain {@code varchar(64)} string holding
+ * the {@link PoiCategory} enum name — no JPA enum mapping needed.
+ */
 @Entity
 @Table(name = "listing_pois", schema = "public")
 public class ListingPoi {
@@ -15,10 +32,11 @@ public class ListingPoi {
     @Column(name = "listing_id", nullable = false)
     private UUID listingId;
 
-    @Column(name = "name", length = 255)
+    @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(name = "category", length = 64)
+    /** Stores {@link PoiCategory} name as a plain string (e.g. "HOSPITAL"). */
+    @Column(name = "category", nullable = false, length = 64)
     private String category;
 
     @Column(name = "latitude")
@@ -37,13 +55,10 @@ public class ListingPoi {
     private String osmId;
 
     @Column(name = "approved", nullable = false)
-    private boolean approved;
+    private Boolean approved = false;
 
     @Column(name = "pinned", nullable = false)
-    private boolean pinned;
-
-    @Column(name = "position")
-    private Integer position;
+    private Boolean pinned = false;
 
     @Column(name = "approved_by")
     private UUID approvedBy;
@@ -54,11 +69,13 @@ public class ListingPoi {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    // ===== Lifecycle =====
+
     @PrePersist
     void prePersist() {
         OffsetDateTime now = OffsetDateTime.now();
         if (createdAt == null) createdAt = now;
-        updatedAt = now;
+        if (updatedAt == null) updatedAt = now;
     }
 
     @PreUpdate
@@ -66,7 +83,7 @@ public class ListingPoi {
         updatedAt = OffsetDateTime.now();
     }
 
-    // --- Getters / Setters ---
+    // ===== Getters and setters =====
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -95,18 +112,18 @@ public class ListingPoi {
     public String getOsmId() { return osmId; }
     public void setOsmId(String osmId) { this.osmId = osmId; }
 
-    public boolean isApproved() { return approved; }
-    public void setApproved(boolean approved) { this.approved = approved; }
+    public Boolean getApproved() { return approved; }
+    public void setApproved(Boolean approved) { this.approved = approved; }
 
-    public boolean isPinned() { return pinned; }
-    public void setPinned(boolean pinned) { this.pinned = pinned; }
-
-    public Integer getPosition() { return position; }
-    public void setPosition(Integer position) { this.position = position; }
+    public Boolean getPinned() { return pinned; }
+    public void setPinned(Boolean pinned) { this.pinned = pinned; }
 
     public UUID getApprovedBy() { return approvedBy; }
     public void setApprovedBy(UUID approvedBy) { this.approvedBy = approvedBy; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

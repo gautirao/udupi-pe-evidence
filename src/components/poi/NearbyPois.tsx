@@ -1,113 +1,81 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { Card, CardContent } from '@/components/ui/card';
+import { CATEGORY_LABELS, CATEGORY_ICONS, formatDistance } from '@/lib/poi-categories';
 
-// ---- Types ----------------------------------------------------------------
-
-interface PoiItem {
+interface PoiResponse {
   id: string;
   name: string;
   category: string;
-  distanceMeters: number;
+  distanceMeters: number | null;
+  latitude: number | null;
+  longitude: number | null;
   pinned: boolean;
+  approved: boolean;
 }
-
-// ---- Config ----------------------------------------------------------------
-
-const CATEGORY_CONFIG: Record<string, { label: string; icon: string }> = {
-  WORSHIP:   { label: 'Places of Worship', icon: '🛕' },
-  HOSPITAL:  { label: 'Hospitals & Clinics', icon: '🏥' },
-  SCHOOL:    { label: 'Schools & Universities', icon: '🏫' },
-  HOTEL:     { label: 'Hotels & Guest Houses', icon: '🏨' },
-  TRANSPORT: { label: 'Bus & Train Stations', icon: '🚌' },
-  AIRPORT:   { label: 'Airports', icon: '✈️' },
-  GROCERY:   { label: 'Supermarkets & Markets', icon: '🛒' },
-};
-
-const CATEGORY_ORDER = Object.keys(CATEGORY_CONFIG);
-
-// ---- Helpers ---------------------------------------------------------------
-
-function formatDistance(meters: number): string {
-  return meters >= 1000
-    ? `${(meters / 1000).toFixed(1)} km`
-    : `${meters} m`;
-}
-
-// ---- Component -------------------------------------------------------------
 
 interface NearbyPoisProps {
   listingId: string;
 }
 
-/**
- * Displays approved nearby POIs grouped by category.
- * Hidden entirely when the list is empty.
- * Silently hides on API error — listing detail still renders.
- * Includes OSM attribution (required by ODbL license).
- */
 export function NearbyPois({ listingId }: NearbyPoisProps) {
-  const { data: pois = [] } = useQuery({
-    queryKey: ['nearby-pois', listingId],
-    queryFn: () => api.get<PoiItem[]>(`/api/listings/${listingId}/pois`, { skipAuth: true }),
-    staleTime: 10 * 60 * 1000,
-    // Silently return empty on error — never surface a broken POI section
-    throwOnError: false,
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['pois', listingId],
+    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`, { skipAuth: true }),
   });
 
-  if (pois.length === 0) return null;
+  if (isLoading) return null;
+  if (isError) return null;
+  if (!data || data.length === 0) return null;
 
-  // Group by category, preserving display order
-  const grouped: Record<string, PoiItem[]> = {};
-  for (const poi of pois) {
-    if (!grouped[poi.category]) grouped[poi.category] = [];
-    grouped[poi.category].push(poi);
+  // Group by category
+  const grouped = new Map<string, PoiResponse[]>();
+  for (const poi of data) {
+    const list = grouped.get(poi.category) ?? [];
+    list.push(poi);
+    grouped.set(poi.category, list);
   }
 
-  const orderedCategories = CATEGORY_ORDER.filter((c) => grouped[c]?.length > 0);
-
   return (
-    <div className="space-y-4">
-      <h3 className="font-semibold">Nearby Places</h3>
-      <div className="space-y-3">
-        {orderedCategories.map((category) => {
-          const config = CATEGORY_CONFIG[category];
-          const items = grouped[category];
-          return (
-            <div key={category}>
-              <p className="text-sm font-medium text-muted-foreground mb-1.5">
-                {config.icon} {config.label}
-              </p>
-              <ul className="space-y-1">
-                {items.map((poi) => (
-                  <li
-                    key={poi.id}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <span className={poi.pinned ? 'font-medium' : ''}>
-                      {poi.name}
-                    </span>
-                    <span className="text-muted-foreground text-xs ml-2 shrink-0">
-                      {formatDistance(poi.distanceMeters)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        ©{' '}
-        <a
-          href="https://www.openstreetmap.org/copyright"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-foreground"
-        >
-          OpenStreetMap
-        </a>{' '}
-        contributors
-      </p>
-    </div>
+    <Card>
+      <CardContent className="p-4">
+        <h3 className="font-semibold mb-3">Nearby</h3>
+        <div className="space-y-4">
+          {Array.from(grouped.entries()).map(([category, pois]) => {
+            const capped = pois.slice(0, 3);
+            const icon = CATEGORY_ICONS[category] ?? '';
+            const label = CATEGORY_LABELS[category] ?? category;
+            return (
+              <div key={category}>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  {icon} {label}
+                </p>
+                <div className="space-y-1">
+                  {capped.map((poi) => (
+                    <div key={poi.id} className="flex items-center justify-between text-sm">
+                      <span className="truncate mr-2">{poi.name}</span>
+                      <span className="text-muted-foreground shrink-0">
+                        {formatDistance(poi.distanceMeters)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          &copy;{' '}
+          <a
+            href="https://www.openstreetmap.org/copyright"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            OpenStreetMap
+          </a>{' '}
+          contributors (ODbL)
+        </p>
+      </CardContent>
+    </Card>
   );
 }

@@ -751,6 +751,72 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$[0].title").isEmpty());
     }
 
+    // ==================== Listing Search Tests ====================
+
+    @Test
+    void searchListings_withoutAuth_returnsForbidden() throws Exception {
+        mockMvc.perform(get("/api/dashboard/listings/search"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_noParams_returns200() throws Exception {
+        when(listingRepository.findBySearch(isNull(), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/listings/search"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(listingRepository).findBySearch(isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_withQ_returns200() throws Exception {
+        when(listingRepository.findBySearch(eq("apartment"), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "apartment"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(listingRepository).findBySearch(eq("apartment"), isNull(), isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_withAllFilters_returns200() throws Exception {
+        when(listingRepository.findBySearch(eq("villa"), eq("Manipal"), eq("house"), eq(3), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "villa")
+                        .param("locality", "Manipal")
+                        .param("propertyType", "house")
+                        .param("bedrooms", "3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(listingRepository).findBySearch(eq("villa"), eq("Manipal"), eq("house"), eq(3), any(Pageable.class));
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_pageableHasNoSort() throws Exception {
+        when(listingRepository.findBySearch(isNull(), isNull(), isNull(), isNull(),
+                argThat(p -> !p.getSort().isSorted())))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/listings/search"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository).findBySearch(isNull(), isNull(), isNull(), isNull(),
+                argThat(p -> !p.getSort().isSorted()));
+    }
+
     // ==================== Helper Methods ====================
 
     private AreaPriceWeekly createWeeklyData(

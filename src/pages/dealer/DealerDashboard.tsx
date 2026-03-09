@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, PlusCircle, List } from 'lucide-react';
 
 /**
  * Dealer home page with quick-link cards.
@@ -32,11 +32,12 @@ export default function DealerDashboard() {
   return (
     <AppLayout>
       <div className="container max-w-4xl py-6 px-4">
-        <h1 className="text-3xl font-bold mb-8">Dealer Dashboard</h1>
+        <h1 className="text-3xl font-bold">Dealer Dashboard</h1>
+        <p className="text-muted-foreground mt-1 mb-8">Manage your property listings</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>New Listing</CardTitle>
+              <CardTitle className="flex items-center gap-2"><PlusCircle className="h-5 w-5 text-primary" />New Listing</CardTitle>
               <CardDescription>
                 Submit a new property listing for review and publication.
               </CardDescription>
@@ -50,7 +51,7 @@ export default function DealerDashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>My Listings</CardTitle>
+              <CardTitle className="flex items-center gap-2"><List className="h-5 w-5 text-primary" />My Listings</CardTitle>
               <CardDescription>
                 View and manage all the listings you have submitted.
               </CardDescription>

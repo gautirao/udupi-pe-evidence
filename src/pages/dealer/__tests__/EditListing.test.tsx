@@ -24,15 +24,56 @@ vi.mock('@/hooks/useDealerListings', () => ({
 }));
 
 vi.mock('@/components/dealer/ImageUploader', () => ({
-  ImageUploader: () => React.createElement('div', { 'data-testid': 'image-uploader' }),
+  ImageUploader: ({
+    onCanSubmitChange,
+  }: {
+    listingId: string;
+    onCanSubmitChange?: (canSubmit: boolean) => void;
+  }) => {
+    React.useEffect(() => {
+      onCanSubmitChange?.(false);
+    }, [onCanSubmitChange]);
+    return React.createElement('div', { 'data-testid': 'image-uploader' });
+  },
+}));
+
+vi.mock('@/components/poi/PoiManager', () => ({
+  PoiManager: ({ listingId }: { listingId: string }) =>
+    React.createElement('div', { 'data-testid': 'poi-manager', 'data-listing-id': listingId }),
 }));
 
 vi.mock('@/components/dealer/AddressPicker', () => ({
-  AddressPicker: ({ onConfirm }: { onConfirm: (v: unknown) => void }) =>
-    React.createElement('button', {
-      'data-testid': 'address-picker-confirm',
-      onClick: () => onConfirm({ lat: 13.34, lng: 74.74, address_confirmed: true }),
-    }, 'Confirm Location'),
+  AddressPicker: ({
+    onConfirm,
+    onUnconfirm,
+    initialConfirmed,
+  }: {
+    onConfirm: (v: { lat: number; lng: number; address_confirmed: boolean }) => void;
+    onUnconfirm?: () => void;
+    initialConfirmed?: boolean;
+  }) =>
+    React.createElement(
+      'div',
+      { 'data-testid': 'address-picker' },
+      React.createElement(
+        'button',
+        {
+          'data-testid': 'address-picker-confirm',
+          onClick: () => onConfirm({ lat: 13.34, lng: 74.74, address_confirmed: true }),
+        },
+        'Confirm Location',
+      ),
+      initialConfirmed
+        ? React.createElement(
+            'button',
+            {
+              'data-testid': 'address-picker-change',
+              onClick: () => onUnconfirm?.(),
+            },
+            'Change',
+          )
+        : null,
+    ),
 }));
 
 vi.mock('@/components/poi/PoiManager', () => ({
@@ -185,7 +226,7 @@ describe('EditListing page', () => {
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
   });
 
-  it('submitsUpdates_andNavigates', async () => {
+  it('savesChanges_staysOnPage', async () => {
     vi.mocked(useGetListing).mockReturnValue({
       data: makeListing({ status: 'DRAFT' }),
       isLoading: false,
@@ -211,7 +252,7 @@ describe('EditListing page', () => {
     const saveButton = screen.getByRole('button', { name: /Save Changes/i });
     fireEvent.click(saveButton);
 
-    // PUT should have been called with the updated title
+    // mutate should have been called with the updated title
     await waitFor(() => {
       expect(mutateFn).toHaveBeenCalledWith(
         expect.objectContaining({ title: 'Updated Title' }),
@@ -219,7 +260,29 @@ describe('EditListing page', () => {
       );
     });
 
-    // navigate to /dealer/listings should have been triggered
-    expect(mockNavigate).toHaveBeenCalledWith('/dealer/listings');
+    // Save Changes must NOT navigate away — user stays on the edit page
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('calls mutate with addressConfirmed false when Change is clicked on a confirmed listing', async () => {
+    vi.mocked(useGetListing).mockReturnValue({
+      data: makeListing({ status: 'DRAFT', addressConfirmed: true, latitude: 13.34, longitude: 74.74 }),
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useGetListing>);
+
+    const mutateFn = vi.fn();
+    vi.mocked(useUpdateListing).mockReturnValue({
+      mutate: mutateFn,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateListing>);
+
+    renderEditListing();
+
+    // The mock renders a "Change" button when initialConfirmed=true
+    const changeButton = await screen.findByTestId('address-picker-change');
+    fireEvent.click(changeButton);
+
+    expect(mutateFn).toHaveBeenCalledWith({ addressConfirmed: false });
   });
 });

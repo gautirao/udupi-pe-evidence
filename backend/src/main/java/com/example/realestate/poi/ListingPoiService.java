@@ -1,5 +1,7 @@
 package com.example.realestate.poi;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
@@ -7,10 +9,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+ * Service for {@link ListingPoi} business logic.
+ * Provides the public read path used by {@link ListingPoiController}
+ * and helper accessors used by admin/moderation flows (PR-15.4).
+ */
 @Service
 public class ListingPoiService {
 
-    private static final int CAP_TOTAL = 15;
+    private static final Logger log = LoggerFactory.getLogger(ListingPoiService.class);
 
     private final ListingPoiRepository repository;
 
@@ -19,22 +26,21 @@ public class ListingPoiService {
     }
 
     /**
-     * Returns approved POIs for a listing, ordered: pinned first, then by position ASC,
-     * then by distance ASC. Capped at 15 total. Never throws — returns empty list on any error.
+     * Returns approved POIs for a listing, ordered pinned DESC then distance ASC,
+     * capped at 15 items. Public endpoint — no auth required.
+     * Note: rate limiting for this endpoint is tracked as a future cross-cutting concern.
      */
     public List<PoiResponse> getApproved(UUID listingId) {
-        return repository.findByListingIdAndApproved(listingId, true)
-                .stream()
-                .sorted(Comparator
-                        .comparing(ListingPoi::isPinned, Comparator.reverseOrder())
-                        .thenComparing(p -> Optional.ofNullable(p.getPosition()).orElse(Integer.MAX_VALUE))
-                        .thenComparing(p -> Optional.ofNullable(p.getDistanceMeters()).orElse(Integer.MAX_VALUE)))
-                .limit(CAP_TOTAL)
+        log.debug("getApproved listingId={}", listingId);
+        return repository.findByListingIdAndApprovedTrue(listingId).stream()
+                .sorted(Comparator.comparing((ListingPoi p) -> Boolean.TRUE.equals(p.getPinned()) ? 0 : 1)
+                        .thenComparingInt(p -> p.getDistanceMeters() != null ? p.getDistanceMeters() : Integer.MAX_VALUE))
+                .limit(15)
                 .map(PoiResponse::from)
                 .toList();
     }
 
-    /** Returns all POIs for a listing (approved + unapproved) — used by dealer suggestions endpoint. */
+    /** Returns all POIs for a listing regardless of approval status. Used by PR-15.4. */
     public List<ListingPoi> getAll(UUID listingId) {
         return repository.findByListingId(listingId);
     }

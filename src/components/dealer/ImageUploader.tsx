@@ -2,6 +2,7 @@ import { useRef, useState, useCallback, type DragEvent } from 'react';
 import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Upload, X, GripVertical, ImageOff, Loader2, RotateCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -165,8 +166,10 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="aspect-square rounded-lg" />
+        ))}
       </div>
     );
   }
