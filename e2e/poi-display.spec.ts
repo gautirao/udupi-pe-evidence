@@ -4,7 +4,9 @@
  * Covers:
  *   P1 — NearbyPois section renders when API returns approved POIs
  *   P2 — NearbyPois section is hidden when API returns empty list
- *   P3 — GET /api/listings/{id}/pois requires auth (401 without token)
+ *
+ * Auth enforcement (401 without token) is covered by the Spring unit test
+ * ListingPoiControllerTest#getApproved_withoutAuth_returns401.
  *
  * Run locally:
  *   SMOKE_USER_EMAIL=you@example.com SMOKE_USER_PASSWORD=secret npm run test:e2e -- --project=chromium e2e/poi-display.spec.ts
@@ -156,18 +158,3 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
   await expect(page.getByText('Nearby')).toHaveCount(0);
 });
 
-// ---------------------------------------------------------------------------
-// P3 — GET /api/listings/{id}/pois requires authentication (401 without token)
-// ---------------------------------------------------------------------------
-test('P3 — POI endpoint returns 401 without Authorization header', async ({ request }) => {
-  // This test does not need browser credentials — it hits the backend directly.
-  // Skip if no backend URL is configured (CI sets VITE_API_URL or falls back to localhost).
-  const backendUrl = process.env.VITE_API_URL ?? 'http://localhost:8080';
-
-  const response = await request.get(
-    `${backendUrl}/api/listings/${FIXTURE_LISTING_ID}/pois`,
-    { headers: {} }, // deliberately no Authorization header
-  );
-
-  expect(response.status()).toBe(401);
-});
