@@ -98,3 +98,35 @@ When running tool commands, batch logically related steps into one command block
 - show diff/status
 - run tests/lint
 - re-run the minimal failing subset
+
+## E2E test placement rule
+
+Before creating a new e2e spec file, check whether an existing file already
+covers the same page or workflow. If yes, add the new test there.
+
+| Workflow | Spec file |
+|----------|-----------|
+| Infrastructure, auth redirect, CORS, ingestion | `quick-smoke.spec.ts` |
+| Map filters, BHK, text search, insights page | `map-filters.spec.ts` |
+| Dealer role access (dashboard, listings, bookings) | `dealer-smoke.spec.ts` |
+| Admin role access | `admin-smoke.spec.ts` |
+| Nav link visibility by role | `nav-roles.spec.ts` |
+| Listing lifecycle (create → approve → book) | `listing-lifecycle.spec.ts` |
+| Dealer listing form interactions (PriceField, media, wizard) | `dealer-listing-form.spec.ts` |
+| User journeys (saved areas, bookings, insights, listing detail) | `user-journeys.spec.ts` |
+
+Rules:
+- Never name spec files by sprint (e.g. `sprint11-12-smoke.spec.ts`). Use feature-area names.
+- Create a new spec file only when no existing file covers the workflow.
+- Smoke tests (page loads, no crash) and interaction tests may coexist in the same file;
+  add interaction tests as a clearly marked section at the bottom.
+
+## E2E gate overview
+
+| Layer | When | How |
+|-------|------|-----|
+| Pre-push (local) | Before every `git push` | `.githooks/pre-push` → `npm run test:e2e:local` |
+| Post-deploy (production) | After every merge to `main` | `.github/workflows/e2e-post-deploy.yml` — waits for Cloudflare + Render, then runs full suite |
+
+Post-deploy failures upload a Playwright report artifact (traces + screenshots)
+to GitHub Actions for 14 days. Sentry catches JS errors that slip through.

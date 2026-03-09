@@ -1,5 +1,5 @@
 /**
- * Sprint 11+12 Feature Smoke — map filters, BHK filter, text search, insights
+ * Map Filters — map page load, BHK filter, text search, insights page
  *
  * Covers:
  *   M1 — Map page loads; filter panel and search input visible

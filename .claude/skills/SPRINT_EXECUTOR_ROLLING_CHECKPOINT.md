@@ -23,15 +23,35 @@ Checkpoint is the single source of truth.
 
 Before the first PR:
 1. Fetch all sprint issue IDs + titles in one Linear call — store in checkpoint preamble as `Sprint issues:` list.
-2. Fetch full descriptions for all issues (one `get_issue` call each) — needed for team-lead pre-flight.
-3. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, and descriptions as context:
-   > "Sprint issues: [paste all issue IDs + titles + descriptions]. Run Mode 1: Sprint Kickoff Analysis."
+2. Fetch full descriptions for all issues (one `get_issue` call each) — needed for spec enrichment and team-lead pre-flight.
+3. **Spec enrichment (all issues, once)** — for each issue, derive a structured spec from the title + description:
+
+   For each issue produce:
+   ```
+   [RE-XX] <title>
+   AC:
+   - [ ] <testable acceptance criterion>
+   - [ ] <testable acceptance criterion>
+   (2–5 criteria max; each must be verifiable by a test or manual step)
+   Out of scope: <explicit or inferred exclusions, or NONE>
+   Key unknowns: <ambiguities that block safe implementation, or NONE>
+   ```
+
+   Rules:
+   - Derive AC from description. If description is too sparse (< 50 chars or no behavior stated), treat as spec gap — do NOT invent criteria.
+   - "Out of scope" captures implicit exclusions (e.g., "no mobile layout changes" if work is backend-only).
+   - "Key unknowns" are ambiguities that could block safe implementation — feed these directly into team-lead step 4.
+   - Store all enriched specs in the checkpoint preamble as `Enriched specs:` — one block per issue.
+   - These specs are the authoritative input to team-lead, qa-fast, and engineers for the rest of the sprint. Do NOT re-derive them per-PR.
+
+4. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, descriptions, AND enriched specs as context:
+   > "Sprint issues: [paste all issue IDs + titles + descriptions + enriched specs]. Run Mode 1: Sprint Kickoff Analysis."
    - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
    - Store the recommended execution order in the checkpoint preamble as `Execution order:`.
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
-   - If team-lead flags spec gaps: play `afplay /System/Library/Sounds/Ping.aiff`, surface them to the user and **pause for confirmation** before starting execution. If the gap is in acceptance criteria or ambiguous scope, do not proceed until resolved or explicitly waived by the user.
-4. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
-5. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
+   - If team-lead flags spec gaps, OR if enrichment produced `Key unknowns` for any issue: play `afplay /System/Library/Sounds/Ping.aiff`, surface all gaps/unknowns to the user and **pause for confirmation** before starting execution. Do not proceed until each gap is resolved or explicitly waived by the user.
+5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
+6. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2 and enriched specs from step 3. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
    - The cached issue description is missing or truncated to fewer than 50 characters
    - The issue title in the checkpoint does not match the issue title in Linear
    - The execution order in the checkpoint does not match the current approved execution order for this sprint (team-lead-derived order if pre-flight ran, or original Linear order if no reorder was applied)
@@ -43,7 +63,7 @@ Before the first PR:
 
 For each Linear issue (PR N):
 
-1. **Use cached spec** — use the description cached during Sprint Start step 2. Only call `get_issue` again if the checkpoint is stale (see Sprint Start step 5). State issue id + title (1 line); capture first 300 chars of description into checkpoint `issue_description` field.
+1. **Use cached spec** — use the description cached during Sprint Start step 2 and the enriched spec from step 3. Only call `get_issue` again if the checkpoint is stale (see Sprint Start step 6). State issue id + title (1 line); copy AC from enriched spec into the checkpoint `Acceptance criteria` field for this PR.
 2. **Mark In Progress** — `save_issue state=In Progress`
 3. **Bug fix gate** — if issue type is bugfix (Linear issue type = Bug, or title starts with `fix:`/`bug:`, or description explicitly says "bug" or "defect"):
    - Reproduce the defect with a targeted test or manual step. Confirm it fails. Document in checkpoint.
@@ -51,7 +71,7 @@ For each Linear issue (PR N):
 4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`. Routing logic, agent invocation rules, code-reviewer skip conditions, and Security Gate triggers are all defined in `ROUTE_AND_RUN.md` — do not re-derive them here.
 
    Sprint-specific context for `qa-fast` — always pass this prompt:
-   > "Review the codebase and identify risks for this planned change: [issue description]. The feature does not exist yet."
+   > "Review the codebase and identify risks for this planned change: [issue description]. Acceptance criteria: [AC from enriched spec]. The feature does not exist yet."
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
 
@@ -93,6 +113,9 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Issue description (last PR, first 300 chars):
   <truncated spec text or NONE>
+Acceptance criteria (last PR):
+- [ ] <criterion 1>
+- [ ] <criterion 2>
 Bugfix reproduced: <YES|NO|N/A>
 Routing used: <agent chain, e.g. qa-fast → backend-engineer → code-reviewer>
 Tests passed: <YES|NO|N/A>
@@ -127,6 +150,7 @@ When user pastes checkpoint + says resume:
 - Do NOT infer prior context outside checkpoint.
 - Do NOT re-triage completed PRs.
 - Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from Linear.
+- Use `Enriched specs:` from the checkpoint preamble as the authoritative AC for remaining issues — do NOT re-derive them.
 - Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
 - Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.
 - Immediately start on "Next PR".
