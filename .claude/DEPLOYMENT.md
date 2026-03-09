@@ -71,7 +71,7 @@ Tests that need credentials use `test.skip` when vars are absent — they will n
 
 | Variable | Required for | Description |
 |----------|-------------|-------------|
-| `PLAYWRIGHT_BASE_URL` | All | Frontend URL (e.g. `http://localhost:8080`) |
+| `PLAYWRIGHT_BASE_URL` | All | Frontend URL (e.g. `http://localhost:5173`) |
 | `BACKEND_BASE_URL` | Q4, Q5, Q7 | Backend URL (e.g. `http://localhost:8085`) |
 | `SMOKE_USER_EMAIL` | Q3, Q7 | Regular user account email |
 | `SMOKE_USER_PASSWORD` | Q3, Q7 | Regular user account password |
