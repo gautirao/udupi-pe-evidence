@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGetListing, useUpdateListing, useSubmitListing } from '@/hooks/useDealerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -23,6 +23,7 @@ import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { PriceField } from '@/components/dealer/PriceField';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
+import { StepIndicator } from '@/components/dealer/StepIndicator';
 import { ApiError } from '@/lib/api';
 
 const PROPERTY_TYPES = [
@@ -37,8 +38,11 @@ type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
 const LOCKED_STATUSES = ['PENDING_REVIEW', 'LIVE'];
 const SUBMITTABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
+const WIZARD_STEPS = ['Describe', 'Add Photos', 'Pin Location', 'Review & Submit'];
+
 export default function EditListing() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { userRole, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -46,6 +50,14 @@ export default function EditListing() {
   const { data: listing, isLoading: listingLoading, isError } = useGetListing(id ?? '');
   const updateListing = useUpdateListing(id ?? '');
   const submitListing = useSubmitListing(id);
+
+  // Step routing: read initial step from ?step= query param (1-based, default 1).
+  // Guard against non-numeric values (e.g. ?step=abc → NaN) and clamp to [1, 4].
+  const stepParam = searchParams.get('step');
+  const initialStep = stepParam ? (Math.max(1, Math.min(4, parseInt(stepParam, 10) || 1))) : 1;
+  const [currentStep, setCurrentStep] = useState(initialStep);
+  // When true: after saving a step, return to step 4 instead of advancing sequentially
+  const [cameFromReview, setCameFromReview] = useState(false);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -55,6 +67,7 @@ export default function EditListing() {
   const [landArea, setLandArea] = useState('');
   const [bedrooms, setBedrooms] = useState('');
   const [builtArea, setBuiltArea] = useState('');
+  // Tracks whether image uploader has >= 3 images (drives step 2 completion + submit gate)
   const [canSubmitImages, setCanSubmitImages] = useState(false);
 
   // Pre-populate form once listing loads
@@ -143,7 +156,29 @@ export default function EditListing() {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Step 1 is complete when property type and a valid price are set
+  const step1Complete = listing.propertyType !== '' && (listing.price ?? 0) > 0;
+  // Step 2 is complete when >= 3 images have been uploaded (tracked by canSubmitImages)
+  const step2Complete = canSubmitImages;
+  // Step 3 is complete when address has been confirmed
+  const step3Complete = listing.addressConfirmed === true;
+
+  const steps = [
+    { label: WIZARD_STEPS[0], isComplete: step1Complete },
+    { label: WIZARD_STEPS[1], isComplete: step2Complete },
+    { label: WIZARD_STEPS[2], isComplete: step3Complete },
+    { label: WIZARD_STEPS[3], isComplete: false }, // terminal step
+  ];
+
+  const handleStepClick = (n: number) => {
+    // Allow: step 1 always, any completed step, or any step before current
+    if (n === 1 || steps[n - 1]?.isComplete || n < currentStep) {
+      setCurrentStep(n);
+    }
+  };
+
+  // Saves step 1 form fields, then advances to step 2 (or back to review)
+  const handleStep1Save = (e: React.FormEvent) => {
     e.preventDefault();
 
     const landAreaNum = landArea !== '' ? parseFloat(landArea) : undefined;
@@ -164,9 +199,29 @@ export default function EditListing() {
       {
         onSuccess: () => {
           toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
+          if (cameFromReview) {
+            setCameFromReview(false);
+            setCurrentStep(4);
+          } else {
+            setCurrentStep(2);
+          }
         },
       },
     );
+  };
+
+  const handleStep2Continue = () => {
+    if (cameFromReview) {
+      setCameFromReview(false);
+      setCurrentStep(4);
+    } else {
+      setCurrentStep(3);
+    }
+  };
+
+  const handleStep3Continue = () => {
+    setCameFromReview(false);
+    setCurrentStep(4);
   };
 
   const handleSubmitForReview = () => {
@@ -220,269 +275,369 @@ export default function EditListing() {
           </p>
         </div>
 
-        {/* Card 1: Listing Details */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Listing Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Property Type */}
-              <div className="space-y-2">
-                <Label htmlFor="propertyType">Property Type</Label>
-                <Select
-                  value={propertyType}
-                  onValueChange={(v) => setPropertyType(v as PropertyType)}
-                >
-                  <SelectTrigger id="propertyType">
-                    <SelectValue placeholder="Select property type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROPERTY_TYPES.map((pt) => (
-                      <SelectItem key={pt.value} value={pt.value}>
-                        {pt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Step indicator */}
+        <StepIndicator
+          steps={steps}
+          currentStep={currentStep}
+          onStepClick={handleStepClick}
+        />
 
-              {/* Title */}
-              <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  placeholder="e.g. 3 BHK Apartment in Manipal"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-              </div>
-
-              {/* Price */}
-              <PriceField initialRupees={priceRupees} onChange={setPriceRupees} required />
-
-              {/* Locality */}
-              <div className="space-y-2">
-                <Label htmlFor="locality">Locality</Label>
-                <Input
-                  id="locality"
-                  placeholder="e.g. Manipal, Udupi"
-                  value={locality}
-                  onChange={(e) => setLocality(e.target.value)}
-                />
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Brief description of the property..."
-                  rows={4}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
-
-              {/* Land Area — land only */}
-              {showLandArea && (
-                <div className="space-y-2">
-                  <Label htmlFor="landArea">Land Area (sq ft)</Label>
-                  <Input
-                    id="landArea"
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 2400"
-                    value={landArea}
-                    onChange={(e) => setLandArea(e.target.value)}
-                  />
-                </div>
-              )}
-
-              {/* Bedrooms — apartment / house */}
-              {showBedrooms && (
-                <div className="space-y-2">
-                  <Label htmlFor="bedrooms">Bedrooms</Label>
-                  <Input
-                    id="bedrooms"
-                    type="number"
-                    min="1"
-                    max="20"
-                    placeholder="e.g. 3"
-                    value={bedrooms}
-                    onChange={(e) => setBedrooms(e.target.value)}
-                  />
-                </div>
-              )}
-
-              {/* Built Area — apartment / house */}
-              {showBuiltArea && (
-                <div className="space-y-2">
-                  <Label htmlFor="builtArea">Built Area (sq ft)</Label>
-                  <Input
-                    id="builtArea"
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 1200"
-                    value={builtArea}
-                    onChange={(e) => setBuiltArea(e.target.value)}
-                  />
-                </div>
-              )}
-
-              {/* Save button */}
-              <div className="flex justify-end pt-4 border-t mt-2">
-                <Button type="submit" variant="default" disabled={updateListing.isPending}>
-                  {updateListing.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Save Changes
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Card 2: Listing Images (isSubmittable only) */}
-        {isSubmittable && (
+        {/* ── Step 1: Describe ── */}
+        <div data-testid="step-1-panel" style={{ display: currentStep === 1 ? 'block' : 'none' }}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                Listing Images
+                <FileText className="h-5 w-5" />
+                Listing Details
               </CardTitle>
-              <CardDescription>Minimum 3 images required to submit for review.</CardDescription>
             </CardHeader>
             <CardContent>
-              <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
+              <form onSubmit={handleStep1Save} className="space-y-6">
+                {/* Property Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="propertyType">Property Type</Label>
+                  <Select
+                    value={propertyType}
+                    onValueChange={(v) => setPropertyType(v as PropertyType)}
+                  >
+                    <SelectTrigger id="propertyType">
+                      <SelectValue placeholder="Select property type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROPERTY_TYPES.map((pt) => (
+                        <SelectItem key={pt.value} value={pt.value}>
+                          {pt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Title */}
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    placeholder="e.g. 3 BHK Apartment in Manipal"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+
+                {/* Price */}
+                <PriceField initialRupees={priceRupees} onChange={setPriceRupees} required />
+
+                {/* Locality */}
+                <div className="space-y-2">
+                  <Label htmlFor="locality">Locality</Label>
+                  <Input
+                    id="locality"
+                    placeholder="e.g. Manipal, Udupi"
+                    value={locality}
+                    onChange={(e) => setLocality(e.target.value)}
+                  />
+                </div>
+
+                {/* Description */}
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Brief description of the property..."
+                    rows={4}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
+
+                {/* Land Area — land only */}
+                {showLandArea && (
+                  <div className="space-y-2">
+                    <Label htmlFor="landArea">Land Area (sq ft)</Label>
+                    <Input
+                      id="landArea"
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 2400"
+                      value={landArea}
+                      onChange={(e) => setLandArea(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Bedrooms — apartment / house */}
+                {showBedrooms && (
+                  <div className="space-y-2">
+                    <Label htmlFor="bedrooms">Bedrooms</Label>
+                    <Input
+                      id="bedrooms"
+                      type="number"
+                      min="1"
+                      max="20"
+                      placeholder="e.g. 3"
+                      value={bedrooms}
+                      onChange={(e) => setBedrooms(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Built Area — apartment / house */}
+                {showBuiltArea && (
+                  <div className="space-y-2">
+                    <Label htmlFor="builtArea">Built Area (sq ft)</Label>
+                    <Input
+                      id="builtArea"
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 1200"
+                      value={builtArea}
+                      onChange={(e) => setBuiltArea(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Step 1 action */}
+                <div className="flex justify-end pt-4 border-t mt-2">
+                  <Button type="submit" disabled={updateListing.isPending}>
+                    {updateListing.isPending && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Save & Continue
+                  </Button>
+                </div>
+              </form>
             </CardContent>
           </Card>
-        )}
+        </div>
 
-        {/* Card 3: Confirm Location (isSubmittable only) */}
-        {isSubmittable && (
-          <Card>
+        {/* ── Step 2: Add Photos ── */}
+        <div data-testid="step-2-panel" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
+          {isSubmittable && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ImageIcon className="h-5 w-5" />
+                  Listing Images
+                </CardTitle>
+                <CardDescription>Minimum 3 images required to submit for review.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* ImageUploader is always mounted (CSS visibility) so upload state is preserved */}
+                <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
+                <div className="flex justify-end pt-4 border-t">
+                  <Button type="button" onClick={handleStep2Continue}>
+                    Save & Continue
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* ── Step 3: Pin Location ── */}
+        <div data-testid="step-3-panel" style={{ display: currentStep === 3 ? 'block' : 'none' }}>
+          {isSubmittable && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Confirm Location
+                </CardTitle>
+                <CardDescription>
+                  Search for your listing's address, drag the pin to the exact spot, then confirm.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <AddressPicker
+                  initialLatitude={listing.latitude}
+                  initialLongitude={listing.longitude}
+                  initialLocality={listing.locality}
+                  initialConfirmed={listing.addressConfirmed}
+                  onConfirm={(addr) => {
+                    if (!updateListing.isPending) {
+                      updateListing.mutate({ latitude: addr.lat, longitude: addr.lng, addressConfirmed: true });
+                    }
+                  }}
+                  onUnconfirm={() => {
+                    if (!updateListing.isPending) {
+                      updateListing.mutate({ addressConfirmed: false });
+                    }
+                  }}
+                />
+                <div className="flex justify-end pt-4 border-t">
+                  <Button type="button" onClick={handleStep3Continue}>
+                    Save & Continue
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* ── Step 4: Review & Submit ── */}
+        <div data-testid="step-4-panel" style={{ display: currentStep === 4 ? 'block' : 'none' }}>
+          {/* Review summary */}
+          <Card className="mb-4">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Confirm Location
-              </CardTitle>
+              <CardTitle>Review Your Listing</CardTitle>
               <CardDescription>
-                Search for your listing's address, drag the pin to the exact spot, then confirm.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AddressPicker
-                initialLatitude={listing.latitude}
-                initialLongitude={listing.longitude}
-                initialLocality={listing.locality}
-                initialConfirmed={listing.addressConfirmed}
-                onConfirm={(addr) => {
-                  if (!updateListing.isPending) {
-                    updateListing.mutate({ latitude: addr.lat, longitude: addr.lng, addressConfirmed: true });
-                  }
-                }}
-                onUnconfirm={() => {
-                  if (!updateListing.isPending) {
-                    updateListing.mutate({ addressConfirmed: false });
-                  }
-                }}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Card 4: POIs */}
-        {listing.addressConfirmed ? (
-          <PoiManager listingId={id!} />
-        ) : (
-          <Card>
-            <CardHeader>
-              <CardTitle>Nearby Points of Interest</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center gap-2 py-6 text-center">
-                <MapPin className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm font-medium">Location not yet confirmed</p>
-                <p className="text-sm text-muted-foreground">
-                  Confirm your listing's address above to enable POI suggestions.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Card 5: Submit for Review (isSubmittable only, absolute last) */}
-        {isSubmittable && (
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Send className="h-5 w-5 text-primary" />
-                Ready to Submit?
-              </CardTitle>
-              <CardDescription>
-                All requirements must be met before submitting for admin review.
+                Check the details below before submitting for admin review.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-3">
-                {[
-                  {
-                    label: 'Listing photos',
-                    met: canSubmitImages,
-                    detail: canSubmitImages
-                      ? 'Minimum 3 photos uploaded'
-                      : 'At least 3 photos required',
-                  },
-                  {
-                    label: 'Location confirmed',
-                    met: !!listing.addressConfirmed,
-                    detail: listing.addressConfirmed
-                      ? 'Pin position confirmed on map'
-                      : 'Confirm your pin location above',
-                  },
-                  {
-                    label: 'Required fields',
-                    met: requiredFieldsComplete,
-                    detail: requiredFieldsComplete
-                      ? 'All required fields filled in'
-                      : 'Price, property type, and locality required',
-                  },
-                ].map(({ label, met, detail }) => (
-                  <div key={label} className="flex items-start gap-3">
-                    {met
-                      ? <Check className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                      : <X className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />}
-                    <div>
-                      <p className="text-sm font-medium">{label}</p>
-                      <p className="text-xs text-muted-foreground">{detail}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-3 border-t">
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={submitListing.isPending || updateListing.isPending || !allConditionsMet}
-                  onClick={handleSubmitForReview}
-                >
-                  {submitListing.isPending
-                    ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
-                    : 'Submit for Review'}
-                </Button>
-                {listing.status === 'REJECTED' && (
-                  <p className="text-xs text-muted-foreground text-center mt-2">
-                    Previously rejected — review the feedback before resubmitting.
+              {/* Property Details row */}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Property Details</p>
+                  <p className="text-sm text-muted-foreground">
+                    {listing.propertyType || '—'} · {listing.title || '—'}
                   </p>
-                )}
+                  <p className="text-sm text-muted-foreground">
+                    {listing.price != null
+                      ? `₹${listing.price.toLocaleString('en-IN')}`
+                      : '—'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setCameFromReview(true); setCurrentStep(1); }}
+                >
+                  Edit
+                </Button>
+              </div>
+
+              <div className="border-t" />
+
+              {/* Photos row */}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Photos</p>
+                  <p className="text-sm text-muted-foreground">
+                    {canSubmitImages ? 'Minimum 3 photos uploaded' : 'Fewer than 3 photos — add more before submitting'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setCameFromReview(true); setCurrentStep(2); }}
+                >
+                  Edit
+                </Button>
+              </div>
+
+              <div className="border-t" />
+
+              {/* Location row */}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Location</p>
+                  <p className="text-sm text-muted-foreground">
+                    {listing.addressConfirmed
+                      ? `Confirmed · ${listing.locality || 'pin set'}`
+                      : 'Not yet confirmed'}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setCameFromReview(true); setCurrentStep(3); }}
+                >
+                  Edit
+                </Button>
               </div>
             </CardContent>
           </Card>
-        )}
+
+          {/* POIs — shown when address is confirmed */}
+          {listing.addressConfirmed ? (
+            <PoiManager listingId={id!} />
+          ) : (
+            <Card className="mb-4">
+              <CardHeader>
+                <CardTitle>Nearby Points of Interest</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col items-center gap-2 py-6 text-center">
+                  <MapPin className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm font-medium">Location not yet confirmed</p>
+                  <p className="text-sm text-muted-foreground">
+                    Confirm your listing's address in step 3 to enable POI suggestions.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Submit for Review (isSubmittable only) */}
+          {isSubmittable && (
+            <Card className="border-primary/20 bg-primary/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Send className="h-5 w-5 text-primary" />
+                  Ready to Submit?
+                </CardTitle>
+                <CardDescription>
+                  All requirements must be met before submitting for admin review.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  {[
+                    {
+                      label: 'Listing photos',
+                      met: canSubmitImages,
+                      detail: canSubmitImages
+                        ? 'Minimum 3 photos uploaded'
+                        : 'At least 3 photos required',
+                    },
+                    {
+                      label: 'Location confirmed',
+                      met: !!listing.addressConfirmed,
+                      detail: listing.addressConfirmed
+                        ? 'Pin position confirmed on map'
+                        : 'Confirm your pin location in step 3',
+                    },
+                    {
+                      label: 'Required fields',
+                      met: requiredFieldsComplete,
+                      detail: requiredFieldsComplete
+                        ? 'All required fields filled in'
+                        : 'Price, property type, and locality required',
+                    },
+                  ].map(({ label, met, detail }) => (
+                    <div key={label} className="flex items-start gap-3">
+                      {met
+                        ? <Check className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
+                        : <X className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />}
+                      <div>
+                        <p className="text-sm font-medium">{label}</p>
+                        <p className="text-xs text-muted-foreground">{detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-3 border-t">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    disabled={submitListing.isPending || updateListing.isPending || !allConditionsMet}
+                    onClick={handleSubmitForReview}
+                  >
+                    {submitListing.isPending
+                      ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting…</>
+                      : 'Submit for Review'}
+                  </Button>
+                  {listing.status === 'REJECTED' && (
+                    <p className="text-xs text-muted-foreground text-center mt-2">
+                      Previously rejected — review the feedback before resubmitting.
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
       </div>
     </AppLayout>
