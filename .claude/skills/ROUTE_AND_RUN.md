@@ -7,8 +7,10 @@ Do NOT redefine agents.
 Do NOT merge agent outputs.
 Process: triage → route → sequential agent execution → STOP.
 
+**Authority:** `ROUTE_AND_RUN` is the single source of truth for routing logic, agent invocation rules, and the default E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` invokes this skill for per-PR execution and may declare sprint-layer overrides on top of it — but does not redefine its core rules.
+
 ## Agents
-qa-fast, backend-engineer, frontend-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
+qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
 
 ---
 
@@ -35,10 +37,13 @@ Routing: A → B → C
 Choose the smallest valid path.
 
 ### A) Backend bugfix / small change
-Low risk:
+Low risk, single-file, no logic change (e.g. config value, constant, label):
 Routing: qa-fast → backend-engineer
 
-Medium/high risk (data integrity, transactions, concurrency, auth, money):
+Low/medium risk with logic change:
+Routing: qa-fast → backend-engineer → code-reviewer
+
+High risk (data integrity, transactions, concurrency, auth, money):
 Routing: qa-fast → backend-engineer → code-reviewer
 
 ---
@@ -73,7 +78,21 @@ Routing: qa-fast → backend-engineer → frontend-engineer → code-reviewer
 
 ---
 
-### E) Security Gate (Non-negotiable)
+### E) Supabase layer work
+
+If task touches RLS policies, Supabase Storage policies, PostgreSQL RPCs (supabase-rpcs/), or existing Supabase Edge Functions:
+
+RLS or storage policies (access control changes):
+Routing: qa-fast → supabase-engineer → security-reviewer
+
+RPCs or edge function maintenance (no access control change):
+Routing: qa-fast → supabase-engineer → code-reviewer
+
+Note: RLS and storage policy routes already end with `security-reviewer` — section F does not need to be separately applied for those cases.
+
+---
+
+### F) Security Gate (Non-negotiable)
 
 If task touches:
 auth/authz/JWT, secrets, PII, payments, permission changes, CORS/CSP, destructive migrations
@@ -87,15 +106,31 @@ Routing: qa-fast → architect → backend-engineer → code-reviewer → securi
 
 ---
 
-### F) Heavy Multi-Stream Work
+### G) Doc-only / read-only changes
 
-If >3 parallel subtasks or cross-domain:
+If the task touches only documentation, comments, or non-code config (e.g. `*.md`, `docs/`, `*.toml` with no behavioral change):
 
-Routing: team-lead
+Routing: (none — no agents needed)
+
+Skip qa-fast, engineer, code-reviewer, and E2E validation. Commit directly.
+
+---
+
+### H) Heavy Multi-Stream Work
+
+If the task genuinely requires multiple parallel workstreams that cannot be safely handled by a single agent pass (e.g. new backend endpoint + Flyway migration + frontend wiring, or supabase schema change + RLS + Spring Boot service changes):
+
+Routing: team-lead (Mode 2: Complex PR Decomposition)
 
 team-lead must:
-- Produce decomposition plan
-- Then delegate to appropriate agents
+- Confirm decomposition is warranted (not just a large single-stream task)
+- Produce a decomposition plan with subtasks, owners, non-goals, and gates
+- Delegate to the appropriate specialist agents
+- Verify integration across subtasks before declaring complete (team-lead Mode 2 Step 6)
+
+**E2E for team-lead work:** run E2E only after team-lead has completed integration verification (Mode 2 Step 6), not after each individual subtask. The final E2E covers the fully assembled change.
+
+Note: sprint kickoff analysis (team-lead Mode 1) is handled by SPRINT_EXECUTOR, not here.
 
 ---
 
@@ -112,7 +147,7 @@ Never pause to ask for confirmation before executing any of these:
 - `gh pr merge <number> --merge --delete-branch` — merge pull request
 - `git checkout main && git pull origin main` — sync main after merge
 
-These apply during sprint execution and all ROUTE_AND_RUN agent runs.
+These pre-approvals apply to git operations performed within `ROUTE_AND_RUN`'s execution scope. The full sprint PR lifecycle — branch creation, commit, push, PR creation, CI monitoring, merge, and post-merge checkout — is owned by `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, not by this skill.
 
 ---
 
@@ -128,6 +163,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 | `qa-fast` | `.claude/agents/qa-fast.md` | Pre-implementation risk scan | Critical Paths, Edge Cases, Smoke Script, Risks |
 | `backend-engineer` | `.claude/agents/backend-engineer.md` | Implements backend code | Working code + tests |
 | `frontend-engineer` | `.claude/agents/frontend-engineer.md` | Implements frontend UI code | Working UI code |
+| `supabase-engineer` | `.claude/agents/supabase-engineer.md` | RLS policies, storage policies, RPCs, edge function maintenance | Working SQL / TypeScript |
 | `code-reviewer` | `.claude/agents/code-reviewer.md` | Reviews completed implementation | APPROVE or REQUEST CHANGES table |
 | `architect` | `.claude/agents/architect.md` | API/schema/design decisions | Read-only design output |
 | `performance-analyst` | `.claude/agents/performance-analyst.md` | Query/perf analysis | Read-only analysis |
@@ -142,20 +178,68 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   When invoking pre-implementation, use this Task prompt pattern:
   > "Review the codebase and identify risks for this planned change: [paste issue/PR description].
   > The feature does not exist yet — scan the surrounding codebase and flag what could go wrong."
+
+- Engineer agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`) MUST follow these rules — include them verbatim in every engineer Task prompt:
+  > 1. **Read every file you will modify before writing any changes.** Do not assume file contents.
+  > 2. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
+  > 3. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
+
+- When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
+
 - `code-reviewer` runs AFTER the engineer completes the implementation.
+- Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
-- If still REQUEST CHANGES after one re-run: stop and surface to user.
-- `security-reviewer` always runs last when the Security Gate (E) applies.
+- If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop and surface to user.
+- `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
 
 ---
 
+## Step 3 — E2E Validation Policy (Authoritative)
+
+This is the default E2E policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` inherits this policy and may extend it with sprint-layer skip overrides — but this section is the single source of truth for E2E behavior and the E2E script.
+
+After the final routed agent completes, run the full e2e suite locally before committing:
+
+```bash
+# 1. Start backend via run-local.sh in background
+./backend/run-local.sh > /tmp/backend-e2e.log 2>&1 &
+BACKEND_PID=$!
+
+# 2. Start frontend (Vite) in background
+npm run dev > /tmp/frontend-e2e.log 2>&1 &
+FRONTEND_PID=$!
+
+# 3. Wait for both to be ready (poll until responding)
+VITE_PORT=${VITE_PORT:-5173}
+echo "Waiting for backend..." && until curl -sf http://localhost:8085/actuator/health > /dev/null 2>&1; do sleep 2; done
+echo "Waiting for frontend..." && until curl -sf http://localhost:${VITE_PORT} > /dev/null 2>&1; do sleep 2; done
+
+# 4. Run e2e
+npm run test:e2e:local
+E2E_EXIT=$?
+
+# 5. Stop servers
+kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
+
+# 6. Fail the task if e2e failed
+[ $E2E_EXIT -eq 0 ] || exit 1
+```
+
+Rules:
+- Run this after code-reviewer (and security-reviewer if applicable) APPROVE.
+- If e2e fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix and re-run.
+- If backend or frontend fails to start within 60s: play `afplay /System/Library/Sounds/Basso.aiff`, surface the error log and stop.
+- **Default skip:** doc-only changes (`*.md`, `docs/`, non-behavioral config) — never skip for code changes.
+- Sprint-layer callers may declare additional skip overrides — see `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`.
+
+---
 
 ## Execution Rules (Mandatory)
 
 - Agents execute sequentially.
 - Do NOT merge agent outputs.
-- After final routed agent completes, STOP.
+- After final routed agent completes, run Step 3 (E2E Validation), then play `afplay /System/Library/Sounds/Hero.aiff` and STOP.
 - Do NOT suggest improvements beyond scope.
 - One pass only.
 - Only re-run if code-reviewer or security-reviewer marks BLOCKING.
