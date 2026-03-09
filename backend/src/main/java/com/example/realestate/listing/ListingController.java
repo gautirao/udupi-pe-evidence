@@ -54,9 +54,10 @@ public class ListingController {
         CallerInfo caller = resolveCallerOrForbid(auth);
         if (caller == null) return forbidden();
 
+        String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         Listing saved = listingService.createDraft(
                 caller.userId(), req.propertyType(), req.title(),
-                req.locality(), req.price(), req.description());
+                req.locality(), req.price(), req.description(), createVideoUrl);
 
         log.info("POST /api/listings -> 201 listingId={} createdBy={}", saved.getId(), caller.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
@@ -97,12 +98,16 @@ public class ListingController {
         if (caller == null) return forbidden();
 
         try {
+            boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
+            String updateVideoUrl = applyVideo
+                    ? ((req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl())
+                    : null;
             Listing updated = listingService.updateListing(
                     id, caller.userId(), caller.isAdmin(),
                     req.propertyType(), req.title(), req.locality(),
                     req.price(), req.description(),
                     req.landArea(), req.bedrooms(), req.builtArea(),
-                    req.addressConfirmed());
+                    req.addressConfirmed(), updateVideoUrl, applyVideo);
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -186,7 +191,7 @@ public class ListingController {
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount, firstImageUrl);
+                imageCount, firstImageUrl, l.getVideoUrl());
     }
 
     // ===== DTOs =====
@@ -196,7 +201,8 @@ public class ListingController {
             String title,
             String locality,
             BigDecimal price,
-            String description
+            String description,
+            String videoUrl
     ) {}
 
     public record UpdateRequest(
@@ -208,7 +214,9 @@ public class ListingController {
             BigDecimal landArea,
             Integer bedrooms,
             BigDecimal builtArea,
-            Boolean addressConfirmed
+            Boolean addressConfirmed,
+            String videoUrl,
+            Boolean applyVideoUrl   // true = apply the videoUrl field (null clears, non-null sets)
     ) {}
 
     public record ListingResponse(
@@ -226,6 +234,7 @@ public class ListingController {
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt,
             int imageCount,
-            String firstImageUrl
+            String firstImageUrl,
+            String videoUrl
     ) {}
 }

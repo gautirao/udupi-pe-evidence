@@ -326,6 +326,13 @@ public class ListingService {
     @Transactional
     public Listing createDraft(UUID createdBy, String propertyType, String title,
                                String locality, BigDecimal price, String description) {
+        return createDraft(createdBy, propertyType, title, locality, price, description, null);
+    }
+
+    @Transactional
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description,
+                               String videoUrl) {
         Listing listing = new Listing();
         listing.setCreatedBy(createdBy);
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
@@ -334,6 +341,7 @@ public class ListingService {
         listing.setLocality(locality);
         listing.setPrice(price);
         listing.setDescription(description);
+        listing.setVideoUrl(videoUrl);
 
         OffsetDateTime now = OffsetDateTime.now();
         listing.setCreatedAt(now);
@@ -364,7 +372,7 @@ public class ListingService {
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description) {
         return updateListing(listingId, userId, isAdmin,
-                propertyType, title, locality, price, description, null, null, null, null);
+                propertyType, title, locality, price, description, null, null, null, null, null, false);
     }
 
     /**
@@ -382,6 +390,29 @@ public class ListingService {
                                  BigDecimal price, String description,
                                  BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
                                  Boolean addressConfirmed) {
+        return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, null, false);
+    }
+
+    /**
+     * Update a listing with extended fields including videoUrl.
+     *
+     * <p>videoUrl is only applied when {@code applyVideoUrl} is {@code true}. This distinguishes
+     * "caller explicitly sent the videoUrl field" (true → apply: null clears, non-null sets)
+     * from "caller omitted the field" (false → skip, preserving the existing stored value).
+     * Blank→null normalisation is performed by the controller before this method is called.
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing is owned by a different user
+     * @throws ListingStatusException    if status does not allow updates
+     */
+    @Transactional
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description,
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                                 Boolean addressConfirmed, String videoUrl, boolean applyVideoUrl) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
         if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
@@ -397,6 +428,8 @@ public class ListingService {
         if (bedrooms != null) listing.setBedrooms(bedrooms);
         if (builtArea != null) listing.setBuiltArea(builtArea);
         if (addressConfirmed != null) listing.setAddressConfirmed(addressConfirmed);
+        // Only apply when caller explicitly sent the videoUrl field.
+        if (applyVideoUrl) listing.setVideoUrl(videoUrl);
         listing.setUpdatedAt(OffsetDateTime.now());
 
         Listing saved = listingRepository.save(listing);

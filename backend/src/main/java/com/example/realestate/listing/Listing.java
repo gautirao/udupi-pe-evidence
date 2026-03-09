@@ -114,6 +114,9 @@ public class Listing {
     @Column(name = "description")
     private String description;
 
+    @Column(name = "video_url", length = 500)
+    private String videoUrl;
+
     @Column(name = "latitude")
     private Double latitude;
 
@@ -355,6 +358,14 @@ public class Listing {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getVideoUrl() {
+        return videoUrl;
+    }
+
+    public void setVideoUrl(String videoUrl) {
+        this.videoUrl = videoUrl;
     }
 
     public Double getLatitude() {
