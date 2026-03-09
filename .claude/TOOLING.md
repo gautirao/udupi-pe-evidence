@@ -44,6 +44,8 @@ These commands modify local files but are non-destructive:
 - storage deletions
 - production deployments
 
+**Exception:** When executing inside `ROUTE_AND_RUN` or `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, the git operations listed in `ROUTE_AND_RUN.md § Git Operations — Pre-Approved` (checkout, add, commit, push, pr create, pr merge) are pre-approved and do not require confirmation.
+
 Rules:
 - Do not ask for permission for auto-approved commands.
 - Batch auto-approved commands when useful.
@@ -56,8 +58,9 @@ Play a sound using `afplay` in these situations:
 | Event | Command |
 |-------|---------|
 | Waiting for user approval or input (pre-implementation plan posted, blocking on user) | `afplay /System/Library/Sounds/Ping.aiff` |
-| A spawned background agent has finished its task | `afplay /System/Library/Sounds/Glass.aiff` |
-| Foreground task completed (no further input needed from user) | `afplay /System/Library/Sounds/Glass.aiff` |
+| A spawned background agent has finished its task | `afplay /System/Library/Sounds/Hero.aiff` |
+| Foreground task completed (no further input needed from user) | `afplay /System/Library/Sounds/Hero.aiff` |
+| Hard stop / blocked (CI failure, e2e failure, unresolved review) | `afplay /System/Library/Sounds/Basso.aiff` |
 
 Rules:
 - Always play the sound immediately before or after the triggering event (not delayed).

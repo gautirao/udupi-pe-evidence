@@ -22,7 +22,7 @@ If the user explicitly says **"fast path"** or **"pre-approved"** for a change:
 ## Terminology
 
 When these rules reference roles:
-- "engineer" means: **backend-engineer** or **frontend-engineer** (whichever applies)
+- "engineer" means: **backend-engineer**, **frontend-engineer**, or **supabase-engineer** (whichever applies)
 - "qa-validate" means: **qa-fast final** (or **qa** only when test-writing is required)
 - "architect" means: **architect agent** (design-only, no direct code edits)
 
@@ -63,6 +63,8 @@ Any created or modified file, including:
 * <Assumptions requiring approval>
 
 Claude must stop after this section and wait for approval.
+
+**Note:** When running via `ROUTE_AND_RUN`, the `qa-fast` pre-scan and `code-reviewer` gate satisfy this planning requirement automatically. The stop-and-wait only applies to manual (non-ROUTE_AND_RUN) tasks.
 
 ---
 
@@ -122,17 +124,9 @@ If zero files are modified:
 
 ---
 
-## Risk Pipeline
+## Routing
 
-Default tier: MEDIUM
-
-| Tier | Applies to | Pipeline |
-|------|------------|----------|
-| CRITICAL | auth, payments, security, atomicity | qa-fast → engineer → qa-validate → code-reviewer → security-reviewer |
-| MEDIUM | endpoints, DB changes, service logic | qa-fast → engineer → code-reviewer |
-| LOW | UI tweaks, tests, cosmetic | engineer → code-reviewer |
-
-Escalate to CRITICAL if auth, money, or security involved.
+Agent routing and risk tiers are defined in `.claude/skills/ROUTE_AND_RUN.md` — that is the single source of truth. Do not re-derive routing here.
 
 ---
 

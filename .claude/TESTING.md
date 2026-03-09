@@ -20,7 +20,7 @@ Claude must not:
 
 ## Required Failure Analysis
 
-After writing code, Claude must always include (exception: skip for pure formatting, comments, renames, or cosmetic-only UI tweaks):
+After writing code, include failure analysis when the change involves logic, data, or behaviour (per CLAUDE.md §6 — skip for pure formatting, comments, renames, or cosmetic-only UI tweaks):
 
 ### "What could break?" section
 Must list:
