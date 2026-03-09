@@ -20,6 +20,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
+import { PriceField } from '@/components/dealer/PriceField';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { ApiError } from '@/lib/api';
@@ -48,7 +49,7 @@ export default function EditListing() {
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [price, setPrice] = useState('');
+  const [priceRupees, setPriceRupees] = useState<number | null>(null);
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
   const [locality, setLocality] = useState('');
   const [landArea, setLandArea] = useState('');
@@ -61,7 +62,7 @@ export default function EditListing() {
     if (!listing) return;
     setTitle(listing.title ?? '');
     setDescription(listing.description ?? '');
-    setPrice(listing.price != null ? String(listing.price) : '');
+    setPriceRupees(listing.price ?? null);
     setPropertyType((listing.propertyType as PropertyType) ?? '');
     setLocality(listing.locality ?? '');
     setLandArea(listing.landArea != null ? String(listing.landArea) : '');
@@ -145,16 +146,6 @@ export default function EditListing() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const priceNum = parseFloat(price);
-    if (price !== '' && (isNaN(priceNum) || priceNum <= 0)) {
-      toast({
-        title: 'Invalid price',
-        description: 'Please enter a valid price greater than 0.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     const landAreaNum = landArea !== '' ? parseFloat(landArea) : undefined;
     const bedroomsNum = bedrooms !== '' ? parseInt(bedrooms, 10) : undefined;
     const builtAreaNum = builtArea !== '' ? parseFloat(builtArea) : undefined;
@@ -163,7 +154,7 @@ export default function EditListing() {
       {
         title: title.trim() || undefined,
         description: description.trim() || undefined,
-        price: price !== '' ? priceNum : undefined,
+        price: priceRupees ?? undefined,
         propertyType: propertyType || undefined,
         locality: locality.trim() || undefined,
         landArea: landAreaNum,
@@ -211,7 +202,7 @@ export default function EditListing() {
     ? 'secondary'
     : 'outline';
 
-  const requiredFieldsComplete = !!price && !!propertyType && !!locality;
+  const requiredFieldsComplete = priceRupees != null && priceRupees > 0 && !!propertyType && !!locality;
   const allConditionsMet = canSubmitImages && !!listing.addressConfirmed && requiredFieldsComplete;
 
   return (
@@ -271,17 +262,7 @@ export default function EditListing() {
               </div>
 
               {/* Price */}
-              <div className="space-y-2">
-                <Label htmlFor="price">Price (INR)</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  min="0"
-                  placeholder="e.g. 2500000"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </div>
+              <PriceField initialRupees={priceRupees} onChange={setPriceRupees} required />
 
               {/* Locality */}
               <div className="space-y-2">

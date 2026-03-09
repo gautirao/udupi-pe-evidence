@@ -37,6 +37,43 @@ vi.mock('@/components/dealer/ImageUploader', () => ({
   },
 }));
 
+// PriceField uses Radix UI Slider which requires ResizeObserver. Mock it with a
+// simple controlled input so EditListing unit tests stay focused on page behaviour.
+vi.mock('@/components/dealer/PriceField', () => ({
+  PriceField: ({
+    initialRupees,
+    onChange,
+  }: {
+    id?: string;
+    label?: string;
+    initialRupees?: number | null;
+    onChange: (rupees: number | null) => void;
+    required?: boolean;
+  }) => {
+    const [value, setValue] = React.useState(
+      initialRupees != null ? String(initialRupees) : '',
+    );
+    React.useEffect(() => {
+      if (initialRupees != null) setValue(String(initialRupees));
+    }, [initialRupees]);
+    return React.createElement(
+      'div',
+      null,
+      React.createElement('label', { htmlFor: 'price' }, 'Price (INR)'),
+      React.createElement('input', {
+        id: 'price',
+        type: 'text',
+        value,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+          setValue(e.target.value);
+          const num = parseFloat(e.target.value);
+          onChange(isNaN(num) ? null : num);
+        },
+      }),
+    );
+  },
+}));
+
 vi.mock('@/components/poi/PoiManager', () => ({
   PoiManager: ({ listingId }: { listingId: string }) =>
     React.createElement('div', { 'data-testid': 'poi-manager', 'data-listing-id': listingId }),
