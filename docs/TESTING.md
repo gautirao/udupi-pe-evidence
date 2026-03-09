@@ -34,7 +34,7 @@ cp .env.e2e.example .env.e2e
 The file must contain real accounts — placeholder `@example.com` values will cause all auth-dependent tests to skip.
 
 ```
-PLAYWRIGHT_BASE_URL=http://localhost:8080
+PLAYWRIGHT_BASE_URL=http://localhost:5173
 BACKEND_BASE_URL=http://localhost:8085
 VITE_SUPABASE_URL=https://<your-project>.supabase.co
 VITE_SUPABASE_PUBLISHABLE_KEY=<your-anon-key>
