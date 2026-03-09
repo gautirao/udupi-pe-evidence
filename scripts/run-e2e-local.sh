@@ -28,16 +28,28 @@ FRONTEND_PORT="$(port_of "$PLAYWRIGHT_BASE_URL")"
 BACKEND_PORT="$(port_of "$BACKEND_BASE_URL")"
 
 port_in_use() { lsof -ti:"$1" >/dev/null 2>&1; }
+service_healthy() { curl -sf "$1" > /dev/null 2>&1; }
+
+BACKEND_ALREADY_RUNNING=false
+FRONTEND_ALREADY_RUNNING=false
 
 if port_in_use "$FRONTEND_PORT"; then
-  echo "ERROR: Port $FRONTEND_PORT is already in use (needed for Vite frontend)."
-  echo "Stop whatever is running on port $FRONTEND_PORT before running e2e tests."
-  exit 1
+  if service_healthy "$PLAYWRIGHT_BASE_URL"; then
+    echo "[e2e] Frontend already running on $FRONTEND_PORT — reusing."
+    FRONTEND_ALREADY_RUNNING=true
+  else
+    echo "ERROR: Port $FRONTEND_PORT is in use but not responding. Stop it and retry."
+    exit 1
+  fi
 fi
 if port_in_use "$BACKEND_PORT"; then
-  echo "ERROR: Port $BACKEND_PORT is already in use (needed for backend)."
-  echo "Stop whatever is running on port $BACKEND_PORT before running e2e tests."
-  exit 1
+  if service_healthy "$BACKEND_BASE_URL/actuator/health"; then
+    echo "[e2e] Backend already running on $BACKEND_PORT — reusing."
+    BACKEND_ALREADY_RUNNING=true
+  else
+    echo "ERROR: Port $BACKEND_PORT is in use but not healthy. Stop it and retry."
+    exit 1
+  fi
 fi
 
 # Warn if .env.e2e still has placeholder credentials
@@ -52,48 +64,60 @@ if [[ "${SMOKE_USER_EMAIL:-}" == *"@example.com"* ]] || \
 fi
 
 
-# Start backend via run-local.sh
-echo "[e2e] Starting backend..."
-"$SCRIPT_DIR/../backend/run-local.sh" > /tmp/backend-e2e.log 2>&1 &
-BACKEND_PID=$!
+BACKEND_PID=""
+FRONTEND_PID=""
 
-# Start frontend (Vite dev server)
-echo "[e2e] Starting frontend..."
-npm --prefix "$SCRIPT_DIR/.." run dev > /tmp/frontend-e2e.log 2>&1 &
-FRONTEND_PID=$!
+# Start backend via run-local.sh (skip if already running)
+if [ "$BACKEND_ALREADY_RUNNING" = false ]; then
+  echo "[e2e] Starting backend..."
+  "$SCRIPT_DIR/../backend/run-local.sh" > /tmp/backend-e2e.log 2>&1 &
+  BACKEND_PID=$!
+fi
 
-# Cleanup on exit (success or failure)
+# Start frontend (Vite dev server, skip if already running)
+if [ "$FRONTEND_ALREADY_RUNNING" = false ]; then
+  echo "[e2e] Starting frontend..."
+  npm --prefix "$SCRIPT_DIR/.." run dev > /tmp/frontend-e2e.log 2>&1 &
+  FRONTEND_PID=$!
+fi
+
+# Cleanup on exit — only stop services we started
 cleanup() {
-  echo "[e2e] Stopping backend (pid $BACKEND_PID) and frontend (pid $FRONTEND_PID)..."
-  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+  [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
+  [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
 }
 trap cleanup EXIT
 
 # Wait for backend
-echo "[e2e] Waiting for backend on $BACKEND_BASE_URL..."
-TIMEOUT=60
-ELAPSED=0
-until curl -sf "$BACKEND_BASE_URL/actuator/health" > /dev/null 2>&1; do
-  sleep 2; ELAPSED=$((ELAPSED + 2))
-  if [ $ELAPSED -ge $TIMEOUT ]; then
-    echo "[e2e] Backend did not start in ${TIMEOUT}s. Log:"
-    tail -30 /tmp/backend-e2e.log
-    exit 1
-  fi
-done
+if [ "$BACKEND_ALREADY_RUNNING" = false ]; then
+  echo "[e2e] Waiting for backend on $BACKEND_BASE_URL..."
+  TIMEOUT=60
+  ELAPSED=0
+  until curl -sf "$BACKEND_BASE_URL/actuator/health" > /dev/null 2>&1; do
+    sleep 2; ELAPSED=$((ELAPSED + 2))
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "[e2e] Backend did not start in ${TIMEOUT}s. Log:"
+      tail -30 /tmp/backend-e2e.log
+      exit 1
+    fi
+  done
+fi
 echo "[e2e] Backend ready."
 
 # Wait for frontend
-echo "[e2e] Waiting for frontend on $PLAYWRIGHT_BASE_URL..."
-ELAPSED=0
-until curl -sf "$PLAYWRIGHT_BASE_URL" > /dev/null 2>&1; do
-  sleep 2; ELAPSED=$((ELAPSED + 2))
-  if [ $ELAPSED -ge $TIMEOUT ]; then
-    echo "[e2e] Frontend did not start in ${TIMEOUT}s. Log:"
-    tail -30 /tmp/frontend-e2e.log
-    exit 1
-  fi
-done
+if [ "$FRONTEND_ALREADY_RUNNING" = false ]; then
+  echo "[e2e] Waiting for frontend on $PLAYWRIGHT_BASE_URL..."
+  TIMEOUT=60
+  ELAPSED=0
+  until curl -sf "$PLAYWRIGHT_BASE_URL" > /dev/null 2>&1; do
+    sleep 2; ELAPSED=$((ELAPSED + 2))
+    if [ $ELAPSED -ge $TIMEOUT ]; then
+      echo "[e2e] Frontend did not start in ${TIMEOUT}s. Log:"
+      tail -30 /tmp/frontend-e2e.log
+      exit 1
+    fi
+  done
+fi
 echo "[e2e] Frontend ready."
 echo ""
 

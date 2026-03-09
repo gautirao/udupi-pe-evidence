@@ -335,7 +335,7 @@ export default function EditListing() {
 
               {/* Save button */}
               <div className="flex justify-end pt-4 border-t mt-2">
-                <Button type="submit" variant="outline" disabled={updateListing.isPending}>
+                <Button type="submit" variant="default" disabled={updateListing.isPending}>
                   {updateListing.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
@@ -455,7 +455,7 @@ export default function EditListing() {
                   <div key={label} className="flex items-start gap-3">
                     {met
                       ? <Check className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
-                      : <X className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />}
+                      : <X className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />}
                     <div>
                       <p className="text-sm font-medium">{label}</p>
                       <p className="text-xs text-muted-foreground">{detail}</p>
