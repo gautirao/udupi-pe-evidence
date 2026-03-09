@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Git pre-push hook — runs e2e only when code files have changed.
+# Doc-only changes (*.md, docs/) skip the e2e gate entirely.
+set -e
+
+# Patterns that count as code (anything NOT matching the doc exclusion below)
+DOC_PATTERN='^(docs/|README|CLAUDE|\.githooks/|\.claude/|e2e/|.*\.md$)'
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Branch deletion — nothing to check
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    exit 0
+  fi
+
+  # New branch: diff against merge-base with main
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    base=$(git merge-base main "$local_sha" 2>/dev/null || echo "")
+    if [ -z "$base" ]; then
+      changed=$(git diff --name-only "${local_sha}^" "$local_sha" 2>/dev/null || echo "")
+    else
+      changed=$(git diff --name-only "$base" "$local_sha")
+    fi
+  else
+    changed=$(git diff --name-only "$remote_sha" "$local_sha")
+  fi
+
+  # Filter to code-only files
+  code_changes=$(echo "$changed" | grep -Ev "$DOC_PATTERN" | grep -v '^$' || true)
+
+  if [ -z "$code_changes" ]; then
+    echo "[pre-push] Doc-only changes — skipping e2e."
+    exit 0
+  fi
+
+  echo "[pre-push] Code changes detected:"
+  echo "$code_changes" | sed 's/^/  /'
+  echo ""
+  echo "━━━ pre-push: running e2e tests ━━━"
+  echo "Ensure backend (port 8085) and frontend (port 8080) are running."
+  echo ""
+
+  npm run test:e2e:local
+
+  echo ""
+  echo "━━━ e2e passed — push proceeding ━━━"
+  echo ""
+done
