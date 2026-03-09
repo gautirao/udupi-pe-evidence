@@ -76,6 +76,10 @@ vi.mock('@/components/dealer/AddressPicker', () => ({
     ),
 }));
 
+vi.mock('@/components/poi/PoiManager', () => ({
+  PoiManager: () => React.createElement('div', { 'data-testid': 'poi-manager' }),
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     userRole: 'dealer',
