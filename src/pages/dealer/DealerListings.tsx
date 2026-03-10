@@ -94,12 +94,15 @@ function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
       ? `Need ${3 - listing.imageCount} more image(s)`
       : 'Confirm address to submit';
 
+  // Deep-link to the blocking wizard step: images (step 2) takes priority
+  const targetStep = listing.imageCount < 3 ? 2 : 3;
+
   return (
     <div>
       <Button
         variant="outline"
         size="sm"
-        onClick={() => navigate(`/dealer/listings/${listing.id}/edit`)}
+        onClick={() => navigate(`/dealer/listings/${listing.id}/edit?step=${targetStep}`)}
       >
         Complete &amp; Submit
       </Button>
