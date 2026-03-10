@@ -22,7 +22,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Building2, Eye, Loader2 } from 'lucide-react';
+import { AlertCircle, Building2, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -206,14 +206,34 @@ export default function DealerListings() {
             {allListings.map((listing) => (
               <Card key={listing.id} className="overflow-hidden">
                 {listing.firstImageUrl ? (
-                  <img
-                    src={listing.firstImageUrl}
-                    alt={listing.title ?? 'Property listing image'}
-                    className="w-full h-32 object-cover rounded-t-lg"
-                  />
+                  <div className="relative">
+                    <img
+                      src={listing.firstImageUrl}
+                      alt={listing.title ?? 'Property listing image'}
+                      className="w-full h-32 object-cover rounded-t-lg"
+                    />
+                    {listing.imageCount > 0 && (
+                      <span
+                        className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                          listing.status === 'DRAFT' && listing.imageCount < 3
+                            ? 'bg-amber-500/90 text-white'
+                            : 'bg-black/60 text-white'
+                        }`}
+                      >
+                        <ImageIcon className="h-3 w-3" />
+                        {listing.imageCount}
+                      </span>
+                    )}
+                  </div>
                 ) : (
-                  <div className="w-full h-32 bg-secondary flex items-center justify-center rounded-t-lg">
+                  <div className="w-full h-32 bg-secondary flex flex-col items-center justify-center rounded-t-lg gap-1">
                     <Building2 className="h-8 w-8 text-muted-foreground/40" />
+                    {listing.status === 'DRAFT' && listing.imageCount === 0 && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        <ImageIcon className="h-3 w-3" />
+                        No photos yet
+                      </span>
+                    )}
                   </div>
                 )}
                 <CardHeader className="pb-2">
