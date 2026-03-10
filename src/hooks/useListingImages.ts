@@ -39,13 +39,24 @@ function getFileExtension(name: string): string {
   return name.split('.').pop()?.toLowerCase() ?? '';
 }
 
+const BLOCKED_FORMAT_HINTS: Record<string, string> = {
+  heic: 'HEIC is not supported. Please convert to JPEG or PNG first.',
+  heif: 'HEIF is not supported. Please convert to JPEG or PNG first.',
+  gif:  'GIF is not supported. Please upload a JPG, PNG, or WebP instead.',
+  tiff: 'TIFF is not supported. Please upload a JPG, PNG, or WebP instead.',
+  tif:  'TIFF is not supported. Please upload a JPG, PNG, or WebP instead.',
+};
+
 function validateFile(file: File): string | null {
-  if (file.size > MAX_FILE_SIZE) {
-    return `File "${file.name}" exceeds 5 MB limit.`;
-  }
   const ext = getFileExtension(file.name);
+  if (BLOCKED_FORMAT_HINTS[ext]) {
+    return BLOCKED_FORMAT_HINTS[ext];
+  }
   if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return `File "${file.name}" has unsupported format. Allowed: ${ALLOWED_EXTENSIONS.join(', ')}.`;
+    return `"${file.name}" has an unsupported format. Accepted: JPG, PNG, WebP.`;
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return `"${file.name}" is too large (max 5 MB). Please reduce the file size and try again.`;
   }
   return null;
 }
@@ -187,7 +198,7 @@ export function useListingImages(listingId: string | undefined) {
             delete next[uploadKey];
             return next;
           });
-        }, 1500);
+        }, 2000);
       } catch (err) {
         const apiErr = err instanceof ApiError ? err : null;
         const status = apiErr?.status;
@@ -205,7 +216,7 @@ export function useListingImages(listingId: string | undefined) {
               delete next[uploadKey];
               return next;
             });
-          }, 1500);
+          }, 2000);
           return;
         }
 
@@ -272,7 +283,7 @@ export function useListingImages(listingId: string | undefined) {
             delete next[uploadKey];
             return next;
           });
-        }, 1500);
+        }, 2000);
       } catch (err) {
         const apiErr = err instanceof ApiError ? err : null;
         // 409 = already registered, treat as success
@@ -288,7 +299,7 @@ export function useListingImages(listingId: string | undefined) {
               delete next[uploadKey];
               return next;
             });
-          }, 1500);
+          }, 2000);
           return;
         }
         const message = apiErr?.message ?? 'Finalize retry failed.';
