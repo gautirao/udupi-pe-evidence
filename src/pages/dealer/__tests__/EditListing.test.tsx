@@ -25,6 +25,10 @@ vi.mock('@/hooks/useDealerListings', () => ({
 }));
 
 vi.mock('@/components/dealer/ImageUploader', () => ({
+  // Default: report canSubmit=true so step-2 "Save & Continue" is enabled in
+  // tests that don't care about the 3-image gate. Tests that need to exercise
+  // the disabled state can fire onCanSubmitChange(false) themselves via the
+  // data-testid handle.
   ImageUploader: ({
     onCanSubmitChange,
   }: {
@@ -32,7 +36,7 @@ vi.mock('@/components/dealer/ImageUploader', () => ({
     onCanSubmitChange?: (canSubmit: boolean) => void;
   }) => {
     React.useEffect(() => {
-      onCanSubmitChange?.(false);
+      onCanSubmitChange?.(true);
     }, [onCanSubmitChange]);
     return React.createElement('div', { 'data-testid': 'image-uploader' });
   },
@@ -364,6 +368,40 @@ describe('EditListing page', () => {
       expect(screen.getByTestId('step-2-panel')).toHaveStyle('display: none');
       expect(screen.getByTestId('step-3-panel')).toHaveStyle('display: block');
     });
+  });
+
+  it('step2_withZeroImages_disablesSaveButton_andShowsHint', async () => {
+    // Override the ImageUploader mock to fire onCanSubmitChange(false) so the
+    // 3-image gate is active for this test only.
+    const uploaderModule = await import('@/components/dealer/ImageUploader');
+    vi.spyOn(uploaderModule, 'ImageUploader').mockImplementationOnce(
+      ({ onCanSubmitChange }: { listingId: string; onCanSubmitChange?: (v: boolean) => void }) => {
+        React.useEffect(() => {
+          onCanSubmitChange?.(false);
+        }, [onCanSubmitChange]);
+        return React.createElement('div', { 'data-testid': 'image-uploader' });
+      },
+    );
+
+    mockUseSearchParams.mockReturnValue([new URLSearchParams('step=2'), vi.fn()]);
+    vi.mocked(useGetListing).mockReturnValue({
+      data: makeListing({ status: 'DRAFT', imageCount: 0 }),
+      isLoading: false,
+      isError: false,
+    } as ReturnType<typeof useGetListing>);
+
+    renderEditListing();
+
+    const step2Panel = screen.getByTestId('step-2-panel');
+
+    // The "Save & Continue" button inside step 2 must be disabled when there are no images.
+    const button = step2Panel.querySelector('button[type="button"]') as HTMLButtonElement;
+    await waitFor(() => {
+      expect(button).toBeDisabled();
+    });
+
+    // Hint text must be visible.
+    expect(screen.getByText('Add at least 3 photos to continue.')).toBeInTheDocument();
   });
 
   it('calls mutate with addressConfirmed false when Change is clicked on a confirmed listing', async () => {
