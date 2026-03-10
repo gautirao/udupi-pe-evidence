@@ -282,7 +282,7 @@ export default function DealerListings() {
                         )}
                       </>
                     )}
-                    {listing.status === 'DRAFT' && (
+                    {(listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button
@@ -295,9 +295,9 @@ export default function DealerListings() {
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>Delete draft listing?</AlertDialogTitle>
+                            <AlertDialogTitle>Delete listing?</AlertDialogTitle>
                             <AlertDialogDescription>
-                              This will permanently delete your draft listing. This cannot be undone.
+                              This will permanently delete your listing. This cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

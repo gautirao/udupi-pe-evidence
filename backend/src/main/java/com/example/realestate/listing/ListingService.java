@@ -438,17 +438,18 @@ public class ListingService {
     }
 
     /**
-     * Delete a listing. Only DRAFT status allowed. Enforces ownership unless admin.
+     * Delete a listing. Only DRAFT or REJECTED status allowed. Enforces ownership unless admin.
      *
      * @throws ListingNotFoundException if listing not found or not owned
-     * @throws ListingStatusException   if status is not DRAFT
+     * @throws ListingStatusException   if status is not DRAFT or REJECTED
      */
     @Transactional
     public void deleteListing(UUID listingId, UUID userId, boolean isAdmin) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
-        if (!ListingStatus.DRAFT.toDbValue().equals(listing.getStatus())) {
-            throw new ListingStatusException("Cannot delete listing with status " + listing.getStatus());
+        String status = listing.getStatus();
+        if (!ListingStatus.DRAFT.toDbValue().equals(status) && !ListingStatus.REJECTED.toDbValue().equals(status)) {
+            throw new ListingStatusException("Cannot delete listing with status " + status);
         }
 
         listingRepository.delete(listing);
