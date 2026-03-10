@@ -81,6 +81,16 @@ logging:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
 
+# Supabase Storage — used by SupabaseStorageService for server-side object deletion.
+# Set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Render env vars before enabling.
+# Defaults to disabled so the app starts cleanly when keys are absent.
+supabase:
+  url: ${SUPABASE_URL:}
+  service-role-key: ${SUPABASE_SERVICE_ROLE_KEY:}
+  storage:
+    enabled: ${SUPABASE_STORAGE_ENABLED:false}
+    bucket: ${SUPABASE_STORAGE_BUCKET:listing-images}
+
 # Sentry error monitoring
 # DSN must be set in Render env vars: SENTRY_DSN=https://...@sentry.io/...
 # When SENTRY_DSN is absent (empty default), Sentry initializes in no-op mode — no crash.

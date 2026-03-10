@@ -69,6 +69,9 @@ class ListingImageControllerTest {
     @MockitoBean
     private ListingService listingService;
 
+    @MockitoBean
+    private SupabaseStorageService storageService;
+
     private Listing draftListing;
 
     @BeforeEach
