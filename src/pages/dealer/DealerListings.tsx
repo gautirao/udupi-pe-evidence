@@ -27,6 +27,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft',
+  PENDING_REVIEW: 'Under Review',
+  LIVE: 'Live',
+  REJECTED: 'Rejected',
+};
+
 function statusClassName(status: string): string {
   switch (status) {
     case 'LIVE':
@@ -196,7 +203,7 @@ export default function DealerListings() {
                       {listing.title ?? 'Untitled Listing'}
                     </CardTitle>
                     <Badge className={statusClassName(listing.status)}>
-                      {listing.status}
+                      {STATUS_LABELS[listing.status] ?? listing.status}
                     </Badge>
                   </div>
                 </CardHeader>
