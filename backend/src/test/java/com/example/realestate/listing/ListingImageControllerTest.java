@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -45,7 +46,14 @@ class ListingImageControllerTest {
             return http
                     .csrf(AbstractHttpConfigurer::disable)
                     .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                    .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
                     .build();
+        }
+
+        @Bean
+        public JwtDecoder jwtDecoder() {
+            // Stub decoder — the jwt() MockMvc post-processor bypasses actual JWT validation.
+            return token -> { throw new UnsupportedOperationException("stub"); };
         }
     }
 
@@ -219,16 +227,16 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$.error").value("Image already registered"));
     }
 
-    // ==================== Test 8: POST without JWT -> 403 ====================
+    // ==================== Test 8: POST without JWT -> 401 ====================
 
     @Test
-    void register_withoutJwt_returns403() throws Exception {
+    void register_withoutJwt_returns401() throws Exception {
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"x","url":"y"}
                                 """))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized());
     }
 
     // ==================== Test 9: DELETE image -> 204 ====================
@@ -317,6 +325,93 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$.error").value("imageIds must contain exactly all images for this listing"));
 
         verify(imageRepository, never()).saveAll(anyList());
+    }
+
+    // ==================== Test 13: GET images — empty list -> 200 [] ====================
+
+    @Test
+    void getImages_withNoImages_returns200EmptyList() throws Exception {
+        stubDealerWithDraftListing();
+        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // ==================== Test 14: GET images — ordered list -> 200 ====================
+
+    @Test
+    void getImages_withImages_returnsOrderedList() throws Exception {
+        stubDealerWithDraftListing();
+
+        UUID id1 = UUID.fromString("00000000-0000-0000-0000-000000000061");
+        UUID id2 = UUID.fromString("00000000-0000-0000-0000-000000000062");
+        ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "https://x.com/1.jpg", 0);
+        ListingImage img2 = buildImage(id2, LISTING_ID, "p2.jpg", "https://x.com/2.jpg", 1);
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
+                .thenReturn(List.of(img1, img2));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].id").value(id1.toString()))
+                .andExpect(jsonPath("$[0].position").value(0))
+                .andExpect(jsonPath("$[1].id").value(id2.toString()))
+                .andExpect(jsonPath("$[1].position").value(1));
+    }
+
+    // ==================== Test 15: GET images — no auth -> 401 ====================
+
+    @Test
+    void getImages_withoutAuth_returns401() throws Exception {
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    // ==================== Test 16: GET images — different dealer -> 404 ====================
+
+    @Test
+    void getImages_differentDealer_returns403or404() throws Exception {
+        when(listingService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
+        // draftListing.createdBy = DEALER_ID, but caller is OTHER_DEALER
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== Test 17: GET images — LIVE listing -> 200 (no status guard on GET) ====================
+
+    @Test
+    void getImages_liveListing_returns200() throws Exception {
+        // getImages has no status guard; it intentionally works for any status the caller owns.
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing liveListing = new Listing();
+        liveListing.setId(LISTING_ID);
+        liveListing.setCreatedBy(DEALER_ID);
+        liveListing.setStatus(ListingStatus.LIVE.toDbValue());
+        liveListing.setPropertyType("land");
+        liveListing.setCreatedAt(OffsetDateTime.now());
+        liveListing.setUpdatedAt(OffsetDateTime.now());
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(liveListing));
+
+        UUID id1 = UUID.fromString("00000000-0000-0000-0000-000000000071");
+        ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "https://x.com/1.jpg", 0);
+        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
+                .thenReturn(List.of(img1));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(id1.toString()));
     }
 
     // ==================== Helper ====================
