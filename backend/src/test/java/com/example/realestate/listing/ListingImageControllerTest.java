@@ -6,7 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -14,13 +16,14 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -72,6 +75,9 @@ class ListingImageControllerTest {
     @MockitoBean
     private SupabaseStorageService storageService;
 
+    @MockitoBean
+    private ListingImageRegistrar imageRegistrar;
+
     private Listing draftListing;
 
     @BeforeEach
@@ -105,10 +111,11 @@ class ListingImageControllerTest {
     @Test
     void register_validImage_returns201() throws Exception {
         stubDealerWithDraftListing();
-        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
         ListingImage saved = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 2);
-        when(imageRepository.save(any(ListingImage.class))).thenReturn(saved);
+        ResponseEntity<?> created201 = ResponseEntity.status(HttpStatus.CREATED)
+                .body(ListingImageController.toResponse(saved));
+        doReturn(created201).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -127,7 +134,9 @@ class ListingImageControllerTest {
     @Test
     void register_maxImagesReached_returns400() throws Exception {
         stubDealerWithDraftListing();
-        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(10L);
+        ResponseEntity<?> bad400 = ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "Maximum 10 images per listing"));
+        doReturn(bad400).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -216,9 +225,9 @@ class ListingImageControllerTest {
     @Test
     void register_duplicatePath_returns409() throws Exception {
         stubDealerWithDraftListing();
-        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
-        when(imageRepository.save(any(ListingImage.class)))
-                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("unique constraint"));
+        ResponseEntity<?> conflict409 = ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Image already registered"));
+        doReturn(conflict409).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))

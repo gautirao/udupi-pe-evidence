@@ -2,7 +2,6 @@ package com.example.realestate.listing;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -47,15 +46,18 @@ public class ListingImageController {
     private final ListingImageRepository imageRepository;
     private final ListingService listingService;
     private final SupabaseStorageService storageService;
+    private final ListingImageRegistrar imageRegistrar;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
                                    ListingService listingService,
-                                   SupabaseStorageService storageService) {
+                                   SupabaseStorageService storageService,
+                                   ListingImageRegistrar imageRegistrar) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.listingService = listingService;
         this.storageService = storageService;
+        this.imageRegistrar = imageRegistrar;
     }
 
     // ==================== GET — list images ====================
@@ -104,37 +106,15 @@ public class ListingImageController {
             return badRequest("Allowed image types: jpg, jpeg, png, webp");
         }
 
-        // Validate max images
-        long currentCount = imageRepository.countByListingId(listingId);
-        if (currentCount >= MAX_IMAGES) {
-            return badRequest("Maximum " + MAX_IMAGES + " images per listing");
-        }
-
-        // Validate url present
+        // Validate url present (before acquiring the lock)
         if (req.url() == null || req.url().isBlank()) {
             return badRequest("URL is required");
         }
 
-        // Insert metadata
-        ListingImage image = new ListingImage();
-        image.setListingId(listingId);
-        image.setStoragePath(req.storagePath());
-        image.setUrl(req.url());
-        image.setPosition((int) currentCount);
-        image.setCreatedAt(OffsetDateTime.now());
-
-        try {
-            ListingImage saved = imageRepository.save(image);
-            log.info("POST /api/listings/{}/images -> 201 storagePath={} userId={}",
-                    listingId, req.storagePath(), caller.userId());
-            return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
-        } catch (DataIntegrityViolationException e) {
-            // UNIQUE constraint on (listing_id, storage_path) — idempotent duplicate
-            log.info("POST /api/listings/{}/images -> 409 duplicate storagePath={} userId={}",
-                    listingId, req.storagePath(), caller.userId());
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", "Image already registered"));
-        }
+        // Delegate to a separate Spring bean so @Transactional proxy is honoured.
+        // Self-calls within the same bean bypass the proxy and would leave the
+        // count-check and save running without a transaction or pessimistic lock.
+        return imageRegistrar.register(listingId, req, caller.userId());
     }
 
     // ==================== DELETE — remove image metadata ====================
@@ -277,7 +257,7 @@ public class ListingImageController {
                 .body(Map.of("error", message));
     }
 
-    private static ImageResponse toResponse(ListingImage img) {
+    static ImageResponse toResponse(ListingImage img) {
         return new ImageResponse(
                 img.getId(), img.getListingId(), img.getStoragePath(), img.getUrl(),
                 img.getPosition(), img.getCreatedAt() != null ? img.getCreatedAt().toString() : null);
