@@ -261,9 +261,15 @@ export default function DealerListings() {
                   )}
                   <div className="flex gap-2 flex-wrap items-start">
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={`/listing/${listing.id}`}>
+                      <Link
+                        to={
+                          listing.status === 'LIVE'
+                            ? `/listing/${listing.id}`
+                            : `/listing/${listing.id}?preview=true`
+                        }
+                      >
                         <Eye className="h-3.5 w-3.5 mr-1" />
-                        View
+                        {listing.status === 'LIVE' ? 'View' : 'Preview'}
                       </Link>
                     </Button>
                     {listing.status === 'LIVE' && (

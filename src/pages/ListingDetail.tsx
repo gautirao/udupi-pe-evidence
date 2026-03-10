@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -61,6 +61,8 @@ function useListingById(id: string | undefined) {
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isPreview = searchParams.get('preview') === 'true';
   const { toast } = useToast();
   const { data: listing, isLoading, error } = useListingById(id);
   
@@ -138,11 +140,18 @@ export default function ListingDetail() {
   return (
     <AppLayout>
       <div className="max-w-4xl mx-auto p-4 md:p-6">
+        {/* Preview banner */}
+        {isPreview && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <strong>Preview mode</strong> — this listing is not yet live. Only you can see this page.
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => navigate('/')}>
+          <Button variant="ghost" onClick={() => navigate(isPreview ? '/dealer/listings' : '/')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Map
+            {isPreview ? 'Back to My Listings' : 'Back to Map'}
           </Button>
           <Button variant="outline" onClick={handleShare} className="gap-2">
             {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
