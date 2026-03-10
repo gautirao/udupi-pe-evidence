@@ -114,6 +114,7 @@ export function useCreateListing() {
       api.post<ListingResponse>('/api/listings', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
     },
     onError: (error: Error) => {
       toast({
@@ -149,6 +150,7 @@ export function useUpdateListing(id: string) {
       api.put<ListingResponse>(`/api/listings/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['listing', id] });
     },
     onError: (error: Error) => {
@@ -173,6 +175,7 @@ export function useDeleteListing() {
       api.delete<void>(`/api/listings/${listingId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
     },
   });
 }
@@ -192,6 +195,7 @@ export function useSubmitListing(listingId: string | undefined) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['listing', listingId] });
     },
   });
