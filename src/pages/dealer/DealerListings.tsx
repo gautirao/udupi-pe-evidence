@@ -22,7 +22,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Building2, Eye, ImageIcon, Loader2 } from 'lucide-react';
+import { AlertCircle, Building2, CalendarDays, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -266,6 +266,14 @@ export default function DealerListings() {
                         View
                       </Link>
                     </Button>
+                    {listing.status === 'LIVE' && (
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link to="/dealer/bookings">
+                          <CalendarDays className="h-3.5 w-3.5 mr-1" />
+                          Booking enquiries
+                        </Link>
+                      </Button>
+                    )}
                     {EDITABLE_STATUSES.includes(listing.status) && (
                       <>
                         <Button variant="outline" size="sm" asChild>
