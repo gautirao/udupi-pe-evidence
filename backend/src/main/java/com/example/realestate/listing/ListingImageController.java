@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -52,6 +53,24 @@ public class ListingImageController {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.listingService = listingService;
+    }
+
+    // ==================== GET — list images ====================
+
+    @GetMapping
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getImages(JwtAuthenticationToken auth,
+                                       @PathVariable UUID listingId) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        Listing listing = findOwnedListing(listingId, caller);
+        if (listing == null) return notFound("Listing not found");
+
+        List<ListingImage> images = imageRepository.findByListingIdOrderByPositionAsc(listingId);
+        log.info("GET /api/listings/{}/images -> 200 count={} userId={}",
+                listingId, images.size(), caller.userId());
+        return ResponseEntity.ok(images.stream().map(ListingImageController::toResponse).toList());
     }
 
     // ==================== POST — register image metadata ====================
