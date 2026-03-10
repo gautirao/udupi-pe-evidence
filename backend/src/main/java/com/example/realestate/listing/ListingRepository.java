@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -16,6 +19,16 @@ import java.util.UUID;
 
 @Repository
 public interface ListingRepository extends JpaRepository<Listing, UUID> {
+
+    /**
+     * Acquires a row-level exclusive lock (SELECT ... FOR UPDATE) on the listing row.
+     * Used by registerImage to serialize concurrent upload count-check-then-insert
+     * within a single transaction, preventing TOCTOU races past the 10-image limit.
+     * Must be called inside an active @Transactional context.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT l FROM Listing l WHERE l.id = :id")
+    Optional<Listing> findByIdWithLock(@Param("id") UUID id);
 
     boolean existsByRawPostId(UUID rawPostId);
 
