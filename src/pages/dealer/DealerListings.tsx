@@ -1,7 +1,7 @@
 import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  useDealerMyListings,
+  useDealerMyListingsInfinite,
   useDeleteListing,
   useSubmitListing,
   type ListingResponse,
@@ -120,7 +120,18 @@ function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
  */
 export default function DealerListings() {
   const { isDealer, isAdmin, isLoading } = useAuth();
-  const { data, isLoading: listingsLoading, isError, refetch } = useDealerMyListings();
+  const {
+    data,
+    isLoading: listingsLoading,
+    isError,
+    refetch,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useDealerMyListingsInfinite();
+
+  const allListings = data?.pages.flatMap((p) => p.listings) ?? [];
+  const totalElements = data?.pages[0]?.totalElements ?? 0;
   const deleteListingMutation = useDeleteListing();
   const { toast } = useToast();
 
@@ -172,7 +183,7 @@ export default function DealerListings() {
           </div>
         )}
 
-        {!listingsLoading && !isError && data?.listings.length === 0 && (
+        {!listingsLoading && !isError && allListings.length === 0 && (
           <div className="text-center py-12 space-y-3">
             <Building2 className="h-8 w-8 text-muted-foreground/50 mx-auto" />
             <p className="text-sm font-medium text-muted-foreground">No listings yet</p>
@@ -185,9 +196,14 @@ export default function DealerListings() {
           </div>
         )}
 
-        {!listingsLoading && !isError && data && data.listings.length > 0 && (
+        {!listingsLoading && !isError && allListings.length > 0 && (
           <div className="space-y-4">
-            {data.listings.map((listing) => (
+            {totalElements > 20 && (
+              <p className="text-sm text-muted-foreground">
+                Showing {allListings.length} of {totalElements} listings
+              </p>
+            )}
+            {allListings.map((listing) => (
               <Card key={listing.id} className="overflow-hidden">
                 {listing.firstImageUrl ? (
                   <img
@@ -286,6 +302,25 @@ export default function DealerListings() {
                 </CardContent>
               </Card>
             ))}
+            {hasNextPage && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isFetchingNextPage}
+                  onClick={() => fetchNextPage()}
+                >
+                  {isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      Loading…
+                    </>
+                  ) : (
+                    'Load more'
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

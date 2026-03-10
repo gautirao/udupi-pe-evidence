@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type PageResponse } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -78,6 +78,30 @@ export function useDealerMyListings(page = 0, size = 20) {
         isLast: response.page.number + 1 >= response.page.totalPages,
       };
     },
+  });
+}
+
+/**
+ * Infinite-query variant of useDealerMyListings.
+ * Pages are appended on each "load more" call.
+ * Use `data.pages.flatMap(p => p.listings)` to get all loaded listings.
+ */
+export function useDealerMyListingsInfinite(size = 20) {
+  return useInfiniteQuery({
+    queryKey: ['dealer-listings-infinite', size],
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      const response = await api.get<PageResponse<ListingResponse>>(
+        `/api/listings/mine?page=${pageParam}&size=${size}`,
+      );
+      return {
+        listings: response.content,
+        totalElements: response.page.totalElements,
+        isLast: response.page.number + 1 >= response.page.totalPages,
+        nextPage: response.page.number + 1,
+      };
+    },
+    getNextPageParam: (lastPage) => (lastPage.isLast ? undefined : lastPage.nextPage),
   });
 }
 
