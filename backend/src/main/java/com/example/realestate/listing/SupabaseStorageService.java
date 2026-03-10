@@ -8,7 +8,9 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * Best-effort Supabase Storage object deletion via the Admin REST API (service_role key).
@@ -48,13 +50,19 @@ public class SupabaseStorageService {
      */
     @PostConstruct
     public void validate() {
-        if (enabled && (supabaseUrl == null || supabaseUrl.isBlank()
-                || serviceRoleKey == null || serviceRoleKey.isBlank())) {
-            throw new IllegalStateException(
-                    "supabase.storage.enabled=true but SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. "
-                    + "Set both environment variables or disable with SUPABASE_STORAGE_ENABLED=false.");
-        }
         if (enabled) {
+            if (supabaseUrl == null || supabaseUrl.isBlank()
+                    || serviceRoleKey == null || serviceRoleKey.isBlank()) {
+                throw new IllegalStateException(
+                        "supabase.storage.enabled=true but SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. "
+                        + "Set both environment variables or disable with SUPABASE_STORAGE_ENABLED=false.");
+            }
+            // Enforce HTTPS to prevent plaintext transmission of the service role key
+            if (!supabaseUrl.startsWith("https://")) {
+                throw new IllegalStateException(
+                        "supabase.url must start with https:// — plaintext URLs are not permitted "
+                        + "as they would transmit the SUPABASE_SERVICE_ROLE_KEY unencrypted.");
+            }
             log.info("SupabaseStorageService: enabled — bucket={} url={}", bucket, supabaseUrl);
         } else {
             log.info("SupabaseStorageService: disabled (set SUPABASE_STORAGE_ENABLED=true to enable)");
@@ -73,14 +81,22 @@ public class SupabaseStorageService {
             return;
         }
 
-        String url = supabaseUrl + "/storage/v1/object/" + bucket + "/" + storagePath;
+        // Build URL with proper percent-encoding to prevent path injection
+        String url = UriComponentsBuilder.fromHttpUrl(supabaseUrl)
+                .pathSegment("storage", "v1", "object", bucket)
+                .path("/" + storagePath) // storagePath contains '/' separators — preserve them
+                .build().toUriString();
+
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", "Bearer " + serviceRoleKey);
             restTemplate.exchange(url, HttpMethod.DELETE, new HttpEntity<>(headers), Void.class);
             log.info("Storage object deleted: path={}", storagePath);
+        } catch (RestClientResponseException e) {
+            // Log status code only — response body may contain token fragments
+            log.warn("Best-effort Storage delete failed — path={} status={}", storagePath, e.getStatusCode());
         } catch (Exception e) {
-            log.warn("Best-effort Storage delete failed — path={} error={}", storagePath, e.getMessage());
+            log.warn("Best-effort Storage delete failed — path={} error={}", storagePath, e.getClass().getSimpleName());
         }
     }
 }

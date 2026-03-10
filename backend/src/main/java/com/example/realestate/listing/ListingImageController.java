@@ -140,6 +140,7 @@ public class ListingImageController {
     // ==================== DELETE — remove image metadata ====================
 
     @DeleteMapping("/{imageId}")
+    @Transactional
     public ResponseEntity<?> deleteImage(JwtAuthenticationToken auth,
                                           @PathVariable UUID listingId,
                                           @PathVariable UUID imageId) {
