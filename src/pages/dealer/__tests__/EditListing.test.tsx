@@ -24,6 +24,10 @@ vi.mock('@/hooks/useDealerListings', () => ({
   useSubmitListing: vi.fn(),
 }));
 
+vi.mock('@/hooks/useListingImages', () => ({
+  useListingImages: vi.fn(() => ({ images: [], isLoading: false })),
+}));
+
 vi.mock('@/components/dealer/ImageUploader', () => ({
   // Default: report canSubmit=true so step-2 "Save & Continue" is enabled in
   // tests that don't care about the 3-image gate. Tests that need to exercise

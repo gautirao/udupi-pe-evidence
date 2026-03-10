@@ -21,6 +21,7 @@ import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X, Link } from
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
+import { useListingImages } from '@/hooks/useListingImages';
 import { PriceField } from '@/components/dealer/PriceField';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
@@ -86,6 +87,9 @@ export default function EditListing() {
   const [canSubmitImages, setCanSubmitImages] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [videoUrlError, setVideoUrlError] = useState('');
+
+  // Images for thumbnail strip in step 4 review
+  const { images: listingImages } = useListingImages(id);
 
   // Pre-populate form once listing loads
   useEffect(() => {
@@ -588,9 +592,26 @@ export default function EditListing() {
 
               {/* Photos row */}
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">Photos</p>
-                  <p className="text-sm text-muted-foreground">
+                  {listingImages.length > 0 && (
+                    <div className="flex gap-1.5 mt-1.5 overflow-x-auto pb-1">
+                      {listingImages.slice(0, 5).map((img, i) => (
+                        <img
+                          key={img.id}
+                          src={img.url}
+                          alt={`Photo ${i + 1}`}
+                          className="h-12 w-12 object-cover rounded-md flex-shrink-0"
+                        />
+                      ))}
+                      {listingImages.length > 5 && (
+                        <div className="h-12 w-12 flex-shrink-0 rounded-md bg-muted flex items-center justify-center text-xs text-muted-foreground font-medium">
+                          +{listingImages.length - 5}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-sm text-muted-foreground mt-1">
                     {canSubmitImages ? 'Minimum 3 photos uploaded' : 'Fewer than 3 photos — add more before submitting'}
                   </p>
                 </div>
@@ -667,6 +688,7 @@ export default function EditListing() {
                       detail: canSubmitImages
                         ? 'Minimum 3 photos uploaded'
                         : 'At least 3 photos required',
+                      step: 2,
                     },
                     {
                       label: 'Location confirmed',
@@ -674,6 +696,7 @@ export default function EditListing() {
                       detail: listing.addressConfirmed
                         ? 'Pin position confirmed on map'
                         : 'Confirm your pin location in step 3',
+                      step: 3,
                     },
                     {
                       label: 'Required fields',
@@ -681,15 +704,30 @@ export default function EditListing() {
                       detail: requiredFieldsComplete
                         ? 'All required fields filled in'
                         : 'Price, property type, and locality required',
+                      step: 1,
                     },
-                  ].map(({ label, met, detail }) => (
-                    <div key={label} className="flex items-start gap-3">
+                  ].map(({ label, met, detail, step }) => (
+                    <div
+                      key={label}
+                      className={`flex items-start gap-3 rounded-md transition-colors ${
+                        !met ? 'cursor-pointer hover:bg-accent/60 px-2 py-1 -mx-2' : ''
+                      }`}
+                      onClick={!met ? () => { setCameFromReview(true); setCurrentStep(step); } : undefined}
+                      role={!met ? 'button' : undefined}
+                      tabIndex={!met ? 0 : undefined}
+                      onKeyDown={!met ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') { setCameFromReview(true); setCurrentStep(step); }
+                      } : undefined}
+                    >
                       {met
                         ? <Check className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />
                         : <X className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />}
                       <div>
                         <p className="text-sm font-medium">{label}</p>
-                        <p className="text-xs text-muted-foreground">{detail}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {detail}
+                          {!met && <span className="ml-1 text-primary font-medium">→ Fix now</span>}
+                        </p>
                       </div>
                     </div>
                   ))}
