@@ -46,13 +46,16 @@ public class ListingImageController {
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
     private final ListingService listingService;
+    private final SupabaseStorageService storageService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
-                                   ListingService listingService) {
+                                   ListingService listingService,
+                                   SupabaseStorageService storageService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.listingService = listingService;
+        this.storageService = storageService;
     }
 
     // ==================== GET — list images ====================
@@ -158,9 +161,9 @@ public class ListingImageController {
         ListingImage image = imageOpt.get();
         imageRepository.delete(image);
 
-        // TODO: best-effort Storage delete when Supabase admin SDK is available.
-        // Per IMAGE_UPLOAD_FAILURE_MODES.md §3: Storage delete is non-fatal.
-        // Orphan cleanup strategy in §5 covers this case.
+        // Best-effort Storage delete — non-fatal per IMAGE_UPLOAD_FAILURE_MODES.md §3.
+        // DB row is deleted first; orphan cleanup (§5) covers any missed objects.
+        storageService.deleteObjectBestEffort(image.getStoragePath());
 
         log.info("DELETE /api/listings/{}/images/{} -> 204 storagePath={} userId={}",
                 listingId, imageId, image.getStoragePath(), caller.userId());
