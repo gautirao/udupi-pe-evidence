@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import imageCompression from 'browser-image-compression';
 import { supabase } from '@/integrations/supabase/client';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -8,6 +9,8 @@ const BUCKET = 'listing-images';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp'];
 const MAX_IMAGES = 10;
+const COMPRESSION_THRESHOLD = 200 * 1024; // 200 KB — skip compression for small files
+const COMPRESSION_MAX_SIZE_MB = 1; // target ≤ 1 MB after compression
 
 export interface ListingImage {
   id: string;
@@ -21,11 +24,15 @@ export interface ListingImage {
 export interface UploadProgress {
   fileName: string;
   progress: number; // 0-100
-  status: 'uploading' | 'registering' | 'done' | 'error' | 'finalize_failed';
+  status: 'compressing' | 'uploading' | 'registering' | 'done' | 'error' | 'finalize_failed';
   error?: string;
   file?: File;          // retained for retryUpload
   storagePath?: string; // retained for retryFinalize
   url?: string;         // retained for retryFinalize
+  /** Original size in bytes (set when compression ran). */
+  originalSize?: number;
+  /** Compressed size in bytes (set when compression ran). */
+  compressedSize?: number;
 }
 
 function getFileExtension(name: string): string {
@@ -105,15 +112,40 @@ export function useListingImages(listingId: string | undefined) {
       const storagePath = `listings/${userId}/${listingId}/${uniqueName}`;
       const uploadKey = storagePath;
 
+      // Step 0: Compress if above threshold
+      let fileToUpload: File = file;
+      let originalSize: number | undefined;
+      let compressedSize: number | undefined;
+
+      if (file.size > COMPRESSION_THRESHOLD) {
+        setUploads((prev) => ({
+          ...prev,
+          [uploadKey]: { fileName: file.name, progress: 10, status: 'compressing', file },
+        }));
+        try {
+          const compressed = await imageCompression(file, {
+            maxSizeMB: COMPRESSION_MAX_SIZE_MB,
+            useWebWorker: true,
+          });
+          originalSize = file.size;
+          compressedSize = compressed.size;
+          // Keep original filename on the File object for display
+          fileToUpload = new File([compressed], file.name, { type: compressed.type });
+        } catch {
+          // If compression fails, fall back to original file
+          fileToUpload = file;
+        }
+      }
+
       // Step 1: Upload bytes to Supabase Storage
       setUploads((prev) => ({
         ...prev,
-        [uploadKey]: { fileName: file.name, progress: 30, status: 'uploading', file },
+        [uploadKey]: { fileName: file.name, progress: 30, status: 'uploading', file, originalSize, compressedSize },
       }));
 
       const { error: storageError } = await supabase.storage
         .from(BUCKET)
-        .upload(storagePath, file, { upsert: false });
+        .upload(storagePath, fileToUpload, { upsert: false });
 
       if (storageError) {
         setUploads((prev) => ({
@@ -307,7 +339,7 @@ export function useListingImages(listingId: string | undefined) {
   });
 
   const isUploading = Object.values(uploads).some(
-    (u) => u.status === 'uploading' || u.status === 'registering',
+    (u) => u.status === 'compressing' || u.status === 'uploading' || u.status === 'registering',
   );
 
   return {

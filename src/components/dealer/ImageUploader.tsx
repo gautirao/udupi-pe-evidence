@@ -235,11 +235,21 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
                 />
               </div>
               <div className="flex items-center gap-1.5 whitespace-nowrap">
+                {upload.status === 'compressing' && (
+                  <span className="text-xs text-muted-foreground">Compressing…</span>
+                )}
                 {upload.status === 'uploading' && (
-                  <span className="text-xs text-muted-foreground">Uploading...</span>
+                  <>
+                    <span className="text-xs text-muted-foreground">Uploading…</span>
+                    {upload.originalSize != null && upload.compressedSize != null && (
+                      <span className="text-xs text-muted-foreground">
+                        ({Math.round(upload.originalSize / 1024)} KB → {Math.round(upload.compressedSize / 1024)} KB)
+                      </span>
+                    )}
+                  </>
                 )}
                 {upload.status === 'registering' && (
-                  <span className="text-xs text-muted-foreground">Saving...</span>
+                  <span className="text-xs text-muted-foreground">Saving…</span>
                 )}
                 {upload.status === 'done' && (
                   <span className="text-xs text-muted-foreground">Done</span>
@@ -367,8 +377,8 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
       {(isUploading || isReordering) && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          {isUploading && 'Uploading...'}
-          {isReordering && 'Saving order...'}
+          {isUploading && 'Processing…'}
+          {isReordering && 'Saving order…'}
         </div>
       )}
     </div>
