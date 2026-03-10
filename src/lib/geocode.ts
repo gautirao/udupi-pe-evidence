@@ -1,5 +1,8 @@
-// Nominatim OSM geocoding wrapper with rate limiting (1 req/sec) and in-memory cache.
-// https://nominatim.org/release-docs/develop/api/Search/
+// Geocoding wrapper — proxies through backend to comply with Nominatim User-Agent requirements.
+// The browser Fetch API cannot set the User-Agent header (forbidden header per spec).
+// Backend endpoints: GET /api/geocode?q= and GET /api/geocode/reverse?lat=&lon=
+
+import { api } from '@/lib/api';
 
 export interface NominatimAddress {
   road?: string;
@@ -32,37 +35,6 @@ export interface ParsedAddress {
   country?: string;
 }
 
-interface RawNominatimResult {
-  lat: string;
-  lon: string;
-  display_name: string;
-  address?: NominatimAddress;
-}
-
-// ---------------------------------------------------------------------------
-// Rate limiter
-// ---------------------------------------------------------------------------
-
-const NOMINATIM_BASE = 'https://nominatim.openstreetmap.org';
-export const MIN_INTERVAL_MS = 1_000; // 1 req/sec per Nominatim usage policy
-
-let lastRequestTime = 0;
-
-/** Exported for testing — reset the throttle timestamp. */
-export function _resetThrottle() {
-  lastRequestTime = 0;
-}
-
-async function throttled<T>(fn: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
-  if (elapsed < MIN_INTERVAL_MS) {
-    await new Promise((r) => setTimeout(r, MIN_INTERVAL_MS - elapsed));
-  }
-  lastRequestTime = Date.now();
-  return fn();
-}
-
 // ---------------------------------------------------------------------------
 // In-memory cache  (query string → results, capped at MAX_CACHE entries)
 // ---------------------------------------------------------------------------
@@ -74,6 +46,11 @@ const searchCache = new Map<string, NominatimResult[]>();
 export function _clearCache() {
   searchCache.clear();
 }
+
+/** Exported for testing compatibility (no-op: throttle is now server-side). */
+export function _resetThrottle() { /* no-op */ }
+/** Exported for testing compatibility. */
+export const MIN_INTERVAL_MS = 1_000;
 
 function cacheKey(query: string, limit: number): string {
   return `${query.trim().toLowerCase()}|${limit}`;
@@ -109,13 +86,12 @@ export function parseAddress(addr?: NominatimAddress): ParsedAddress {
 }
 
 // ---------------------------------------------------------------------------
-// Forward geocode (search)
+// Forward geocode (search) — via backend proxy
 // ---------------------------------------------------------------------------
 
 /**
- * Forward geocode: search for a place name and return matching locations.
- * Bounded to India with a viewbox around coastal Karnataka for relevance.
- * Results are cached in memory to avoid redundant Nominatim calls.
+ * Forward geocode: search for a place name via the backend Nominatim proxy.
+ * Results are cached in memory to avoid duplicate requests.
  */
 export async function searchNominatim(
   query: string,
@@ -127,30 +103,9 @@ export async function searchNominatim(
   const cached = searchCache.get(key);
   if (cached) return cached;
 
-  const params = new URLSearchParams({
-    q: query,
-    format: 'json',
-    addressdetails: '1',
-    limit: String(limit),
-    countrycodes: 'in',
-    viewbox: '74.5,13.0,75.1,13.7',
-    bounded: '0',
-  });
-
-  const data = await throttled(async () => {
-    const res = await fetch(`${NOMINATIM_BASE}/search?${params}`, {
-      headers: { 'Accept-Language': 'en' },
-    });
-    if (!res.ok) throw new Error(`Nominatim search failed: ${res.status}`);
-    return res.json() as Promise<RawNominatimResult[]>;
-  });
-
-  const results: NominatimResult[] = data.map((r) => ({
-    lat: parseFloat(r.lat),
-    lon: parseFloat(r.lon),
-    display_name: r.display_name,
-    address: r.address,
-  }));
+  const results = await api.get<NominatimResult[]>(
+    `/api/geocode?q=${encodeURIComponent(query)}&limit=${limit}`,
+  );
 
   // Evict oldest entry when cache is full
   if (searchCache.size >= MAX_CACHE) {
@@ -163,37 +118,22 @@ export async function searchNominatim(
 }
 
 // ---------------------------------------------------------------------------
-// Reverse geocode
+// Reverse geocode — via backend proxy
 // ---------------------------------------------------------------------------
 
 /**
- * Reverse geocode: get a display name + structured address for a lat/lon pair.
+ * Reverse geocode: get a display name + structured address for a lat/lon pair
+ * via the backend Nominatim proxy.
  */
 export async function reverseGeocode(
   lat: number,
   lon: number,
 ): Promise<NominatimResult | null> {
-  const params = new URLSearchParams({
-    lat: String(lat),
-    lon: String(lon),
-    format: 'json',
-    addressdetails: '1',
-  });
+  const result = await api.get<NominatimResult | Record<string, never>>(
+    `/api/geocode/reverse?lat=${lat}&lon=${lon}`,
+  );
 
-  const data = await throttled(async () => {
-    const res = await fetch(`${NOMINATIM_BASE}/reverse?${params}`, {
-      headers: { 'Accept-Language': 'en' },
-    });
-    if (!res.ok) throw new Error(`Nominatim reverse failed: ${res.status}`);
-    return res.json() as Promise<RawNominatimResult>;
-  });
-
-  if (!data.display_name) return null;
-
-  return {
-    lat: parseFloat(data.lat),
-    lon: parseFloat(data.lon),
-    display_name: data.display_name,
-    address: data.address,
-  };
+  // Backend returns {} when Nominatim returns no result
+  if (!result || !('display_name' in result)) return null;
+  return result as NominatimResult;
 }

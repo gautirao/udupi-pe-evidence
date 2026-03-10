@@ -101,6 +101,8 @@ export function AddressPicker({
   const [results, setResults] = useState<NominatimResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [noResults, setNoResults] = useState(false);
+  const [reverseGeocoding, setReverseGeocoding] = useState(false);
 
   const hasInitial =
     initialLatitude != null &&
@@ -145,17 +147,22 @@ export function AddressPicker({
     if (!value.trim()) {
       setResults([]);
       setShowResults(false);
+      setNoResults(false);
       return;
     }
 
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
+      setNoResults(false);
       try {
         const res = await searchNominatim(value);
         setResults(res);
-        setShowResults(res.length > 0);
+        setShowResults(true); // show dropdown even for zero results
+        setNoResults(res.length === 0);
       } catch {
         setResults([]);
+        setNoResults(false);
+        setShowResults(false);
       } finally {
         setSearching(false);
       }
@@ -188,6 +195,7 @@ export function AddressPicker({
     setPinPosition(pos);
     setConfirmed(false);
     setDragged(true);
+    setReverseGeocoding(true);
 
     try {
       const rev = await reverseGeocode(latlng.lat, latlng.lng);
@@ -199,6 +207,8 @@ export function AddressPicker({
       }
     } catch {
       // keep existing display name on failure
+    } finally {
+      setReverseGeocoding(false);
     }
   }, []);
 
@@ -208,6 +218,7 @@ export function AddressPicker({
     setPinPosition(pos);
     setConfirmed(false);
     setDragged(true);
+    setReverseGeocoding(true);
 
     try {
       const rev = await reverseGeocode(latlng.lat, latlng.lng);
@@ -219,6 +230,8 @@ export function AddressPicker({
       }
     } catch {
       // keep existing display name on failure
+    } finally {
+      setReverseGeocoding(false);
     }
   }, []);
 
@@ -308,9 +321,9 @@ export function AddressPicker({
         </div>
 
         {/* Results dropdown — py-3 for mobile touch targets */}
-        {showResults && results.length > 0 && (
+        {showResults && (
           <ul className="absolute z-[1100] mt-1 w-full bg-popover border rounded-md shadow-lg max-h-56 overflow-y-auto">
-            {results.map((r, i) => (
+            {results.length > 0 ? results.map((r, i) => (
               <li
                 key={`${r.lat}-${r.lon}-${i}`}
                 className="px-3 py-3 text-sm cursor-pointer hover:bg-accent active:bg-accent truncate"
@@ -319,7 +332,11 @@ export function AddressPicker({
                 <MapPin className="inline-block h-3.5 w-3.5 mr-1.5 flex-shrink-0 text-muted-foreground" />
                 {r.display_name}
               </li>
-            ))}
+            )) : noResults ? (
+              <li className="px-3 py-3 text-sm text-muted-foreground">
+                No locations found for "{query}". Try a different search.
+              </li>
+            ) : null}
           </ul>
         )}
       </div>
@@ -377,9 +394,13 @@ export function AddressPicker({
       {/* Status bar: display name + confirm/confirmed state */}
       {pinPosition && (
         <div className="flex items-start gap-3">
-          <p className="flex-1 text-sm text-muted-foreground line-clamp-2">
-            {displayName ||
-              `${pinPosition[0].toFixed(5)}, ${pinPosition[1].toFixed(5)}`}
+          <p className="flex-1 text-sm text-muted-foreground line-clamp-2 flex items-center gap-1.5">
+            {reverseGeocoding && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
+            )}
+            {reverseGeocoding
+              ? 'Looking up address…'
+              : displayName || `${pinPosition[0].toFixed(5)}, ${pinPosition[1].toFixed(5)}`}
           </p>
 
           {dragged && !confirmed ? (
