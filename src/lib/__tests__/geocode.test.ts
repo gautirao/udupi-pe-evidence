@@ -5,9 +5,23 @@ import {
   parseAddress,
   _clearCache,
   _resetThrottle,
-  MIN_INTERVAL_MS,
   type NominatimAddress,
 } from '@/lib/geocode';
+
+// Mock api.get — geocode.ts now proxies through the backend
+vi.mock('@/lib/api', () => ({
+  api: {
+    get: vi.fn(),
+  },
+  ApiError: class ApiError extends Error {
+    constructor(public status: number, message: string) {
+      super(message);
+    }
+  },
+}));
+
+import { api } from '@/lib/api';
+const mockApiGet = vi.mocked(api.get);
 
 // ---------------------------------------------------------------------------
 // parseAddress — pure function, no mocking needed
@@ -76,14 +90,14 @@ describe('parseAddress', () => {
 });
 
 // ---------------------------------------------------------------------------
-// searchNominatim — mocked fetch
+// searchNominatim — mocked api.get (proxies through backend)
 // ---------------------------------------------------------------------------
 
 describe('searchNominatim', () => {
   beforeEach(() => {
     _clearCache();
     _resetThrottle();
-    vi.restoreAllMocks();
+    mockApiGet.mockReset();
   });
 
   afterEach(() => {
@@ -93,25 +107,18 @@ describe('searchNominatim', () => {
   it('returns empty array for blank query', async () => {
     const result = await searchNominatim('   ');
     expect(result).toEqual([]);
+    expect(mockApiGet).not.toHaveBeenCalled();
   });
 
-  it('parses Nominatim response correctly', async () => {
-    const mockResponse = [
+  it('parses backend response correctly (lat/lon as numbers)', async () => {
+    mockApiGet.mockResolvedValueOnce([
       {
-        lat: '13.3409',
-        lon: '74.7421',
+        lat: 13.3409,
+        lon: 74.7421,
         display_name: 'Udupi, Karnataka, India',
         address: { city: 'Udupi', state: 'Karnataka', country: 'India' },
       },
-    ];
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      }),
-    );
+    ]);
 
     const results = await searchNominatim('Udupi');
     expect(results).toHaveLength(1);
@@ -121,89 +128,64 @@ describe('searchNominatim', () => {
     expect(results[0].address?.city).toBe('Udupi');
   });
 
-  it('returns cached results on repeated query (no second fetch)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve([
-          { lat: '13.0', lon: '74.0', display_name: 'Place A' },
-        ]),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+  it('returns cached results on repeated query (no second api.get call)', async () => {
+    mockApiGet.mockResolvedValue([
+      { lat: 13.0, lon: 74.0, display_name: 'Place A' },
+    ]);
 
     await searchNominatim('Manipal');
-    _resetThrottle(); // avoid throttle delay on second call
     await searchNominatim('Manipal');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
   });
 
   it('cache is case-insensitive', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve([
-          { lat: '13.0', lon: '74.0', display_name: 'Place A' },
-        ]),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    mockApiGet.mockResolvedValue([
+      { lat: 13.0, lon: 74.0, display_name: 'Place A' },
+    ]);
 
     await searchNominatim('udupi');
-    _resetThrottle();
     await searchNominatim('Udupi');
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockApiGet).toHaveBeenCalledTimes(1);
   });
 
-  it('throws on non-ok response', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
-    );
+  it('calls backend with encoded query and limit params', async () => {
+    mockApiGet.mockResolvedValueOnce([]);
 
-    await expect(searchNominatim('fail')).rejects.toThrow(
-      'Nominatim search failed: 503',
+    await searchNominatim('test query', 3);
+
+    expect(mockApiGet).toHaveBeenCalledWith(
+      expect.stringContaining('test%20query'),
+    );
+    expect(mockApiGet).toHaveBeenCalledWith(
+      expect.stringContaining('limit=3'),
     );
   });
 
-  it('includes addressdetails=1 in request URL', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await searchNominatim('test');
-
-    const url = fetchMock.mock.calls[0][0] as string;
-    expect(url).toContain('addressdetails=1');
+  it('propagates api errors to the caller', async () => {
+    mockApiGet.mockRejectedValueOnce(new Error('network error'));
+    await expect(searchNominatim('fail')).rejects.toThrow();
   });
 });
 
 // ---------------------------------------------------------------------------
-// reverseGeocode — mocked fetch
+// reverseGeocode — mocked api.get
 // ---------------------------------------------------------------------------
 
 describe('reverseGeocode', () => {
   beforeEach(() => {
     _resetThrottle();
-    vi.restoreAllMocks();
+    mockApiGet.mockReset();
   });
 
   it('returns structured result with address', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            lat: '13.35',
-            lon: '74.79',
-            display_name: 'Manipal, Udupi, Karnataka',
-            address: { town: 'Manipal', county: 'Udupi', country: 'India' },
-          }),
-      }),
-    );
+    mockApiGet.mockResolvedValueOnce({
+      lat: 13.35,
+      lon: 74.79,
+      display_name: 'Manipal, Udupi, Karnataka',
+      address: { town: 'Manipal', county: 'Udupi', country: 'India' },
+    });
 
     const result = await reverseGeocode(13.35, 74.79);
     expect(result).not.toBeNull();
@@ -211,58 +193,27 @@ describe('reverseGeocode', () => {
     expect(result!.address?.town).toBe('Manipal');
   });
 
-  it('returns null when display_name is missing', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ lat: '0', lon: '0', display_name: '' }),
-      }),
-    );
+  it('returns null when backend returns empty object (no result)', async () => {
+    mockApiGet.mockResolvedValueOnce({});
 
     const result = await reverseGeocode(0, 0);
     expect(result).toBeNull();
   });
-});
 
-// ---------------------------------------------------------------------------
-// Throttle behaviour
-// ---------------------------------------------------------------------------
-
-describe('throttle', () => {
-  beforeEach(() => {
-    _clearCache();
-    _resetThrottle();
-    vi.restoreAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('delays second request to respect MIN_INTERVAL_MS', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
+  it('calls backend with correct lat/lon params', async () => {
+    mockApiGet.mockResolvedValueOnce({
+      lat: 13.35,
+      lon: 74.79,
+      display_name: 'Some Place',
     });
-    vi.stubGlobal('fetch', fetchMock);
 
-    // First call — immediate
-    const p1 = searchNominatim('query1');
-    await vi.advanceTimersByTimeAsync(0);
-    await p1;
+    await reverseGeocode(13.35, 74.79);
 
-    // Second call — should be delayed (different query to avoid cache)
-    const p2 = searchNominatim('query2');
-
-    // Before MIN_INTERVAL_MS, second fetch should not have fired
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    // Advance past the throttle
-    await vi.advanceTimersByTimeAsync(MIN_INTERVAL_MS);
-    await p2;
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mockApiGet).toHaveBeenCalledWith(
+      expect.stringContaining('lat=13.35'),
+    );
+    expect(mockApiGet).toHaveBeenCalledWith(
+      expect.stringContaining('lon=74.79'),
+    );
   });
 });
