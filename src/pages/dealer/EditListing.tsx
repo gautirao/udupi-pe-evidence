@@ -492,10 +492,19 @@ export default function EditListing() {
                   )}
                 </div>
 
-                <div className="flex justify-end pt-4 border-t">
-                  <Button type="button" onClick={handleStep2Continue}>
+                <div className="flex flex-col items-end pt-4 border-t gap-1">
+                  <Button
+                    type="button"
+                    onClick={handleStep2Continue}
+                    disabled={!canSubmitImages}
+                  >
                     Save & Continue
                   </Button>
+                  {!canSubmitImages && (
+                    <p className="text-sm text-muted-foreground">
+                      Add at least 3 photos to continue.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

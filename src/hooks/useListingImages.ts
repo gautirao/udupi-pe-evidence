@@ -60,6 +60,10 @@ export function useListingImages(listingId: string | undefined) {
     queryFn: () => api.get<ListingImage[]>(`/api/listings/${listingId}/images`),
     enabled: !!listingId,
     staleTime: 30_000,
+    // Suppress the cold-start skeleton: treat the previous cache entry (or an
+    // empty array on first mount) as placeholder data so isLoading is false
+    // immediately. The real fetch still runs in the background.
+    placeholderData: (prev) => prev ?? [],
   });
 
   const imageCount = images.length;
