@@ -21,6 +21,20 @@ Rules:
 - Prefer `qa-fast` over `qa`.
 - Do not manually invoke agents.
 
+**HARD GATE — No code before triage:**
+Before writing any code, output this block verbatim:
+```
+Summary: <1 line>
+Type: {bugfix|feature|refactor|perf|security|ui}
+Scope: {single-service|multi-service|cross-cutting}
+Risk: {low|med|high} — <reason>
+Routing: <agent chain, e.g. qa-fast → backend-engineer → code-reviewer>
+```
+If this block is absent, the PR is non-compliant. A missing triage block is visible in the conversation — flag it immediately.
+
+**Skill tool failure rule:**
+If `Skill tool` returns an error for `ROUTE_AND_RUN` or `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, STOP immediately and surface the error to the user. Do NOT fall back to direct implementation. The routing gate must run before any code is written.
+
 ---
 
 ## 2) Sprint Execution

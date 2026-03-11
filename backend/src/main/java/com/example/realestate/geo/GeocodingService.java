@@ -146,7 +146,7 @@ public class GeocodingService implements GeocodingPort {
                 .queryParam("countrycodes", "in")
                 .queryParam("viewbox", "74.5,13.0,75.1,13.7")
                 .queryParam("bounded", "0")
-                .build(true).toUri();
+                .build(false).toUri();
 
         try {
             HttpRequest request = HttpRequest.newBuilder(uri)

@@ -57,6 +57,12 @@ function MapFlyTo({ position }: { position: L.LatLngExpression | null }) {
   const map = useMap();
   useEffect(() => {
     if (position) {
+      // invalidateSize() first: the wizard uses CSS display:none/block toggling,
+      // so this MapContainer may have been initialised while hidden (0×0 size).
+      // Leaflet's flyTo animation interpolates from the current centre, which can
+      // be NaN when the map never measured its container.  Invalidating here
+      // re-reads the container dimensions before the animation begins.
+      map.invalidateSize();
       map.flyTo(position, 16, { duration: 0.8 });
     }
   }, [position, map]);
