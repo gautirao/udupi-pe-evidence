@@ -17,8 +17,9 @@ import java.time.ZoneOffset;
  * Rollup rules:
  * - Groups by (area_key, week_start_date) where week_start_date = DATE_TRUNC('week', created_at)
  * - Excludes duplicates (is_duplicate = true)
- * - Excludes listings with null area_key
- * - Stores listing_count; price fields left null until unit-price derivation is implemented
+ * - Excludes listings with null area_key or null price_per_cent_paise
+ * - Filters to status IN ('SCRAPED', 'LIVE') — excludes DRAFT, PENDING_REVIEW, REJECTED
+ * - Computes median, P25, P75 price_per_cent_paise using PERCENTILE_CONT
  * <p>
  * The job is idempotent: running it multiple times updates existing rows via UPSERT.
  */
@@ -79,17 +80,24 @@ public class AreaPriceWeeklyRollupJob {
                 'all' AS property_type,
                 0 AS bedrooms,
                 COUNT(*) AS listing_count,
-                NULL AS median_price_per_cent_paise,
-                NULL AS p25_price_per_cent_paise,
-                NULL AS p75_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS median_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p25_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p75_price_per_cent_paise,
                 ? AS created_at, ? AS updated_at
             FROM public.property_listings
             WHERE area_key IS NOT NULL
+              AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
+              AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date
             ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
-            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                p25_price_per_cent_paise = EXCLUDED.p25_price_per_cent_paise,
+                p75_price_per_cent_paise = EXCLUDED.p75_price_per_cent_paise,
+                updated_at = EXCLUDED.updated_at
             """;
 
         // 2. Per-type aggregate: property_type=<type>, bedrooms=0
@@ -106,18 +114,25 @@ public class AreaPriceWeeklyRollupJob {
                 property_type,
                 0 AS bedrooms,
                 COUNT(*) AS listing_count,
-                NULL AS median_price_per_cent_paise,
-                NULL AS p25_price_per_cent_paise,
-                NULL AS p75_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS median_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p25_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p75_price_per_cent_paise,
                 ? AS created_at, ? AS updated_at
             FROM public.property_listings
             WHERE area_key IS NOT NULL
+              AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
               AND property_type IS NOT NULL
+              AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date, property_type
             ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
-            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                p25_price_per_cent_paise = EXCLUDED.p25_price_per_cent_paise,
+                p75_price_per_cent_paise = EXCLUDED.p75_price_per_cent_paise,
+                updated_at = EXCLUDED.updated_at
             """;
 
         // 3. Per-bedrooms aggregate: property_type='all', bedrooms=<n> (n > 0)
@@ -134,18 +149,25 @@ public class AreaPriceWeeklyRollupJob {
                 'all' AS property_type,
                 bedrooms,
                 COUNT(*) AS listing_count,
-                NULL AS median_price_per_cent_paise,
-                NULL AS p25_price_per_cent_paise,
-                NULL AS p75_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS median_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p25_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p75_price_per_cent_paise,
                 ? AS created_at, ? AS updated_at
             FROM public.property_listings
             WHERE area_key IS NOT NULL
+              AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
               AND bedrooms IS NOT NULL AND bedrooms > 0
+              AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date, bedrooms
             ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
-            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                p25_price_per_cent_paise = EXCLUDED.p25_price_per_cent_paise,
+                p75_price_per_cent_paise = EXCLUDED.p75_price_per_cent_paise,
+                updated_at = EXCLUDED.updated_at
             """;
 
         // 4. Per-type-per-bedrooms: property_type=<type>, bedrooms=<n> (n > 0)
@@ -162,19 +184,26 @@ public class AreaPriceWeeklyRollupJob {
                 property_type,
                 bedrooms,
                 COUNT(*) AS listing_count,
-                NULL AS median_price_per_cent_paise,
-                NULL AS p25_price_per_cent_paise,
-                NULL AS p75_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS median_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p25_price_per_cent_paise,
+                ROUND(PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_cent_paise))::BIGINT AS p75_price_per_cent_paise,
                 ? AS created_at, ? AS updated_at
             FROM public.property_listings
             WHERE area_key IS NOT NULL
+              AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
               AND property_type IS NOT NULL
               AND bedrooms IS NOT NULL AND bedrooms > 0
+              AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date, property_type, bedrooms
             ON CONFLICT (area_key, week_start_date, property_type, bedrooms)
-            DO UPDATE SET listing_count = EXCLUDED.listing_count, updated_at = EXCLUDED.updated_at
+            DO UPDATE SET
+                listing_count = EXCLUDED.listing_count,
+                median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise,
+                p25_price_per_cent_paise = EXCLUDED.p25_price_per_cent_paise,
+                p75_price_per_cent_paise = EXCLUDED.p75_price_per_cent_paise,
+                updated_at = EXCLUDED.updated_at
             """;
 
         int r1 = jdbcOperations.update(allSql, now, now, fromDate);

@@ -59,6 +59,8 @@ class AreaPriceWeeklyRollupJobTest {
         String sql = sqlCaptor.getValue();
         assertThat(sql).contains("is_duplicate = false");
         assertThat(sql).contains("area_key IS NOT NULL");
+        assertThat(sql).contains("price_per_cent_paise IS NOT NULL");
+        assertThat(sql).contains("status IN ('SCRAPED', 'LIVE')");
         assertThat(sql).contains("DATE_TRUNC('week', created_at)");
         assertThat(sql).contains("ON CONFLICT (area_key, week_start_date, property_type, bedrooms)");
         assertThat(sql).contains("DO UPDATE SET");
@@ -105,6 +107,9 @@ class AreaPriceWeeklyRollupJobTest {
         String sql = sqlCaptor.getValue();
         assertThat(sql).contains("ON CONFLICT (area_key, week_start_date, property_type, bedrooms)");
         assertThat(sql).contains("listing_count = EXCLUDED.listing_count");
+        assertThat(sql).contains("median_price_per_cent_paise = EXCLUDED.median_price_per_cent_paise");
+        assertThat(sql).contains("p25_price_per_cent_paise = EXCLUDED.p25_price_per_cent_paise");
+        assertThat(sql).contains("p75_price_per_cent_paise = EXCLUDED.p75_price_per_cent_paise");
         assertThat(sql).contains("updated_at = EXCLUDED.updated_at");
     }
 
@@ -124,10 +129,10 @@ class AreaPriceWeeklyRollupJobTest {
         assertThat(capturedDate).isEqualTo(expectedCutoff);
     }
 
-    // --- Test: price fields are null (until unit-price derivation) ---
+    // --- Test: price fields use PERCENTILE_CONT ---
 
     @Test
-    void computeRollupsFromDate_priceFieldsAreNull() {
+    void computeRollupsFromDate_priceFieldsUsePercentileCont() {
         LocalDate fromDate = LocalDate.of(2024, 1, 1);
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         when(jdbcOperations.update(sqlCaptor.capture(), any(), any(), any())).thenReturn(0);
@@ -135,10 +140,10 @@ class AreaPriceWeeklyRollupJobTest {
         rollupJob.computeRollupsFromDate(fromDate);
 
         String sql = sqlCaptor.getValue();
-        // Verify price fields are explicitly set to NULL in the SELECT
-        assertThat(sql).contains("NULL AS median_price_per_cent_paise");
-        assertThat(sql).contains("NULL AS p25_price_per_cent_paise");
-        assertThat(sql).contains("NULL AS p75_price_per_cent_paise");
+        assertThat(sql).contains("PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price_per_cent_paise)");
+        assertThat(sql).contains("PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price_per_cent_paise)");
+        assertThat(sql).contains("PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price_per_cent_paise)");
+        assertThat(sql).contains("::BIGINT");
     }
 
     // --- Test: returns count of affected rows ---

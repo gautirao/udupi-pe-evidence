@@ -18,6 +18,7 @@ import java.time.ZoneOffset;
  * - Uses a rolling 12-week window for "latest" stats
  * - Excludes duplicates (is_duplicate = true)
  * - Excludes listings with null area_key or null price_per_cent_paise
+ * - Filters to status IN ('SCRAPED', 'LIVE') — excludes DRAFT, PENDING_REVIEW, REJECTED
  * - Computes listing_count and median_price_per_cent_paise per area
  * - Derives city_key from area_key if format is country|region|city|locality
  * - Computes city_median and price_index when city derivation succeeds
@@ -76,6 +77,7 @@ public class AreaStatsLatestRollupJob {
                 WHERE area_key IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
+                  AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
             ),
             area_stats AS (
@@ -136,6 +138,7 @@ public class AreaStatsLatestRollupJob {
                   AND property_type IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
+                  AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
             )
             INSERT INTO public.area_stats_latest (
@@ -166,6 +169,7 @@ public class AreaStatsLatestRollupJob {
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
                   AND bedrooms IS NOT NULL AND bedrooms > 0
+                  AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
             )
             INSERT INTO public.area_stats_latest (
@@ -197,6 +201,7 @@ public class AreaStatsLatestRollupJob {
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
                   AND bedrooms IS NOT NULL AND bedrooms > 0
+                  AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
             )
             INSERT INTO public.area_stats_latest (
