@@ -255,6 +255,7 @@ export function AddressPicker({
         setPinPosition(pos);
         setConfirmed(false);
         setDragged(true);
+        setReverseGeocoding(true);
         try {
           const rev = await reverseGeocode(latitude, longitude);
           if (rev) {
@@ -267,6 +268,7 @@ export function AddressPicker({
           // keep existing display name
         } finally {
           setGeolocating(false);
+          setReverseGeocoding(false);
         }
       },
       (error) => {

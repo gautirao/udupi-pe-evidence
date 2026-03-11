@@ -80,6 +80,10 @@ public class SupabaseStorageService {
             log.debug("Storage delete skipped (disabled): path={}", storagePath);
             return;
         }
+        if (storagePath == null || storagePath.contains("..")) {
+            log.warn("Storage delete rejected — unsafe path: path={}", storagePath);
+            return;
+        }
 
         // Build URL with proper percent-encoding to prevent path injection
         String url = UriComponentsBuilder.fromHttpUrl(supabaseUrl)
