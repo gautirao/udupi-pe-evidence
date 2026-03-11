@@ -1,6 +1,6 @@
 package com.example.realestate.geo;
 
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.exception.RateLimiterService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -21,6 +21,8 @@ import java.util.UUID;
  * (forbidden header). This controller adds the User-Agent server-side and forwards the request.
  * Complies with Nominatim usage policy (1 req/sec per IP) — frontend debounces at 400 ms.
  *
+ * <p>Rate-limited to 10 requests per user per minute (per-user Bucket4j token bucket).
+ *
  * <p>Endpoints:
  * <ul>
  *   <li>GET /api/geocode?q=&limit= — forward geocode (search by text)
@@ -34,12 +36,12 @@ public class GeocodingProxyController {
     private static final Logger log = LoggerFactory.getLogger(GeocodingProxyController.class);
 
     private final GeocodingService geocodingService;
-    private final ListingService listingService;
+    private final RateLimiterService rateLimiterService;
 
     public GeocodingProxyController(GeocodingService geocodingService,
-                                    ListingService listingService) {
+                                    RateLimiterService rateLimiterService) {
         this.geocodingService = geocodingService;
-        this.listingService = listingService;
+        this.rateLimiterService = rateLimiterService;
     }
 
     /**
@@ -54,8 +56,9 @@ public class GeocodingProxyController {
             @RequestParam String q,
             @RequestParam(defaultValue = "5") int limit) {
 
-        if (!isAuthenticated(auth)) {
-            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
+        String userId = UUID.fromString(auth.getToken().getSubject()).toString();
+        if (!rateLimiterService.getGeocodingBucket(userId).tryConsume(1)) {
+            return ResponseEntity.status(429).body(Map.of("error", "Rate limit exceeded"));
         }
 
         String trimmed = q == null ? "" : q.trim();
@@ -79,8 +82,9 @@ public class GeocodingProxyController {
             @RequestParam double lat,
             @RequestParam double lon) {
 
-        if (!isAuthenticated(auth)) {
-            return ResponseEntity.status(401).body(Map.of("error", "Authentication required"));
+        String userId = UUID.fromString(auth.getToken().getSubject()).toString();
+        if (!rateLimiterService.getGeocodingBucket(userId).tryConsume(1)) {
+            return ResponseEntity.status(429).body(Map.of("error", "Rate limit exceeded"));
         }
 
         if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
@@ -93,15 +97,5 @@ public class GeocodingProxyController {
         }
         log.debug("GET /api/geocode/reverse lat={} lon={} display={}", lat, lon, result.display_name());
         return ResponseEntity.ok(result);
-    }
-
-    private boolean isAuthenticated(JwtAuthenticationToken auth) {
-        if (auth == null || auth.getToken() == null) return false;
-        try {
-            UUID.fromString(auth.getToken().getSubject());
-            return true;
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
     }
 }
