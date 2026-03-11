@@ -372,7 +372,7 @@ public class ListingService {
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description) {
         return updateListing(listingId, userId, isAdmin,
-                propertyType, title, locality, price, description, null, null, null, null, null, false);
+                propertyType, title, locality, price, description, null, null, null, null, null, null, null, false);
     }
 
     /**
@@ -391,7 +391,7 @@ public class ListingService {
                                  BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
                                  Boolean addressConfirmed) {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
-                price, description, landArea, bedrooms, builtArea, addressConfirmed, null, false);
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, false);
     }
 
     /**
@@ -412,7 +412,8 @@ public class ListingService {
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description,
                                  BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
-                                 Boolean addressConfirmed, String videoUrl, boolean applyVideoUrl) {
+                                 Boolean addressConfirmed, Double latitude, Double longitude,
+                                 String videoUrl, boolean applyVideoUrl) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
         if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
@@ -428,6 +429,8 @@ public class ListingService {
         if (bedrooms != null) listing.setBedrooms(bedrooms);
         if (builtArea != null) listing.setBuiltArea(builtArea);
         if (addressConfirmed != null) listing.setAddressConfirmed(addressConfirmed);
+        if (latitude != null) listing.setLatitude(latitude);
+        if (longitude != null) listing.setLongitude(longitude);
         // Only apply when caller explicitly sent the videoUrl field.
         if (applyVideoUrl) listing.setVideoUrl(videoUrl);
         listing.setUpdatedAt(OffsetDateTime.now());
