@@ -217,19 +217,21 @@ export default function DealerListings() {
                       <span
                         className={`absolute bottom-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                           listing.status === 'DRAFT' && listing.imageCount < 3
-                            ? 'bg-amber-500/90 text-white'
+                            ? 'bg-amber-100 text-amber-800'
                             : 'bg-black/60 text-white'
                         }`}
                       >
                         <ImageIcon className="h-3 w-3" />
-                        {listing.imageCount}
+                        {listing.status === 'DRAFT' && listing.imageCount < 3
+                          ? `${listing.imageCount} / 3`
+                          : listing.imageCount}
                       </span>
                     )}
                   </div>
                 ) : (
                   <div className="w-full h-32 bg-secondary flex flex-col items-center justify-center rounded-t-lg gap-1">
                     <Building2 className="h-8 w-8 text-muted-foreground/40" />
-                    {listing.status === 'DRAFT' && listing.imageCount === 0 && (
+                    {listing.imageCount === 0 && (
                       <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
                         <ImageIcon className="h-3 w-3" />
                         No photos yet
@@ -274,7 +276,7 @@ export default function DealerListings() {
                       </Link>
                     </Button>
                     {listing.status === 'LIVE' && (
-                      <Button variant="ghost" size="sm" asChild>
+                      <Button variant="outline" size="sm" asChild>
                         <Link to="/dealer/bookings">
                           <CalendarDays className="h-3.5 w-3.5 mr-1" />
                           Booking enquiries
