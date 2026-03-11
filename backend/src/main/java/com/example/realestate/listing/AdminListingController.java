@@ -114,6 +114,8 @@ public class AdminListingController {
         return new ListingController.ListingResponse(
                 l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),
+                l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
+                l.getLandAreaUnit(), l.getBuiltAreaUnit(),
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),

@@ -83,7 +83,8 @@ class ListingControllerTest {
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         when(listingService.createDraft(eq(DEALER_ID), eq("land"), eq("Test plot"),
-                eq("Manipal"), eq(new BigDecimal("5000000")), eq("Nice plot"), isNull()))
+                eq("Manipal"), eq(new BigDecimal("5000000")), eq("Nice plot"),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -98,7 +99,8 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.status").value("DRAFT"));
 
         verify(listingService).createDraft(DEALER_ID, "land", "Test plot",
-                "Manipal", new BigDecimal("5000000"), "Nice plot", null);
+                "Manipal", new BigDecimal("5000000"), "Nice plot",
+                null, null, null, null, null, null);
     }
 
     // ==================== Test 2: GET /mine -> 200, array ====================
@@ -133,7 +135,7 @@ class ListingControllerTest {
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 eq("land"), eq("Updated title"), eq("Manipal"),
                 eq(new BigDecimal("6000000")), eq("Updated desc"),
-                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(false)))
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(false)))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -150,7 +152,7 @@ class ListingControllerTest {
         verify(listingService).updateListing(LISTING_ID, DEALER_ID, false,
                 "land", "Updated title", "Manipal",
                 new BigDecimal("6000000"), "Updated desc",
-                null, null, null, null, null, null, null, false);
+                null, null, null, null, null, null, null, null, null, false);
     }
 
     // ==================== Test 4: DELETE -> 204 ====================
@@ -195,7 +197,8 @@ class ListingControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
 
-        verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(), any());
+        verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any());
     }
 
     // ==================== Test 7: PUT -> not found -> 404 ====================
@@ -204,7 +207,7 @@ class ListingControllerTest {
     void update_listingNotFound_returns404() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -223,7 +226,7 @@ class ListingControllerTest {
     void update_wrongStatus_returns409() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -444,7 +447,7 @@ class ListingControllerTest {
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Draft Plot",
                 "Manipal", new BigDecimal("5000000"), "Updated draft");
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -465,7 +468,7 @@ class ListingControllerTest {
         Listing updated = buildListing(LISTING_ID, "REJECTED", "house", "Fixed House",
                 "Udupi", new BigDecimal("8000000"), "Fixed after rejection");
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -482,7 +485,7 @@ class ListingControllerTest {
     void updateListing_wrongOwner_returns403() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ListingService.ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -499,7 +502,7 @@ class ListingControllerTest {
     void updateListing_pendingReviewStatus_returns409() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status PENDING_REVIEW"));
 
@@ -517,7 +520,7 @@ class ListingControllerTest {
     void updateListing_liveListing_returns409() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -535,7 +538,7 @@ class ListingControllerTest {
     void updateListing_listingNotFound_returns404() throws Exception {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -556,7 +559,8 @@ class ListingControllerTest {
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
-        when(listingService.createDraft(any(), any(), any(), any(), any(), any(), any()))
+        when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any()))
                 .thenReturn(saved);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
@@ -597,7 +601,7 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         updated.setVideoUrl("https://www.youtube.com/watch?v=abc123");
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true)))
                 .thenReturn(updated);
 
@@ -611,7 +615,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.videoUrl").value("https://www.youtube.com/watch?v=abc123"));
 
         verify(listingService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true));
     }
 
@@ -623,7 +627,7 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         // videoUrl is null — blank input normalised to null by the controller; applyVideoUrl=true clears it.
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true)))
                 .thenReturn(updated);
 
@@ -637,7 +641,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.videoUrl").isEmpty());
 
         verify(listingService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true));
     }
 
@@ -653,6 +657,8 @@ class ListingControllerTest {
         l.setLocality(locality);
         l.setPrice(price);
         l.setDescription(description);
+        l.setLandAreaUnit("sqft");
+        l.setBuiltAreaUnit("sqft");
         l.setCreatedAt(OffsetDateTime.now());
         l.setUpdatedAt(OffsetDateTime.now());
         return l;

@@ -1092,6 +1092,7 @@ class ListingServiceTest {
                 null, null, null, null, null,
                 null, null, null, null,
                 13.3409, 74.7421,
+                null, null,
                 null, false);
 
         assertThat(result.getLatitude()).isEqualTo(13.3409);
@@ -1124,6 +1125,7 @@ class ListingServiceTest {
                 null, null, null, null, null,
                 null, null, null, null,
                 null, null,
+                null, null,
                 null, false);
 
         assertThat(result.getLatitude()).isEqualTo(13.3409);
@@ -1133,5 +1135,72 @@ class ListingServiceTest {
         verify(listingRepository).save(captor.capture());
         assertThat(captor.getValue().getLatitude()).isEqualTo(13.3409);
         assertThat(captor.getValue().getLongitude()).isEqualTo(74.7421);
+    }
+
+    // --- RE-67: landAreaUnit / builtAreaUnit persisted on update ---
+
+    @Test
+    void updateListing_areaUnitsPresent_savedToListing() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                new java.math.BigDecimal("10"), null, null, null,
+                null, null,
+                "cent", "sqft",
+                null, false);
+
+        assertThat(result.getLandAreaUnit()).isEqualTo("cent");
+        assertThat(result.getBuiltAreaUnit()).isEqualTo("sqft");
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getLandAreaUnit()).isEqualTo("cent");
+        assertThat(captor.getValue().getBuiltAreaUnit()).isEqualTo("sqft");
+        // AreaNormalizer should have populated derived fields (10 cents = 4356 sqft)
+        assertThat(captor.getValue().getAreaSqft()).isNotNull();
+    }
+
+    @Test
+    void updateListing_areaUnitsAbsent_existingUnitsPreserved() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setLandAreaUnit("sqft");
+        existing.setBuiltAreaUnit("sqm");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // PUT with no unit fields (null) — must not zero out existing units
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, null,
+                null, null,
+                null, null,
+                null, false);
+
+        assertThat(result.getLandAreaUnit()).isEqualTo("sqft");
+        assertThat(result.getBuiltAreaUnit()).isEqualTo("sqm");
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getLandAreaUnit()).isEqualTo("sqft");
+        assertThat(captor.getValue().getBuiltAreaUnit()).isEqualTo("sqm");
     }
 }

@@ -366,5 +366,6 @@ test('DL1 — full dealer listing creation journey', async ({ page }) => {
   await page.waitForURL(/\/dealer\/listings$/, { timeout: 30_000 });
 
   // The newly submitted listing should appear with "Under Review" badge
-  await expect(page.getByText('Under Review')).toBeVisible({ timeout: 10_000 });
+  // Use .first() — dealer may have other PENDING_REVIEW listings visible on the same page
+  await expect(page.getByText('Under Review').first()).toBeVisible({ timeout: 10_000 });
 });

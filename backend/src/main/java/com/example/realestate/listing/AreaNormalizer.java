@@ -20,6 +20,8 @@ public final class AreaNormalizer {
     // Conversion constants (source of truth)
     private static final BigDecimal SQFT_PER_SQM = new BigDecimal("10.7639104167");
     private static final BigDecimal SQFT_PER_CENT = new BigDecimal("435.6");
+    // 1 gunta = 1089 sq ft (exact)
+    private static final BigDecimal SQFT_PER_GUNTA = new BigDecimal("1089");
 
     // Derived: sqm per cent = sqft_per_cent / sqft_per_sqm
     private static final BigDecimal SQM_PER_CENT = SQFT_PER_CENT.divide(SQFT_PER_SQM, 20, RoundingMode.HALF_UP);
@@ -86,12 +88,35 @@ public final class AreaNormalizer {
                 areaSqft = landArea.multiply(SQFT_PER_CENT).setScale(AREA_SCALE, RoundingMode.HALF_UP);
                 areaSqm = landArea.multiply(SQM_PER_CENT).setScale(AREA_SCALE, RoundingMode.HALF_UP);
             }
+            case GUNTA -> {
+                // 1 gunta = 1089 sqft; delegate to sqft conversion path
+                BigDecimal asSqft = landArea.multiply(SQFT_PER_GUNTA);
+                areaSqft = asSqft.setScale(AREA_SCALE, RoundingMode.HALF_UP);
+                areaSqm = asSqft.divide(SQFT_PER_SQM, AREA_SCALE, RoundingMode.HALF_UP);
+                areaCent = asSqft.divide(SQFT_PER_CENT, AREA_SCALE, RoundingMode.HALF_UP);
+            }
             default -> {
                 return NormalizedArea.empty();
             }
         }
 
         return new NormalizedArea(areaSqm, areaSqft, areaCent);
+    }
+
+    /**
+     * Convenience overload: normalizes area fields on a Listing and writes derived values back.
+     * Reads landArea + landAreaUnit; updates areaSqm, areaSqft, areaCent, and pricePerCentPaise.
+     * No-ops if area or unit are absent.
+     *
+     * @param listing the listing to normalize in-place
+     */
+    public static void normalize(Listing listing) {
+        NormalizedArea normalized = normalize(listing.getLandArea(), listing.getLandAreaUnit());
+        listing.setAreaSqm(normalized.areaSqm());
+        listing.setAreaSqft(normalized.areaSqft());
+        listing.setAreaCent(normalized.areaCent());
+        listing.setPricePerCentPaise(
+                computePricePerCentPaise(listing.getPricePaise(), normalized.areaCent()));
     }
 
     /**
@@ -119,7 +144,7 @@ public final class AreaNormalizer {
      * Internal enum for recognized area units.
      */
     private enum AreaUnit {
-        SQM, SQFT, CENT
+        SQM, SQFT, CENT, GUNTA
     }
 
     /**
@@ -164,6 +189,12 @@ public final class AreaNormalizer {
         if (normalized.equals("cent") ||
             normalized.equals("cents")) {
             return AreaUnit.CENT;
+        }
+
+        // GUNTA aliases (1 gunta = 1089 sqft)
+        if (normalized.equals("gunta") ||
+            normalized.equals("guntas")) {
+            return AreaUnit.GUNTA;
         }
 
         return null;

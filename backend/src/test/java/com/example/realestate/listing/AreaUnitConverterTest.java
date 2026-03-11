@@ -66,9 +66,20 @@ class AreaUnitConverterTest {
 
         @ParameterizedTest
         @NullAndEmptySource
-        @ValueSource(strings = {"  ", "acre", "hectare", "unknown", "guntha", "gunta"})
+        @ValueSource(strings = {"  ", "acre", "hectare", "unknown", "guntha"})
         void returnsNullForUnrecognizedUnits(String input) {
             assertThat(AreaUnitConverter.normalizeUnit(input)).isNull();
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "gunta, gunta",
+                "guntas, gunta",
+                "GUNTA, gunta",
+                "GUNTAS, gunta"
+        })
+        void normalizesGuntaVariants(String input, String expected) {
+            assertThat(AreaUnitConverter.normalizeUnit(input)).isEqualTo(expected);
         }
     }
 
@@ -149,6 +160,20 @@ class AreaUnitConverterTest {
         @Test
         void returnsNullForBlankUnit() {
             assertThat(AreaUnitConverter.toCent(new BigDecimal("100"), "   ")).isNull();
+        }
+
+        @Test
+        void guntaToCentConversion() {
+            // 1 gunta = 1089 sqft; 1089 / 435.6 ≈ 2.5 cents
+            BigDecimal result = AreaUnitConverter.toCent(new BigDecimal("1"), "gunta");
+            assertThat(result.doubleValue()).isCloseTo(2.5, within(0.01));
+        }
+
+        @Test
+        void guntasToCentConversionVariant() {
+            // 4 guntas = 4356 sqft = 10 cents exactly
+            BigDecimal result = AreaUnitConverter.toCent(new BigDecimal("4"), "guntas");
+            assertThat(result).isEqualByComparingTo("10");
         }
     }
 

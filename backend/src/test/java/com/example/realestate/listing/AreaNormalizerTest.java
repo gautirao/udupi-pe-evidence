@@ -204,7 +204,7 @@ class AreaNormalizerTest {
         @DisplayName("Unknown units return empty")
         @ValueSource(strings = {
             "acre", "acres", "hectare", "ha",
-            "guntha", "gunta", "ground",
+            "guntha", "ground",
             "are", "ares", "unknown", "xyz"
         })
         void unknownUnit_returnsEmpty(String unit) {
@@ -214,6 +214,55 @@ class AreaNormalizerTest {
             assertThat(result.areaSqm()).isNull();
             assertThat(result.areaSqft()).isNull();
             assertThat(result.areaCent()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("normalize - GUNTA input")
+    class NormalizeGuntaTests {
+
+        @Test
+        @DisplayName("1 gunta = 1089 sqft exactly")
+        void oneGunta_sqftIsExact() {
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), "gunta");
+
+            assertThat(result.areaSqft()).isEqualByComparingTo(new BigDecimal("1089"));
+        }
+
+        @Test
+        @DisplayName("1 gunta sqm conversion correct")
+        void oneGunta_sqmIsCorrect() {
+            // 1089 sqft / 10.7639104167 sqft/sqm ≈ 101.17 sqm
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), "gunta");
+
+            assertThat(result.areaSqm()).isCloseTo(new BigDecimal("101.17"), within(new BigDecimal("0.01")));
+        }
+
+        @Test
+        @DisplayName("1 gunta cent conversion correct")
+        void oneGunta_centIsCorrect() {
+            // 1089 sqft / 435.6 sqft/cent ≈ 2.5 cents
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), "gunta");
+
+            assertThat(result.areaCent()).isCloseTo(new BigDecimal("2.5"), within(new BigDecimal("0.01")));
+        }
+
+        @ParameterizedTest
+        @DisplayName("GUNTA unit variations are recognized")
+        @CsvSource({
+            "gunta", "GUNTA", "Gunta",
+            "guntas", "GUNTAS"
+        })
+        void guntaVariations_recognized(String unit) {
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), unit);
+
+            assertThat(result.areaSqm()).isNotNull();
+            assertThat(result.areaSqft()).isNotNull();
+            assertThat(result.areaCent()).isNotNull();
         }
     }
 
