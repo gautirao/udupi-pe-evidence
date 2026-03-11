@@ -89,16 +89,20 @@ export function useMyBookings() {
 }
 
 /**
- * Fetches all viewing requests for the current dealer's listings.
+ * Fetches viewing requests for the current dealer's listings.
  * GET /api/bookings/dealer — backend returns Page<BookingResponse>.
- * Returns content array plus pagination metadata.
+ *
+ * @param listingId  Optional UUID string. When provided, only bookings for that
+ *                   listing are returned. Omit to fetch all dealer bookings.
  */
-export function useDealerBookings() {
+export function useDealerBookings(listingId?: string) {
   const { user, isDealer, isAdmin } = useAuth();
 
   const query = useQuery({
-    queryKey: ['dealer-bookings'],
-    queryFn: () => api.get<PageResponse<BookingResponse>>('/api/bookings/dealer'),
+    queryKey: ['dealer-bookings', listingId ?? 'all'],
+    queryFn: () => api.get<PageResponse<BookingResponse>>(
+      listingId ? `/api/bookings/dealer?listingId=${listingId}` : '/api/bookings/dealer'
+    ),
     enabled: !!user && (isDealer || isAdmin),
     staleTime: 5 * 60 * 1000,
   });

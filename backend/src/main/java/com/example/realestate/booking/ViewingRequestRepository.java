@@ -26,6 +26,8 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
 
     Page<ViewingRequest> findByDealerIdAndStatusIn(UUID dealerId, List<String> statuses, Pageable pageable);
 
+    Page<ViewingRequest> findByDealerIdAndListingIdAndStatusIn(UUID dealerId, UUID listingId, List<String> statuses, Pageable pageable);
+
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query("UPDATE ViewingRequest v SET v.status = 'CONFIRMED', v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.dealerId = :callerId")
