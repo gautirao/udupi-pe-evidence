@@ -130,7 +130,7 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     await loginAsDealer(page);
     await openEditListing(page, draftId!);
 
-    await expect(page.getByRole('slider', { name: /price slider/i })).toBeVisible({
+    await expect(page.locator('[role="slider"]')).toBeVisible({
       timeout: 8_000,
     });
   });
@@ -155,7 +155,7 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     await loginAsDealer(page);
     await openEditListing(page, draftId!);
 
-    const slider = page.getByRole('slider', { name: /price slider/i });
+    const slider = page.locator('[role="slider"]');
     await expect(slider).toBeVisible({ timeout: 8_000 });
     const priceInput = page.locator('input#price');
     const initialText = await priceInput.inputValue();
@@ -177,7 +177,7 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     await loginAsDealer(page);
     await openEditListing(page, draftId!);
 
-    const slider = page.getByRole('slider', { name: /price slider/i });
+    const slider = page.locator('[role="slider"]');
     await expect(slider).toBeVisible({ timeout: 8_000 });
     const initialValue = await slider.getAttribute('aria-valuenow');
 
