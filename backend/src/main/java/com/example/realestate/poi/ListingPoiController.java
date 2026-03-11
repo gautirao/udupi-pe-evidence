@@ -102,10 +102,12 @@ public class ListingPoiController {
             return forbidden();
         }
 
-        // Trigger Overpass amenity fetch if listing has coordinates and no cached results yet.
-        // OverpassService handles the 14-day cache guard internally.
+        // Trigger Overpass fetches if listing has coordinates. Both methods guard against re-fetch
+        // internally (14-day cache per source type), so calling on every request is safe.
         if (listing.getLatitude() != null && listing.getLongitude() != null) {
             overpassService.fetchAndCacheAmenities(
+                    listingId, listing.getLatitude(), listing.getLongitude(), listing.getPropertyType());
+            overpassService.enrichSettlement(
                     listingId, listing.getLatitude(), listing.getLongitude(), listing.getPropertyType());
         }
 

@@ -20,6 +20,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -1202,5 +1203,92 @@ class ListingServiceTest {
         verify(listingRepository).save(captor.capture());
         assertThat(captor.getValue().getLandAreaUnit()).isEqualTo("sqft");
         assertThat(captor.getValue().getBuiltAreaUnit()).isEqualTo("sqm");
+    }
+
+    // --- RE-70: settlement enrichment event published on address confirmation ---
+
+    @Test
+    void updateListing_addressConfirmedWithCoordsAndLandType_publishesSettlementEvent() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("land");
+        existing.setLatitude(13.3409);
+        existing.setLongitude(74.7421);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, true,   // addressConfirmed = true
+                null, null, null, null, null, false);
+
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getValue())
+                .isInstanceOf(ListingService.SettlementEnrichmentRequestedEvent.class);
+        ListingService.SettlementEnrichmentRequestedEvent event =
+                (ListingService.SettlementEnrichmentRequestedEvent) eventCaptor.getValue();
+        assertThat(event.listingId()).isEqualTo(listingId);
+        assertThat(event.propertyType()).isEqualTo("land");
+    }
+
+    @Test
+    void updateListing_addressConfirmedButApartmentType_doesNotPublishSettlementEvent() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("apartment");
+        existing.setLatitude(13.3409);
+        existing.setLongitude(74.7421);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, true,   // addressConfirmed = true
+                null, null, null, null, null, false);
+
+        verify(applicationEventPublisher, never()).publishEvent(
+                any(ListingService.SettlementEnrichmentRequestedEvent.class));
+    }
+
+    @Test
+    void updateListing_addressNotConfirmed_doesNotPublishSettlementEvent() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("land");
+        existing.setLatitude(13.3409);
+        existing.setLongitude(74.7421);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // addressConfirmed = null (not set in this request)
+        listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, null,
+                null, null, null, null, null, false);
+
+        verify(applicationEventPublisher, never()).publishEvent(
+                any(ListingService.SettlementEnrichmentRequestedEvent.class));
     }
 }
