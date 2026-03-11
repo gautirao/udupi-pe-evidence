@@ -209,7 +209,7 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
       }
     });
 
-    await page.getByRole('button', { name: /save changes/i }).click();
+    await page.getByRole('button', { name: /save & continue/i }).click();
     await page.waitForResponse(
       (res) => res.url().includes(`/api/listings/${id}`) && res.request().method() === 'PUT',
       { timeout: 10_000 },
