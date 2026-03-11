@@ -1069,4 +1069,69 @@ class ListingServiceTest {
         // insertNotification must NEVER be called directly — this is the critical decoupling assertion
         verify(listingRepository, never()).insertNotification(any(), any(), any(), any(), any());
     }
+
+    // --- RE-69: lat/lng persisted on location confirmation ---
+
+    @Test
+    void updateListing_latLonPresent_savedToListing() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setLatitude(12.0);
+        existing.setLongitude(75.0);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, null,
+                13.3409, 74.7421,
+                null, false);
+
+        assertThat(result.getLatitude()).isEqualTo(13.3409);
+        assertThat(result.getLongitude()).isEqualTo(74.7421);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getLatitude()).isEqualTo(13.3409);
+        assertThat(captor.getValue().getLongitude()).isEqualTo(74.7421);
+    }
+
+    @Test
+    void updateListing_latLonAbsent_existingCoordsPreserved() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setLatitude(13.3409);
+        existing.setLongitude(74.7421);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // PUT with no lat/lon (null) — must not zero out existing coordinates
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, null,
+                null, null,
+                null, false);
+
+        assertThat(result.getLatitude()).isEqualTo(13.3409);
+        assertThat(result.getLongitude()).isEqualTo(74.7421);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getLatitude()).isEqualTo(13.3409);
+        assertThat(captor.getValue().getLongitude()).isEqualTo(74.7421);
+    }
 }

@@ -107,7 +107,8 @@ public class ListingController {
                     req.propertyType(), req.title(), req.locality(),
                     req.price(), req.description(),
                     req.landArea(), req.bedrooms(), req.builtArea(),
-                    req.addressConfirmed(), updateVideoUrl, applyVideo);
+                    req.addressConfirmed(), req.latitude(), req.longitude(),
+                    updateVideoUrl, applyVideo);
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -215,6 +216,8 @@ public class ListingController {
             Integer bedrooms,
             BigDecimal builtArea,
             Boolean addressConfirmed,
+            Double latitude,
+            Double longitude,
             String videoUrl,
             Boolean applyVideoUrl   // true = apply the videoUrl field (null clears, non-null sets)
     ) {}
