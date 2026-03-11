@@ -108,7 +108,6 @@ public class GeocodingService implements GeocodingPort {
         for (String term : variations) {
             double[] coords = callNominatim(term);
             if (coords != null) {
-                String displayName = coords.length > 2 ? null : null; // display name not captured in coords array
                 saveCache(normalized, coords[0], coords[1], null);
                 return new GeoResult(coords[0], coords[1], null, null, null, null, locality, null);
             }
