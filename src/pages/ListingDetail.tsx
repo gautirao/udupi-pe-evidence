@@ -1,4 +1,4 @@
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -8,8 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
-import { 
-  ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight, 
+import {
+  AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -141,11 +141,20 @@ export default function ListingDetail() {
     <AppLayout>
       <div className="max-w-4xl mx-auto p-4 md:p-6">
         {/* Preview banner */}
-        {isPreview && (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <strong>Preview mode</strong> — this listing is not yet live. Only you can see this page.
-          </div>
-        )}
+        {isPreview && (() => {
+          const previewCopy: Record<string, string> = {
+            DRAFT: 'Preview mode — this listing is a draft. Only you can see this page.',
+            PENDING_REVIEW: 'Preview mode — this listing is under admin review. It will go live once approved.',
+            REJECTED: 'Preview mode — this listing was rejected. See the rejection reason below.',
+          };
+          const copy = previewCopy[listing.status ?? ''] ?? 'Preview mode — this listing is not yet live. Only you can see this page.';
+          return (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <span>{copy}</span>
+            </div>
+          );
+        })()}
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -153,10 +162,17 @@ export default function ListingDetail() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             {isPreview ? 'Back to My Listings' : 'Back to Map'}
           </Button>
-          <Button variant="outline" onClick={handleShare} className="gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-            {copied ? 'Copied!' : 'Share'}
-          </Button>
+          <div className="flex items-center gap-2">
+            {isPreview && (listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
+              <Button variant="outline" size="sm" asChild>
+                <Link to={`/dealer/listings/${id}/edit`}>Edit Listing</Link>
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleShare} className="gap-2">
+              {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+              {copied ? 'Copied!' : 'Share'}
+            </Button>
+          </div>
         </div>
 
         {/* Image Gallery */}
