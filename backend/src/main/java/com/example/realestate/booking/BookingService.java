@@ -341,6 +341,11 @@ public class BookingService {
                 .findByDealerIdAndStatusIn(dealerId, DEALER_ACTIVE_STATUSES, pageable);
     }
 
+    public Page<ViewingRequest> getBookingsForDealerByListingPaged(UUID dealerId, UUID listingId, Pageable pageable) {
+        return viewingRequestRepository
+                .findByDealerIdAndListingIdAndStatusIn(dealerId, listingId, DEALER_ACTIVE_STATUSES, pageable);
+    }
+
     // ===== Private helpers =====
 
     /**

@@ -277,7 +277,7 @@ export default function DealerListings() {
                     </Button>
                     {listing.status === 'LIVE' && (
                       <Button variant="outline" size="sm" asChild>
-                        <Link to="/dealer/bookings">
+                        <Link to={`/dealer/bookings?listingId=${listing.id}`}>
                           <CalendarDays className="h-3.5 w-3.5 mr-1" />
                           Booking enquiries
                         </Link>

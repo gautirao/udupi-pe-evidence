@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,9 @@ import {
  */
 export default function DealerBookings() {
   const { isDealer, isAdmin, isLoading: authLoading } = useAuth();
-  const { data: bookings, isLoading: bookingsLoading, isError } = useDealerBookings();
+  const [searchParams] = useSearchParams();
+  const listingId = searchParams.get('listingId') ?? undefined;
+  const { data: bookings, isLoading: bookingsLoading, isError } = useDealerBookings(listingId);
   const confirmBooking = useConfirmBooking();
   const declineBooking = useDeclineBooking();
   const cancelBooking = useCancelBooking();
@@ -62,7 +64,9 @@ export default function DealerBookings() {
   return (
     <AppLayout>
       <div className="container max-w-4xl py-6 px-4">
-        <h1 className="text-3xl font-bold mb-8">Booking Requests</h1>
+        <h1 className="text-3xl font-bold mb-8">
+          {listingId ? 'Booking Requests — This Listing' : 'Booking Requests'}
+        </h1>
 
         {/* Pending Requests */}
         <section className="mb-10">
