@@ -10,8 +10,10 @@ interface CreateListingRequest {
   price?: number;
   description?: string;
   landArea?: number;
+  landAreaUnit?: string;
   bedrooms?: number;
   builtArea?: number;
+  builtAreaUnit?: string;
 }
 
 // Mirrors backend UpdateRequest DTO
@@ -22,8 +24,10 @@ export interface UpdateListingRequest {
   propertyType?: string;
   locality?: string;
   landArea?: number;
+  landAreaUnit?: string;
   bedrooms?: number;
   builtArea?: number;
+  builtAreaUnit?: string;
   latitude?: number;
   longitude?: number;
   addressConfirmed?: boolean;
@@ -41,8 +45,10 @@ export interface ListingResponse {
   price: number | null;
   description: string | null;
   landArea: number | null;
+  landAreaUnit: string | null;
   bedrooms: number | null;
   builtArea: number | null;
+  builtAreaUnit: string | null;
   latitude: number | null;
   longitude: number | null;
   addressConfirmed: boolean;

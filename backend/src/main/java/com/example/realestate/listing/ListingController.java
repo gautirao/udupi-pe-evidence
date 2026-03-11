@@ -57,7 +57,9 @@ public class ListingController {
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         Listing saved = listingService.createDraft(
                 caller.userId(), req.propertyType(), req.title(),
-                req.locality(), req.price(), req.description(), createVideoUrl);
+                req.locality(), req.price(), req.description(),
+                req.landArea(), req.bedrooms(), req.builtArea(),
+                req.landAreaUnit(), req.builtAreaUnit(), createVideoUrl);
 
         log.info("POST /api/listings -> 201 listingId={} createdBy={}", saved.getId(), caller.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
@@ -108,6 +110,7 @@ public class ListingController {
                     req.price(), req.description(),
                     req.landArea(), req.bedrooms(), req.builtArea(),
                     req.addressConfirmed(), req.latitude(), req.longitude(),
+                    req.landAreaUnit(), req.builtAreaUnit(),
                     updateVideoUrl, applyVideo);
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
@@ -189,6 +192,8 @@ public class ListingController {
         return new ListingResponse(
                 l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),
+                l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
+                l.getLandAreaUnit(), l.getBuiltAreaUnit(),
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
@@ -203,6 +208,11 @@ public class ListingController {
             String locality,
             BigDecimal price,
             String description,
+            BigDecimal landArea,
+            Integer bedrooms,
+            BigDecimal builtArea,
+            String landAreaUnit,
+            String builtAreaUnit,
             String videoUrl
     ) {}
 
@@ -218,6 +228,8 @@ public class ListingController {
             Boolean addressConfirmed,
             Double latitude,
             Double longitude,
+            String landAreaUnit,
+            String builtAreaUnit,
             String videoUrl,
             Boolean applyVideoUrl   // true = apply the videoUrl field (null clears, non-null sets)
     ) {}
@@ -230,6 +242,11 @@ public class ListingController {
             String locality,
             BigDecimal price,
             String description,
+            BigDecimal landArea,
+            Integer bedrooms,
+            BigDecimal builtArea,
+            String landAreaUnit,
+            String builtAreaUnit,
             Double latitude,
             Double longitude,
             boolean addressConfirmed,

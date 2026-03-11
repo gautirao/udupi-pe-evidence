@@ -48,7 +48,8 @@ export function formatArea(area: number, unit?: string | null): string {
     return `${area.toFixed(2)} acres`;
   }
   
-  if (areaUnit === 'guntha') {
+  // Accept both legacy 'guntha' spelling and new canonical 'gunta'/'guntas'
+  if (areaUnit === 'guntha' || areaUnit === 'gunta' || areaUnit === 'guntas') {
     return `${area.toFixed(2)} guntha`;
   }
   

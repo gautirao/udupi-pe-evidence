@@ -22,6 +22,9 @@ public final class AreaUnitConverter {
     /**
      * Mapping of recognized unit aliases to canonical unit names.
      */
+    // Conversion: 1 gunta = 1089 sq ft (exact)
+    private static final BigDecimal SQFT_PER_GUNTA = new BigDecimal("1089");
+
     private static final Map<String, String> UNIT_ALIASES = Map.ofEntries(
             // Cent aliases
             Map.entry("cent", "cent"),
@@ -46,7 +49,10 @@ public final class AreaUnitConverter {
             Map.entry("square metre", "sqm"),
             Map.entry("square metres", "sqm"),
             Map.entry("m2", "sqm"),
-            Map.entry("m²", "sqm")
+            Map.entry("m²", "sqm"),
+            // Gunta aliases (1 gunta = 1089 sqft)
+            Map.entry("gunta", "gunta"),
+            Map.entry("guntas", "gunta")
     );
 
     private AreaUnitConverter() {
@@ -90,6 +96,11 @@ public final class AreaUnitConverter {
             case "sqm" -> {
                 // sqm -> sqft -> cent
                 BigDecimal sqft = value.multiply(SQFT_PER_SQM);
+                yield sqft.divide(SQFT_PER_CENT, CALC_SCALE, ROUNDING);
+            }
+            case "gunta" -> {
+                // 1 gunta = 1089 sqft -> cent
+                BigDecimal sqft = value.multiply(SQFT_PER_GUNTA);
                 yield sqft.divide(SQFT_PER_CENT, CALC_SCALE, ROUNDING);
             }
             default -> null;
