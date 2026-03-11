@@ -16,7 +16,13 @@ public enum PoiCategory {
     HOTEL,
     TRANSPORT,
     AIRPORT,
-    GROCERY;
+    GROCERY,
+    /** Nearest city or town — resolved from OSM {@code place=city|town} nodes. Auto-approved. */
+    TOWN_CENTER,
+    /** Nearest village or hamlet — resolved from OSM {@code place=village|hamlet|locality|suburb} nodes. Auto-approved. */
+    VILLAGE_CENTER,
+    /** Road access tier — resolved from OSM {@code highway=trunk|primary|secondary|tertiary} ways. Auto-approved. */
+    HIGHWAY;
 
     /**
      * Resolve a {@link PoiCategory} from a raw OSM tag map.
@@ -35,6 +41,22 @@ public enum PoiCategory {
         String railway = tags.get("railway");
         String aeroway = tags.get("aeroway");
         String shop = tags.get("shop");
+        String place = tags.get("place");
+
+        // Settlement categories — checked first so place/highway tags win over coincidental amenity tags
+
+        // place=city|town → TOWN_CENTER
+        if ("city".equals(place) || "town".equals(place)) return TOWN_CENTER;
+
+        // place=village|hamlet|locality|suburb → VILLAGE_CENTER
+        if ("village".equals(place) || "hamlet".equals(place)
+                || "locality".equals(place) || "suburb".equals(place)) return VILLAGE_CENTER;
+
+        // highway=trunk|primary|secondary|tertiary → HIGHWAY (road-access tier, not bus stop)
+        if ("trunk".equals(highway) || "primary".equals(highway)
+                || "secondary".equals(highway) || "tertiary".equals(highway)) return HIGHWAY;
+
+        // Amenity categories
 
         // amenity=place_of_worship → WORSHIP
         if ("place_of_worship".equals(amenity)) return WORSHIP;
