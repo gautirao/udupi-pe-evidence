@@ -47,6 +47,16 @@ public class ListingPoiController {
     private static final Logger log = LoggerFactory.getLogger(ListingPoiController.class);
     private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
 
+    /**
+     * Settlement-derived categories (TOWN_CENTER, VILLAGE_CENTER, HIGHWAY) are auto-approved
+     * computed data. Dealers may not approve or delete them via the management API.
+     */
+    private static final Set<String> SETTLEMENT_CATEGORIES = Set.of(
+            PoiCategory.TOWN_CENTER.name(),
+            PoiCategory.VILLAGE_CENTER.name(),
+            PoiCategory.HIGHWAY.name()
+    );
+
     private final ListingPoiService service;
     private final OverpassService overpassService;
     private final ListingService listingService;
@@ -92,10 +102,13 @@ public class ListingPoiController {
             return forbidden();
         }
 
-        // Trigger Overpass fetch if listing has coordinates and no cached results yet.
-        // OverpassService handles the 14-day cache guard internally.
+        // Trigger Overpass fetches if listing has coordinates. Both methods guard against re-fetch
+        // internally (14-day cache per source type), so calling on every request is safe.
         if (listing.getLatitude() != null && listing.getLongitude() != null) {
-            overpassService.fetchAndCache(listingId, listing.getLatitude(), listing.getLongitude());
+            overpassService.fetchAndCacheAmenities(
+                    listingId, listing.getLatitude(), listing.getLongitude(), listing.getPropertyType());
+            overpassService.enrichSettlement(
+                    listingId, listing.getLatitude(), listing.getLongitude(), listing.getPropertyType());
         }
 
         List<PoiResponse> pois = service.getAll(listingId).stream()
@@ -124,6 +137,11 @@ public class ListingPoiController {
 
         ListingPoi poi = service.findById(poiId).orElse(null);
         if (poi == null || !listingId.equals(poi.getListingId())) return poiNotFound();
+
+        if (SETTLEMENT_CATEGORIES.contains(poi.getCategory())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Settlement POIs (TOWN_CENTER, VILLAGE_CENTER, HIGHWAY) are auto-approved and cannot be manually approved");
+        }
 
         poi.setApproved(true);
         poi.setApprovedBy(caller.userId());
@@ -232,6 +250,11 @@ public class ListingPoiController {
 
         ListingPoi poi = service.findById(poiId).orElse(null);
         if (poi == null || !listingId.equals(poi.getListingId())) return poiNotFound();
+
+        if (SETTLEMENT_CATEGORIES.contains(poi.getCategory())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Settlement POIs (TOWN_CENTER, VILLAGE_CENTER, HIGHWAY) are auto-computed and cannot be deleted");
+        }
 
         service.delete(poiId);
         log.info("DELETE poiId={} listingId={} caller={}", poiId, listingId, caller.userId());

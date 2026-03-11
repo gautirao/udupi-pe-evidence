@@ -7,6 +7,7 @@ import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
 import com.example.realestate.ingestion.RawPostRepository;
+import com.example.realestate.poi.PoiQueryProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -472,6 +473,19 @@ public class ListingService {
 
         Listing saved = listingRepository.save(listing);
         log.info("Updated listing listingId={} by userId={}", listingId, userId);
+
+        // Trigger settlement enrichment when address is confirmed and coordinates are present.
+        // Only for property types where settlement context adds value (land, house, commercial).
+        if (saved.isAddressConfirmed()
+                && saved.getLatitude() != null && saved.getLongitude() != null
+                && PoiQueryProfile.forPropertyType(saved.getPropertyType()).hasSettlementQueries()) {
+            applicationEventPublisher.publishEvent(
+                    new SettlementEnrichmentRequestedEvent(
+                            saved.getId(), saved.getLatitude(), saved.getLongitude(), saved.getPropertyType()));
+            log.debug("SettlementEnrichmentRequestedEvent published listingId={} propertyType={}",
+                    saved.getId(), saved.getPropertyType());
+        }
+
         return saved;
     }
 
@@ -744,4 +758,12 @@ public class ListingService {
     /** Fired when a listing with a known areaKey goes LIVE. Triggers area-subscriber notifications. */
     public record NewListingInAreaEvent(UUID listingId, String areaKey, String areaLabel,
                                         String title, String propertyType, Long pricePaise) {}
+
+    /**
+     * Fired after a dealer confirms the address on a listing that has coordinates and a
+     * settlement-enrichment-eligible property type (land, house, commercial).
+     * Consumed by {@code SettlementEnrichmentListener} to trigger Overpass settlement fetch.
+     */
+    public record SettlementEnrichmentRequestedEvent(UUID listingId, double lat, double lon,
+                                                     String propertyType) {}
 }

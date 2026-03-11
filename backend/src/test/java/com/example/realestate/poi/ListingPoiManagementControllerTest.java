@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -109,7 +110,7 @@ class ListingPoiManagementControllerTest {
     void suggestions_ownerCanAccess_returns200() throws Exception {
         when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
-        when(overpassService.fetchAndCache(eq(LISTING_ID), any(Double.class), any(Double.class)))
+        when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
                 .thenReturn(List.of());
 
         ListingPoi poi = buildPoi(false, false);
@@ -234,12 +235,48 @@ class ListingPoiManagementControllerTest {
 
     // ==================== Test 8: admin can access any listing's suggestions → 200 ====================
 
+    // ==================== Test 8b: approve settlement POI → 400 ====================
+
+    @Test
+    void approve_settlementCategory_returns400() throws Exception {
+        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+
+        ListingPoi townCenterPoi = buildPoi(false, false);
+        townCenterPoi.setCategory("TOWN_CENTER");
+        when(service.findById(POI_ID)).thenReturn(Optional.of(townCenterPoi));
+
+        mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/approve", LISTING_ID, POI_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).save(any());
+    }
+
+    // ==================== Test 8c: delete settlement POI → 400 ====================
+
+    @Test
+    void delete_settlementCategory_returns400() throws Exception {
+        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+
+        ListingPoi highwayPoi = buildPoi(true, false);
+        highwayPoi.setCategory("HIGHWAY");
+        when(service.findById(POI_ID)).thenReturn(Optional.of(highwayPoi));
+
+        mockMvc.perform(delete("/api/listings/{listingId}/pois/{poiId}", LISTING_ID, POI_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isBadRequest());
+
+        verify(service, never()).delete(any());
+    }
+
     @Test
     void admin_canAccessAnyListing() throws Exception {
         // Admin accesses a listing owned by a different dealer (OWNER_ID)
         when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
-        when(overpassService.fetchAndCache(eq(LISTING_ID), any(Double.class), any(Double.class)))
+        when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
                 .thenReturn(List.of());
 
         ListingPoi poi = buildPoi(true, false);

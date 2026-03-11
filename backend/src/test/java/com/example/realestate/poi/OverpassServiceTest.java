@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -168,6 +169,224 @@ class OverpassServiceTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(school.getName()).isEqualTo("St. Mary's School");
+    }
+
+    // ===== 6. fetchAndCacheAmenities — uses profile radius =====
+
+    @Test
+    void fetchAndCacheAmenities_landProfile_usesWiderRadius() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(false);
+
+        List<String> capturedBodies = new java.util.ArrayList<>();
+        OverpassHttpClient mockClient = (url, body) -> {
+            capturedBodies.add(body);
+            return Optional.of("{\"elements\":[]}");
+        };
+
+        OverpassService service = new OverpassService(repository, mockClient);
+        service.fetchAndCacheAmenities(listingId, 13.3409, 74.7421, "land");
+
+        // Land profile amenity radius = 3000m; default = 1500m
+        assertThat(capturedBodies).hasSize(1);
+        assertThat(capturedBodies.get(0)).contains("3000");
+    }
+
+    @Test
+    void fetchAndCacheAmenities_apartmentProfile_usesDefaultRadius() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass"), any(OffsetDateTime.class)))
+                .thenReturn(false);
+
+        List<String> capturedBodies = new java.util.ArrayList<>();
+        OverpassHttpClient mockClient = (url, body) -> {
+            capturedBodies.add(body);
+            return Optional.of("{\"elements\":[]}");
+        };
+
+        OverpassService service = new OverpassService(repository, mockClient);
+        service.fetchAndCacheAmenities(listingId, 13.3409, 74.7421, "apartment");
+
+        // Apartment profile amenity radius = 1500m
+        assertThat(capturedBodies).hasSize(1);
+        assertThat(capturedBodies.get(0)).contains("1500");
+    }
+
+    // ===== 7. enrichSettlement — apartment skipped (no settlement queries) =====
+
+    @Test
+    void enrichSettlement_apartment_skipsAllQueries() {
+        UUID listingId = UUID.randomUUID();
+        boolean[] called = {false};
+        OverpassHttpClient mockClient = (url, body) -> {
+            called[0] = true;
+            return Optional.of("{\"elements\":[]}");
+        };
+
+        OverpassService service = new OverpassService(repository, mockClient);
+        List<ListingPoi> result = service.enrichSettlement(listingId, 13.3409, 74.7421, "apartment");
+
+        assertThat(result).isEmpty();
+        assertThat(called[0]).as("HTTP client should not be called for apartment type").isFalse();
+        verify(repository, never()).existsByListingIdAndSourceAndCreatedAtAfter(any(), anyString(), any());
+    }
+
+    @Test
+    void enrichSettlement_settlementCacheHit_skipsHttpCall() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass_settlement"), any(OffsetDateTime.class)))
+                .thenReturn(true);
+
+        boolean[] called = {false};
+        OverpassHttpClient mockClient = (url, body) -> {
+            called[0] = true;
+            return Optional.of("{\"elements\":[]}");
+        };
+
+        OverpassService service = new OverpassService(repository, mockClient);
+        List<ListingPoi> result = service.enrichSettlement(listingId, 13.3409, 74.7421, "land");
+
+        assertThat(result).isEmpty();
+        assertThat(called[0]).isFalse();
+    }
+
+    @Test
+    void enrichSettlement_parsesPlaceNodeAsApprovedTownCenter() {
+        UUID listingId = UUID.randomUUID();
+        when(repository.existsByListingIdAndSourceAndCreatedAtAfter(
+                eq(listingId), eq("overpass_settlement"), any(OffsetDateTime.class)))
+                .thenReturn(false);
+
+        String json = """
+                {
+                  "elements": [
+                    {
+                      "type": "node",
+                      "id": 111111,
+                      "lat": 13.3300,
+                      "lon": 74.7421,
+                      "tags": { "place": "town", "name": "Udupi" }
+                    }
+                  ]
+                }
+                """;
+
+        OverpassHttpClient mockClient = (url, body) -> Optional.of(json);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ListingPoi>> captor = ArgumentCaptor.forClass(List.class);
+        when(repository.saveAll(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        OverpassService service = new OverpassService(repository, mockClient);
+        service.enrichSettlement(listingId, 13.3409, 74.7421, "land");
+
+        List<ListingPoi> saved = captor.getValue();
+        assertThat(saved).hasSize(1);
+        ListingPoi town = saved.get(0);
+        assertThat(town.getCategory()).isEqualTo("TOWN_CENTER");
+        assertThat(town.getName()).isEqualTo("Udupi");
+        assertThat(town.getSource()).isEqualTo("overpass_settlement");
+        assertThat(town.getApproved()).isTrue();
+        assertThat(town.getDistanceMeters()).isPositive();
+    }
+
+    // ===== 8. buildSettlementQuery — radius clauses present / absent =====
+
+    @Test
+    void buildSettlementQuery_land_includesAllClauses() {
+        String query = OverpassService.buildSettlementQuery(13.34, 74.74, PoiQueryProfile.LAND);
+        assertThat(query).contains("city|town");
+        assertThat(query).contains("village|hamlet");
+        assertThat(query).contains("highway~\"trunk|primary");
+        assertThat(query).contains("25000");  // town radius
+        assertThat(query).contains("15000");  // village radius
+        assertThat(query).contains("out geom;");
+    }
+
+    @Test
+    void buildSettlementQuery_apartment_returnsQueryWithNoContent() {
+        // Apartment has all zero radii — hasSettlementQueries() would prevent this call,
+        // but if called directly it should produce a valid (empty) query structure.
+        String query = OverpassService.buildSettlementQuery(13.34, 74.74, PoiQueryProfile.APARTMENT);
+        assertThat(query).contains("[out:json]");
+        assertThat(query).doesNotContain("city|town");
+        assertThat(query).doesNotContain("highway");
+    }
+
+    // ===== 9. Highway name extraction =====
+
+    @Test
+    void extractHighwayName_refTag_normalizedWithDash() {
+        Map<String, String> tags = Map.of("highway", "trunk", "ref", "NH 66");
+        assertThat(OverpassService.extractHighwayName(tags, "trunk")).isEqualTo("NH-66");
+    }
+
+    @Test
+    void extractHighwayName_refWithSpaces_allNormalized() {
+        Map<String, String> tags = Map.of("highway", "primary", "ref", "SH 57");
+        assertThat(OverpassService.extractHighwayName(tags, "primary")).isEqualTo("SH-57");
+    }
+
+    @Test
+    void extractHighwayName_nameTagUsedWhenNoRef() {
+        Map<String, String> tags = Map.of("highway", "primary", "name", "Manipal-Udupi Road");
+        assertThat(OverpassService.extractHighwayName(tags, "primary")).isEqualTo("Manipal-Udupi Road");
+    }
+
+    @Test
+    void extractHighwayName_tierFallback_trunk() {
+        assertThat(OverpassService.extractHighwayName(Map.of(), "trunk")).isEqualTo("National Highway");
+    }
+
+    @Test
+    void extractHighwayName_tierFallback_primary() {
+        assertThat(OverpassService.extractHighwayName(Map.of(), "primary")).isEqualTo("State Highway");
+    }
+
+    @Test
+    void extractHighwayName_tierFallback_secondary() {
+        assertThat(OverpassService.extractHighwayName(Map.of(), "secondary")).isEqualTo("District Road");
+    }
+
+    @Test
+    void extractHighwayName_tierFallback_tertiary() {
+        assertThat(OverpassService.extractHighwayName(Map.of(), "tertiary")).isEqualTo("Local Road");
+    }
+
+    // ===== 10. PoiQueryProfile — factory =====
+
+    @Test
+    void queryProfile_land_hasWideRadii() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType("land");
+        assertThat(p.amenityRadiusMeters()).isEqualTo(3_000);
+        assertThat(p.townRadiusMeters()).isEqualTo(25_000);
+        assertThat(p.villageRadiusMeters()).isEqualTo(15_000);
+        assertThat(p.highwayRadiusMeters()).isEqualTo(3_000);
+        assertThat(p.hasSettlementQueries()).isTrue();
+    }
+
+    @Test
+    void queryProfile_apartment_noSettlement() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType("apartment");
+        assertThat(p.amenityRadiusMeters()).isEqualTo(1_500);
+        assertThat(p.hasSettlementQueries()).isFalse();
+    }
+
+    @Test
+    void queryProfile_unknownType_usesDefault() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType("studio");
+        assertThat(p.amenityRadiusMeters()).isEqualTo(1_500);
+        assertThat(p.hasSettlementQueries()).isFalse();
+    }
+
+    @Test
+    void queryProfile_null_usesDefault() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType(null);
+        assertThat(p).isEqualTo(PoiQueryProfile.DEFAULT);
     }
 
     // ===== 6. Cap: top 3 per category =====
