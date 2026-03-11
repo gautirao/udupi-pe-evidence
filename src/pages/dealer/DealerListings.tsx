@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -130,7 +131,7 @@ export default function DealerListings() {
     isFetchingNextPage,
   } = useDealerMyListingsInfinite();
 
-  const allListings = data?.pages.flatMap((p) => p.listings) ?? [];
+  const allListings = useMemo(() => data?.pages.flatMap((p) => p.listings) ?? [], [data?.pages]);
   const totalElements = data?.pages[0]?.totalElements ?? 0;
   const deleteListingMutation = useDeleteListing();
   const { toast } = useToast();
