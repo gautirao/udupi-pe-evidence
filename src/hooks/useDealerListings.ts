@@ -89,6 +89,7 @@ export function useDealerMyListings(page = 0, size = 20) {
 export function useDealerMyListingsInfinite(size = 20) {
   return useInfiniteQuery({
     queryKey: ['dealer-listings-infinite', size],
+    staleTime: 60_000,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       const response = await api.get<PageResponse<ListingResponse>>(
