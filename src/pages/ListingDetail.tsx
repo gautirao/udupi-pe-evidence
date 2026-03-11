@@ -175,6 +175,21 @@ export default function ListingDetail() {
           </div>
         </div>
 
+        {/* For land listings: location panel appears before photos */}
+        {listing.property_type === 'land' && (
+          <div className="space-y-4 mb-6">
+            <NearbyPois listingId={listing.id} propertyType={listing.property_type} />
+            {listing.latitude != null && listing.longitude != null && (
+              <PoiMiniMap
+                listingId={listing.id}
+                latitude={listing.latitude}
+                longitude={listing.longitude}
+                propertyType={listing.property_type}
+              />
+            )}
+          </div>
+        )}
+
         {/* Image Gallery */}
         <Card className="overflow-hidden mb-6">
           <div className="relative bg-muted aspect-video">
@@ -384,14 +399,19 @@ export default function ListingDetail() {
               </Card>
             )}
 
-            <NearbyPois listingId={listing.id} />
-
-            {listing.latitude != null && listing.longitude != null && (
-              <PoiMiniMap
-                listingId={listing.id}
-                latitude={listing.latitude}
-                longitude={listing.longitude}
-              />
+            {/* Land listings show location panel above photos — skip here */}
+            {listing.property_type !== 'land' && (
+              <>
+                <NearbyPois listingId={listing.id} propertyType={listing.property_type} />
+                {listing.latitude != null && listing.longitude != null && (
+                  <PoiMiniMap
+                    listingId={listing.id}
+                    latitude={listing.latitude}
+                    longitude={listing.longitude}
+                    propertyType={listing.property_type}
+                  />
+                )}
+              </>
             )}
 
             {/* Posted Date */}
