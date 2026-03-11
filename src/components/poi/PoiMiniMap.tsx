@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Polyline, Tooltip } from 'react-leafle
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api } from '@/lib/api';
-import { CATEGORY_LABELS, CATEGORY_ICONS, formatDistance } from '@/lib/poi-categories';
+import { CATEGORY_LABELS, CATEGORY_ICONS, SETTLEMENT_CATEGORIES, formatDistance } from '@/lib/poi-categories';
 
 interface PoiResponse {
   id: string;
@@ -21,7 +21,14 @@ interface PoiMiniMapProps {
   listingId: string;
   latitude: number;
   longitude: number;
+  propertyType?: string;
 }
+
+const ZOOM_BY_TYPE: Record<string, number> = {
+  land: 11,
+  'house-rural': 12,
+  commercial: 13,
+};
 
 const CATEGORY_COLORS: Record<string, string> = {
   WORSHIP: '#f97316',
@@ -102,13 +109,22 @@ function createDistanceIcon(label: string): L.DivIcon {
   });
 }
 
+function createTownIcon(): L.DivIcon {
+  return L.divIcon({
+    className: 'town-pin',
+    html: `<div style="width:28px;height:28px;background:#1e40af;border:2px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;">🏙</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
+
 interface MappablePoi extends PoiResponse {
   latitude: number;
   longitude: number;
 }
 
-export function PoiMiniMap({ listingId, latitude, longitude }: PoiMiniMapProps) {
-  const [visible, setVisible] = useState(false);
+export function PoiMiniMap({ listingId, latitude, longitude, propertyType }: PoiMiniMapProps) {
+  const [visible, setVisible] = useState(propertyType === 'land');
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['pois', listingId],
@@ -117,11 +133,25 @@ export function PoiMiniMap({ listingId, latitude, longitude }: PoiMiniMapProps) 
 
   if (isLoading || isError) return null;
 
-  const mappable: MappablePoi[] = (data ?? []).filter(
-    (p): p is MappablePoi => p.latitude != null && p.longitude != null,
-  );
+  const zoom = ZOOM_BY_TYPE[propertyType ?? ''] ?? 15;
 
-  if (mappable.length === 0) return null;
+  const mappable: MappablePoi[] = (data ?? [])
+    .filter(
+      (p): p is MappablePoi =>
+        p.latitude != null && p.longitude != null && !SETTLEMENT_CATEGORIES.has(p.category),
+    );
+
+  // Find nearest town for land maps — rendered as a blue reference marker with dashed polyline
+  const landTown = (data ?? [])
+    .filter(
+      (p): p is MappablePoi =>
+        p.category === 'TOWN_CENTER' && p.latitude != null && p.longitude != null,
+    )
+    .sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity))[0] as
+    | MappablePoi
+    | undefined;
+
+  if (mappable.length === 0 && !landTown) return null;
 
   const listingIcon = createListingIcon();
 
@@ -138,12 +168,16 @@ export function PoiMiniMap({ listingId, latitude, longitude }: PoiMiniMapProps) 
 
       {/* Map wrapper — hidden on mobile unless toggled; always visible on md+ */}
       <div
-        className={visible ? 'h-[350px] rounded-lg overflow-hidden' : 'h-[350px] rounded-lg overflow-hidden hidden md:block'}
+        className={
+          visible
+            ? 'h-[350px] rounded-lg overflow-hidden'
+            : 'h-[350px] rounded-lg overflow-hidden hidden md:block'
+        }
         style={{ height: '350px' }}
       >
         <MapContainer
           center={[latitude, longitude]}
-          zoom={15}
+          zoom={zoom}
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom={false}
         >
@@ -154,6 +188,27 @@ export function PoiMiniMap({ listingId, latitude, longitude }: PoiMiniMapProps) 
 
           {/* Listing marker */}
           <Marker position={[latitude, longitude]} icon={listingIcon} />
+
+          {/* Nearest town: dashed blue polyline + blue marker with permanent tooltip */}
+          {landTown && (
+            <React.Fragment>
+              <Polyline
+                positions={[
+                  [latitude, longitude],
+                  [landTown.latitude, landTown.longitude],
+                ]}
+                pathOptions={{ color: '#1e40af', weight: 2, dashArray: '6 3' }}
+              />
+              <Marker
+                position={[landTown.latitude, landTown.longitude]}
+                icon={createTownIcon()}
+              >
+                <Tooltip permanent direction="top">
+                  <span>{landTown.name}</span>
+                </Tooltip>
+              </Marker>
+            </React.Fragment>
+          )}
 
           {/* Per-POI: polyline + midpoint distance label + POI marker with tooltip */}
           {mappable.map((poi) => {

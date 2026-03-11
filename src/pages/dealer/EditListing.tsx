@@ -707,7 +707,7 @@ export default function EditListing() {
 
           {/* POIs — shown when address is confirmed */}
           {listing.addressConfirmed ? (
-            <PoiManager listingId={id!} />
+            <PoiManager listingId={id!} propertyType={listing.propertyType} />
           ) : (
             <Card className="mb-4">
               <CardHeader>

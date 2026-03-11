@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { searchNominatim, type NominatimResult } from '@/lib/geocode';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,9 +17,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Pin, Trash2, PinOff, MapPin, Loader2, Search, X } from 'lucide-react';
+import { Pin, Trash2, PinOff, MapPin, Loader2, Search, X, Building2, Route, Home } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-import { CATEGORY_LABELS, formatDistance } from '@/lib/poi-categories';
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ICONS,
+  SETTLEMENT_CATEGORIES,
+  AMENITY_CATEGORY_ORDER,
+  formatDistance,
+} from '@/lib/poi-categories';
 
 interface PoiResponse {
   id: string;
@@ -31,7 +38,8 @@ interface PoiResponse {
   approved: boolean;
 }
 
-const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
+/** Only amenity categories are curated by dealers — settlement categories are auto-computed. */
+const AMENITY_CATEGORY_KEYS = AMENITY_CATEGORY_ORDER as readonly string[];
 
 interface PoiRowProps {
   poi: PoiResponse;
@@ -231,7 +239,7 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
             <SelectValue placeholder="Select category" />
           </SelectTrigger>
           <SelectContent>
-            {CATEGORY_KEYS.map((key) => (
+            {AMENITY_CATEGORY_KEYS.map((key) => (
               <SelectItem key={key} value={key}>
                 {CATEGORY_LABELS[key]}
               </SelectItem>
@@ -320,11 +328,19 @@ function AddManualForm({ listingId, onAdded }: AddManualFormProps) {
   );
 }
 
+const CARD_DESCRIPTIONS: Record<string, string> = {
+  land: 'Location facts below are auto-computed from map data. Approve nearby places that buyers will find useful.',
+  commercial: 'Location context is auto-computed. Approve transport and amenities relevant for tenants.',
+  apartment: 'Approve the nearby amenities that are most relevant for buyers of this apartment.',
+  house: 'Location context is auto-computed. Approve any nearby amenities relevant for buyers.',
+};
+
 interface PoiManagerProps {
   listingId: string;
+  propertyType?: string;
 }
 
-export function PoiManager({ listingId }: PoiManagerProps) {
+export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('nearby');
 
@@ -361,10 +377,12 @@ export function PoiManager({ listingId }: PoiManagerProps) {
     },
   });
 
-  const unapprovedPois = (pois ?? []).filter((p) => !p.approved);
-
+  // Settlement POIs are auto-computed and non-curatable — exclude from curation tabs
+  const unapprovedPois = (pois ?? []).filter(
+    (p) => !p.approved && !SETTLEMENT_CATEGORIES.has(p.category),
+  );
   const approvedPois = (pois ?? [])
-    .filter((p) => p.approved)
+    .filter((p) => p.approved && !SETTLEMENT_CATEGORIES.has(p.category))
     .sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
       const da = a.distanceMeters ?? Infinity;
@@ -372,12 +390,84 @@ export function PoiManager({ listingId }: PoiManagerProps) {
       return da - db;
     });
 
+  // Settlement POIs for the Location Context read-only block
+  const settlementPois = (pois ?? []).filter((p) => SETTLEMENT_CATEGORIES.has(p.category));
+  const village = settlementPois
+    .filter((p) => p.category === 'VILLAGE_CENTER')
+    .sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity))[0];
+  const town = settlementPois
+    .filter((p) => p.category === 'TOWN_CENTER')
+    .sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity))[0];
+  const highway = settlementPois
+    .filter((p) => p.category === 'HIGHWAY')
+    .sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity))[0];
+
+  const showLocationContext =
+    propertyType !== 'apartment' && (isLoading || settlementPois.length > 0);
+  const cardDescription = propertyType ? CARD_DESCRIPTIONS[propertyType] : undefined;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Nearby Points of Interest</CardTitle>
+        {cardDescription && <CardDescription>{cardDescription}</CardDescription>}
       </CardHeader>
       <CardContent>
+        {/* Location Context block — auto-computed settlement data, non-interactive */}
+        {showLocationContext && (
+          <div className="mb-6 rounded-lg border border-border bg-muted p-4 pointer-events-none select-none">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <span className="text-sm font-medium">Location Context</span>
+              <Badge variant="secondary" className="text-xs">Auto-computed</Badge>
+            </div>
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Loading location data…</span>
+              </div>
+            ) : (
+              <div className="space-y-1 text-sm">
+                {village && (
+                  <div className="flex items-center gap-2 min-h-[36px]">
+                    <Home className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                    <span className="text-muted-foreground shrink-0">Nearest village ·</span>
+                    <span className="font-medium truncate">{village.name}</span>
+                    <span className="text-muted-foreground shrink-0 ml-auto">
+                      {formatDistance(village.distanceMeters)}
+                    </span>
+                  </div>
+                )}
+                {town && (
+                  <div className="flex items-center gap-2 min-h-[36px]">
+                    <Building2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                    <span className="text-muted-foreground shrink-0">Nearest town ·</span>
+                    <span className="font-medium truncate">{town.name}</span>
+                    <span className="text-muted-foreground shrink-0 ml-auto">
+                      {formatDistance(town.distanceMeters)}
+                    </span>
+                  </div>
+                )}
+                {highway && (
+                  <div className="flex items-center gap-2 min-h-[36px]">
+                    <Route className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                    <span className="text-muted-foreground shrink-0">Road access ·</span>
+                    <span className="font-medium truncate">{highway.name}</span>
+                    <span className="text-muted-foreground shrink-0 ml-auto">
+                      {formatDistance(highway.distanceMeters)}
+                    </span>
+                  </div>
+                )}
+                {!village && !town && !highway && (
+                  <p className="text-muted-foreground text-xs">
+                    Location context not yet computed — check back shortly.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-4">
             <TabsTrigger value="nearby">Nearby Places</TabsTrigger>
