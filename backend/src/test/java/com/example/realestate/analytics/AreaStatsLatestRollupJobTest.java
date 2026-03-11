@@ -116,6 +116,18 @@ class AreaStatsLatestRollupJobTest {
             String sql = sqlCaptor.getValue();
             assertThat(sql).contains("created_at >=");
         }
+
+        @Test
+        void sqlFiltersOnStatus() {
+            LocalDate fromDate = LocalDate.of(2024, 1, 1);
+            ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+            when(jdbcOperations.update(sqlCaptor.capture(), any(), any(), any())).thenReturn(0);
+
+            rollupJob.computeStatsFromDate(fromDate);
+
+            String sql = sqlCaptor.getValue();
+            assertThat(sql).contains("status IN ('SCRAPED', 'LIVE')");
+        }
     }
 
     @Nested
