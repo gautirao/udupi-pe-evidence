@@ -7,6 +7,7 @@ import com.example.realestate.listing.ListingRepository.OpportunityProjection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -27,6 +28,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Dashboard API for querying pre-aggregated statistics.
@@ -41,6 +44,7 @@ public class DashboardController {
     private static final int DEFAULT_WEEKS = 52;
     private static final int MAX_WEEKS = 520; // ~10 years
     private static final int MAX_LIMIT = 200;
+    private static final Pattern PROP_ID_PATTERN = Pattern.compile("(?i)^PROP[- ]?(\\d+)$");
 
     private final AreaPriceWeeklyRepository areaPriceWeeklyRepository;
     private final AreaInsightsDao areaInsightsDao;
@@ -101,6 +105,29 @@ public class DashboardController {
 
         String effectiveQ = (q != null && !q.isBlank()) ? q.trim() : null;
 
+        // PROP-XXXXX pattern detection: if query matches, look up by listing_number directly
+        if (effectiveQ != null) {
+            Matcher matcher = PROP_ID_PATTERN.matcher(effectiveQ);
+            if (matcher.matches()) {
+                try {
+                    int listingNumber = Integer.parseInt(matcher.group(1));
+                    var found = listingRepository.findByListingNumber(listingNumber);
+                    if (found.isPresent()) {
+                        Listing l = found.get();
+                        Page<SearchListingResponse> result = new PageImpl<>(
+                                List.of(toSearchListingResponse(l)));
+                        log.info("PROP-ID search matched listingNumber={} listingId={}", listingNumber, l.getId());
+                        return ResponseEntity.ok(result);
+                    }
+                    // No match for that number — fall through to FTS
+                    log.debug("PROP-ID search no match for listingNumber={}, falling through to FTS", listingNumber);
+                } catch (NumberFormatException e) {
+                    // Number too large or invalid — fall through to FTS
+                    log.debug("PROP-ID pattern matched but number parse failed q={}, falling through to FTS", effectiveQ);
+                }
+            }
+        }
+
         // Strip any Sort from the Pageable: the native SQL already owns ORDER BY.
         // Passing a sorted Pageable to a native query causes a duplicate ORDER BY crash in PostgreSQL.
         Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
@@ -119,6 +146,8 @@ public class DashboardController {
     private SearchListingResponse toSearchListingResponse(Listing l) {
         return new SearchListingResponse(
                 l.getId(),
+                l.getListingNumber(),
+                l.getDisplayId(),
                 l.getTitle(),
                 l.getLocality(),
                 l.getPropertyType(),
@@ -177,6 +206,8 @@ public class DashboardController {
     private MapListingResponse toMapListingResponse(Listing listing) {
         return new MapListingResponse(
                 listing.getId(),
+                listing.getListingNumber(),
+                listing.getDisplayId(),
                 listing.getDescription(),
                 paiseToRupees(listing.getPricePaise()),
                 paiseToRupees(listing.getPricePerCentPaise()),
@@ -235,6 +266,8 @@ public class DashboardController {
 
     public record MapListingResponse(
             UUID id,
+            Integer listingNumber,
+            String displayId,
             String title,
             BigDecimal priceRupees,
             BigDecimal pricePerCentRupees,
@@ -258,6 +291,8 @@ public class DashboardController {
 
     public record SearchListingResponse(
             UUID id,
+            Integer listingNumber,
+            String displayId,
             String title,
             String locality,
             String propertyType,

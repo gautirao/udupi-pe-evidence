@@ -51,6 +51,7 @@ AS $$
     NOW()
   FROM property_listings
   WHERE is_valid = true
+    AND is_duplicate = false
     AND price_per_cent_paise IS NOT NULL
     AND COALESCE(area_key, locality) IS NOT NULL
     AND created_at >= NOW() - (p_lookback_weeks || ' weeks')::INTERVAL

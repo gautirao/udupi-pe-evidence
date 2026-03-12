@@ -249,6 +249,7 @@ class AdminListingControllerTest {
                                   String locality, BigDecimal price, String description) {
         Listing l = new Listing();
         l.setId(id);
+        l.setListingNumber(42);
         l.setStatus(status);
         l.setPropertyType(propertyType);
         l.setTitle(title);

@@ -36,6 +36,10 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     long countByDedupeHash(String dedupeHash);
 
+    long countByDedupeHashAndIdNot(String dedupeHash, UUID id);
+
+    Optional<Listing> findByListingNumber(Integer listingNumber);
+
     Page<Listing> findByCreatedByOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
 
     @Query(value = "SELECT COUNT(*) FROM public.listing_images WHERE listing_id = :listingId",

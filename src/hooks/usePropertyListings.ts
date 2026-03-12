@@ -35,6 +35,7 @@ export interface PropertyListing {
   is_valid: boolean;
   is_duplicate: boolean;
   status: string | null;
+  listing_number?: number;
   created_at: string;
   updated_at: string;
   raw_post_id: string | null;

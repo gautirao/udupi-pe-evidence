@@ -112,7 +112,8 @@ public class AdminListingController {
                 .map(ListingImage::getUrl)
                 .orElse(null);
         return new ListingController.ListingResponse(
-                l.getId(), l.getStatus(), l.getPropertyType(), l.getTitle(),
+                l.getId(), l.getListingNumber(), l.getDisplayId(),
+                l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),
                 l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
                 l.getLandAreaUnit(), l.getBuiltAreaUnit(),

@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.*;
@@ -815,6 +816,113 @@ class DashboardControllerTest {
 
         verify(listingRepository).findBySearch(isNull(), isNull(), isNull(), isNull(),
                 argThat(p -> !p.getSort().isSorted()));
+    }
+
+    // ==================== PROP-XXXXX Search Pattern Detection ====================
+
+    @Test
+    @WithMockUser
+    void searchListings_propPattern_returnsMatchingListing() throws Exception {
+        Listing listing = createListing(13.35, 74.75, "IN|KA|Udupi|Manipal", "Manipal, Udupi",
+                "A nice plot", 500000L, 300000L);
+        listing.setTitle("3 cent plot");
+        listing.setLocality("Manipal");
+        listing.setPropertyType("land");
+        listing.setListingNumber(42);
+
+        when(listingRepository.findByListingNumber(42)).thenReturn(Optional.of(listing));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "PROP-00042"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].displayId").value("PROP-00042"))
+                .andExpect(jsonPath("$.content[0].listingNumber").value(42));
+
+        // Verify FTS search was NOT called
+        verify(listingRepository, never()).findBySearch(any(), any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_propPatternNoMatch_fallsBackToFts() throws Exception {
+        when(listingRepository.findByListingNumber(99999)).thenReturn(Optional.empty());
+        when(listingRepository.findBySearch(eq("PROP-99999"), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "PROP-99999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(listingRepository).findByListingNumber(99999);
+        verify(listingRepository).findBySearch(eq("PROP-99999"), isNull(), isNull(), isNull(), any(Pageable.class));
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_propPatternCaseInsensitive_returnsMatch() throws Exception {
+        Listing listing = createListing(13.35, 74.75, "IN|KA|Udupi|Manipal", "Manipal, Udupi",
+                "A nice plot", 500000L, 300000L);
+        listing.setListingNumber(7);
+
+        when(listingRepository.findByListingNumber(7)).thenReturn(Optional.of(listing));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "prop-7"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        verify(listingRepository).findByListingNumber(7);
+        verify(listingRepository, never()).findBySearch(any(), any(), any(), any(), any(Pageable.class));
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_propPatternWithSpace_returnsMatch() throws Exception {
+        Listing listing = createListing(13.35, 74.75, "IN|KA|Udupi|Manipal", "Manipal, Udupi",
+                "A nice plot", 500000L, 300000L);
+        listing.setListingNumber(123);
+
+        when(listingRepository.findByListingNumber(123)).thenReturn(Optional.of(listing));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "PROP 123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        verify(listingRepository).findByListingNumber(123);
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_propPatternNoDash_returnsMatch() throws Exception {
+        Listing listing = createListing(13.35, 74.75, "IN|KA|Udupi|Manipal", "Manipal, Udupi",
+                "A nice plot", 500000L, 300000L);
+        listing.setListingNumber(42);
+
+        when(listingRepository.findByListingNumber(42)).thenReturn(Optional.of(listing));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "PROP42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        verify(listingRepository).findByListingNumber(42);
+    }
+
+    @Test
+    @WithMockUser
+    void searchListings_regularQuery_doesNotUsePropLookup() throws Exception {
+        when(listingRepository.findBySearch(eq("apartment in manipal"), isNull(), isNull(), isNull(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/dashboard/listings/search")
+                        .param("q", "apartment in manipal"))
+                .andExpect(status().isOk());
+
+        verify(listingRepository, never()).findByListingNumber(anyInt());
+        verify(listingRepository).findBySearch(eq("apartment in manipal"), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     // ==================== Helper Methods ====================

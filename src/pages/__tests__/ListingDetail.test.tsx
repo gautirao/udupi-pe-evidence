@@ -261,3 +261,17 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     expect(screen.getAllByText('Back to Map').length).toBeGreaterThan(0);
   });
 });
+
+// ── E. Human-friendly listing ID (RE-83) ────────────────────────
+
+describe('ListingDetail — display ID (RE-83)', () => {
+  it('shows formatted PROP-XXXXX when listing_number is present', () => {
+    renderWithListing(makeListing({ listing_number: 42 }));
+    expect(screen.getByText('PROP-00042')).toBeInTheDocument();
+  });
+
+  it('does NOT show display ID when listing_number is absent', () => {
+    renderWithListing(makeListing());
+    expect(screen.queryByText(/PROP-/)).not.toBeInTheDocument();
+  });
+});

@@ -77,6 +77,7 @@ public class AreaStatsLatestRollupJob {
                 WHERE area_key IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
+                  AND is_valid = true
                   AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
             ),
@@ -138,6 +139,7 @@ public class AreaStatsLatestRollupJob {
                   AND property_type IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
+                  AND is_valid = true
                   AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
             )
@@ -168,6 +170,7 @@ public class AreaStatsLatestRollupJob {
                 WHERE area_key IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
+                  AND is_valid = true
                   AND bedrooms IS NOT NULL AND bedrooms > 0
                   AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
@@ -200,6 +203,7 @@ public class AreaStatsLatestRollupJob {
                   AND property_type IS NOT NULL
                   AND price_per_cent_paise IS NOT NULL
                   AND is_duplicate = false
+                  AND is_valid = true
                   AND bedrooms IS NOT NULL AND bedrooms > 0
                   AND status IN ('SCRAPED', 'LIVE')
                   AND created_at >= ?
