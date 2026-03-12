@@ -111,7 +111,7 @@ public class ListingController {
                     req.landArea(), req.bedrooms(), req.builtArea(),
                     req.addressConfirmed(), req.latitude(), req.longitude(),
                     req.landAreaUnit(), req.builtAreaUnit(),
-                    updateVideoUrl, applyVideo);
+                    updateVideoUrl, applyVideo, req.reraNumber());
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -198,7 +198,8 @@ public class ListingController {
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount, firstImageUrl, l.getVideoUrl());
+                imageCount, firstImageUrl, l.getVideoUrl(),
+                l.getReraNumber());
     }
 
     // ===== DTOs =====
@@ -232,7 +233,8 @@ public class ListingController {
             String landAreaUnit,
             String builtAreaUnit,
             String videoUrl,
-            Boolean applyVideoUrl   // true = apply the videoUrl field (null clears, non-null sets)
+            Boolean applyVideoUrl,  // true = apply the videoUrl field (null clears, non-null sets)
+            String reraNumber
     ) {}
 
     public record ListingResponse(
@@ -258,6 +260,7 @@ public class ListingController {
             OffsetDateTime updatedAt,
             int imageCount,
             String firstImageUrl,
-            String videoUrl
+            String videoUrl,
+            String reraNumber
     ) {}
 }

@@ -93,6 +93,7 @@ export default function EditListing() {
   const [builtAreaUnitError, setBuiltAreaUnitError] = useState('');
   // Tracks whether image uploader has >= 3 images (drives step 2 completion + submit gate)
   const [canSubmitImages, setCanSubmitImages] = useState(false);
+  const [reraNumber, setReraNumber] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
   const [videoUrlError, setVideoUrlError] = useState('');
 
@@ -115,6 +116,7 @@ export default function EditListing() {
     setBuiltArea(listing.builtArea);
     setBuiltAreaUnit(listing.builtAreaUnit ?? 'sqft');
     setVideoUrl(listing.videoUrl ?? '');
+    setReraNumber(listing.reraNumber ?? '');
   }, [listing]);
 
   // Auth guard
@@ -241,6 +243,9 @@ export default function EditListing() {
         bedrooms: bedroomsNum,
         builtArea: builtAreaVal,
         builtAreaUnit: showBuiltArea && builtAreaVal !== undefined ? builtAreaUnit : undefined,
+        reraNumber: (propertyType === 'apartment' || propertyType === 'house')
+          ? (reraNumber.trim() || null)
+          : undefined,
       },
       {
         onSuccess: () => {
@@ -452,6 +457,20 @@ export default function EditListing() {
                       setBuiltAreaUnit(unit);
                     }}
                   />
+                )}
+
+                {/* RERA Number — apartment / house only */}
+                {(propertyType === 'apartment' || propertyType === 'house') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="reraNumber">RERA Number (optional)</Label>
+                    <Input
+                      id="reraNumber"
+                      placeholder="e.g., PRM/KA/RERA/1251/..."
+                      maxLength={80}
+                      value={reraNumber}
+                      onChange={(e) => setReraNumber(e.target.value)}
+                    />
+                  </div>
                 )}
 
                 {/* Step 1 action */}

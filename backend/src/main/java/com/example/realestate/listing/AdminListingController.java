@@ -120,7 +120,8 @@ public class AdminListingController {
                 l.getLatitude(), l.getLongitude(),
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount, firstImageUrl, l.getVideoUrl());
+                imageCount, firstImageUrl, l.getVideoUrl(),
+                l.getReraNumber());
     }
 
     // ===== DTOs =====
