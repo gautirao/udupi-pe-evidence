@@ -232,6 +232,47 @@ export function useDeleteListing() {
 }
 
 /**
+ * Duplicates an existing listing by fetching it and creating a new DRAFT
+ * with the same core fields (type, title, locality, price, description, areas).
+ * Images, address, and video are NOT copied — the dealer adds those fresh.
+ */
+export function useDuplicateListing() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (sourceId: string) => {
+      const source = await api.get<ListingResponse>(`/api/listings/${sourceId}`);
+      return api.post<ListingResponse>('/api/listings', {
+        propertyType: source.propertyType,
+        title: source.title ? `Copy of ${source.title}` : undefined,
+        locality: source.locality ?? undefined,
+        price: source.price ?? undefined,
+        description: source.description ?? undefined,
+        landArea: source.landArea ?? undefined,
+        landAreaUnit: source.landAreaUnit ?? undefined,
+        bedrooms: source.bedrooms ?? undefined,
+        builtArea: source.builtArea ?? undefined,
+        builtAreaUnit: source.builtAreaUnit ?? undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      toast({ title: 'Listing duplicated', description: 'Edit your new draft to customize it.' });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to duplicate listing',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
  * Submits a listing for review via POST /api/listings/{id}/submit.
  * Backend validates address_confirmed=true, imageCount>=3, and required fields.
  * Throws an error with `.status` and `.body` attached for 422 responses.

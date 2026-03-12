@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   useDealerMyListingsInfinite,
   useDeleteListing,
+  useDuplicateListing,
   useSubmitListing,
   type ListingResponse,
 } from '@/hooks/useDealerListings';
@@ -30,7 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Building2, CalendarDays, Eye, ImageIcon, Loader2 } from 'lucide-react';
+import { AlertCircle, Building2, CalendarDays, Copy, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -130,6 +131,37 @@ function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
       </Button>
       <p className="text-xs text-muted-foreground mt-1">{hint}</p>
     </div>
+  );
+}
+
+/**
+ * Duplicate button — creates a new DRAFT by copying core fields from an existing listing.
+ * Separate component so hooks are called at top level (not inside .map()).
+ */
+function DuplicateButton({ listing }: { listing: ListingResponse }) {
+  const navigate = useNavigate();
+  const duplicateMutation = useDuplicateListing();
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={duplicateMutation.isPending}
+      onClick={() => {
+        duplicateMutation.mutate(listing.id, {
+          onSuccess: (newListing) => {
+            navigate(`/dealer/listings/${newListing.id}/edit`);
+          },
+        });
+      }}
+    >
+      {duplicateMutation.isPending ? (
+        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+      ) : (
+        <Copy className="h-3.5 w-3.5 mr-1" />
+      )}
+      Duplicate
+    </Button>
   );
 }
 
@@ -348,6 +380,7 @@ export default function DealerListings() {
                         {listing.status === 'LIVE' ? 'View' : 'Preview'}
                       </Link>
                     </Button>
+                    <DuplicateButton listing={listing} />
                     {listing.status === 'LIVE' && (
                       <Button variant="outline" size="sm" asChild>
                         <Link to={`/dealer/bookings?listingId=${listing.id}`}>
