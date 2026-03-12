@@ -66,9 +66,20 @@ class AreaUnitConverterTest {
 
         @ParameterizedTest
         @NullAndEmptySource
-        @ValueSource(strings = {"  ", "acre", "hectare", "unknown", "guntha"})
+        @ValueSource(strings = {"  ", "hectare", "unknown", "guntha"})
         void returnsNullForUnrecognizedUnits(String input) {
             assertThat(AreaUnitConverter.normalizeUnit(input)).isNull();
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+                "acre, acre",
+                "acres, acre",
+                "ACRE, acre",
+                "ACRES, acre"
+        })
+        void normalizesAcreVariants(String input, String expected) {
+            assertThat(AreaUnitConverter.normalizeUnit(input)).isEqualTo(expected);
         }
 
         @ParameterizedTest
@@ -149,7 +160,7 @@ class AreaUnitConverterTest {
 
         @Test
         void returnsNullForUnrecognizedUnit() {
-            assertThat(AreaUnitConverter.toCent(new BigDecimal("100"), "acre")).isNull();
+            assertThat(AreaUnitConverter.toCent(new BigDecimal("100"), "hectare")).isNull();
         }
 
         @Test
@@ -174,6 +185,20 @@ class AreaUnitConverterTest {
             // 4 guntas = 4356 sqft = 10 cents exactly
             BigDecimal result = AreaUnitConverter.toCent(new BigDecimal("4"), "guntas");
             assertThat(result).isEqualByComparingTo("10");
+        }
+
+        @Test
+        void acreToCentConversion() {
+            // 1 acre = 100 cents
+            BigDecimal result = AreaUnitConverter.toCent(new BigDecimal("1"), "acre");
+            assertThat(result).isEqualByComparingTo("100");
+        }
+
+        @Test
+        void acresToCentConversionVariant() {
+            // 2.5 acres = 250 cents
+            BigDecimal result = AreaUnitConverter.toCent(new BigDecimal("2.5"), "acres");
+            assertThat(result).isEqualByComparingTo("250");
         }
     }
 
@@ -283,6 +308,20 @@ class AreaUnitConverterTest {
 
             Long pricePerCent = AreaUnitConverter.computePricePerCentPaise(250000000L, areaCent);
             assertThat(pricePerCent).isEqualTo(50000000L);
+        }
+
+        @Test
+        void endToEndAcreConversion() {
+            // 1 acre at 1 crore rupees
+            // 1 crore = 10000000 rupees = 1000000000 paise
+            // 1 acre = 100 cents
+            // Price per cent = 1000000000 / 100 = 10000000 paise (1 lakh per cent)
+
+            BigDecimal areaCent = AreaUnitConverter.toCent(new BigDecimal("1"), "acre");
+            assertThat(areaCent).isEqualByComparingTo("100");
+
+            Long pricePerCent = AreaUnitConverter.computePricePerCentPaise(1000000000L, areaCent);
+            assertThat(pricePerCent).isEqualTo(10000000L);
         }
     }
 }

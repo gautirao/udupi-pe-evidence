@@ -203,7 +203,7 @@ class AreaNormalizerTest {
         @ParameterizedTest
         @DisplayName("Unknown units return empty")
         @ValueSource(strings = {
-            "acre", "acres", "hectare", "ha",
+            "hectare", "ha",
             "guntha", "ground",
             "are", "ares", "unknown", "xyz"
         })
@@ -257,6 +257,55 @@ class AreaNormalizerTest {
             "guntas", "GUNTAS"
         })
         void guntaVariations_recognized(String unit) {
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), unit);
+
+            assertThat(result.areaSqm()).isNotNull();
+            assertThat(result.areaSqft()).isNotNull();
+            assertThat(result.areaCent()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("normalize - ACRE input")
+    class NormalizeAcreTests {
+
+        @Test
+        @DisplayName("1 acre = 43560 sqft exactly")
+        void oneAcre_sqftIsExact() {
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), "acre");
+
+            assertThat(result.areaSqft()).isEqualByComparingTo(new BigDecimal("43560"));
+        }
+
+        @Test
+        @DisplayName("1 acre = 100 cents")
+        void oneAcre_centIsCorrect() {
+            // 43560 sqft / 435.6 sqft/cent = 100 cents
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), "acre");
+
+            assertThat(result.areaCent()).isEqualByComparingTo(new BigDecimal("100"));
+        }
+
+        @Test
+        @DisplayName("1 acre sqm conversion correct")
+        void oneAcre_sqmIsCorrect() {
+            // 43560 sqft / 10.7639104167 sqft/sqm ≈ 4046.86 sqm
+            AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
+                    new BigDecimal("1"), "acre");
+
+            assertThat(result.areaSqm()).isCloseTo(new BigDecimal("4046.86"), within(new BigDecimal("0.01")));
+        }
+
+        @ParameterizedTest
+        @DisplayName("ACRE unit variations are recognized")
+        @CsvSource({
+            "acre", "ACRE", "Acre",
+            "acres", "ACRES"
+        })
+        void acreVariations_recognized(String unit) {
             AreaNormalizer.NormalizedArea result = AreaNormalizer.normalize(
                     new BigDecimal("1"), unit);
 
@@ -469,7 +518,7 @@ class AreaNormalizerTest {
         void invalidArea_producesNullPrice() {
             // Step 1: Unknown unit returns empty
             AreaNormalizer.NormalizedArea normalized = AreaNormalizer.normalize(
-                    new BigDecimal("100"), "acre");
+                    new BigDecimal("100"), "hectare");
 
             assertThat(normalized.areaCent()).isNull();
 

@@ -46,6 +46,55 @@ vi.mock('@/components/dealer/ImageUploader', () => ({
   },
 }));
 
+// AreaField uses Radix UI Select which needs portal mounting. Mock it with a
+// simple input + select so EditListing unit tests stay focused on page behaviour.
+vi.mock('@/components/dealer/AreaField', () => ({
+  AreaField: ({
+    id,
+    label,
+    propertyType,
+    initialArea,
+    initialUnit,
+    onChange,
+  }: {
+    id?: string;
+    label?: string;
+    propertyType: string;
+    initialArea?: number | null;
+    initialUnit?: string | null;
+    onChange: (area: number | null, unit: string) => void;
+    required?: boolean;
+  }) => {
+    const fieldId = id ?? 'area';
+    const defaultLabel = propertyType === 'land' ? 'Land Area' : 'Built Area';
+    const [value, setValue] = React.useState(
+      initialArea != null ? String(initialArea) : '',
+    );
+    const [unit, setUnit] = React.useState(initialUnit ?? 'sqft');
+    React.useEffect(() => {
+      if (initialArea != null) setValue(String(initialArea));
+    }, [initialArea]);
+    React.useEffect(() => {
+      if (initialUnit != null) setUnit(initialUnit);
+    }, [initialUnit]);
+    return React.createElement(
+      'div',
+      null,
+      React.createElement('label', { htmlFor: fieldId }, label ?? defaultLabel),
+      React.createElement('input', {
+        id: fieldId,
+        type: 'number',
+        value,
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+          setValue(e.target.value);
+          const num = parseFloat(e.target.value);
+          onChange(isNaN(num) || num <= 0 ? null : num, unit);
+        },
+      }),
+    );
+  },
+}));
+
 // PriceField uses Radix UI Slider which requires ResizeObserver. Mock it with a
 // simple controlled input so EditListing unit tests stay focused on page behaviour.
 vi.mock('@/components/dealer/PriceField', () => ({

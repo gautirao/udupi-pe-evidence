@@ -23,11 +23,11 @@ import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/dealer/ImageUploader';
 import { useListingImages } from '@/hooks/useListingImages';
 import { PriceField } from '@/components/dealer/PriceField';
+import { AreaField } from '@/components/dealer/AreaField';
 import { AddressPicker } from '@/components/dealer/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/dealer/StepIndicator';
 import { ApiError } from '@/lib/api';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 const VIDEO_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
@@ -81,12 +81,11 @@ export default function EditListing() {
   const [priceRupees, setPriceRupees] = useState<number | null>(null);
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
   const [locality, setLocality] = useState('');
-  const [landArea, setLandArea] = useState('');
+  const [landArea, setLandArea] = useState<number | null>(null);
   // Unit for land area; default 'cent' (dominant Udupi/Karnataka unit).
-  // Falls back to 'sqft' when loading an existing listing that has no saved unit.
   const [landAreaUnit, setLandAreaUnit] = useState('cent');
   const [bedrooms, setBedrooms] = useState('');
-  const [builtArea, setBuiltArea] = useState('');
+  const [builtArea, setBuiltArea] = useState<number | null>(null);
   // Unit for built area; default 'sqft'.
   const [builtAreaUnit, setBuiltAreaUnit] = useState('sqft');
   // Inline unit-validation errors (only shown when area has a value but unit is missing)
@@ -108,11 +107,12 @@ export default function EditListing() {
     setPriceRupees(listing.price ?? null);
     setPropertyType((listing.propertyType as PropertyType) ?? '');
     setLocality(listing.locality ?? '');
-    setLandArea(listing.landArea != null ? String(listing.landArea) : '');
-    // Existing listings saved before unit support have null unit — fall back to 'sqft'
-    setLandAreaUnit(listing.landAreaUnit ?? 'sqft');
+    setLandArea(listing.landArea);
+    // Existing listings saved before unit support have null unit — fall back to 'cent'
+    // (dominant Udupi/Karnataka unit, matches NewListing default)
+    setLandAreaUnit(listing.landAreaUnit ?? 'cent');
     setBedrooms(listing.bedrooms != null ? String(listing.bedrooms) : '');
-    setBuiltArea(listing.builtArea != null ? String(listing.builtArea) : '');
+    setBuiltArea(listing.builtArea);
     setBuiltAreaUnit(listing.builtAreaUnit ?? 'sqft');
     setVideoUrl(listing.videoUrl ?? '');
   }, [listing]);
@@ -220,25 +220,14 @@ export default function EditListing() {
   const handleStep1Save = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const landAreaNum = landArea !== '' ? parseFloat(landArea) : undefined;
     const bedroomsNum = bedrooms !== '' ? parseInt(bedrooms, 10) : undefined;
-    const builtAreaNum = builtArea !== '' ? parseFloat(builtArea) : undefined;
+    const landAreaVal = landArea != null && landArea > 0 ? landArea : undefined;
+    const builtAreaVal = builtArea != null && builtArea > 0 ? builtArea : undefined;
 
-    // Block save when area has a value but no unit is selected
-    let hasUnitError = false;
-    if (showLandArea && landAreaNum !== undefined && !landAreaUnit) {
-      setLandAreaUnitError('Please select a unit for land area');
-      hasUnitError = true;
-    } else {
-      setLandAreaUnitError('');
-    }
-    if (showBuiltArea && builtAreaNum !== undefined && !builtAreaUnit) {
-      setBuiltAreaUnitError('Please select a unit for built area');
-      hasUnitError = true;
-    } else {
-      setBuiltAreaUnitError('');
-    }
-    if (hasUnitError) return;
+    // Unit validation is now handled by AreaField (unit is always set via Select).
+    // Clear any stale errors from before the AreaField migration.
+    setLandAreaUnitError('');
+    setBuiltAreaUnitError('');
 
     updateListing.mutate(
       {
@@ -247,11 +236,11 @@ export default function EditListing() {
         price: priceRupees ?? undefined,
         propertyType: propertyType || undefined,
         locality: locality.trim() || undefined,
-        landArea: landAreaNum,
-        landAreaUnit: showLandArea && landAreaNum !== undefined ? landAreaUnit : undefined,
+        landArea: landAreaVal,
+        landAreaUnit: showLandArea && landAreaVal !== undefined ? landAreaUnit : undefined,
         bedrooms: bedroomsNum,
-        builtArea: builtAreaNum,
-        builtAreaUnit: showBuiltArea && builtAreaNum !== undefined ? builtAreaUnit : undefined,
+        builtArea: builtAreaVal,
+        builtAreaUnit: showBuiltArea && builtAreaVal !== undefined ? builtAreaUnit : undefined,
       },
       {
         onSuccess: () => {
@@ -422,31 +411,16 @@ export default function EditListing() {
 
                 {/* Land Area — land only */}
                 {showLandArea && (
-                  <div className="space-y-2">
-                    <Label htmlFor="landArea">Land Area</Label>
-                    <Input
-                      id="landArea"
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 2400"
-                      value={landArea}
-                      onChange={(e) => setLandArea(e.target.value)}
-                    />
-                    <ToggleGroup
-                      type="single"
-                      value={landAreaUnit}
-                      onValueChange={(v) => { if (v) setLandAreaUnit(v); }}
-                      className="justify-start"
-                    >
-                      <ToggleGroupItem value="cent" aria-label="Cents">Cents</ToggleGroupItem>
-                      <ToggleGroupItem value="gunta" aria-label="Guntas">Guntas</ToggleGroupItem>
-                      <ToggleGroupItem value="sqft" aria-label="Sq Ft">Sq Ft</ToggleGroupItem>
-                      <ToggleGroupItem value="sqm" aria-label="Sq M">Sq M</ToggleGroupItem>
-                    </ToggleGroup>
-                    {landAreaUnitError && (
-                      <p className="text-sm text-destructive">{landAreaUnitError}</p>
-                    )}
-                  </div>
+                  <AreaField
+                    id="landArea"
+                    propertyType="land"
+                    initialArea={landArea}
+                    initialUnit={landAreaUnit}
+                    onChange={(area, unit) => {
+                      setLandArea(area);
+                      setLandAreaUnit(unit);
+                    }}
+                  />
                 )}
 
                 {/* Bedrooms — apartment / house */}
@@ -467,29 +441,17 @@ export default function EditListing() {
 
                 {/* Built Area — apartment / house */}
                 {showBuiltArea && (
-                  <div className="space-y-2">
-                    <Label htmlFor="builtArea">Built Area</Label>
-                    <Input
-                      id="builtArea"
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 1200"
-                      value={builtArea}
-                      onChange={(e) => setBuiltArea(e.target.value)}
-                    />
-                    <ToggleGroup
-                      type="single"
-                      value={builtAreaUnit}
-                      onValueChange={(v) => { if (v) setBuiltAreaUnit(v); }}
-                      className="justify-start"
-                    >
-                      <ToggleGroupItem value="sqft" aria-label="Sq Ft">Sq Ft</ToggleGroupItem>
-                      <ToggleGroupItem value="sqm" aria-label="Sq M">Sq M</ToggleGroupItem>
-                    </ToggleGroup>
-                    {builtAreaUnitError && (
-                      <p className="text-sm text-destructive">{builtAreaUnitError}</p>
-                    )}
-                  </div>
+                  <AreaField
+                    id="builtArea"
+                    label="Built Area"
+                    propertyType={propertyType as 'house' | 'apartment'}
+                    initialArea={builtArea}
+                    initialUnit={builtAreaUnit}
+                    onChange={(area, unit) => {
+                      setBuiltArea(area);
+                      setBuiltAreaUnit(unit);
+                    }}
+                  />
                 )}
 
                 {/* Step 1 action */}

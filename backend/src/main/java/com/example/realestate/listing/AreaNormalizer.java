@@ -22,6 +22,8 @@ public final class AreaNormalizer {
     private static final BigDecimal SQFT_PER_CENT = new BigDecimal("435.6");
     // 1 gunta = 1089 sq ft (exact)
     private static final BigDecimal SQFT_PER_GUNTA = new BigDecimal("1089");
+    // 1 acre = 43560 sq ft (exact)
+    private static final BigDecimal SQFT_PER_ACRE = new BigDecimal("43560");
 
     // Derived: sqm per cent = sqft_per_cent / sqft_per_sqm
     private static final BigDecimal SQM_PER_CENT = SQFT_PER_CENT.divide(SQFT_PER_SQM, 20, RoundingMode.HALF_UP);
@@ -95,6 +97,13 @@ public final class AreaNormalizer {
                 areaSqm = asSqft.divide(SQFT_PER_SQM, AREA_SCALE, RoundingMode.HALF_UP);
                 areaCent = asSqft.divide(SQFT_PER_CENT, AREA_SCALE, RoundingMode.HALF_UP);
             }
+            case ACRE -> {
+                // 1 acre = 43560 sqft; delegate to sqft conversion path
+                BigDecimal asSqft = landArea.multiply(SQFT_PER_ACRE);
+                areaSqft = asSqft.setScale(AREA_SCALE, RoundingMode.HALF_UP);
+                areaSqm = asSqft.divide(SQFT_PER_SQM, AREA_SCALE, RoundingMode.HALF_UP);
+                areaCent = asSqft.divide(SQFT_PER_CENT, AREA_SCALE, RoundingMode.HALF_UP);
+            }
             default -> {
                 return NormalizedArea.empty();
             }
@@ -144,7 +153,7 @@ public final class AreaNormalizer {
      * Internal enum for recognized area units.
      */
     private enum AreaUnit {
-        SQM, SQFT, CENT, GUNTA
+        SQM, SQFT, CENT, GUNTA, ACRE
     }
 
     /**
@@ -195,6 +204,12 @@ public final class AreaNormalizer {
         if (normalized.equals("gunta") ||
             normalized.equals("guntas")) {
             return AreaUnit.GUNTA;
+        }
+
+        // ACRE aliases (1 acre = 43560 sqft)
+        if (normalized.equals("acre") ||
+            normalized.equals("acres")) {
+            return AreaUnit.ACRE;
         }
 
         return null;

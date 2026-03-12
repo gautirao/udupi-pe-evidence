@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PriceField } from '@/components/dealer/PriceField';
+import { AreaField } from '@/components/dealer/AreaField';
 import { StepIndicator } from '@/components/dealer/StepIndicator';
 import {
   Select,
@@ -20,7 +21,6 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
@@ -43,7 +43,7 @@ export default function NewListing() {
   const [description, setDescription] = useState('');
 
   // Conditional field state (captured for UX; persisted on edit page via PUT)
-  const [landArea, setLandArea] = useState('');
+  const [landArea, setLandArea] = useState<number | null>(null);
   // Default 'cent' — dominant Udupi/Karnataka unit
   const [landAreaUnit, setLandAreaUnit] = useState('cent');
   const [bedrooms, setBedrooms] = useState('');
@@ -78,10 +78,9 @@ export default function NewListing() {
       return;
     }
 
-    const landAreaNum = landArea ? parseFloat(landArea) : undefined;
     const bedroomsNum = bedrooms ? parseInt(bedrooms, 10) : undefined;
 
-    const resolvedLandArea = landAreaNum && !isNaN(landAreaNum) ? landAreaNum : undefined;
+    const resolvedLandArea = landArea != null && landArea > 0 ? landArea : undefined;
 
     createListing.mutate(
       {
@@ -159,31 +158,16 @@ export default function NewListing() {
 
             {/* Conditional: Land Area */}
             {propertyType === 'land' && (
-              <div className="space-y-2">
-                <Label htmlFor="landArea">Land Area</Label>
-                <Input
-                  id="landArea"
-                  type="number"
-                  min="0"
-                  placeholder="e.g. 2400"
-                  value={landArea}
-                  onChange={(e) => setLandArea(e.target.value)}
-                />
-                <ToggleGroup
-                  type="single"
-                  value={landAreaUnit}
-                  onValueChange={(v) => { if (v) setLandAreaUnit(v); }}
-                  className="justify-start"
-                >
-                  <ToggleGroupItem value="cent" aria-label="Cents">Cents</ToggleGroupItem>
-                  <ToggleGroupItem value="gunta" aria-label="Guntas">Guntas</ToggleGroupItem>
-                  <ToggleGroupItem value="sqft" aria-label="Sq Ft">Sq Ft</ToggleGroupItem>
-                  <ToggleGroupItem value="sqm" aria-label="Sq M">Sq M</ToggleGroupItem>
-                </ToggleGroup>
-                <p className="text-xs text-muted-foreground">
-                  You can update this on the edit page after saving.
-                </p>
-              </div>
+              <AreaField
+                id="landArea"
+                propertyType="land"
+                initialArea={landArea}
+                initialUnit={landAreaUnit}
+                onChange={(area, unit) => {
+                  setLandArea(area);
+                  setLandAreaUnit(unit);
+                }}
+              />
             )}
 
             {/* Conditional: Bedrooms */}

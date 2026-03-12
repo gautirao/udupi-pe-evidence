@@ -778,8 +778,8 @@ class ListingServiceTest {
         RawPost post = makePost();
         ClassificationResult result = new ClassificationResult(
                 true, PropertyType.LAND, new BigDecimal("5000000"),
-                "Udupi", null, new BigDecimal("1"), "acre",
-                null, null, null, null, "Land 1 acre", 75
+                "Udupi", null, new BigDecimal("1"), "hectare",
+                null, null, null, null, "Land 1 hectare", 75
         );
 
         when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
@@ -787,9 +787,9 @@ class ListingServiceTest {
 
         Listing listing = listingService.createFrom(post, result, "test-model");
 
-        // Unknown unit "acre" should leave normalized fields null
+        // Unknown unit "hectare" should leave normalized fields null
         assertThat(listing.getLandArea()).isEqualByComparingTo(new BigDecimal("1"));
-        assertThat(listing.getLandAreaUnit()).isEqualTo("acre");
+        assertThat(listing.getLandAreaUnit()).isEqualTo("hectare");
         assertThat(listing.getAreaSqm()).isNull();
         assertThat(listing.getAreaSqft()).isNull();
         assertThat(listing.getAreaCent()).isNull();
