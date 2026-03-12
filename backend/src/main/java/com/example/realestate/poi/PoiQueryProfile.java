@@ -46,7 +46,7 @@ public record PoiQueryProfile(
             case "land"       -> LAND;
             case "house"      -> HOUSE;
             case "apartment"  -> APARTMENT;
-            case "commercial" -> COMMERCIAL;
+            case "commercial", "commercial_building", "warehouse", "commercial_land" -> COMMERCIAL;
             default           -> DEFAULT;
         };
     }

@@ -158,6 +158,53 @@ public class Listing {
     @Column(name = "listing_number", insertable = false, updatable = false)
     private Integer listingNumber;
 
+    // --- Commercial & Rent fields ---
+
+    @Column(name = "listing_purpose", nullable = false, length = 10)
+    private String listingPurpose = "sale";
+
+    @Column(name = "carpet_area")
+    private BigDecimal carpetArea;
+
+    @Column(name = "carpet_area_unit", length = 20)
+    private String carpetAreaUnit;
+
+    @Column(name = "floor_number")
+    private Integer floorNumber;
+
+    @Column(name = "total_floors")
+    private Integer totalFloors;
+
+    @Column(name = "furnishing_status", length = 30)
+    private String furnishingStatus;
+
+    @Column(name = "washrooms")
+    private Integer washrooms;
+
+    @Column(name = "parking_count")
+    private Integer parkingCount;
+
+    @Column(name = "road_frontage_ft")
+    private BigDecimal roadFrontageFt;
+
+    @Column(name = "commercial_usage", length = 50)
+    private String commercialUsage;
+
+    @Column(name = "number_of_units")
+    private Integer numberOfUnits;
+
+    /**
+     * Monthly rent in paise (1/100 of a rupee). Nullable — only set for rental listings.
+     */
+    @Column(name = "monthly_rent")
+    private Long monthlyRent;
+
+    @Column(name = "security_deposit_months")
+    private Integer securityDepositMonths;
+
+    @Column(name = "lock_in_months")
+    private Integer lockInMonths;
+
     // --- Dealer workflow fields ---
 
     @Column(name = "rera_number", length = 80)
@@ -563,6 +610,120 @@ public class Listing {
             return null;
         }
         return String.format("PROP-%05d", listingNumber);
+    }
+
+    // --- Commercial & Rent getters/setters ---
+
+    public String getListingPurpose() {
+        return listingPurpose;
+    }
+
+    public void setListingPurpose(String listingPurpose) {
+        this.listingPurpose = listingPurpose;
+    }
+
+    public BigDecimal getCarpetArea() {
+        return carpetArea;
+    }
+
+    public void setCarpetArea(BigDecimal carpetArea) {
+        this.carpetArea = carpetArea;
+    }
+
+    public String getCarpetAreaUnit() {
+        return carpetAreaUnit;
+    }
+
+    public void setCarpetAreaUnit(String carpetAreaUnit) {
+        this.carpetAreaUnit = carpetAreaUnit;
+    }
+
+    public Integer getFloorNumber() {
+        return floorNumber;
+    }
+
+    public void setFloorNumber(Integer floorNumber) {
+        this.floorNumber = floorNumber;
+    }
+
+    public Integer getTotalFloors() {
+        return totalFloors;
+    }
+
+    public void setTotalFloors(Integer totalFloors) {
+        this.totalFloors = totalFloors;
+    }
+
+    public String getFurnishingStatus() {
+        return furnishingStatus;
+    }
+
+    public void setFurnishingStatus(String furnishingStatus) {
+        this.furnishingStatus = furnishingStatus;
+    }
+
+    public Integer getWashrooms() {
+        return washrooms;
+    }
+
+    public void setWashrooms(Integer washrooms) {
+        this.washrooms = washrooms;
+    }
+
+    public Integer getParkingCount() {
+        return parkingCount;
+    }
+
+    public void setParkingCount(Integer parkingCount) {
+        this.parkingCount = parkingCount;
+    }
+
+    public BigDecimal getRoadFrontageFt() {
+        return roadFrontageFt;
+    }
+
+    public void setRoadFrontageFt(BigDecimal roadFrontageFt) {
+        this.roadFrontageFt = roadFrontageFt;
+    }
+
+    public String getCommercialUsage() {
+        return commercialUsage;
+    }
+
+    public void setCommercialUsage(String commercialUsage) {
+        this.commercialUsage = commercialUsage;
+    }
+
+    public Integer getNumberOfUnits() {
+        return numberOfUnits;
+    }
+
+    public void setNumberOfUnits(Integer numberOfUnits) {
+        this.numberOfUnits = numberOfUnits;
+    }
+
+    public Long getMonthlyRent() {
+        return monthlyRent;
+    }
+
+    public void setMonthlyRent(Long monthlyRent) {
+        this.monthlyRent = monthlyRent;
+    }
+
+    public Integer getSecurityDepositMonths() {
+        return securityDepositMonths;
+    }
+
+    public void setSecurityDepositMonths(Integer securityDepositMonths) {
+        this.securityDepositMonths = securityDepositMonths;
+    }
+
+    public Integer getLockInMonths() {
+        return lockInMonths;
+    }
+
+    public void setLockInMonths(Integer lockInMonths) {
+        this.lockInMonths = lockInMonths;
     }
 
     @PrePersist

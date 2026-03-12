@@ -389,6 +389,26 @@ class OverpassServiceTest {
         assertThat(p).isEqualTo(PoiQueryProfile.DEFAULT);
     }
 
+    @Test
+    void queryProfile_commercialBuilding_mapsToCommercial() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType("commercial_building");
+        assertThat(p).isEqualTo(PoiQueryProfile.COMMERCIAL);
+        assertThat(p.amenityRadiusMeters()).isEqualTo(1_000);
+        assertThat(p.hasSettlementQueries()).isTrue();
+    }
+
+    @Test
+    void queryProfile_warehouse_mapsToCommercial() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType("warehouse");
+        assertThat(p).isEqualTo(PoiQueryProfile.COMMERCIAL);
+    }
+
+    @Test
+    void queryProfile_commercialLand_mapsToCommercial() {
+        PoiQueryProfile p = PoiQueryProfile.forPropertyType("commercial_land");
+        assertThat(p).isEqualTo(PoiQueryProfile.COMMERCIAL);
+    }
+
     // ===== 6. Cap: top 3 per category =====
 
     @Test
