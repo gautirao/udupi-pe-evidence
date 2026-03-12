@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
+import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check
@@ -302,6 +303,11 @@ export default function ListingDetail() {
                 )}
               </div>
               <h1 className="text-2xl md:text-3xl font-bold mb-2">{title}</h1>
+              {listing.listing_number != null && (
+                <p className="font-mono text-sm text-muted-foreground mb-2">
+                  {formatListingId(listing.listing_number)}
+                </p>
+              )}
               {listing.price && (
                 <p className="text-2xl font-bold text-primary">
                   {formatPrice(listing.price, listing.price_unit)}

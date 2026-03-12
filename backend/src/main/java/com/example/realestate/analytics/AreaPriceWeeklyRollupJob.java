@@ -88,6 +88,7 @@ public class AreaPriceWeeklyRollupJob {
             WHERE area_key IS NOT NULL
               AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
+              AND is_valid = true
               AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
             GROUP BY area_key, DATE_TRUNC('week', created_at)::date
@@ -122,6 +123,7 @@ public class AreaPriceWeeklyRollupJob {
             WHERE area_key IS NOT NULL
               AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
+              AND is_valid = true
               AND property_type IS NOT NULL
               AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
@@ -157,6 +159,7 @@ public class AreaPriceWeeklyRollupJob {
             WHERE area_key IS NOT NULL
               AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
+              AND is_valid = true
               AND bedrooms IS NOT NULL AND bedrooms > 0
               AND status IN ('SCRAPED', 'LIVE')
               AND DATE_TRUNC('week', created_at)::date >= ?
@@ -192,6 +195,7 @@ public class AreaPriceWeeklyRollupJob {
             WHERE area_key IS NOT NULL
               AND price_per_cent_paise IS NOT NULL
               AND is_duplicate = false
+              AND is_valid = true
               AND property_type IS NOT NULL
               AND bedrooms IS NOT NULL AND bedrooms > 0
               AND status IN ('SCRAPED', 'LIVE')

@@ -56,6 +56,8 @@ export interface ListingResponse {
   firstImageUrl: string | null;
   rejectionReason: string | null;
   videoUrl: string | null;
+  listingNumber?: number;
+  displayId?: string;
   createdAt: string;
   updatedAt: string;
 }

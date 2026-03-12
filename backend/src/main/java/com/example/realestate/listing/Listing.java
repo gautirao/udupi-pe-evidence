@@ -151,6 +151,13 @@ public class Listing {
     @Column(name = "parsed_data", columnDefinition = "jsonb")
     private String parsedData;
 
+    /**
+     * Sequential listing number assigned by the database (via listing_number_seq).
+     * Used to generate human-friendly display IDs like "PROP-00042".
+     */
+    @Column(name = "listing_number", insertable = false, updatable = false)
+    private Integer listingNumber;
+
     // --- Dealer workflow fields ---
 
     @Column(name = "address_confirmed", nullable = false)
@@ -526,6 +533,25 @@ public class Listing {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Integer getListingNumber() {
+        return listingNumber;
+    }
+
+    public void setListingNumber(Integer listingNumber) {
+        this.listingNumber = listingNumber;
+    }
+
+    /**
+     * Returns the human-friendly display ID in "PROP-XXXXX" format.
+     * Returns null if listingNumber has not yet been assigned (pre-persist).
+     */
+    public String getDisplayId() {
+        if (listingNumber == null) {
+            return null;
+        }
+        return String.format("PROP-%05d", listingNumber);
     }
 
     @PrePersist

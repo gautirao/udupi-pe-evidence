@@ -1291,4 +1291,188 @@ class ListingServiceTest {
         verify(applicationEventPublisher, never()).publishEvent(
                 any(ListingService.SettlementEnrichmentRequestedEvent.class));
     }
+
+    // --- RE-83: getDisplayId() ---
+
+    @Test
+    void getDisplayId_1_returnsPROPDash00001() {
+        Listing listing = new Listing();
+        listing.setListingNumber(1);
+        assertThat(listing.getDisplayId()).isEqualTo("PROP-00001");
+    }
+
+    @Test
+    void getDisplayId_42_returnsPROPDash00042() {
+        Listing listing = new Listing();
+        listing.setListingNumber(42);
+        assertThat(listing.getDisplayId()).isEqualTo("PROP-00042");
+    }
+
+    @Test
+    void getDisplayId_99999_returnsPROPDash99999() {
+        Listing listing = new Listing();
+        listing.setListingNumber(99999);
+        assertThat(listing.getDisplayId()).isEqualTo("PROP-99999");
+    }
+
+    @Test
+    void getDisplayId_nullListingNumber_returnsNull() {
+        Listing listing = new Listing();
+        assertThat(listing.getDisplayId()).isNull();
+    }
+
+    // --- RE-83: dedupe hash consistency ---
+
+    @Test
+    void computeDedupeHash_sameInputs_returnsSameHash() {
+        String hash1 = listingService.computeDedupeHash("Nice plot", "Manipal", new BigDecimal("5000000"));
+        String hash2 = listingService.computeDedupeHash("Nice plot", "Manipal", new BigDecimal("5000000"));
+        assertThat(hash1).isEqualTo(hash2);
+    }
+
+    @Test
+    void computeDedupeHash_differentInputs_returnsDifferentHash() {
+        String hash1 = listingService.computeDedupeHash("Nice plot", "Manipal", new BigDecimal("5000000"));
+        String hash2 = listingService.computeDedupeHash("Nice plot", "Udupi", new BigDecimal("5000000"));
+        assertThat(hash1).isNotEqualTo(hash2);
+    }
+
+    @Test
+    void computeDedupeHash_nullDescription_usesEmptyString() {
+        String hash1 = listingService.computeDedupeHash(null, "Manipal", new BigDecimal("5000000"));
+        String hash2 = listingService.computeDedupeHash("", "Manipal", new BigDecimal("5000000"));
+        assertThat(hash1).isEqualTo(hash2);
+    }
+
+    @Test
+    void computeDedupeHash_caseInsensitive() {
+        String hash1 = listingService.computeDedupeHash("Nice Plot", "MANIPAL", new BigDecimal("5000000"));
+        String hash2 = listingService.computeDedupeHash("nice plot", "manipal", new BigDecimal("5000000"));
+        assertThat(hash1).isEqualTo(hash2);
+    }
+
+    // --- RE-83: createDraft sets dedupe hash and flags duplicates ---
+
+    @Test
+    void createDraft_setsDedupeHash() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = listingService.createDraft(userId, "land", "Plot", "Manipal",
+                new BigDecimal("5000000"), "Nice plot");
+
+        assertThat(draft.getDedupeHash()).isNotNull();
+        assertThat(draft.getDedupeHash()).isNotEmpty();
+    }
+
+    @Test
+    void createDraft_duplicateInputs_secondDraftFlaggedAsDuplicate() {
+        UUID userId = UUID.randomUUID();
+
+        // First draft
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing first = listingService.createDraft(userId, "land", "Plot", "Manipal",
+                new BigDecimal("5000000"), "Nice plot");
+        assertThat(first.isDuplicate()).isFalse();
+
+        // Second draft with same inputs — existsByDedupeHash now returns true
+        when(listingRepository.existsByDedupeHash(any())).thenReturn(true);
+        when(listingRepository.countByDedupeHash(any())).thenReturn(1L);
+
+        Listing second = listingService.createDraft(userId, "land", "Plot", "Manipal",
+                new BigDecimal("5000000"), "Nice plot");
+        assertThat(second.isDuplicate()).isTrue();
+        assertThat(second.getRepostCount()).isEqualTo(1);
+    }
+
+    // --- RE-83: updateListing recomputes hash, excludes self ---
+
+    @Test
+    void updateListing_priceChange_recomputesHash() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setDescription("Nice plot");
+        existing.setLocality("Manipal");
+        existing.setPrice(new BigDecimal("5000000"));
+
+        String originalHash = listingService.computeDedupeHash("Nice plot", "Manipal", new BigDecimal("5000000"));
+        existing.setDedupeHash(originalHash);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.countByDedupeHashAndIdNot(any(), any())).thenReturn(0L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, new BigDecimal("6000000"), null,
+                null, null, null, null,
+                null, null, null, null, null, false);
+
+        String expectedHash = listingService.computeDedupeHash("Nice plot", "Manipal", new BigDecimal("6000000"));
+        assertThat(result.getDedupeHash()).isEqualTo(expectedHash);
+        assertThat(result.getDedupeHash()).isNotEqualTo(originalHash);
+    }
+
+    @Test
+    void updateListing_selfMatchDoesNotFlagDuplicate() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setDescription("Nice plot");
+        existing.setLocality("Manipal");
+        existing.setPrice(new BigDecimal("5000000"));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        // Self-match only: countByDedupeHashAndIdNot excludes self, returns 0
+        when(listingRepository.countByDedupeHashAndIdNot(any(), eq(listingId))).thenReturn(0L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, "Updated description",
+                null, null, null, null,
+                null, null, null, null, null, false);
+
+        assertThat(result.isDuplicate()).isFalse();
+        assertThat(result.getRepostCount()).isEqualTo(0);
+    }
+
+    @Test
+    void updateListing_otherMatchFlagsDuplicate() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setDescription("Nice plot");
+        existing.setLocality("Manipal");
+        existing.setPrice(new BigDecimal("5000000"));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        // Another listing has same hash: countByDedupeHashAndIdNot returns 1
+        when(listingRepository.countByDedupeHashAndIdNot(any(), eq(listingId))).thenReturn(1L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, "Same as another listing",
+                null, null, null, null,
+                null, null, null, null, null, false);
+
+        assertThat(result.isDuplicate()).isTrue();
+        assertThat(result.getRepostCount()).isEqualTo(1);
+    }
 }

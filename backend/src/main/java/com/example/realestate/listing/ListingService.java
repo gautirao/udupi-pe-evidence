@@ -232,6 +232,53 @@ public class ListingService {
     }
 
     /**
+     * Compute dedupe hash from the listing's description, locality, and price,
+     * and set it on the listing entity.
+     */
+    private void computeAndSetDedupeHash(Listing listing, String description, String locality, BigDecimal price) {
+        String hash = computeDedupeHash(description, locality, price);
+        listing.setDedupeHash(hash);
+    }
+
+    /**
+     * Check if a listing with the same dedupe hash already exists.
+     * If so, mark this listing as a duplicate.
+     * For new listings (no ID yet), any existing match counts.
+     */
+    private void checkAndMarkDuplicate(Listing listing) {
+        String hash = listing.getDedupeHash();
+        if (hash != null && listingRepository.existsByDedupeHash(hash)) {
+            listing.setDuplicate(true);
+            long priorCount = listingRepository.countByDedupeHash(hash);
+            listing.setRepostCount((int) priorCount);
+            log.info("Duplicate detected in draft: hash={} repostCount={}", hash, priorCount);
+        }
+    }
+
+    /**
+     * Check if a listing with the same dedupe hash already exists, excluding self.
+     * Used during updates to avoid self-matching.
+     */
+    private void checkAndMarkDuplicateExcludingSelf(Listing listing) {
+        String hash = listing.getDedupeHash();
+        if (hash != null) {
+            long matchCount = listingRepository.countByDedupeHashAndIdNot(hash, listing.getId());
+            if (matchCount > 0) {
+                listing.setDuplicate(true);
+                listing.setRepostCount((int) matchCount);
+                log.info("Duplicate detected in update: hash={} repostCount={} listingId={}",
+                        hash, matchCount, listing.getId());
+            } else {
+                listing.setDuplicate(false);
+                listing.setRepostCount(0);
+            }
+        } else {
+            listing.setDuplicate(false);
+            listing.setRepostCount(0);
+        }
+    }
+
+    /**
      * Compute a deterministic area_key from geocode result components.
      * Format: country|region|city|locality (lowercase, trimmed, spaces->-, punctuation removed)
      * Fallback: if locality is null, use neighborhood; if neighborhood is null, use city.
@@ -369,12 +416,17 @@ public class ListingService {
             AreaNormalizer.normalize(listing);
         }
 
+        // Compute dedupe hash and check for duplicates
+        computeAndSetDedupeHash(listing, description, locality, price);
+        checkAndMarkDuplicate(listing);
+
         OffsetDateTime now = OffsetDateTime.now();
         listing.setCreatedAt(now);
         listing.setUpdatedAt(now);
 
         Listing saved = listingRepository.save(listing);
-        log.info("Created draft listing listingId={} createdBy={}", saved.getId(), createdBy);
+        log.info("Created draft listing listingId={} createdBy={} isDuplicate={}",
+                saved.getId(), createdBy, saved.isDuplicate());
         return saved;
     }
 
@@ -469,6 +521,13 @@ public class ListingService {
         }
         // Only apply when caller explicitly sent the videoUrl field.
         if (applyVideoUrl) listing.setVideoUrl(videoUrl);
+
+        // Recompute dedupe hash if any hash-relevant field changed
+        if (description != null || locality != null || price != null) {
+            computeAndSetDedupeHash(listing, listing.getDescription(), listing.getLocality(), listing.getPrice());
+            checkAndMarkDuplicateExcludingSelf(listing);
+        }
+
         listing.setUpdatedAt(OffsetDateTime.now());
 
         Listing saved = listingRepository.save(listing);
