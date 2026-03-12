@@ -31,6 +31,38 @@ public class EmailService {
     }
 
     /**
+     * Sends a booking notification email to the dealer via Resend.
+     * Fire-and-forget — callers must handle exceptions.
+     *
+     * @param dealerEmail the dealer's email address (required — caller should skip if null)
+     * @param buyerName   buyer's display name, or null (falls back to "A potential buyer")
+     * @param listingTitle listing title, or null (falls back to "your listing")
+     * @param listingId   the listing UUID for the detail link
+     */
+    public void sendBookingNotification(String dealerEmail, String buyerName,
+                                         String listingTitle, UUID listingId) {
+        String safeBuyerName = (buyerName != null && !buyerName.isBlank()) ? buyerName : "A potential buyer";
+        String safeTitle = (listingTitle != null && !listingTitle.isBlank()) ? listingTitle : "your listing";
+
+        String subject = "New viewing request for " + safeTitle;
+        String html = buildBookingHtml(safeBuyerName, safeTitle, listingId);
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setBearerAuth(apiKey);
+
+        Map<String, Object> body = Map.of(
+                "from", fromAddress,
+                "to", new String[]{dealerEmail},
+                "subject", subject,
+                "html", html
+        );
+
+        restTemplate.postForObject(RESEND_EMAILS_URL, new HttpEntity<>(body, headers), Map.class);
+        log.debug("Booking notification email sent to={} listingId={}", dealerEmail, listingId);
+    }
+
+    /**
      * Sends a new-listing alert email via Resend.
      * Fire-and-forget — callers must handle exceptions.
      */
@@ -56,6 +88,17 @@ public class EmailService {
 
         restTemplate.postForObject(RESEND_EMAILS_URL, new HttpEntity<>(body, headers), Map.class);
         log.debug("Alert email sent to={} listingId={}", toEmail, listingId);
+    }
+
+    private String buildBookingHtml(String buyerName, String listingTitle, UUID listingId) {
+        return "<html><body style=\"font-family:sans-serif;\">" +
+               "<h2>New viewing request</h2>" +
+               "<p>" + escapeHtml(buyerName) + " has requested a viewing for " +
+               "<strong>" + escapeHtml(listingTitle) + "</strong>.</p>" +
+               "<p><a href=\"/listing/" + listingId + "\">View listing</a></p>" +
+               "<hr/><p style=\"color:#888;font-size:12px;\">You received this because you are " +
+               "the listing owner on Udupi Properties.</p>" +
+               "</body></html>";
     }
 
     private String buildHtml(String area, String title, String price, UUID listingId) {
