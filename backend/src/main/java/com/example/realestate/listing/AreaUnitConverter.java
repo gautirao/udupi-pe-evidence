@@ -24,6 +24,8 @@ public final class AreaUnitConverter {
      */
     // Conversion: 1 gunta = 1089 sq ft (exact)
     private static final BigDecimal SQFT_PER_GUNTA = new BigDecimal("1089");
+    // 1 acre = 100 cents (exact)
+    private static final BigDecimal CENTS_PER_ACRE = new BigDecimal("100");
 
     private static final Map<String, String> UNIT_ALIASES = Map.ofEntries(
             // Cent aliases
@@ -52,7 +54,10 @@ public final class AreaUnitConverter {
             Map.entry("m²", "sqm"),
             // Gunta aliases (1 gunta = 1089 sqft)
             Map.entry("gunta", "gunta"),
-            Map.entry("guntas", "gunta")
+            Map.entry("guntas", "gunta"),
+            // Acre aliases (1 acre = 100 cents)
+            Map.entry("acre", "acre"),
+            Map.entry("acres", "acre")
     );
 
     private AreaUnitConverter() {
@@ -103,6 +108,7 @@ public final class AreaUnitConverter {
                 BigDecimal sqft = value.multiply(SQFT_PER_GUNTA);
                 yield sqft.divide(SQFT_PER_CENT, CALC_SCALE, ROUNDING);
             }
+            case "acre" -> value.multiply(CENTS_PER_ACRE);
             default -> null;
         };
     }

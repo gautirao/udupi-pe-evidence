@@ -35,31 +35,53 @@ export function formatPrice(price: number, unit?: string | null): string {
 }
 
 /**
- * Format area with unit
+ * Format area with unit.
+ * Handles both singular and plural unit forms (e.g. "cent" and "cents").
+ * Returns empty string for null/undefined area.
  */
-export function formatArea(area: number, unit?: string | null): string {
-  const areaUnit = unit || 'sq ft';
-  
-  if (areaUnit === 'cents') {
+export function formatArea(area: number | null | undefined, unit?: string | null): string {
+  if (area == null) return '';
+
+  const areaUnit = (unit || 'sq ft').toLowerCase().trim();
+
+  // Cents (singular or plural) — backend stores "cent"
+  if (areaUnit === 'cent' || areaUnit === 'cents') {
+    if (area >= 100) {
+      const acres = area / 100;
+      return `${acres.toFixed(2)} acres`;
+    }
     return `${area.toFixed(2)} cents`;
   }
-  
-  if (areaUnit === 'acres') {
+
+  // Acres (singular or plural)
+  if (areaUnit === 'acre' || areaUnit === 'acres') {
     return `${area.toFixed(2)} acres`;
   }
-  
-  // Accept both legacy 'guntha' spelling and new canonical 'gunta'/'guntas'
+
+  // Guntas — compound display for >= 40 guntas (1 acre = 40 guntas)
   if (areaUnit === 'guntha' || areaUnit === 'gunta' || areaUnit === 'guntas') {
-    return `${area.toFixed(2)} guntha`;
+    if (area >= 40) {
+      const acres = Math.floor(area / 40);
+      const remainder = Math.round((area % 40) * 100) / 100;
+      if (remainder > 0) {
+        return `${acres} acre${acres > 1 ? 's' : ''} ${remainder} guntas`;
+      }
+      return `${acres} acre${acres > 1 ? 's' : ''}`;
+    }
+    return `${area.toFixed(2)} guntas`;
   }
-  
-  // Default to sq ft
+
+  // Sq M
+  if (areaUnit === 'sqm' || areaUnit === 'sq m') {
+    return `${area.toLocaleString('en-IN')} sq m`;
+  }
+
+  // Default to sq ft — convert to acres if very large
   if (area >= 43560) {
-    // Convert to acres
     return `${(area / 43560).toFixed(2)} acres`;
   }
-  
-  return `${area.toLocaleString()} ${areaUnit}`;
+
+  return `${area.toLocaleString('en-IN')} sq ft`;
 }
 
 /**

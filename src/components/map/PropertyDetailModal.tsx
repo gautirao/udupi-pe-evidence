@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
-import { formatPrice } from '@/lib/formatters';
+import { formatPrice, formatArea } from '@/lib/formatters';
 import { 
   MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight, 
   ExternalLink, Bath, Building, ImageOff 
@@ -202,7 +202,7 @@ export function PropertyDetailModal({ listing, images, onClose }: PropertyDetail
                   <Ruler className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Land Area</p>
-                    <p className="font-medium">{listing.land_area} {listing.land_area_unit || 'sq ft'}</p>
+                    <p className="font-medium">{formatArea(listing.land_area, listing.land_area_unit)}</p>
                   </div>
                 </div>
               )}
@@ -212,7 +212,7 @@ export function PropertyDetailModal({ listing, images, onClose }: PropertyDetail
                   <Building className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-sm text-muted-foreground">Built Area</p>
-                    <p className="font-medium">{listing.built_area} {listing.built_area_unit || 'sq ft'}</p>
+                    <p className="font-medium">{formatArea(listing.built_area, listing.built_area_unit)}</p>
                   </div>
                 </div>
               )}
