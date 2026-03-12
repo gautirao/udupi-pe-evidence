@@ -74,7 +74,7 @@ const userNavigation = [
 ];
 
 const dealerNavigation = [
-  { name: 'Home', href: '/', icon: Home },
+  { name: 'Dashboard', href: '/dealer/dashboard', icon: Home },
   { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
   { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
   { name: 'Bookings', href: '/dealer/bookings', icon: CalendarCheck2 },
