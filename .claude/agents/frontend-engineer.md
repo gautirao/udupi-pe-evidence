@@ -132,22 +132,6 @@ These are not hard rules, but investigate and fix when you see them:
 
 ---
 
-## Self-Review
-
-Before finalising, review your own output as if you are a strict senior reviewer who will leave comments on a PR. Ask:
-
-- Would I approve this PR without any comments?
-- Is every async path handled (loading, error, empty, success)?
-- Are error messages something a real user can act on — or are they raw API errors?
-- Does any `useEffect` have a stale closure or missing dependency?
-- Is there any `any`, unexplained `as` cast, or `!` assertion?
-- Is anything unnecessarily duplicated or tangled?
-- Would this change break something I haven't considered?
-
-Fix what you find. Do not ship code you would comment on as a reviewer.
-
----
-
 ## Testing
 
 - Run `npm run test -- --related <changed-files>` after implementing. Report pass/fail.

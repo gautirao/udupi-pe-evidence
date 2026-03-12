@@ -38,7 +38,7 @@ Choose the smallest valid path.
 
 ### A) Backend bugfix / small change
 Low risk, single-file, no logic change (e.g. config value, constant, label):
-Routing: qa-fast → backend-engineer
+Routing: backend-engineer
 
 Low/medium risk with logic change:
 Routing: qa-fast → backend-engineer → code-reviewer
@@ -186,51 +186,31 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 
 - When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
 
+- After `qa-fast` completes, include its key findings (Critical Paths, Edge Cases, Risks) in the engineer's Task prompt as `qa-fast context:`. This lets the engineer skip redundant codebase exploration and address flagged risks proactively.
 - `code-reviewer` runs AFTER the engineer completes the implementation.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop and surface to user.
+- **Agent-to-Checkpoint Warning Channel (NEW):** Any agent (`qa-fast`, `code-reviewer`, `security-reviewer`, `architect`, etc.) can emit structured warnings that are captured in the checkpoint's `Risks` field. Format:
+  ```
+  ROUTE_AND_RUN_WARNING: <severity:LOW|MED|HIGH> <message>
+  ```
+  Example from code-reviewer: `ROUTE_AND_RUN_WARNING: MED This PR introduces a second error response format. Consider standardizing in a follow-up.`
+  After each agent completes, parse agent output for any `ROUTE_AND_RUN_WARNING:` lines and collect them. Append all collected warnings to the checkpoint's Risks section with prefix `[<agent-name>] <severity>: <message>`.
 - `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
 
 ---
 
-## Step 3 — E2E Validation Policy (Authoritative)
+## Step 3 — E2E Validation Policy
 
-This is the default E2E policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` inherits this policy and may extend it with sprint-layer skip overrides — but this section is the single source of truth for E2E behavior and the E2E script.
-
-After the final routed agent completes, run the full e2e suite locally before committing:
-
-```bash
-# 1. Start backend via run-local.sh in background
-./backend/run-local.sh > /tmp/backend-e2e.log 2>&1 &
-BACKEND_PID=$!
-
-# 2. Start frontend (Vite) in background
-npm run dev > /tmp/frontend-e2e.log 2>&1 &
-FRONTEND_PID=$!
-
-# 3. Wait for both to be ready (poll until responding)
-VITE_PORT=${VITE_PORT:-5173}
-echo "Waiting for backend..." && until curl -sf http://localhost:8085/actuator/health > /dev/null 2>&1; do sleep 2; done
-echo "Waiting for frontend..." && until curl -sf http://localhost:${VITE_PORT} > /dev/null 2>&1; do sleep 2; done
-
-# 4. Run e2e
-npm run test:e2e:local
-E2E_EXIT=$?
-
-# 5. Stop servers
-kill $BACKEND_PID $FRONTEND_PID 2>/dev/null || true
-
-# 6. Fail the task if e2e failed
-[ $E2E_EXIT -eq 0 ] || exit 1
-```
+E2E validation is handled by the **pre-push git hook** — not by an explicit in-workflow E2E step. This eliminates double E2E runs.
 
 Rules:
-- Run this after code-reviewer (and security-reviewer if applicable) APPROVE.
-- If e2e fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix and re-run.
-- If backend or frontend fails to start within 60s: play `afplay /System/Library/Sounds/Basso.aiff`, surface the error log and stop.
-- **Default skip:** doc-only changes (`*.md`, `docs/`, non-behavioral config) — never skip for code changes.
+- After code-reviewer (and security-reviewer if applicable) APPROVE, proceed directly to commit + push.
+- The pre-push hook runs the full E2E suite automatically during `git push`.
+- If the pre-push hook fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix and re-run.
+- **Default skip:** doc-only changes (`*.md`, `docs/`, non-behavioral config) are not gated by E2E.
 - Sprint-layer callers may declare additional skip overrides — see `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`.
 
 ---

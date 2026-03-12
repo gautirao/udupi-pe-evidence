@@ -69,8 +69,12 @@ If you notice a pre-existing problem in surrounding code:
 For any review:
 
 - Read every changed file fully before forming an opinion
-- Use Grep to find callers of changed public functions, methods, hooks, endpoints, or exported types
 - Check whether tests exist for the changed paths
+
+For changes that modify **public functions, exported types, API endpoints, or hooks**:
+
+- Use Grep to find callers of changed public surfaces
+- Skip caller grep for private/internal methods with no exported surface — focus review on the changed code itself
 
 For security-sensitive or large changes:
 
@@ -273,6 +277,22 @@ No code snippets unless the fix cannot be expressed in one line. No prose paragr
 
 ---
 
+## Warning Channel (Recommendation 3)
+
+If your review surfaces a concern that is worth noting but does **not** block the merge (e.g., a minor code-quality suggestion, or a concern for a follow-up PR), you can emit a structured warning that will be captured in the sprint checkpoint's `Risks` field for visibility and future reference.
+
+Use this sparingly — only for genuine concerns that another agent or future developer should know about:
+
+```
+ROUTE_AND_RUN_WARNING: MED This PR introduces a second error response format. Consider standardizing in a follow-up PR.
+```
+
+Severity levels: `LOW` (minor, cosmetic), `MED` (worth addressing soon), `HIGH` (critical concern but merge can proceed with explicit owner awareness).
+
+The warning will appear in the checkpoint as `[code-reviewer] MED: <message>` and inform the inter-PR plan check (Recommendation 1 in SPRINT_EXECUTOR).
+
+---
+
 ## Self-Verification
 
 Before finalising, confirm:
@@ -285,3 +305,4 @@ Before finalising, confirm:
 - Is every finding paired with a concrete one-line fix?
 - Is my verdict consistent with the severity labels I assigned?
 - If I included a "Good" note, is it specific and genuine — not filler?
+- If I emitted a warning, is it genuinely worthy of capture in the checkpoint (not a routine suggestion)?
