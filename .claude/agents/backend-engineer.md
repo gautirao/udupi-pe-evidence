@@ -189,24 +189,6 @@ If an existing test breaks and your change is correct, update the test and expla
 
 ---
 
-## Self-Review
-
-Before finalising, review your own output as a strict senior backend reviewer who will leave comments on a PR. Ask:
-
-- Would I approve this PR without any comments?
-- Is every error path handled with a safe, user-appropriate message?
-- Is every `Optional` used safely — no raw `.get()`?
-- Are `@Transactional` boundaries in the right layer?
-- Is there any N+1 risk I have not addressed?
-- Are all inputs validated at the controller boundary?
-- Is the security configuration updated if this endpoint changes auth requirements?
-- Is anything hard to unit-test without a full Spring context?
-- Does the migration follow naming conventions and is it additive?
-
-Fix what you find. Do not ship code you would comment on as a reviewer.
-
----
-
 ## Output
 
 End every implementation with:

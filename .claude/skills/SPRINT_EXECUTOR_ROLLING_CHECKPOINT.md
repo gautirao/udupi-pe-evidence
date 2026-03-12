@@ -48,6 +48,7 @@ Before the first PR:
    > "Sprint issues: [paste all issue IDs + titles + descriptions + enriched specs]. Run Mode 1: Sprint Kickoff Analysis."
    - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
    - Store the recommended execution order in the checkpoint preamble as `Execution order:`.
+   - **Store all dependency findings** in checkpoint preamble as `Dependencies:` (format: `- RE-XX depends on RE-YY [confirmed|likely|speculative]`)
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
    - If team-lead flags spec gaps, OR if enrichment produced `Key unknowns` for any issue: play `afplay /System/Library/Sounds/Ping.aiff`, surface all gaps/unknowns to the user and **pause for confirmation** before starting execution. Do not proceed until each gap is resolved or explicitly waived by the user.
 5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
@@ -75,13 +76,11 @@ For each Linear issue (PR N):
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
 
-5. **E2E validation** — run `ROUTE_AND_RUN` Step 3 (E2E Validation Policy). All E2E rules, failure handling, and the default doc-only skip are owned by `ROUTE_AND_RUN`.
+5. **E2E validation** — E2E is handled by the pre-push git hook (see `ROUTE_AND_RUN` Step 3). No explicit E2E step is needed here — it runs automatically during `git push` in step 6.
 
-   Sprint-layer skip override (extends `ROUTE_AND_RUN` doc-only skip): also skip E2E when the PR touches only non-runtime reference artifacts that produce no local frontend/backend behavior change (e.g., SQL reference copies in `supabase-rpcs/`). Do not extend this override to files that affect runtime behavior.
+   Sprint-layer skip override: skip E2E (and the pre-push hook check) when the PR touches only non-runtime reference artifacts (e.g., `*.md`, `docs/`, SQL reference copies in `supabase-rpcs/`).
 
-   If e2e fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
-
-   **Sprint-layer override boundary:** any sprint-layer override declared here must be narrow, additive, and state-related (e.g., skip conditions, caching, checkpoint fields). Sprint-layer overrides must not redefine routing logic, reviewer gates, invocation rules, or E2E script behavior — those are owned by `ROUTE_AND_RUN`.
+   If the pre-push hook fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
 
 6. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
@@ -97,38 +96,40 @@ For each Linear issue (PR N):
    - `git checkout main && git pull origin main`
 7. **Close issue** — `save_issue state=Done`
 8. **Play chime** — `afplay /System/Library/Sounds/Hero.aiff`
-9. **Emit checkpoint**, then auto-advance to next issue
+
+**9. Inter-PR Plan Check (NEW — after PR N completes, before PR N+1 starts)**
+   - If this is not the last PR: read the checkpoint's `Touched files` and `Key decisions` from the PR that just completed.
+   - Cross-reference against the enriched spec for the next PR (cached from Sprint Start step 3).
+   - Check the `Dependencies:` section: if the next PR depends on any blocked PR, flag it.
+   - If the next PR's likely files overlap with files modified by PR N, compare their specs and key decisions: does PR N invalidate PR N+1's spec or scope?
+   - If conflict detected: play `afplay /System/Library/Sounds/Ping.aiff`, surface the conflict to the user with affected issue IDs and specs, and pause.
+   - If no conflict: proceed silently to step 10.
+
+10. **Emit checkpoint**, then auto-advance to next issue
 
 ---
 
 ## CHECKPOINT Format (Flat + Deterministic)
 
-Output exactly:
+### First checkpoint (preamble — includes full sprint context):
 
 === ROLLING CHECKPOINT START ===
 Sprint: <name/id>
 Sprint issues: <RE-XX Title | RE-XX Title | ...> (all issues, one line)
 Execution order: <RE-XX | RE-XX | ...> (team-lead recommended order, or ORIGINAL if no reorder)
+Dependencies: <RE-XX depends on RE-YY [confirmed|likely|speculative] | NONE>
 Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
-Issue description (last PR, first 300 chars):
-  <truncated spec text or NONE>
-Acceptance criteria (last PR):
-- [ ] <criterion 1>
-- [ ] <criterion 2>
-Bugfix reproduced: <YES|NO|N/A>
-Routing used: <agent chain, e.g. qa-fast → backend-engineer → code-reviewer>
+Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
 E2E passed: <YES|SKIPPED(doc-only)|BLOCKED — reason>
 Touched files:
 - <file1>
 - <file2>
-Key files read (context):
-- <file read for context, not modified — or NONE>
 Key decisions:
 - <decision or NONE>
-Risks:
-- <risk or NONE>
+Risks (includes agent warnings):
+- <risk or agent warning or NONE>
 Open blockers:
 - <blocker or NONE>
 Next PR:
@@ -136,6 +137,32 @@ Next PR:
 Next routing guess:
 - <agent chain or NONE>
 === ROLLING CHECKPOINT END ===
+
+### Subsequent checkpoints (slim — sprint context already established):
+
+=== ROLLING CHECKPOINT START ===
+Sprint: <name/id>
+Last completed PR: <id + title>
+Status: <DONE|BLOCKED>
+Routing used: <agent chain>
+Tests passed: <YES|NO|N/A>
+E2E passed: <YES|SKIPPED(doc-only)|BLOCKED — reason>
+Touched files:
+- <file1>
+- <file2>
+Key decisions:
+- <decision or NONE>
+Risks (includes agent warnings):
+- <risk or agent warning or NONE>
+Open blockers:
+- <blocker or NONE>
+Next PR:
+- <id + title>
+Next routing guess:
+- <agent chain or NONE>
+=== ROLLING CHECKPOINT END ===
+
+Note: Subsequent checkpoints omit `Sprint issues`, `Execution order`, `Dependencies` (already in preamble). On resume, use the preamble checkpoint for full sprint context.
 
 User instruction:
 "To resume, paste the checkpoint and say: Resume sprint execution."
