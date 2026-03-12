@@ -112,7 +112,7 @@ class ListingControllerTest {
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
         Page<Listing> page = new PageImpl<>(List.of(listing));
-        when(listingService.getListingsByOwner(eq(DEALER_ID), any(Pageable.class))).thenReturn(page);
+        when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -121,7 +121,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"));
 
-        verify(listingService).getListingsByOwner(eq(DEALER_ID), any(Pageable.class));
+        verify(listingService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
     }
 
     // ==================== Test 3: PUT -> 200 ====================
@@ -582,13 +582,49 @@ class ListingControllerTest {
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
         Page<Listing> page = new PageImpl<>(List.of(listing));
-        when(listingService.getListingsByOwner(eq(DEALER_ID), any(Pageable.class))).thenReturn(page);
+        when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(4L);
 
         mockMvc.perform(get("/api/listings/mine")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].imageCount").value(4));
+    }
+
+    // ==================== RE-72: status filter on /mine ====================
+
+    @Test
+    void mine_withStatusFilter_passesStatusToService() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
+                "Udupi", new BigDecimal("10000000"), "A house");
+        Page<Listing> page = new PageImpl<>(List.of(listing));
+        when(listingService.getListingsByOwner(eq(DEALER_ID), eq("DRAFT"), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/listings/mine?status=DRAFT")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].status").value("DRAFT"));
+
+        verify(listingService).getListingsByOwner(eq(DEALER_ID), eq("DRAFT"), any(Pageable.class));
+    }
+
+    @Test
+    void mine_withoutStatusFilter_passesNullStatusToService() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Page<Listing> page = new PageImpl<>(List.of());
+        when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/listings/mine")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk());
+
+        verify(listingService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
     }
 
     // ==================== RE-32: videoUrl in update ====================

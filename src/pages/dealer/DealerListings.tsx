@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { Navigate, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   useDealerMyListingsInfinite,
@@ -22,6 +22,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { AlertCircle, Building2, CalendarDays, Eye, ImageIcon, Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,6 +41,20 @@ const STATUS_LABELS: Record<string, string> = {
   LIVE: 'Live',
   REJECTED: 'Rejected',
 };
+
+const FILTER_CHIPS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'All' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'PENDING_REVIEW', label: 'Under Review' },
+  { value: 'LIVE', label: 'Live' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'createdAt,desc', label: 'Newest first' },
+  { value: 'createdAt,asc', label: 'Oldest first' },
+  { value: 'updatedAt,desc', label: 'Recently updated' },
+];
 
 function statusClassName(status: string): string {
   switch (status) {
@@ -121,6 +142,9 @@ function DraftSubmitButton({ listing }: { listing: ListingResponse }) {
  */
 export default function DealerListings() {
   const { isDealer, isAdmin, isLoading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [activeFilter, setActiveFilter] = useState(searchParams.get('status') ?? '');
+  const [activeSort, setActiveSort] = useState('createdAt,desc');
   const {
     data,
     isLoading: listingsLoading,
@@ -129,7 +153,7 @@ export default function DealerListings() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useDealerMyListingsInfinite();
+  } = useDealerMyListingsInfinite({ status: activeFilter, sort: activeSort });
 
   const allListings = useMemo(() => data?.pages.flatMap((p) => p.listings) ?? [], [data?.pages]);
   const totalElements = data?.pages[0]?.totalElements ?? 0;
@@ -160,6 +184,33 @@ export default function DealerListings() {
           </Button>
         </div>
 
+        <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+          <div className="flex gap-2 flex-wrap">
+            {FILTER_CHIPS.map((chip) => (
+              <Button
+                key={chip.value}
+                variant={activeFilter === chip.value ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setActiveFilter(chip.value)}
+              >
+                {chip.label}
+              </Button>
+            ))}
+          </div>
+          <Select value={activeSort} onValueChange={setActiveSort}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {listingsLoading && (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
@@ -187,23 +238,38 @@ export default function DealerListings() {
         {!listingsLoading && !isError && allListings.length === 0 && (
           <div className="text-center py-12 space-y-3">
             <Building2 className="h-8 w-8 text-muted-foreground/50 mx-auto" />
-            <p className="text-sm font-medium text-muted-foreground">No listings yet</p>
-            <p className="text-xs text-muted-foreground">
-              Create your first listing to start reaching buyers.
-            </p>
-            <Button size="sm" asChild>
-              <Link to="/dealer/listings/new">Create your first listing</Link>
-            </Button>
+            {activeFilter ? (
+              <>
+                <p className="text-sm font-medium text-muted-foreground">
+                  No {STATUS_LABELS[activeFilter]?.toLowerCase() ?? activeFilter.toLowerCase()} listings
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveFilter('')}
+                >
+                  View all listings
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-muted-foreground">No listings yet</p>
+                <p className="text-xs text-muted-foreground">
+                  Create your first listing to start reaching buyers.
+                </p>
+                <Button size="sm" asChild>
+                  <Link to="/dealer/listings/new">Create your first listing</Link>
+                </Button>
+              </>
+            )}
           </div>
         )}
 
         {!listingsLoading && !isError && allListings.length > 0 && (
           <div className="space-y-4">
-            {totalElements > 20 && (
-              <p className="text-sm text-muted-foreground">
-                Showing {allListings.length} of {totalElements} listings
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Showing {allListings.length} of {totalElements} listing{totalElements !== 1 ? 's' : ''}
+            </p>
             {allListings.map((listing) => (
               <Card key={listing.id} className="overflow-hidden">
                 {listing.firstImageUrl ? (
@@ -241,9 +307,16 @@ export default function DealerListings() {
                 )}
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between gap-4">
-                    <CardTitle className="text-lg">
-                      {listing.title ?? 'Untitled Listing'}
-                    </CardTitle>
+                    <div>
+                      <CardTitle className="text-lg">
+                        {listing.title ?? 'Untitled Listing'}
+                      </CardTitle>
+                      {listing.displayId && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {listing.displayId}
+                        </p>
+                      )}
+                    </div>
                     <Badge className={statusClassName(listing.status)}>
                       {STATUS_LABELS[listing.status] ?? listing.status}
                     </Badge>

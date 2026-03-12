@@ -15,7 +15,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -1474,5 +1481,49 @@ class ListingServiceTest {
 
         assertThat(result.isDuplicate()).isTrue();
         assertThat(result.getRepostCount()).isEqualTo(1);
+    }
+
+    // ==================== RE-72: getListingsByOwner with status filter ====================
+
+    @Test
+    void getListingsByOwner_withNullStatus_callsFindByCreatedBy() {
+        UUID userId = UUID.randomUUID();
+        Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Listing> expected = new PageImpl<>(List.of());
+        when(listingRepository.findByCreatedBy(userId, pageable)).thenReturn(expected);
+
+        Page<Listing> result = listingService.getListingsByOwner(userId, null, pageable);
+
+        assertThat(result).isSameAs(expected);
+        verify(listingRepository).findByCreatedBy(userId, pageable);
+        verify(listingRepository, never()).findByCreatedByAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void getListingsByOwner_withBlankStatus_callsFindByCreatedBy() {
+        UUID userId = UUID.randomUUID();
+        Pageable pageable = PageRequest.of(0, 20);
+        Page<Listing> expected = new PageImpl<>(List.of());
+        when(listingRepository.findByCreatedBy(userId, pageable)).thenReturn(expected);
+
+        Page<Listing> result = listingService.getListingsByOwner(userId, "  ", pageable);
+
+        assertThat(result).isSameAs(expected);
+        verify(listingRepository).findByCreatedBy(userId, pageable);
+        verify(listingRepository, never()).findByCreatedByAndStatus(any(), any(), any());
+    }
+
+    @Test
+    void getListingsByOwner_withDraftStatus_callsFindByCreatedByAndStatus() {
+        UUID userId = UUID.randomUUID();
+        Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Listing> expected = new PageImpl<>(List.of());
+        when(listingRepository.findByCreatedByAndStatus(userId, "DRAFT", pageable)).thenReturn(expected);
+
+        Page<Listing> result = listingService.getListingsByOwner(userId, "DRAFT", pageable);
+
+        assertThat(result).isSameAs(expected);
+        verify(listingRepository).findByCreatedByAndStatus(userId, "DRAFT", pageable);
+        verify(listingRepository, never()).findByCreatedBy(any(), any());
     }
 }

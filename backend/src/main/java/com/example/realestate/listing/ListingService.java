@@ -431,10 +431,16 @@ public class ListingService {
     }
 
     /**
-     * Return paginated listings owned by the given user, newest first.
+     * Return paginated listings owned by the given user.
+     * When {@code status} is non-null, only listings with that status are returned.
+     * Sort order is determined by the supplied {@link Pageable} (default: createdAt DESC).
      */
-    public Page<Listing> getListingsByOwner(UUID createdBy, Pageable pageable) {
-        return listingRepository.findByCreatedByOrderByCreatedAtDesc(createdBy, pageable);
+    @Transactional(readOnly = true)
+    public Page<Listing> getListingsByOwner(UUID createdBy, String status, Pageable pageable) {
+        if (status != null && !status.isBlank()) {
+            return listingRepository.findByCreatedByAndStatus(createdBy, status, pageable);
+        }
+        return listingRepository.findByCreatedBy(createdBy, pageable);
     }
 
     /**
