@@ -60,7 +60,13 @@ public class ListingController {
                 caller.userId(), req.propertyType(), req.title(),
                 req.locality(), req.price(), req.description(),
                 req.landArea(), req.bedrooms(), req.builtArea(),
-                req.landAreaUnit(), req.builtAreaUnit(), createVideoUrl);
+                req.landAreaUnit(), req.builtAreaUnit(), createVideoUrl,
+                req.listingPurpose(),
+                req.carpetArea(), req.carpetAreaUnit(),
+                req.floorNumber(), req.totalFloors(),
+                req.furnishingStatus(), req.washrooms(), req.parkingCount(),
+                req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
+                req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
 
         log.info("POST /api/listings -> 201 listingId={} createdBy={}", saved.getId(), caller.userId());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
@@ -122,7 +128,13 @@ public class ListingController {
                     req.landArea(), req.bedrooms(), req.builtArea(),
                     req.addressConfirmed(), req.latitude(), req.longitude(),
                     req.landAreaUnit(), req.builtAreaUnit(),
-                    updateVideoUrl, applyVideo, req.reraNumber());
+                    updateVideoUrl, applyVideo, req.reraNumber(),
+                    req.listingPurpose(),
+                    req.carpetArea(), req.carpetAreaUnit(),
+                    req.floorNumber(), req.totalFloors(),
+                    req.furnishingStatus(), req.washrooms(), req.parkingCount(),
+                    req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
+                    req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -210,7 +222,13 @@ public class ListingController {
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
                 imageCount, firstImageUrl, l.getVideoUrl(),
-                l.getReraNumber());
+                l.getReraNumber(),
+                l.getListingPurpose(),
+                l.getCarpetArea(), l.getCarpetAreaUnit(),
+                l.getFloorNumber(), l.getTotalFloors(),
+                l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
+                l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
+                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths());
     }
 
     // ===== DTOs =====
@@ -234,7 +252,22 @@ public class ListingController {
             BigDecimal builtArea,
             String landAreaUnit,
             String builtAreaUnit,
-            String videoUrl
+            String videoUrl,
+            // Commercial & rent fields
+            String listingPurpose,
+            BigDecimal carpetArea,
+            String carpetAreaUnit,
+            Integer floorNumber,
+            Integer totalFloors,
+            String furnishingStatus,
+            Integer washrooms,
+            Integer parkingCount,
+            BigDecimal roadFrontageFt,
+            String commercialUsage,
+            Integer numberOfUnits,
+            Long monthlyRent,
+            Integer securityDepositMonths,
+            Integer lockInMonths
     ) {}
 
     public record UpdateRequest(
@@ -253,7 +286,22 @@ public class ListingController {
             String builtAreaUnit,
             String videoUrl,
             Boolean applyVideoUrl,  // true = apply the videoUrl field (null clears, non-null sets)
-            String reraNumber
+            String reraNumber,
+            // Commercial & rent fields
+            String listingPurpose,
+            BigDecimal carpetArea,
+            String carpetAreaUnit,
+            Integer floorNumber,
+            Integer totalFloors,
+            String furnishingStatus,
+            Integer washrooms,
+            Integer parkingCount,
+            BigDecimal roadFrontageFt,
+            String commercialUsage,
+            Integer numberOfUnits,
+            Long monthlyRent,
+            Integer securityDepositMonths,
+            Integer lockInMonths
     ) {}
 
     public record ListingResponse(
@@ -280,6 +328,21 @@ public class ListingController {
             int imageCount,
             String firstImageUrl,
             String videoUrl,
-            String reraNumber
+            String reraNumber,
+            // Commercial & rent fields
+            String listingPurpose,
+            BigDecimal carpetArea,
+            String carpetAreaUnit,
+            Integer floorNumber,
+            Integer totalFloors,
+            String furnishingStatus,
+            Integer washrooms,
+            Integer parkingCount,
+            BigDecimal roadFrontageFt,
+            String commercialUsage,
+            Integer numberOfUnits,
+            Long monthlyRent,
+            Integer securityDepositMonths,
+            Integer lockInMonths
     ) {}
 }

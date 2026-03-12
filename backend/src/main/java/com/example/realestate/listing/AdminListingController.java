@@ -121,7 +121,13 @@ public class AdminListingController {
                 l.isAddressConfirmed(), l.getRejectionReason(),
                 l.getCreatedAt(), l.getUpdatedAt(),
                 imageCount, firstImageUrl, l.getVideoUrl(),
-                l.getReraNumber());
+                l.getReraNumber(),
+                l.getListingPurpose(),
+                l.getCarpetArea(), l.getCarpetAreaUnit(),
+                l.getFloorNumber(), l.getTotalFloors(),
+                l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
+                l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
+                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths());
     }
 
     // ===== DTOs =====

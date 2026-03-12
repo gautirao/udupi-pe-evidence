@@ -375,7 +375,8 @@ public class ListingService {
     public Listing createDraft(UUID createdBy, String propertyType, String title,
                                String locality, BigDecimal price, String description) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional
@@ -383,11 +384,26 @@ public class ListingService {
                                String locality, BigDecimal price, String description,
                                String videoUrl) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
-                null, null, null, null, null, videoUrl);
+                null, null, null, null, null, videoUrl,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
-     * Create a new dealer-owned listing with status DRAFT, including optional area and unit fields.
+     * Create a new dealer-owned listing with status DRAFT (pre-commercial overload).
+     */
+    @Transactional
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description,
+                               BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                               String landAreaUnit, String builtAreaUnit, String videoUrl) {
+        return createDraft(createdBy, propertyType, title, locality, price, description,
+                landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    /**
+     * Create a new dealer-owned listing with status DRAFT, including optional area, unit,
+     * commercial, and rent fields.
      * Derived area fields (areaSqm, areaSqft, areaCent, pricePerCentPaise) are computed only when
      * both landArea and landAreaUnit are provided.
      */
@@ -395,7 +411,13 @@ public class ListingService {
     public Listing createDraft(UUID createdBy, String propertyType, String title,
                                String locality, BigDecimal price, String description,
                                BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
-                               String landAreaUnit, String builtAreaUnit, String videoUrl) {
+                               String landAreaUnit, String builtAreaUnit, String videoUrl,
+                               String listingPurpose,
+                               BigDecimal carpetArea, String carpetAreaUnit,
+                               Integer floorNumber, Integer totalFloors,
+                               String furnishingStatus, Integer washrooms, Integer parkingCount,
+                               BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                               Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths) {
         Listing listing = new Listing();
         listing.setCreatedBy(createdBy);
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
@@ -410,6 +432,22 @@ public class ListingService {
         if (landAreaUnit != null) listing.setLandAreaUnit(landAreaUnit);
         if (builtAreaUnit != null) listing.setBuiltAreaUnit(builtAreaUnit);
         listing.setVideoUrl(videoUrl);
+
+        // Commercial & rent fields
+        if (listingPurpose != null && !listingPurpose.isBlank()) listing.setListingPurpose(listingPurpose);
+        if (carpetArea != null) listing.setCarpetArea(carpetArea);
+        if (carpetAreaUnit != null) listing.setCarpetAreaUnit(carpetAreaUnit);
+        if (floorNumber != null) listing.setFloorNumber(floorNumber);
+        if (totalFloors != null) listing.setTotalFloors(totalFloors);
+        if (furnishingStatus != null) listing.setFurnishingStatus(furnishingStatus);
+        if (washrooms != null) listing.setWashrooms(washrooms);
+        if (parkingCount != null) listing.setParkingCount(parkingCount);
+        if (roadFrontageFt != null) listing.setRoadFrontageFt(roadFrontageFt);
+        if (commercialUsage != null) listing.setCommercialUsage(commercialUsage);
+        if (numberOfUnits != null) listing.setNumberOfUnits(numberOfUnits);
+        if (monthlyRent != null) listing.setMonthlyRent(monthlyRent);
+        if (securityDepositMonths != null) listing.setSecurityDepositMonths(securityDepositMonths);
+        if (lockInMonths != null) listing.setLockInMonths(lockInMonths);
 
         // Compute derived area fields only when both area and unit are supplied
         if (landArea != null && landAreaUnit != null) {
@@ -487,7 +525,8 @@ public class ListingService {
                                  String propertyType, String title, String locality,
                                  BigDecimal price, String description) {
         return updateListing(listingId, userId, isAdmin,
-                propertyType, title, locality, price, description, null, null, null, null, null, null, null, null, null, false, null);
+                propertyType, title, locality, price, description, null, null, null, null, null, null, null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -506,11 +545,30 @@ public class ListingService {
                                  BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
                                  Boolean addressConfirmed) {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
-                price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, null, null, false, null);
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
-     * Update a listing with extended fields including videoUrl.
+     * Update a listing with extended fields including videoUrl (pre-commercial overload).
+     */
+    @Transactional
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description,
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                                 Boolean addressConfirmed, Double latitude, Double longitude,
+                                 String landAreaUnit, String builtAreaUnit,
+                                 String videoUrl, boolean applyVideoUrl,
+                                 String reraNumber) {
+        return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
+                landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    }
+
+    /**
+     * Update a listing with extended fields including videoUrl and commercial/rent fields.
      *
      * <p>videoUrl is only applied when {@code applyVideoUrl} is {@code true}. This distinguishes
      * "caller explicitly sent the videoUrl field" (true → apply: null clears, non-null sets)
@@ -530,7 +588,13 @@ public class ListingService {
                                  Boolean addressConfirmed, Double latitude, Double longitude,
                                  String landAreaUnit, String builtAreaUnit,
                                  String videoUrl, boolean applyVideoUrl,
-                                 String reraNumber) {
+                                 String reraNumber,
+                                 String listingPurpose,
+                                 BigDecimal carpetArea, String carpetAreaUnit,
+                                 Integer floorNumber, Integer totalFloors,
+                                 String furnishingStatus, Integer washrooms, Integer parkingCount,
+                                 BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                                 Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
         if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
@@ -551,15 +615,28 @@ public class ListingService {
         if (landAreaUnit != null) listing.setLandAreaUnit(landAreaUnit);
         if (builtAreaUnit != null) listing.setBuiltAreaUnit(builtAreaUnit);
         // Recompute derived area fields only when both area and unit are present in this request.
-        // Using AND prevents a unit-only or area-only partial update from overwriting previously
-        // computed derived fields with empty values (AreaNormalizer returns all-nulls if either
-        // input is absent).
         if (landArea != null && landAreaUnit != null) {
             AreaNormalizer.normalize(listing);
         }
         // Only apply when caller explicitly sent the videoUrl field.
         if (applyVideoUrl) listing.setVideoUrl(videoUrl);
         if (reraNumber != null) listing.setReraNumber(reraNumber);
+
+        // Commercial & rent fields
+        if (listingPurpose != null && !listingPurpose.isBlank()) listing.setListingPurpose(listingPurpose);
+        if (carpetArea != null) listing.setCarpetArea(carpetArea);
+        if (carpetAreaUnit != null) listing.setCarpetAreaUnit(carpetAreaUnit);
+        if (floorNumber != null) listing.setFloorNumber(floorNumber);
+        if (totalFloors != null) listing.setTotalFloors(totalFloors);
+        if (furnishingStatus != null) listing.setFurnishingStatus(furnishingStatus);
+        if (washrooms != null) listing.setWashrooms(washrooms);
+        if (parkingCount != null) listing.setParkingCount(parkingCount);
+        if (roadFrontageFt != null) listing.setRoadFrontageFt(roadFrontageFt);
+        if (commercialUsage != null) listing.setCommercialUsage(commercialUsage);
+        if (numberOfUnits != null) listing.setNumberOfUnits(numberOfUnits);
+        if (monthlyRent != null) listing.setMonthlyRent(monthlyRent);
+        if (securityDepositMonths != null) listing.setSecurityDepositMonths(securityDepositMonths);
+        if (lockInMonths != null) listing.setLockInMonths(lockInMonths);
 
         // Recompute dedupe hash if any hash-relevant field changed
         if (description != null || locality != null || price != null) {
@@ -627,7 +704,8 @@ public class ListingService {
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
 
     private static final Set<String> SUBMITTABLE_PROPERTY_TYPES = Set.of(
-            "land", "house", "apartment");
+            "land", "house", "apartment",
+            "commercial", "commercial_building", "warehouse", "commercial_land");
 
     private static final int MIN_IMAGES = 3;
 
@@ -666,21 +744,28 @@ public class ListingService {
     private List<Map<String, String>> validateForSubmission(Listing listing) {
         List<Map<String, String>> errors = new ArrayList<>();
 
-        // Always-required: price > 0
-        if (listing.getPrice() == null || listing.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
-            errors.add(Map.of("field", "price", "message", "Price must be greater than 0"));
+        String purpose = listing.getListingPurpose();
+        boolean isRental = "rent".equals(purpose);
+
+        // Sale listings require price > 0; rental listings require monthlyRent > 0
+        if (isRental) {
+            if (listing.getMonthlyRent() == null || listing.getMonthlyRent() <= 0) {
+                errors.add(Map.of("field", "monthly_rent", "message", "Monthly rent must be greater than 0 for rental listings"));
+            }
+            if (listing.getSecurityDepositMonths() == null) {
+                errors.add(Map.of("field", "security_deposit_months", "message", "Security deposit months is required for rental listings"));
+            }
+        } else {
+            if (listing.getPrice() == null || listing.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+                errors.add(Map.of("field", "price", "message", "Price must be greater than 0"));
+            }
         }
 
         // Always-required: property_type in allowed set
         String propertyType = listing.getPropertyType();
         if (propertyType == null || !SUBMITTABLE_PROPERTY_TYPES.contains(propertyType)) {
-            if ("commercial".equals(propertyType)) {
-                errors.add(Map.of("field", "property_type",
-                        "message", "Commercial submission not supported yet"));
-            } else {
-                errors.add(Map.of("field", "property_type",
-                        "message", "Property type must be one of: land, house, apartment"));
-            }
+            errors.add(Map.of("field", "property_type",
+                    "message", "Property type must be one of: " + String.join(", ", SUBMITTABLE_PROPERTY_TYPES)));
         }
 
         // Always-required: locality non-empty
@@ -726,6 +811,46 @@ public class ListingService {
                     if (listing.getBuiltAreaUnit() == null || listing.getBuiltAreaUnit().isBlank()) {
                         errors.add(Map.of("field", "built_area_unit",
                                 "message", "Built area unit is required for apartment listings"));
+                    }
+                }
+                case "commercial" -> {
+                    if (listing.getCarpetArea() == null) {
+                        errors.add(Map.of("field", "carpet_area",
+                                "message", "Carpet area is required for commercial listings"));
+                    }
+                    if (listing.getFloorNumber() == null) {
+                        errors.add(Map.of("field", "floor_number",
+                                "message", "Floor number is required for commercial listings"));
+                    }
+                }
+                case "commercial_building" -> {
+                    if (listing.getLandArea() == null) {
+                        errors.add(Map.of("field", "land_area",
+                                "message", "Land area is required for commercial building listings"));
+                    }
+                    if (listing.getBuiltArea() == null) {
+                        errors.add(Map.of("field", "built_area",
+                                "message", "Built area is required for commercial building listings"));
+                    }
+                    if (listing.getTotalFloors() == null) {
+                        errors.add(Map.of("field", "total_floors",
+                                "message", "Total floors is required for commercial building listings"));
+                    }
+                }
+                case "warehouse" -> {
+                    if (listing.getBuiltArea() == null && listing.getLandArea() == null) {
+                        errors.add(Map.of("field", "built_area",
+                                "message", "Built area or land area is required for warehouse listings"));
+                    }
+                }
+                case "commercial_land" -> {
+                    if (listing.getLandArea() == null) {
+                        errors.add(Map.of("field", "land_area",
+                                "message", "Land area is required for commercial land listings"));
+                    }
+                    if (listing.getLandAreaUnit() == null || listing.getLandAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "land_area_unit",
+                                "message", "Land area unit is required for commercial land listings"));
                     }
                 }
                 // house: no additional required fields
