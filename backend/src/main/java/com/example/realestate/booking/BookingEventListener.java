@@ -1,6 +1,8 @@
 package com.example.realestate.booking;
 
+import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.notification.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
@@ -28,10 +30,15 @@ public class BookingEventListener {
 
     private final ListingRepository listingRepository;
     private final ObjectMapper objectMapper;
+    private final EmailService emailService;
+    private final ViewingRequestRepository viewingRequestRepository;
 
-    public BookingEventListener(ListingRepository listingRepository, ObjectMapper objectMapper) {
+    public BookingEventListener(ListingRepository listingRepository, ObjectMapper objectMapper,
+                                EmailService emailService, ViewingRequestRepository viewingRequestRepository) {
         this.listingRepository = listingRepository;
         this.objectMapper = objectMapper;
+        this.emailService = emailService;
+        this.viewingRequestRepository = viewingRequestRepository;
     }
 
     @Async
@@ -49,6 +56,9 @@ public class BookingEventListener {
                     metadata);
             log.info("viewing_requested notification sent bookingId={} dealerId={}",
                     booking.getId(), booking.getDealerId());
+
+            // Send email notification to dealer (failure must not propagate)
+            sendBookingEmail(booking);
         } catch (Exception e) {
             log.error("Failed to send viewing_requested notification bookingId={}",
                     booking.getId(), e);
@@ -119,6 +129,29 @@ public class BookingEventListener {
         } catch (Exception e) {
             log.error("Failed to send viewing_cancelled notification bookingId={}",
                     booking.getId(), e);
+        }
+    }
+
+    private void sendBookingEmail(ViewingRequest booking) {
+        try {
+            String dealerEmail = viewingRequestRepository.findEmailByUserId(booking.getDealerId())
+                    .orElse(null);
+            if (dealerEmail == null) {
+                log.warn("No email found for dealerId={}, skipping booking email", booking.getDealerId());
+                return;
+            }
+
+            String buyerName = viewingRequestRepository.findFullNameByUserId(booking.getRequesterId())
+                    .orElse(null);
+
+            String listingTitle = listingRepository.findById(booking.getListingId())
+                    .map(Listing::getTitle)
+                    .orElse(null);
+
+            emailService.sendBookingNotification(dealerEmail, buyerName, listingTitle, booking.getListingId());
+        } catch (Exception e) {
+            log.error("Failed to send booking email bookingId={} dealerId={}",
+                    booking.getId(), booking.getDealerId(), e);
         }
     }
 

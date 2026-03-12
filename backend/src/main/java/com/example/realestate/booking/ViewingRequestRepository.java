@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -47,4 +48,10 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
     @Transactional
     @Query("UPDATE ViewingRequest v SET v.status = 'COMPLETED', v.updatedAt = :now WHERE v.status = 'CONFIRMED' AND v.requestedDate < :today")
     int transitionExpiredConfirmedToCompleted(@Param("now") OffsetDateTime now, @Param("today") LocalDate today);
+
+    @Query(value = "SELECT p.email FROM public.profiles p WHERE p.user_id = :userId", nativeQuery = true)
+    Optional<String> findEmailByUserId(@Param("userId") UUID userId);
+
+    @Query(value = "SELECT p.full_name FROM public.profiles p WHERE p.user_id = :userId", nativeQuery = true)
+    Optional<String> findFullNameByUserId(@Param("userId") UUID userId);
 }
