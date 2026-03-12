@@ -681,6 +681,68 @@ class ListingControllerTest {
                 isNull(), eq(true), any());
     }
 
+    // ==================== RE-75: GET /mine/stats ====================
+
+    @Test
+    void stats_withDealerRole_returnsCorrectCounts() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.getListingStats(DEALER_ID))
+                .thenReturn(new ListingController.ListingStatsResponse(2, 1, 3, 1, 7));
+
+        mockMvc.perform(get("/api/listings/mine/stats")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draftCount").value(2))
+                .andExpect(jsonPath("$.pendingReviewCount").value(1))
+                .andExpect(jsonPath("$.liveCount").value(3))
+                .andExpect(jsonPath("$.rejectedCount").value(1))
+                .andExpect(jsonPath("$.totalCount").value(7));
+
+        verify(listingService).getListingStats(DEALER_ID);
+    }
+
+    @Test
+    void stats_withNoListings_returnsAllZeros() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingService.getListingStats(DEALER_ID))
+                .thenReturn(new ListingController.ListingStatsResponse(0, 0, 0, 0, 0));
+
+        mockMvc.perform(get("/api/listings/mine/stats")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draftCount").value(0))
+                .andExpect(jsonPath("$.pendingReviewCount").value(0))
+                .andExpect(jsonPath("$.liveCount").value(0))
+                .andExpect(jsonPath("$.rejectedCount").value(0))
+                .andExpect(jsonPath("$.totalCount").value(0));
+    }
+
+    @Test
+    void stats_withViewerRole_returnsForbidden() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
+
+        mockMvc.perform(get("/api/listings/mine/stats")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
+
+        verify(listingService, never()).getListingStats(any());
+    }
+
+    @Test
+    void stats_withAdminRole_returnsOk() throws Exception {
+        UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        when(listingService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
+        when(listingService.getListingStats(adminId))
+                .thenReturn(new ListingController.ListingStatsResponse(0, 0, 0, 0, 0));
+
+        mockMvc.perform(get("/api/listings/mine/stats")
+                        .with(jwt().jwt(j -> j.subject(adminId.toString()))))
+                .andExpect(status().isOk());
+
+        verify(listingService).getListingStats(adminId);
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(UUID id, String status, String propertyType, String title,

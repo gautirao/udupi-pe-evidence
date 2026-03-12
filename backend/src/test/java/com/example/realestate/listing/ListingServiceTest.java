@@ -1526,4 +1526,57 @@ class ListingServiceTest {
         verify(listingRepository).findByCreatedByAndStatus(userId, "DRAFT", pageable);
         verify(listingRepository, never()).findByCreatedBy(any(), any());
     }
+
+    // --- RE-75: getListingStats ---
+
+    @Test
+    void getListingStats_mixedStatuses_returnsCorrectCounts() {
+        UUID userId = UUID.randomUUID();
+        java.util.List<Object[]> rows = java.util.Arrays.asList(
+                new Object[]{"DRAFT", 2L},
+                new Object[]{"PENDING_REVIEW", 1L},
+                new Object[]{"LIVE", 3L},
+                new Object[]{"REJECTED", 1L}
+        );
+        when(listingRepository.countByStatusForUser(userId)).thenReturn(rows);
+
+        ListingController.ListingStatsResponse stats = listingService.getListingStats(userId);
+
+        assertThat(stats.draftCount()).isEqualTo(2);
+        assertThat(stats.pendingReviewCount()).isEqualTo(1);
+        assertThat(stats.liveCount()).isEqualTo(3);
+        assertThat(stats.rejectedCount()).isEqualTo(1);
+        assertThat(stats.totalCount()).isEqualTo(7);
+    }
+
+    @Test
+    void getListingStats_noListings_returnsAllZeros() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.countByStatusForUser(userId)).thenReturn(java.util.List.of());
+
+        ListingController.ListingStatsResponse stats = listingService.getListingStats(userId);
+
+        assertThat(stats.draftCount()).isEqualTo(0);
+        assertThat(stats.pendingReviewCount()).isEqualTo(0);
+        assertThat(stats.liveCount()).isEqualTo(0);
+        assertThat(stats.rejectedCount()).isEqualTo(0);
+        assertThat(stats.totalCount()).isEqualTo(0);
+    }
+
+    @Test
+    void getListingStats_onlyDrafts_otherCountsZero() {
+        UUID userId = UUID.randomUUID();
+        java.util.List<Object[]> rows = java.util.Collections.singletonList(
+                new Object[]{"DRAFT", 5L}
+        );
+        when(listingRepository.countByStatusForUser(userId)).thenReturn(rows);
+
+        ListingController.ListingStatsResponse stats = listingService.getListingStats(userId);
+
+        assertThat(stats.draftCount()).isEqualTo(5);
+        assertThat(stats.pendingReviewCount()).isEqualTo(0);
+        assertThat(stats.liveCount()).isEqualTo(0);
+        assertThat(stats.rejectedCount()).isEqualTo(0);
+        assertThat(stats.totalCount()).isEqualTo(5);
+    }
 }

@@ -56,9 +56,9 @@ test('D1 — dealer can access /dealer/dashboard', async ({ page }) => {
     page.getByRole('heading', { name: /dealer dashboard/i }),
   ).toBeVisible({ timeout: 8_000 });
 
-  // Quick-link cards must be present
-  await expect(page.getByRole('link', { name: /create listing/i })).toBeVisible();
-  await expect(page.getByRole('link', { name: /view listings/i })).toBeVisible();
+  // Quick action buttons must be present
+  await expect(page.getByRole('link', { name: /create new listing/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: /view all listings/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

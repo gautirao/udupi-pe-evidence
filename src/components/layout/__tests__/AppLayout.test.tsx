@@ -109,7 +109,7 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
   });
 
-  it('dealer role: shows Home, My Listings, New Listing, Notifications — no user/admin links', () => {
+  it('dealer role: shows Dashboard, My Listings, New Listing, Notifications — no user/admin links', () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
@@ -117,7 +117,7 @@ describe('AppLayout — nav links by role', () => {
     });
     renderLayout();
 
-    expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /dashboard/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /my listings/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /new listing/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);

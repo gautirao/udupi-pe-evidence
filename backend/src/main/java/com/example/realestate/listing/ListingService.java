@@ -431,6 +431,37 @@ public class ListingService {
     }
 
     /**
+     * Return listing count stats grouped by status for the given user.
+     * Single query with GROUP BY; statuses with zero listings are not returned by
+     * the query, so we default them to 0.
+     */
+    @Transactional(readOnly = true)
+    public ListingController.ListingStatsResponse getListingStats(UUID userId) {
+        List<Object[]> rows = listingRepository.countByStatusForUser(userId);
+
+        int draftCount = 0;
+        int pendingReviewCount = 0;
+        int liveCount = 0;
+        int rejectedCount = 0;
+
+        for (Object[] row : rows) {
+            String status = (String) row[0];
+            int count = ((Number) row[1]).intValue();
+            switch (status) {
+                case "DRAFT" -> draftCount = count;
+                case "PENDING_REVIEW" -> pendingReviewCount = count;
+                case "LIVE" -> liveCount = count;
+                case "REJECTED" -> rejectedCount = count;
+                default -> log.debug("Ignoring unknown status '{}' in stats for userId={}", status, userId);
+            }
+        }
+
+        int totalCount = draftCount + pendingReviewCount + liveCount + rejectedCount;
+        return new ListingController.ListingStatsResponse(
+                draftCount, pendingReviewCount, liveCount, rejectedCount, totalCount);
+    }
+
+    /**
      * Return paginated listings owned by the given user.
      * When {@code status} is non-null, only listings with that status are returned.
      * Sort order is determined by the supplied {@link Pageable} (default: createdAt DESC).

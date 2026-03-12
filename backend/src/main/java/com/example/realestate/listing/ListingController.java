@@ -80,6 +80,15 @@ public class ListingController {
         return ResponseEntity.ok(toResponse(listing));
     }
 
+    @GetMapping("/mine/stats")
+    public ResponseEntity<?> stats(JwtAuthenticationToken auth) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        ListingStatsResponse stats = listingService.getListingStats(caller.userId());
+        return ResponseEntity.ok(stats);
+    }
+
     @GetMapping("/mine")
     public ResponseEntity<?> mine(
             JwtAuthenticationToken auth,
@@ -205,6 +214,14 @@ public class ListingController {
     }
 
     // ===== DTOs =====
+
+    public record ListingStatsResponse(
+            int draftCount,
+            int pendingReviewCount,
+            int liveCount,
+            int rejectedCount,
+            int totalCount
+    ) {}
 
     public record CreateRequest(
             String propertyType,
