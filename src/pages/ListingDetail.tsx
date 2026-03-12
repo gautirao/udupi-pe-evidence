@@ -11,7 +11,7 @@ import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
-  ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check
+  ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
@@ -324,6 +324,14 @@ export default function ListingDetail() {
                   ₹{Math.round(listing.price / listing.built_area!).toLocaleString('en-IN')} / sqft
                 </p>
               ) : null}
+              {listing.rera_number && (
+                <div className="mt-2">
+                  <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 gap-1">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    RERA Registered — {listing.rera_number}
+                  </Badge>
+                </div>
+              )}
             </div>
 
             {/* Location */}

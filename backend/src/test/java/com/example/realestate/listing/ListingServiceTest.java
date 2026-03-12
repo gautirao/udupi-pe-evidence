@@ -1094,7 +1094,7 @@ class ListingServiceTest {
                 null, null, null, null,
                 13.3409, 74.7421,
                 null, null,
-                null, false);
+                null, false, null);
 
         assertThat(result.getLatitude()).isEqualTo(13.3409);
         assertThat(result.getLongitude()).isEqualTo(74.7421);
@@ -1127,7 +1127,7 @@ class ListingServiceTest {
                 null, null, null, null,
                 null, null,
                 null, null,
-                null, false);
+                null, false, null);
 
         assertThat(result.getLatitude()).isEqualTo(13.3409);
         assertThat(result.getLongitude()).isEqualTo(74.7421);
@@ -1159,7 +1159,7 @@ class ListingServiceTest {
                 new java.math.BigDecimal("10"), null, null, null,
                 null, null,
                 "cent", "sqft",
-                null, false);
+                null, false, null);
 
         assertThat(result.getLandAreaUnit()).isEqualTo("cent");
         assertThat(result.getBuiltAreaUnit()).isEqualTo("sqft");
@@ -1194,7 +1194,7 @@ class ListingServiceTest {
                 null, null, null, null,
                 null, null,
                 null, null,
-                null, false);
+                null, false, null);
 
         assertThat(result.getLandAreaUnit()).isEqualTo("sqft");
         assertThat(result.getBuiltAreaUnit()).isEqualTo("sqm");
@@ -1227,7 +1227,7 @@ class ListingServiceTest {
                 listingId, userId, false,
                 null, null, null, null, null,
                 null, null, null, true,   // addressConfirmed = true
-                null, null, null, null, null, false);
+                null, null, null, null, null, false, null);
 
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
@@ -1259,7 +1259,7 @@ class ListingServiceTest {
                 listingId, userId, false,
                 null, null, null, null, null,
                 null, null, null, true,   // addressConfirmed = true
-                null, null, null, null, null, false);
+                null, null, null, null, null, false, null);
 
         verify(applicationEventPublisher, never()).publishEvent(
                 any(ListingService.SettlementEnrichmentRequestedEvent.class));
@@ -1286,7 +1286,7 @@ class ListingServiceTest {
                 listingId, userId, false,
                 null, null, null, null, null,
                 null, null, null, null,
-                null, null, null, null, null, false);
+                null, null, null, null, null, false, null);
 
         verify(applicationEventPublisher, never()).publishEvent(
                 any(ListingService.SettlementEnrichmentRequestedEvent.class));
@@ -1413,7 +1413,7 @@ class ListingServiceTest {
                 listingId, userId, false,
                 null, null, null, new BigDecimal("6000000"), null,
                 null, null, null, null,
-                null, null, null, null, null, false);
+                null, null, null, null, null, false, null);
 
         String expectedHash = listingService.computeDedupeHash("Nice plot", "Manipal", new BigDecimal("6000000"));
         assertThat(result.getDedupeHash()).isEqualTo(expectedHash);
@@ -1442,7 +1442,7 @@ class ListingServiceTest {
                 listingId, userId, false,
                 null, null, null, null, "Updated description",
                 null, null, null, null,
-                null, null, null, null, null, false);
+                null, null, null, null, null, false, null);
 
         assertThat(result.isDuplicate()).isFalse();
         assertThat(result.getRepostCount()).isEqualTo(0);
@@ -1470,7 +1470,7 @@ class ListingServiceTest {
                 listingId, userId, false,
                 null, null, null, null, "Same as another listing",
                 null, null, null, null,
-                null, null, null, null, null, false);
+                null, null, null, null, null, false, null);
 
         assertThat(result.isDuplicate()).isTrue();
         assertThat(result.getRepostCount()).isEqualTo(1);

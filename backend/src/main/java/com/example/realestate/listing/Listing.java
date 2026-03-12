@@ -160,6 +160,9 @@ public class Listing {
 
     // --- Dealer workflow fields ---
 
+    @Column(name = "rera_number", length = 80)
+    private String reraNumber;
+
     @Column(name = "address_confirmed", nullable = false)
     private boolean addressConfirmed = false;
 
@@ -469,6 +472,14 @@ public class Listing {
 
     public void setAddressConfirmed(boolean addressConfirmed) {
         this.addressConfirmed = addressConfirmed;
+    }
+
+    public String getReraNumber() {
+        return reraNumber;
+    }
+
+    public void setReraNumber(String reraNumber) {
+        this.reraNumber = reraNumber;
     }
 
     public String getRejectionReason() {

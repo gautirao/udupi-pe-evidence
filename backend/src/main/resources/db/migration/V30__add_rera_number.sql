@@ -1,0 +1,1 @@
+ALTER TABLE property_listings ADD COLUMN IF NOT EXISTS rera_number VARCHAR(80) DEFAULT NULL;

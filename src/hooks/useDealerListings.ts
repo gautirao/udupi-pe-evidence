@@ -33,6 +33,7 @@ export interface UpdateListingRequest {
   addressConfirmed?: boolean;
   videoUrl?: string | null;
   applyVideoUrl?: boolean;
+  reraNumber?: string | null;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -56,6 +57,7 @@ export interface ListingResponse {
   firstImageUrl: string | null;
   rejectionReason: string | null;
   videoUrl: string | null;
+  reraNumber: string | null;
   listingNumber?: number;
   displayId?: string;
   createdAt: string;
