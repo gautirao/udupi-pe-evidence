@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -82,11 +83,12 @@ public class ListingController {
     @GetMapping("/mine")
     public ResponseEntity<?> mine(
             JwtAuthenticationToken auth,
+            @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         CallerInfo caller = resolveCallerOrForbid(auth);
         if (caller == null) return forbidden();
 
-        Page<Listing> listings = listingService.getListingsByOwner(caller.userId(), pageable);
+        Page<Listing> listings = listingService.getListingsByOwner(caller.userId(), status, pageable);
 
         Page<ListingResponse> response = listings.map(this::toResponse);
         return ResponseEntity.ok(response);

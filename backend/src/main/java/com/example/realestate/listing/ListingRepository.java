@@ -40,7 +40,9 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     Optional<Listing> findByListingNumber(Integer listingNumber);
 
-    Page<Listing> findByCreatedByOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
+    Page<Listing> findByCreatedBy(UUID createdBy, Pageable pageable);
+
+    Page<Listing> findByCreatedByAndStatus(UUID createdBy, String status, Pageable pageable);
 
     @Query(value = "SELECT COUNT(*) FROM public.listing_images WHERE listing_id = :listingId",
             nativeQuery = true)

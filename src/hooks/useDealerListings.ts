@@ -91,19 +91,36 @@ export function useDealerMyListings(page = 0, size = 20) {
   });
 }
 
+interface DealerListingsParams {
+  status?: string;
+  sort?: string;
+  size?: number;
+}
+
 /**
  * Infinite-query variant of useDealerMyListings.
  * Pages are appended on each "load more" call.
  * Use `data.pages.flatMap(p => p.listings)` to get all loaded listings.
+ *
+ * Accepts optional filter/sort params that are forwarded to the backend.
  */
-export function useDealerMyListingsInfinite(size = 20) {
+export function useDealerMyListingsInfinite(params: DealerListingsParams = {}) {
+  const { status, sort = 'createdAt,desc', size = 20 } = params;
+
   return useInfiniteQuery({
-    queryKey: ['dealer-listings-infinite', size],
+    queryKey: ['dealer-listings-infinite', size, status, sort],
     staleTime: 60_000,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
+      const searchParams = new URLSearchParams();
+      searchParams.set('page', String(pageParam));
+      searchParams.set('size', String(size));
+      searchParams.set('sort', sort);
+      if (status) {
+        searchParams.set('status', status);
+      }
       const response = await api.get<PageResponse<ListingResponse>>(
-        `/api/listings/mine?page=${pageParam}&size=${size}`,
+        `/api/listings/mine?${searchParams.toString()}`,
       );
       return {
         listings: response.content,
@@ -113,6 +130,26 @@ export function useDealerMyListingsInfinite(size = 20) {
       };
     },
     getNextPageParam: (lastPage) => (lastPage.isLast ? undefined : lastPage.nextPage),
+  });
+}
+
+/** Response shape for GET /api/listings/mine/stats */
+export interface DealerListingStats {
+  draftCount: number;
+  pendingReviewCount: number;
+  liveCount: number;
+  rejectedCount: number;
+  totalCount: number;
+}
+
+/**
+ * Fetches listing count stats by status for the current dealer.
+ * Used by filter chips (RE-72) and dashboard cards (RE-75).
+ */
+export function useDealerListingStats() {
+  return useQuery({
+    queryKey: ['dealer-listing-stats'],
+    queryFn: () => api.get<DealerListingStats>('/api/listings/mine/stats'),
   });
 }
 
@@ -126,6 +163,7 @@ export function useCreateListing() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
     },
     onError: (error: Error) => {
       toast({
@@ -162,6 +200,7 @@ export function useUpdateListing(id: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
       queryClient.invalidateQueries({ queryKey: ['listing', id] });
     },
     onError: (error: Error) => {
@@ -187,6 +226,7 @@ export function useDeleteListing() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
     },
   });
 }
@@ -207,6 +247,7 @@ export function useSubmitListing(listingId: string | undefined) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
       queryClient.invalidateQueries({ queryKey: ['listing', listingId] });
     },
   });
