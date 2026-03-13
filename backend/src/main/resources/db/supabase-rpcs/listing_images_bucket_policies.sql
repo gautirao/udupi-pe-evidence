@@ -55,7 +55,7 @@ CREATE POLICY "listing_images_owner_insert" ON storage.objects
     bucket_id = 'listing-images'
     AND (storage.foldername(name))[1] = 'listings'
     AND (storage.foldername(name))[2] = auth.uid()::text
-    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'admin'))
+    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'user') OR public.has_role(auth.uid(), 'admin'))
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -71,5 +71,5 @@ CREATE POLICY "listing_images_owner_delete" ON storage.objects
     bucket_id = 'listing-images'
     AND (storage.foldername(name))[1] = 'listings'
     AND (storage.foldername(name))[2] = auth.uid()::text
-    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'admin'))
+    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'user') OR public.has_role(auth.uid(), 'admin'))
   );
