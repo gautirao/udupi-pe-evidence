@@ -1,7 +1,7 @@
 ---
 name: team-lead
 description: "Use this agent in two situations: (1) Sprint kickoff — invoked by SPRINT_EXECUTOR before the execution loop, given the full list of sprint issues, to detect dependencies, file conflicts, and pre-review requirements. (2) Complex PR decomposition — invoked by ROUTE_AND_RUN when a task genuinely requires multiple parallel workstreams that cannot be safely handled by a single agent pass.\n\nThis agent does not write code. It reads, analyzes, and directs.\n\nDo NOT invoke this agent when a single specialist agent can handle the task, or when standard ROUTE_AND_RUN routing applies.\n\nExamples:\n\n- Example 1 (sprint kickoff):\n  SPRINT_EXECUTOR says: 'Sprint issues: RE-30 PriceField fix, RE-31 wizard consolidation, RE-32 video link, RE-35 EditListing UX. Run team-lead pre-flight.'\n  team-lead reads issue descriptions, detects RE-31 and RE-35 both touch NewListing.tsx, recommends serializing them with RE-31 first [confirmed].\n\n- Example 2 (complex PR):\n  ROUTE_AND_RUN detects a task spanning frontend UI, a new backend endpoint, and a Flyway migration — routes to team-lead to sequence and partition before delegating.\n\n- Example 3 (do NOT decompose):\n  A task adds a new backend validation rule. Single-agent work. team-lead should not be invoked — ROUTE_AND_RUN handles it directly."
-model: sonnet
+model: opus
 tools: Task(frontend-engineer, backend-engineer, supabase-engineer, qa, qa-fast, code-reviewer, architect, security-reviewer, ui-designer), Read, Grep, Glob
 permissionMode: default
 ---
