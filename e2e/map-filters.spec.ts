@@ -75,8 +75,9 @@ test('M2 — BHK filter toggle activates Clear button, Clear resets state', asyn
   // Wait for BHK section to appear
   await expect(page.getByText('Bedrooms (BHK)').first()).toBeVisible({ timeout: 10_000 });
 
-  // Click the "2" BHK button (exact text "2") — retry click if first attempt doesn't register
-  const btn2 = page.getByRole('button', { name: '2', exact: true }).first();
+  // Click the "2" BHK button — scoped to Bedrooms section to avoid matching header badge
+  const bhkSection = page.getByText('Bedrooms (BHK)').first().locator('..');
+  const btn2 = bhkSection.getByRole('button', { name: '2', exact: true });
   await expect(btn2).toBeVisible({ timeout: 10_000 });
   await btn2.click();
 
