@@ -28,6 +28,9 @@ const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }
   house: { label: 'House', badgeClass: 'bg-blue-100 text-blue-800 border-0' },
   apartment: { label: 'Apartment', badgeClass: 'bg-violet-100 text-violet-800 border-0' },
   commercial: { label: 'Commercial', badgeClass: 'bg-orange-100 text-orange-800 border-0' },
+  commercial_building: { label: 'Comm. Building', badgeClass: 'bg-blue-100 text-blue-800 border-0' },
+  warehouse: { label: 'Warehouse', badgeClass: 'bg-amber-100 text-amber-800 border-0' },
+  commercial_land: { label: 'Comm. Land', badgeClass: 'bg-teal-100 text-teal-800 border-0' },
   other: { label: 'Other', badgeClass: 'bg-gray-100 text-gray-600 border-0' },
 };
 

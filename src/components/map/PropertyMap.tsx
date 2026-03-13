@@ -31,6 +31,9 @@ const propertyConfig: Record<PropertyType, { color: string; label: string; bgCla
   house: { color: '#ea580c', label: 'House', bgClass: 'bg-orange-500' },
   apartment: { color: '#8b5cf6', label: 'Apartment', bgClass: 'bg-violet-500' },
   commercial: { color: '#3b82f6', label: 'Commercial', bgClass: 'bg-blue-500' },
+  commercial_building: { color: '#2563eb', label: 'Comm. Building', bgClass: 'bg-blue-600' },
+  warehouse: { color: '#d97706', label: 'Warehouse', bgClass: 'bg-amber-600' },
+  commercial_land: { color: '#0d9488', label: 'Comm. Land', bgClass: 'bg-teal-600' },
   other: { color: '#6b7280', label: 'Other', bgClass: 'bg-gray-500' },
 };
 

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'other';
+export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'commercial_building' | 'warehouse' | 'commercial_land' | 'other';
 
 export interface PropertyImage {
   url: string;

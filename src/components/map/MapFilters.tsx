@@ -27,6 +27,9 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'house', label: 'House' },
   { value: 'apartment', label: 'Apartment' },
   { value: 'commercial', label: 'Commercial' },
+  { value: 'commercial_building', label: 'Comm. Building' },
+  { value: 'warehouse', label: 'Warehouse' },
+  { value: 'commercial_land', label: 'Comm. Land' },
   { value: 'other', label: 'Other' },
 ];
 

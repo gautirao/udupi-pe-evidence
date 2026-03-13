@@ -28,6 +28,9 @@ const propertyConfig: Record<PropertyType, { label: string; bgClass: string }> =
   house: { label: 'House', bgClass: 'bg-orange-500' },
   apartment: { label: 'Apartment', bgClass: 'bg-violet-500' },
   commercial: { label: 'Commercial', bgClass: 'bg-blue-500' },
+  commercial_building: { label: 'Comm. Building', bgClass: 'bg-blue-600' },
+  warehouse: { label: 'Warehouse', bgClass: 'bg-amber-600' },
+  commercial_land: { label: 'Comm. Land', bgClass: 'bg-teal-600' },
   other: { label: 'Other', bgClass: 'bg-gray-500' },
 };
 

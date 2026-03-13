@@ -59,6 +59,9 @@ const propertyTypeColors: Record<PropertyType, string> = {
   house: 'bg-orange-500/10 text-orange-600',
   apartment: 'bg-violet-500/10 text-violet-600',
   commercial: 'bg-blue-500/10 text-blue-600',
+  commercial_building: 'bg-blue-600/10 text-blue-700',
+  warehouse: 'bg-amber-500/10 text-amber-700',
+  commercial_land: 'bg-teal-500/10 text-teal-700',
   other: 'bg-gray-500/10 text-gray-600',
 };
 
