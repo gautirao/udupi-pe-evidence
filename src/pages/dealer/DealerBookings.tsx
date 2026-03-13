@@ -36,7 +36,7 @@ import {
  *  - Confirmed Bookings (CONFIRMED): Cancel action.
  */
 export default function DealerBookings() {
-  const { isDealer, isAdmin, isLoading: authLoading } = useAuth();
+  const { isDealer, isAdmin, isLoading: authLoading, userRole } = useAuth();
   const [searchParams] = useSearchParams();
   const listingId = searchParams.get('listingId') ?? undefined;
   const { data: bookings, isLoading: bookingsLoading, isError } = useDealerBookings(listingId);
@@ -54,7 +54,7 @@ export default function DealerBookings() {
     );
   }
 
-  if (!isDealer && !isAdmin) {
+  if (!isDealer && !isAdmin && userRole !== 'user') {
     return <Navigate to="/" replace />;
   }
 

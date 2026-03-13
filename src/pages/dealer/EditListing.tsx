@@ -175,7 +175,7 @@ export default function EditListing() {
       </AppLayout>
     );
   }
-  if (role !== 'dealer' && role !== 'admin') {
+  if (role !== 'dealer' && role !== 'admin' && role !== 'user') {
     return <Navigate to="/" replace />;
   }
 

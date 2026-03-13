@@ -91,22 +91,27 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
   });
 
-  it('user role: shows Home, Insights, My Saved Areas, Notifications — no admin/dealer links', () => {
+  it('user role: shows Home, Insights, My Saved Areas, My Listings, New Listing, My Bookings, Notifications — no admin/dealer-only links', () => {
     mockAuth = baseAuth({
       user: { email: 'user@test.com' },
       userRole: 'user',
     });
     renderLayout();
 
+    // Owner navigation items (superset of old user nav + listing management)
     expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /insights/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /my saved areas/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /my listings/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /new listing/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /my bookings/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);
 
-    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /new listing/i })).not.toBeInTheDocument();
+    // Admin-only items must not appear
     expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
+    // Dealer-only Dashboard link must not appear
+    expect(screen.queryByRole('link', { name: /^dashboard$/i })).not.toBeInTheDocument();
   });
 
   it('dealer role: shows Dashboard, My Listings, New Listing, Notifications — no user/admin links', () => {

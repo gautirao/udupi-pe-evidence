@@ -174,7 +174,7 @@ function DuplicateButton({ listing }: { listing: ListingResponse }) {
  *  - Not dealer/admin: redirect to / (access not permitted).
  */
 export default function DealerListings() {
-  const { isDealer, isAdmin, isLoading } = useAuth();
+  const { isDealer, isAdmin, isLoading, userRole } = useAuth();
   const [searchParams] = useSearchParams();
   const [activeFilter, setActiveFilter] = useState(searchParams.get('status') ?? '');
   const [activeSort, setActiveSort] = useState('createdAt,desc');
@@ -252,7 +252,8 @@ export default function DealerListings() {
     );
   }
 
-  if (!isDealer && !isAdmin) {
+  const isOwner = userRole === 'user';
+  if (!isDealer && !isAdmin && !isOwner) {
     return <Navigate to="/" replace />;
   }
 
