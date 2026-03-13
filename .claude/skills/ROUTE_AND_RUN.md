@@ -191,6 +191,43 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop and surface to user.
+
+#### Code-Reviewer Invocation Protocol
+
+When invoking `code-reviewer`, the orchestrator MUST construct a structured review brief. Never send a vague prompt like "review this" or "check for issues."
+
+**Step 1 — Determine review_mode:**
+- `.java`, `.kt`, migrations, backend config → `review_mode: backend`
+- `.tsx`, `.ts` in `src/`, frontend hooks/components → `review_mode: frontend`
+- Both layers changed → prefer **two separate calls** (one backend, one frontend) for higher quality. Use `review_mode: both` only for small mixed changes.
+
+**Step 2 — Determine model override:**
+- risk=high (auth, payments, migrations, data integrity, concurrency) → add `model: opus` to the Task invocation
+- risk=low or risk=med → use default (sonnet)
+
+**Step 3 — Construct the review brief using the template:**
+- Backend → fill in `.claude/prompts/code-review-backend.md`
+- Frontend → fill in `.claude/prompts/code-review-frontend.md`
+- Always fill in: `pr_summary`, `change_intent`, `changed_files`
+- Include `known_repo_rules` when the change touches established patterns (see list below)
+- Include `risk_notes` when triage identified specific concerns
+
+**Known repo rules** (pass to reviewer when relevant — reviewer must not flag these):
+- CSS display-toggle for wizard panels (preserves image upload state)
+- `applyVideoUrl: boolean` for partial-update APIs
+- NaN-safe clamp: `Math.max(1, Math.min(N, parseInt(param, 10) || 1))`
+- Hook-level `onError` only (double-toast prevention)
+- React fiber-walk for file drops in E2E
+- `UriComponentsBuilder.build(false)` for user-input query params
+- Leaflet `invalidateSize()` before `flyTo()` in hidden containers
+- `house` type for E2E tests (avoids type-specific required fields)
+- Radix Slider `role="slider"` is on Thumb, not Root
+
+**Step 4 — Summarize results back to user/checkpoint:**
+- Preserve severity (BLOCKING/ADVISORY/SUGGESTION)
+- Preserve exact file:line references
+- Separate backend and frontend findings if both were reviewed
+- Never dilute BLOCKING findings in the summary
 - **Agent-to-Checkpoint Warning Channel (NEW):** Any agent (`qa-fast`, `code-reviewer`, `security-reviewer`, `architect`, etc.) can emit structured warnings that are captured in the checkpoint's `Risks` field. Format:
   ```
   ROUTE_AND_RUN_WARNING: <severity:LOW|MED|HIGH> <message>
