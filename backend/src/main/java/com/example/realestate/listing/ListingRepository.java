@@ -338,6 +338,33 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("propertyType") String propertyType,
             @Param("excludeId") UUID excludeId);
 
+    /**
+     * Returns a page of LIVE, non-archived, non-duplicate, geo-coded listings.
+     * Used by ProximityDuplicateBatchJob for nightly backfill scan.
+     * Paginated to avoid materialising an unbounded result set in heap.
+     */
+    @Query(value = """
+            SELECT * FROM property_listings
+            WHERE status = 'LIVE'
+              AND archived_at IS NULL
+              AND is_duplicate = false
+              AND is_suspected_duplicate = false
+              AND latitude IS NOT NULL
+              AND longitude IS NOT NULL
+            ORDER BY created_at ASC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM property_listings
+            WHERE status = 'LIVE'
+              AND archived_at IS NULL
+              AND is_duplicate = false
+              AND is_suspected_duplicate = false
+              AND latitude IS NOT NULL
+              AND longitude IS NOT NULL
+            """,
+            nativeQuery = true)
+    Page<Listing> findAllLiveWithCoordinates(Pageable pageable);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """
