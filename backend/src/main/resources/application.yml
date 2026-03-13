@@ -101,3 +101,10 @@ sentry:
   send-default-pii: false
   environment: ${RENDER_SERVICE_NAME:local}
   traces-sample-rate: 0
+
+# Proximity duplicate batch job — nightly backfill scan.
+# Cron uses Spring 6-field format: seconds minutes hours day-of-month month day-of-week.
+# Default: 02:00 UTC. Override via PROXIMITY_BATCH_CRON env var (e.g. "0/5 * * * * *" for dev).
+proximity:
+  batch:
+    cron: ${PROXIMITY_BATCH_CRON:0 0 2 * * *}
