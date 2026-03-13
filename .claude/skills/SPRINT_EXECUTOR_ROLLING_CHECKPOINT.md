@@ -29,7 +29,8 @@ Before the first PR:
 
    `spec-enricher` runs on `opus` regardless of your current model — consistent quality is the reason it is a dedicated agent.
 
-   - Store all enriched spec blocks returned by the agent in the checkpoint preamble as `Enriched specs:` — one block per issue.
+   - `spec-enricher` prints its full output to the conversation (all spec blocks + summary + any spec gaps). **Do not suppress or paraphrase this output** — the user must be able to read every enriched spec before team-lead runs.
+   - Store all enriched spec blocks in the checkpoint preamble as `Enriched specs:` — one block per issue.
    - These specs are the authoritative input to team-lead, qa-fast, and engineers for the rest of the sprint. Do NOT re-derive them per-PR.
 
 4. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, descriptions, AND enriched specs as context:
@@ -164,6 +165,7 @@ When a new issue is added to the sprint after kickoff (user says "add RE-XX to s
 1. **Fetch the issue** — `get_issue RE-XX` to obtain title and full description.
 2. **Run spec-enricher** — invoke `spec-enricher` (Task tool) for this issue alone:
    > "Enrich spec for one issue: [RE-XX title + description]."
+   - `spec-enricher` prints its full output to the conversation. Do not suppress it — the user reviews the enriched spec before team-lead runs.
    - If spec-enricher flags a spec gap (Key unknowns = SPEC GAP): play `afplay /System/Library/Sounds/Ping.aiff`, surface the gap to the user, and pause. Do not insert the issue into the execution order until resolved or waived.
 3. **Run lightweight team-lead conflict check** — invoke `team-lead` (Task tool) with:
    > "A new issue RE-XX is being added mid-sprint. Completed PRs: [list]. In-progress PR: [current]. Remaining planned issues: [list + enriched specs]. Enriched spec for RE-XX: [paste]. Mode: mid-sprint insertion — return only: (a) recommended insertion point in execution order, (b) any file conflicts with completed or in-progress work, (c) any dependency on remaining issues."

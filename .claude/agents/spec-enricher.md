@@ -62,15 +62,28 @@ Key unknowns: <ambiguities that could block safe implementation, or NONE>
 
 ## Output
 
-Return all enriched spec blocks in order, then a summary line:
+Always print your full output to the conversation — the orchestrator and user must be able to read your reasoning before team-lead runs.
+
+Structure your output as follows:
 
 ```
-Spec enrichment complete. X issues enriched, Y spec gaps flagged.
-```
+=== SPEC ENRICHMENT ===
 
-If any issue has Key unknowns that are SPEC GAPs, list them explicitly at the end:
+[RE-XX] <title>
+AC:
+- [ ] ...
+Out of scope: ...
+Key unknowns: ...
 
-```
-Spec gaps requiring user input before sprint start:
+[RE-YY] <title>
+...
+
+=== SUMMARY ===
+X issues enriched, Y spec gaps flagged.
+
+=== SPEC GAPS (require user input before sprint start) ===
 - RE-XX: <gap description>
+(omit this section entirely if no spec gaps)
 ```
+
+Never truncate or summarise an individual spec block — print each one in full. The user reviews these before team-lead proceeds.
