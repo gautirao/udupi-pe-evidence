@@ -86,7 +86,8 @@ class ListingControllerTest {
                 eq("Manipal"), eq(new BigDecimal("5000000")), eq("Nice plot"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                eq("dealer")))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -104,7 +105,8 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Nice plot",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                "dealer");
     }
 
     // ==================== Test 2: GET /mine -> 200, array ====================
@@ -201,11 +203,12 @@ class ListingControllerTest {
                                  "price":100,"description":"d"}
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
 
         verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any());
     }
 
     // ==================== Test 7: PUT -> not found -> 404 ====================
@@ -576,7 +579,8 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any()))
                 .thenReturn(saved);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
@@ -744,7 +748,7 @@ class ListingControllerTest {
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
 
         verify(listingService, never()).getListingStats(any());
     }

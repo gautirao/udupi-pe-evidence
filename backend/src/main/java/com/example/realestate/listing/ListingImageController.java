@@ -39,7 +39,7 @@ public class ListingImageController {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
     private static final Set<String> MUTABLE_STATUSES = Set.of(
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
+    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
     private static final Pattern EXTENSION_PATTERN = Pattern.compile(".*\\.([a-zA-Z]+)$");
 
     private final ListingRepository listingRepository;
@@ -244,7 +244,7 @@ public class ListingImageController {
 
     private static ResponseEntity<Map<String, String>> forbidden() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer or admin role"));
+                .body(Map.of("error", "Requires dealer, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound(String message) {

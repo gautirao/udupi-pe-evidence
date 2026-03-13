@@ -322,12 +322,12 @@ class BookingControllerTest {
 
     @Test
     void dealer_withoutDealerRole_returns403() throws Exception {
-        when(bookingService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("user"));
+        when(bookingService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/bookings/dealer")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
 
         verify(bookingService, never()).getBookingsForDealerPaged(any(), any());
     }

@@ -36,7 +36,7 @@ import java.util.UUID;
 public class ListingController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingController.class);
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
+    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
 
     private final ListingService listingService;
     private final ListingRepository listingRepository;
@@ -55,21 +55,29 @@ public class ListingController {
         CallerInfo caller = resolveCallerOrForbid(auth);
         if (caller == null) return forbidden();
 
+        String sellerType = "user".equals(caller.role()) ? "owner" : caller.role();
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
-        Listing saved = listingService.createDraft(
-                caller.userId(), req.propertyType(), req.title(),
-                req.locality(), req.price(), req.description(),
-                req.landArea(), req.bedrooms(), req.builtArea(),
-                req.landAreaUnit(), req.builtAreaUnit(), createVideoUrl,
-                req.listingPurpose(),
-                req.carpetArea(), req.carpetAreaUnit(),
-                req.floorNumber(), req.totalFloors(),
-                req.furnishingStatus(), req.washrooms(), req.parkingCount(),
-                req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
-                req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
+        try {
+            Listing saved = listingService.createDraft(
+                    caller.userId(), req.propertyType(), req.title(),
+                    req.locality(), req.price(), req.description(),
+                    req.landArea(), req.bedrooms(), req.builtArea(),
+                    req.landAreaUnit(), req.builtAreaUnit(), createVideoUrl,
+                    req.listingPurpose(),
+                    req.carpetArea(), req.carpetAreaUnit(),
+                    req.floorNumber(), req.totalFloors(),
+                    req.furnishingStatus(), req.washrooms(), req.parkingCount(),
+                    req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
+                    req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
+                    sellerType);
 
-        log.info("POST /api/listings -> 201 listingId={} createdBy={}", saved.getId(), caller.userId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
+            log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
+                    saved.getId(), caller.userId(), sellerType);
+            return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
+        } catch (ListingService.OwnerListingLimitException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/{id}")
@@ -215,7 +223,7 @@ public class ListingController {
 
     private static ResponseEntity<Map<String, String>> forbidden() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer or admin role"));
+                .body(Map.of("error", "Requires dealer, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound() {
@@ -246,7 +254,8 @@ public class ListingController {
                 l.getFloorNumber(), l.getTotalFloors(),
                 l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
-                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths());
+                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
+                l.getSellerType());
     }
 
     // ===== DTOs =====
@@ -361,7 +370,8 @@ public class ListingController {
             Integer numberOfUnits,
             Long monthlyRent,
             Integer securityDepositMonths,
-            Integer lockInMonths
+            Integer lockInMonths,
+            String sellerType
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

@@ -44,6 +44,8 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     Page<Listing> findByCreatedByAndStatus(UUID createdBy, String status, Pageable pageable);
 
+    long countByCreatedByAndSellerTypeAndStatus(UUID createdBy, String sellerType, String status);
+
     /**
      * Count listings grouped by status for a given user.
      * Returns rows of [status (String), count (Long)].

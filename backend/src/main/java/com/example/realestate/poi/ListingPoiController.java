@@ -45,7 +45,7 @@ import java.util.UUID;
 public class ListingPoiController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingPoiController.class);
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin");
+    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
 
     /**
      * Settlement-derived categories (TOWN_CENTER, VILLAGE_CENTER, HIGHWAY) are auto-approved
@@ -268,7 +268,7 @@ public class ListingPoiController {
         String role = listingService.getUserRole(userId).orElse(null);
         if (role == null || !ALLOWED_ROLES.contains(role)) {
             log.warn("AUTH DENIED caller={} reason=insufficient_role role={}", userId, role);
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires dealer or admin role");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires dealer, owner, or admin role");
         }
         return new CallerInfo(userId, role, "admin".equals(role));
     }
@@ -279,7 +279,7 @@ public class ListingPoiController {
 
     private static ResponseEntity<Map<String, String>> forbidden() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer or admin role"));
+                .body(Map.of("error", "Requires dealer, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound() {
