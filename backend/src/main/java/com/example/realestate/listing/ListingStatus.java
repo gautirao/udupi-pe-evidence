@@ -10,6 +10,7 @@ package com.example.realestate.listing;
  *   <li>{@link #PENDING_REVIEW} — submitted by dealer, awaiting admin approval</li>
  *   <li>{@link #LIVE} — approved by admin, visible to all users</li>
  *   <li>{@link #REJECTED} — rejected by admin, dealer can edit and resubmit</li>
+ *   <li>{@link #ARCHIVED} — soft-deleted by dealer/admin; hidden from owner views but preserved for history</li>
  * </ul>
  */
 public enum ListingStatus {
@@ -17,7 +18,8 @@ public enum ListingStatus {
     DRAFT,
     PENDING_REVIEW,
     LIVE,
-    REJECTED;
+    REJECTED,
+    ARCHIVED;
 
     /**
      * Returns the database-compatible string value (matches PostgreSQL enum).

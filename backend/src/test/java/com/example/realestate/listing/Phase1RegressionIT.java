@@ -68,13 +68,13 @@ class Phase1RegressionIT {
     }
 
     @Test
-    @DisplayName("listing_status enum has all 5 expected values")
+    @DisplayName("listing_status enum has all 6 expected values (including ARCHIVED added by V35)")
     void listingStatusEnum_hasAllValues() {
         List<String> values = jdbcTemplate.queryForList(
                 "SELECT unnest(enum_range(NULL::listing_status))::text AS val",
                 String.class);
         assertThat(values).containsExactly(
-                "SCRAPED", "DRAFT", "PENDING_REVIEW", "LIVE", "REJECTED");
+                "SCRAPED", "DRAFT", "PENDING_REVIEW", "LIVE", "REJECTED", "ARCHIVED");
     }
 
     @Test

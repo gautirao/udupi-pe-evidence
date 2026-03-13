@@ -56,6 +56,25 @@ public class AdminListingController {
         }
     }
 
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<?> restore(JwtAuthenticationToken auth, @PathVariable UUID id) {
+        UUID adminId = resolveAdminOrForbid(auth);
+        if (adminId == null) return forbidden();
+
+        try {
+            Listing restored = listingService.restoreListing(id, adminId);
+            log.info("POST /api/admin/listings/{}/restore -> 200 status=DRAFT adminId={}", id, adminId);
+            adminAuditService.record(adminId, "listing_restored", "listing", id, null,
+                    "{\"status\":\"DRAFT\"}");
+            return ResponseEntity.ok(toResponse(restored));
+        } catch (ListingService.ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingService.ListingNotArchivedException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PostMapping("/{id}/reject")
     public ResponseEntity<?> reject(JwtAuthenticationToken auth,
                                     @PathVariable UUID id,

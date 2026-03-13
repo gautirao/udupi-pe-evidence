@@ -13,6 +13,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -204,6 +205,16 @@ public class Listing {
 
     @Column(name = "lock_in_months")
     private Integer lockInMonths;
+
+    // --- Soft delete ---
+
+    /**
+     * When non-null, the listing has been soft-deleted (archived).
+     * Archived listings are hidden from dealer/owner views but preserved for history.
+     * Set by {@code deleteListing()} and {@code bulkDeleteListings()}; cleared by admin restore.
+     */
+    @Column(name = "archived_at")
+    private Instant archivedAt;
 
     // --- Seller type ---
 
@@ -729,6 +740,16 @@ public class Listing {
 
     public void setLockInMonths(Integer lockInMonths) {
         this.lockInMonths = lockInMonths;
+    }
+
+    // --- Soft delete getter/setter ---
+
+    public Instant getArchivedAt() {
+        return archivedAt;
+    }
+
+    public void setArchivedAt(Instant archivedAt) {
+        this.archivedAt = archivedAt;
     }
 
     // --- Seller type getter/setter ---
