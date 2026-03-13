@@ -86,7 +86,8 @@ class ListingControllerTest {
                 eq("Manipal"), eq(new BigDecimal("5000000")), eq("Nice plot"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                eq("dealer")))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -104,7 +105,8 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Nice plot",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null,
+                "dealer");
     }
 
     // ==================== Test 2: GET /mine -> 200, array ====================
@@ -201,11 +203,12 @@ class ListingControllerTest {
                                  "price":100,"description":"d"}
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
 
         verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any());
     }
 
     // ==================== Test 7: PUT -> not found -> 404 ====================
@@ -576,7 +579,8 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any()))
                 .thenReturn(saved);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
@@ -744,7 +748,7 @@ class ListingControllerTest {
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
 
         verify(listingService, never()).getListingStats(any());
     }
@@ -761,6 +765,96 @@ class ListingControllerTest {
                 .andExpect(status().isOk());
 
         verify(listingService).getListingStats(adminId);
+    }
+
+    // ==================== RE-86: Owner seller type tests ====================
+
+    @Test
+    void create_withUserRole_setsSellerTypeOwner() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
+
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "My plot",
+                "Manipal", new BigDecimal("3000000"), "Owner listing");
+        saved.setSellerType("owner");
+        when(listingService.createDraft(eq(DEALER_ID), eq("land"), eq("My plot"),
+                eq("Manipal"), eq(new BigDecimal("3000000")), eq("Owner listing"),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                eq("owner")))
+                .thenReturn(saved);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"land","title":"My plot","locality":"Manipal",
+                                 "price":3000000,"description":"Owner listing"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sellerType").value("owner"));
+
+        verify(listingService).createDraft(DEALER_ID, "land", "My plot",
+                "Manipal", new BigDecimal("3000000"), "Owner listing",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                "owner");
+    }
+
+    @Test
+    void create_withUserRole_atLimit_returns409() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
+        when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                eq("owner")))
+                .thenThrow(new ListingService.OwnerListingLimitException(
+                        "Owner accounts are limited to 3 active listings"));
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"land","title":"4th listing","locality":"Udupi",
+                                 "price":1000000,"description":"Over limit"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Owner accounts are limited to 3 active listings"));
+    }
+
+    @Test
+    void create_withAdminRole_setsSellerTypeDealer() throws Exception {
+        UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        when(listingService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
+
+        Listing saved = buildListing(LISTING_ID, "DRAFT", "house", "Admin house",
+                "Udupi", new BigDecimal("7000000"), "Admin-created");
+        saved.setSellerType("dealer");
+        when(listingService.createDraft(eq(adminId), eq("house"), eq("Admin house"),
+                eq("Udupi"), eq(new BigDecimal("7000000")), eq("Admin-created"),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                eq("dealer")))
+                .thenReturn(saved);
+
+        mockMvc.perform(post("/api/listings")
+                        .with(jwt().jwt(j -> j.subject(adminId.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"propertyType":"house","title":"Admin house","locality":"Udupi",
+                                 "price":7000000,"description":"Admin-created"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.sellerType").value("dealer"));
+
+        verify(listingService).createDraft(adminId, "house", "Admin house",
+                "Udupi", new BigDecimal("7000000"), "Admin-created",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                "dealer");
     }
 
     // ==================== Helper ====================

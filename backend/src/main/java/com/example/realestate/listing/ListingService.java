@@ -376,7 +376,8 @@ public class ListingService {
                                String locality, BigDecimal price, String description) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer");
     }
 
     @Transactional
@@ -385,7 +386,8 @@ public class ListingService {
                                String videoUrl) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 null, null, null, null, null, videoUrl,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer");
     }
 
     /**
@@ -398,14 +400,18 @@ public class ListingService {
                                String landAreaUnit, String builtAreaUnit, String videoUrl) {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer");
     }
 
     /**
-     * Create a new dealer-owned listing with status DRAFT, including optional area, unit,
-     * commercial, and rent fields.
+     * Create a new listing with status DRAFT, including optional area, unit,
+     * commercial, rent fields, and seller type.
      * Derived area fields (areaSqm, areaSqft, areaCent, pricePerCentPaise) are computed only when
      * both landArea and landAreaUnit are provided.
+     *
+     * @param sellerType one of "owner", "dealer", "builder" — inferred by controller from caller's role
+     * @throws OwnerListingLimitException if sellerType is "owner" and the user already has 3 LIVE listings
      */
     @Transactional
     public Listing createDraft(UUID createdBy, String propertyType, String title,
@@ -417,11 +423,22 @@ public class ListingService {
                                Integer floorNumber, Integer totalFloors,
                                String furnishingStatus, Integer washrooms, Integer parkingCount,
                                BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
-                               Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths) {
+                               Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                               String sellerType) {
+        // Enforce owner listing limit: max 3 LIVE listings for owner accounts
+        if ("owner".equals(sellerType)) {
+            long liveCount = listingRepository.countByCreatedByAndSellerTypeAndStatus(
+                    createdBy, "owner", ListingStatus.LIVE.toDbValue());
+            if (liveCount >= 3) {
+                throw new OwnerListingLimitException("Owner accounts are limited to 3 active listings");
+            }
+        }
+
         Listing listing = new Listing();
         listing.setCreatedBy(createdBy);
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
         listing.setPropertyType(propertyType != null ? propertyType : "other");
+        listing.setSellerType(sellerType != null ? sellerType : "dealer");
         listing.setTitle(title);
         listing.setLocality(locality);
         listing.setPrice(price);
@@ -463,8 +480,8 @@ public class ListingService {
         listing.setUpdatedAt(now);
 
         Listing saved = listingRepository.save(listing);
-        log.info("Created draft listing listingId={} createdBy={} isDuplicate={}",
-                saved.getId(), createdBy, saved.isDuplicate());
+        log.info("Created draft listing listingId={} createdBy={} sellerType={} isDuplicate={}",
+                saved.getId(), createdBy, sellerType, saved.isDuplicate());
         return saved;
     }
 
@@ -993,6 +1010,12 @@ public class ListingService {
 
         public List<Map<String, String>> getErrors() {
             return errors;
+        }
+    }
+
+    public static class OwnerListingLimitException extends RuntimeException {
+        public OwnerListingLimitException(String message) {
+            super(message);
         }
     }
 

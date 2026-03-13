@@ -107,6 +107,7 @@ export interface ListingResponse {
   monthlyRent: number | null;
   securityDepositMonths: number | null;
   lockInMonths: number | null;
+  sellerType: string | null;
 }
 
 /**

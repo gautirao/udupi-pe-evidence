@@ -42,7 +42,7 @@ import java.util.UUID;
 public class BookingController {
 
     private static final Logger log = LoggerFactory.getLogger(BookingController.class);
-    private static final Set<String> DEALER_ROLES = Set.of("dealer", "admin");
+    private static final Set<String> DEALER_ROLES = Set.of("dealer", "admin", "user");
     private static final Set<String> BOOKING_SORT_FIELDS = Set.of("createdAt", "requestedDate");
 
     private final BookingService bookingService;
@@ -234,7 +234,7 @@ public class BookingController {
 
     private static ResponseEntity<Map<String, String>> forbidden() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer or admin role"));
+                .body(Map.of("error", "Requires dealer, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound() {

@@ -127,7 +127,8 @@ public class AdminListingController {
                 l.getFloorNumber(), l.getTotalFloors(),
                 l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
-                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths());
+                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
+                l.getSellerType());
     }
 
     // ===== DTOs =====
