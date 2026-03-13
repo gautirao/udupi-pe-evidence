@@ -3,7 +3,7 @@
  * and that the 404 page renders for unknown routes.
  *
  * Covers:
- *   N1 — user role: Insights, My Saved Areas, My Bookings visible; no dealer/admin links
+ *   N1 — user role (owner): Insights, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer/admin links
  *   N2 — admin role: Administrator label + admin nav links visible; no dealer links
  *   N3 — 404: navigating to an unknown route renders the Not Found page
  *
@@ -44,7 +44,7 @@ async function loginAs(
 // ---------------------------------------------------------------------------
 // N1 — User role: correct nav links after login
 // ---------------------------------------------------------------------------
-test('N1 — user role: Insights, My Saved Areas, My Bookings visible; no dealer or admin links', async ({ page }) => {
+test('N1 — user role (owner): Insights, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping N1');
 
   await loginAs(page, userEmail, userPassword);
@@ -52,14 +52,14 @@ test('N1 — user role: Insights, My Saved Areas, My Bookings visible; no dealer
   // Wait for auth context to settle so nav renders with the correct role
   await page.waitForTimeout(2_000);
 
-  // User nav items must be visible
+  // Owner nav items must be visible (superset of old user nav + listing management)
   await expect(page.getByRole('link', { name: /^insights$/i }).first()).toBeVisible({ timeout: 8_000 });
   await expect(page.getByRole('link', { name: /my saved areas/i })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByRole('link', { name: /^my listings$/i })).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByRole('link', { name: /new listing/i })).toBeVisible({ timeout: 8_000 });
   await expect(page.getByRole('link', { name: /my bookings/i })).toBeVisible({ timeout: 8_000 });
 
-  // Dealer-only links must NOT appear
-  await expect(page.getByRole('link', { name: /^my listings$/i })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /new listing/i })).toHaveCount(0);
+  // Dealer-only "Bookings" (not "My Bookings") must NOT appear
   await expect(page.getByRole('link', { name: /^bookings$/i })).toHaveCount(0);
 
   // Admin-only links must NOT appear
