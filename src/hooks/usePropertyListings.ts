@@ -55,6 +55,7 @@ export interface PropertyListing {
   monthly_rent: number | null;
   security_deposit_months: number | null;
   lock_in_months: number | null;
+  seller_type: string | null;
 }
 
 export interface PropertyFilters {
@@ -66,6 +67,8 @@ export interface PropertyFilters {
   dateTo?: Date;
   /** BHK values: 1, 2, 3, or 4 (meaning 4+) */
   bedrooms?: number[];
+  /** Filter by seller type: 'owner', 'dealer' */
+  sellerTypes?: string[];
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
@@ -107,6 +110,10 @@ export function usePropertyListings(filters?: PropertyFilters) {
 
       if (filters?.dateTo) {
         query = query.lte('created_at', filters.dateTo.toISOString());
+      }
+
+      if (filters?.sellerTypes && filters.sellerTypes.length > 0) {
+        query = query.in('seller_type', filters.sellerTypes);
       }
 
       if (filters?.bedrooms && filters.bedrooms.length > 0) {

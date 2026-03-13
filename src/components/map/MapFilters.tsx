@@ -72,11 +72,18 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     onFiltersChange({ ...filters, bedrooms: next.length > 0 ? next : undefined });
   };
 
+  const handleSellerTypeToggle = (value: string) => {
+    const current = filters.sellerTypes || [];
+    const next = current.includes(value) ? current.filter((s) => s !== value) : [...current, value];
+    onFiltersChange({ ...filters, sellerTypes: next.length > 0 ? next : undefined });
+  };
+
   const hasActiveFilters =
     !!searchQuery ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
     (filters.localities && filters.localities.length > 0) ||
     (filters.bedrooms && filters.bedrooms.length > 0) ||
+    (filters.sellerTypes && filters.sellerTypes.length > 0) ||
     filters.priceMin !== undefined ||
     filters.priceMax !== undefined ||
     filters.dateFrom !== undefined ||
@@ -158,6 +165,27 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
                   size="sm"
                   className="h-8 px-3 text-sm"
                   onClick={() => handleBedroomToggle(value)}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Listed By */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Listed By</Label>
+          <div className="flex gap-2 flex-wrap">
+            {[{ label: 'Owner', value: 'owner' }, { label: 'Dealer', value: 'dealer' }].map(({ label, value }) => {
+              const active = filters.sellerTypes?.includes(value) || false;
+              return (
+                <Button
+                  key={value}
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 px-3 text-sm"
+                  onClick={() => handleSellerTypeToggle(value)}
                 >
                   {label}
                 </Button>
