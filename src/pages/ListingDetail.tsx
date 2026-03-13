@@ -291,6 +291,12 @@ export default function ListingDetail() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Badge className={badgeClass}>{label}</Badge>
+                {listing.seller_type === 'owner' && (
+                  <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">Owner</Badge>
+                )}
+                {listing.seller_type === 'dealer' && (
+                  <Badge variant="outline" className="border-sky-300 text-sky-700 bg-sky-50">Dealer</Badge>
+                )}
                 {listing.confidence_score && listing.confidence_score < 70 && (
                   <TooltipProvider>
                     <Tooltip>

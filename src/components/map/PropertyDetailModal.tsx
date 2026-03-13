@@ -165,6 +165,12 @@ export function PropertyDetailModal({ listing, images, onClose }: PropertyDetail
           <DialogHeader className="mb-4">
             <div className="flex items-center gap-2 mb-2">
               <Badge className={`${bgClass} text-white`}>{label}</Badge>
+              {listing.seller_type === 'owner' && (
+                <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">Owner</Badge>
+              )}
+              {listing.seller_type === 'dealer' && (
+                <Badge variant="outline" className="border-sky-300 text-sky-700 bg-sky-50">Dealer</Badge>
+              )}
               {listing.confidence_score && listing.confidence_score < 70 && (
                 <Badge variant="outline" className="text-yellow-600 border-yellow-400">
                   Low confidence
