@@ -684,6 +684,30 @@ public class ListingService {
     }
 
     /**
+     * Bulk-deletes listings by ID.  Each listing is validated independently:
+     * must be owned by the caller and in DRAFT or REJECTED status.
+     * Returns a result summarising successes and per-ID errors.
+     */
+    @Transactional
+    public ListingController.BulkDeleteResult bulkDeleteListings(
+            java.util.List<UUID> ids, UUID userId, boolean isAdmin) {
+        int deleted = 0;
+        int skipped = 0;
+        java.util.List<String> errors = new java.util.ArrayList<>();
+
+        for (UUID id : ids) {
+            try {
+                deleteListing(id, userId, isAdmin);
+                deleted++;
+            } catch (ListingNotFoundException | ListingOwnershipException | ListingStatusException e) {
+                skipped++;
+                errors.add(id + ": " + e.getMessage());
+            }
+        }
+        return new ListingController.BulkDeleteResult(deleted, skipped, errors);
+    }
+
+    /**
      * Find a listing that the user owns (or any listing if admin).
      * Throws ListingNotFoundException if the listing does not exist.
      * Throws ListingOwnershipException if the listing exists but is owned by someone else.

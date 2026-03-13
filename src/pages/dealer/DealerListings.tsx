@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   useDealerMyListingsInfinite,
   useDeleteListing,
+  useBulkDeleteListings,
   useDuplicateListing,
   useSubmitListing,
   type ListingResponse,
@@ -31,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { AlertCircle, Building2, CalendarDays, Copy, Eye, ImageIcon, Loader2 } from 'lucide-react';
+import { AlertCircle, Building2, CalendarDays, Copy, Eye, ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -190,7 +191,56 @@ export default function DealerListings() {
   const allListings = useMemo(() => data?.pages.flatMap((p) => p.listings) ?? [], [data?.pages]);
   const totalElements = data?.pages[0]?.totalElements ?? 0;
   const deleteListingMutation = useDeleteListing();
+  const bulkDeleteMutation = useBulkDeleteListings();
   const { toast } = useToast();
+
+  // Bulk selection state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Only DRAFT and REJECTED listings can be bulk-deleted
+  const deletableListings = useMemo(
+    () => allListings.filter((l) => l.status === 'DRAFT' || l.status === 'REJECTED'),
+    [allListings],
+  );
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(deletableListings.map((l) => l.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    const ids = Array.from(selectedIds);
+    bulkDeleteMutation.mutate(ids, {
+      onSuccess: (result) => {
+        toast({
+          title: `${result.deleted} listing${result.deleted !== 1 ? 's' : ''} deleted`,
+          description: result.skipped > 0
+            ? `${result.skipped} could not be deleted (wrong status or not found).`
+            : undefined,
+        });
+        setSelectedIds(new Set());
+      },
+      onError: (error: Error) => {
+        toast({
+          title: 'Bulk delete failed',
+          description: error.message,
+          variant: 'destructive',
+        });
+      },
+    });
+  };
 
   if (isLoading) {
     return (
@@ -299,11 +349,92 @@ export default function DealerListings() {
 
         {!listingsLoading && !isError && allListings.length > 0 && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Showing {allListings.length} of {totalElements} listing{totalElements !== 1 ? 's' : ''}
-            </p>
-            {allListings.map((listing) => (
-              <Card key={listing.id} className="overflow-hidden">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Showing {allListings.length} of {totalElements} listing{totalElements !== 1 ? 's' : ''}
+              </p>
+              {deletableListings.length > 0 && (
+                <div className="flex items-center gap-2">
+                  {selectedIds.size > 0 ? (
+                    <Button variant="ghost" size="sm" onClick={deselectAll}>
+                      Deselect all
+                    </Button>
+                  ) : (
+                    <Button variant="ghost" size="sm" onClick={selectAll}>
+                      Select all deletable
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2">
+                <span className="text-sm font-medium">
+                  {selectedIds.size} selected
+                </span>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      disabled={bulkDeleteMutation.isPending}
+                    >
+                      {bulkDeleteMutation.isPending ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      )}
+                      Delete selected
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Delete {selectedIds.size} listing{selectedIds.size !== 1 ? 's' : ''}?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete the selected listings. This cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        onClick={handleBulkDelete}
+                      >
+                        Delete {selectedIds.size} listing{selectedIds.size !== 1 ? 's' : ''}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button variant="ghost" size="sm" onClick={deselectAll}>
+                  Cancel
+                </Button>
+              </div>
+            )}
+            {allListings.map((listing) => {
+              const isDeletable = listing.status === 'DRAFT' || listing.status === 'REJECTED';
+              const isSelected = selectedIds.has(listing.id);
+
+              return (
+              <Card
+                key={listing.id}
+                className={`overflow-hidden relative transition-colors ${isSelected ? 'ring-2 ring-destructive/40' : ''}`}
+              >
+                {/* Selection checkbox for deletable listings */}
+                {isDeletable && (
+                  <div className="absolute top-2 left-2 z-10">
+                    <label className="flex items-center justify-center h-6 w-6 rounded border bg-background/90 cursor-pointer hover:bg-accent">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(listing.id)}
+                        className="h-4 w-4 accent-destructive cursor-pointer"
+                      />
+                    </label>
+                  </div>
+                )}
                 {listing.firstImageUrl ? (
                   <div className="relative">
                     <img
@@ -453,7 +584,8 @@ export default function DealerListings() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
             {hasNextPage && (
               <div className="flex justify-center pt-2">
                 <Button

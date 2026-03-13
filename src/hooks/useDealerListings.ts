@@ -332,6 +332,27 @@ export function useDuplicateListing() {
 }
 
 /**
+ * Bulk-deletes listings via POST /api/listings/bulk-delete.
+ * Only DRAFT and REJECTED listings can be deleted.
+ */
+export function useBulkDeleteListings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) =>
+      api.post<{ deleted: number; skipped: number; errors: string[] }>(
+        '/api/listings/bulk-delete',
+        { ids },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+    },
+  });
+}
+
+/**
  * Submits a listing for review via POST /api/listings/{id}/submit.
  * Backend validates address_confirmed=true, imageCount>=3, and required fields.
  * Throws an error with `.status` and `.body` attached for 422 responses.

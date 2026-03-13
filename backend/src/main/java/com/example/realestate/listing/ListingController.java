@@ -162,6 +162,24 @@ public class ListingController {
         }
     }
 
+    @PostMapping("/bulk-delete")
+    public ResponseEntity<?> bulkDelete(JwtAuthenticationToken auth, @RequestBody BulkDeleteRequest req) {
+        CallerInfo caller = resolveCallerOrForbid(auth);
+        if (caller == null) return forbidden();
+
+        if (req.ids() == null || req.ids().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "ids must not be empty"));
+        }
+        if (req.ids().size() > 50) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Cannot delete more than 50 listings at once"));
+        }
+
+        BulkDeleteResult result = listingService.bulkDeleteListings(req.ids(), caller.userId(), caller.isAdmin());
+        log.info("POST /api/listings/bulk-delete -> deleted={} skipped={} userId={}",
+                result.deleted(), result.skipped(), caller.userId());
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/{id}/submit")
     public ResponseEntity<?> submit(JwtAuthenticationToken auth, @PathVariable UUID id) {
         CallerInfo caller = resolveCallerOrForbid(auth);
@@ -345,4 +363,8 @@ public class ListingController {
             Integer securityDepositMonths,
             Integer lockInMonths
     ) {}
+
+    public record BulkDeleteRequest(List<UUID> ids) {}
+
+    public record BulkDeleteResult(int deleted, int skipped, List<String> errors) {}
 }
