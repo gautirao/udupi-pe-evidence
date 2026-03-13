@@ -81,6 +81,15 @@ const dealerNavigation = [
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
+const ownerNavigation = [
+  { name: 'Home', href: '/', icon: Home },
+  { name: 'Insights', href: '/insights', icon: BarChart3 },
+  { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
+  { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
+  { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
+];
+
 const loggedOutNavigation = [
   { name: 'Home', href: '/', icon: Home },
 ];
@@ -88,7 +97,7 @@ const loggedOutNavigation = [
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, isDealer, signOut } = useAuth();
+  const { user, isAdmin, isDealer, userRole, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -103,6 +112,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     ? adminPrimaryNavigation
     : isDealer
     ? dealerNavigation
+    : user && userRole === 'user'
+    ? ownerNavigation
     : user
     ? userNavigation
     : loggedOutNavigation;

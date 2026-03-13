@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, MapPin, Building2 } from 'lucide-react';
+import { Loader2, MapPin, Building2, Home } from 'lucide-react';
 
 /**
  * First-run intent screen shown after signup.
@@ -33,7 +33,7 @@ export default function Onboarding() {
 
   return (
     <AppLayout>
-      <div className="container max-w-2xl py-16 px-4">
+      <div className="container max-w-4xl py-16 px-4">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold tracking-tight mb-3">What brings you here?</h1>
           <p className="text-muted-foreground text-lg">
@@ -41,7 +41,7 @@ export default function Onboarding() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {/* Browse path */}
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
@@ -59,6 +59,27 @@ export default function Onboarding() {
             <CardContent>
               <Button className="w-full" variant="outline" onClick={() => navigate('/')}>
                 Start Browsing
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Owner path */}
+          <Card
+            className="cursor-pointer transition-colors hover:border-primary"
+            onClick={() => navigate('/dealer/listings/new')}
+          >
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-3">
+                <Home className="h-6 w-6 text-primary" />
+              </div>
+              <CardTitle>List Your Property</CardTitle>
+              <CardDescription>
+                List up to 3 of your own properties. No dealer registration needed.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" variant="outline" onClick={() => navigate('/dealer/listings/new')}>
+                List as Owner
               </Button>
             </CardContent>
           </Card>

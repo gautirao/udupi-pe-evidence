@@ -81,7 +81,7 @@ export default function NewListing() {
   const [securityDepositMonths, setSecurityDepositMonths] = useState('');
   const [lockInMonths, setLockInMonths] = useState('');
 
-  // Dealer-only guard: allow dealer and admin roles
+  // Guard: allow dealer, admin, and user (owner) roles
   const role = userRole as string | null;
   if (authLoading) {
     return (
@@ -92,7 +92,7 @@ export default function NewListing() {
       </AppLayout>
     );
   }
-  if (role !== 'dealer' && role !== 'admin') {
+  if (role !== 'dealer' && role !== 'admin' && role !== 'user') {
     return <Navigate to="/" replace />;
   }
 
