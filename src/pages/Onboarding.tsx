@@ -78,7 +78,7 @@ export default function Onboarding() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="outline" onClick={() => navigate('/dealer/listings/new')}>
+              <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); navigate('/dealer/listings/new'); }}>
                 List as Owner
               </Button>
             </CardContent>

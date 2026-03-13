@@ -65,14 +65,6 @@ const adminNavigation = [
   { name: 'Audit Log', href: '/admin/audit-log', icon: Shield },
 ];
 
-const userNavigation = [
-  { name: 'Home', href: '/', icon: Home },
-  { name: 'Insights', href: '/insights', icon: BarChart3 },
-  { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
-  { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
-  { name: 'Notifications', href: '/notifications', icon: Bell },
-];
-
 const dealerNavigation = [
   { name: 'Dashboard', href: '/dealer/dashboard', icon: Home },
   { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
@@ -84,6 +76,7 @@ const dealerNavigation = [
 const ownerNavigation = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Insights', href: '/insights', icon: BarChart3 },
+  { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
   { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
   { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
   { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
@@ -112,10 +105,8 @@ export function AppLayout({ children }: AppLayoutProps) {
     ? adminPrimaryNavigation
     : isDealer
     ? dealerNavigation
-    : user && userRole === 'user'
-    ? ownerNavigation
     : user
-    ? userNavigation
+    ? ownerNavigation
     : loggedOutNavigation;
 
   const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
