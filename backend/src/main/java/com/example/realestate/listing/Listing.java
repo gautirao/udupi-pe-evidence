@@ -142,6 +142,15 @@ public class Listing {
     @Column(name = "is_duplicate", nullable = false)
     private boolean isDuplicate = false;
 
+    /**
+     * True when the proximity-based duplicate-detection service has flagged this
+     * listing as a likely duplicate of another nearby listing.  Unlike
+     * {@link #isDuplicate} (which tracks exact-hash matches), this flag is set
+     * asynchronously and requires admin review before any action is taken.
+     */
+    @Column(name = "is_suspected_duplicate", nullable = false)
+    private boolean isSuspectedDuplicate = false;
+
     @Column(name = "dedupe_hash")
     private String dedupeHash;
 
@@ -503,6 +512,14 @@ public class Listing {
 
     public void setDuplicate(boolean duplicate) {
         isDuplicate = duplicate;
+    }
+
+    public boolean isSuspectedDuplicate() {
+        return isSuspectedDuplicate;
+    }
+
+    public void setSuspectedDuplicate(boolean suspectedDuplicate) {
+        isSuspectedDuplicate = suspectedDuplicate;
     }
 
     public String getDedupeHash() {
