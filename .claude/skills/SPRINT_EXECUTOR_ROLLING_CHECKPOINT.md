@@ -157,6 +157,23 @@ User instruction:
 
 ---
 
+## Mid-Sprint Issue Addition
+
+When a new issue is added to the sprint after kickoff (user says "add RE-XX to sprint", or pulls an issue in from backlog):
+
+1. **Fetch the issue** — `get_issue RE-XX` to obtain title and full description.
+2. **Run spec-enricher** — invoke `spec-enricher` (Task tool) for this issue alone:
+   > "Enrich spec for one issue: [RE-XX title + description]."
+   - If spec-enricher flags a spec gap (Key unknowns = SPEC GAP): play `afplay /System/Library/Sounds/Ping.aiff`, surface the gap to the user, and pause. Do not insert the issue into the execution order until resolved or waived.
+3. **Run lightweight team-lead conflict check** — invoke `team-lead` (Task tool) with:
+   > "A new issue RE-XX is being added mid-sprint. Completed PRs: [list]. In-progress PR: [current]. Remaining planned issues: [list + enriched specs]. Enriched spec for RE-XX: [paste]. Mode: mid-sprint insertion — return only: (a) recommended insertion point in execution order, (b) any file conflicts with completed or in-progress work, (c) any dependency on remaining issues."
+   - team-lead returns insertion point and conflict flags — do NOT re-run full pre-flight.
+   - If team-lead flags conflicts: surface to user and pause.
+4. **Update checkpoint preamble** — append new enriched spec to `Enriched specs:`, insert RE-XX into `Execution order:` at team-lead's recommended position, add any new dependencies to `Dependencies:`.
+5. **Proceed** — continue sprint execution with updated order. No restart required.
+
+---
+
 ## Resume Protocol
 
 When user pastes checkpoint + says resume:
