@@ -194,7 +194,7 @@ test('DL1 — full dealer listing creation journey', async ({ page }) => {
 
   // Select property type "House"
   await page.locator('#propertyType').click();
-  await page.getByRole('option', { name: 'House' }).click();
+  await page.getByRole('option', { name: 'House', exact: true }).click();
 
   // Fill title
   await page.locator('#title').fill('E2E Test House — delete me');

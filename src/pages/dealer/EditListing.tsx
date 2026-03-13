@@ -47,10 +47,21 @@ const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
   { value: 'apartment', label: 'Apartment' },
   { value: 'house', label: 'House' },
-  { value: 'commercial', label: 'Commercial' },
+  { value: 'commercial', label: 'Commercial Shop/Office' },
+  { value: 'commercial_building', label: 'Commercial Building' },
+  { value: 'warehouse', label: 'Warehouse / Godown' },
+  { value: 'commercial_land', label: 'Commercial Land' },
 ] as const;
 
 type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
+
+const COMMERCIAL_TYPES = new Set(['commercial', 'commercial_building', 'warehouse', 'commercial_land']);
+
+const FURNISHING_OPTIONS = [
+  { value: 'unfurnished', label: 'Unfurnished' },
+  { value: 'semi_furnished', label: 'Semi Furnished' },
+  { value: 'furnished', label: 'Furnished' },
+];
 
 const LOCKED_STATUSES = ['PENDING_REVIEW', 'LIVE'];
 const SUBMITTABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -97,6 +108,26 @@ export default function EditListing() {
   const [videoUrl, setVideoUrl] = useState('');
   const [videoUrlError, setVideoUrlError] = useState('');
 
+  // Listing purpose
+  const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>('sale');
+
+  // Commercial-specific fields
+  const [carpetArea, setCarpetArea] = useState<number | null>(null);
+  const [carpetAreaUnit, setCarpetAreaUnit] = useState('sqft');
+  const [floorNumber, setFloorNumber] = useState('');
+  const [totalFloors, setTotalFloors] = useState('');
+  const [furnishingStatus, setFurnishingStatus] = useState('');
+  const [washrooms, setWashrooms] = useState('');
+  const [parkingCount, setParkingCount] = useState('');
+  const [roadFrontageFt, setRoadFrontageFt] = useState('');
+  const [commercialUsage, setCommercialUsage] = useState('');
+  const [numberOfUnits, setNumberOfUnits] = useState('');
+
+  // Rent-specific fields
+  const [monthlyRent, setMonthlyRent] = useState('');
+  const [securityDepositMonths, setSecurityDepositMonths] = useState('');
+  const [lockInMonths, setLockInMonths] = useState('');
+
   // Images for thumbnail strip in step 4 review
   const { images: listingImages } = useListingImages(id);
 
@@ -117,6 +148,20 @@ export default function EditListing() {
     setBuiltAreaUnit(listing.builtAreaUnit ?? 'sqft');
     setVideoUrl(listing.videoUrl ?? '');
     setReraNumber(listing.reraNumber ?? '');
+    setListingPurpose((listing.listingPurpose as 'sale' | 'rent') ?? 'sale');
+    setCarpetArea(listing.carpetArea);
+    setCarpetAreaUnit(listing.carpetAreaUnit ?? 'sqft');
+    setFloorNumber(listing.floorNumber != null ? String(listing.floorNumber) : '');
+    setTotalFloors(listing.totalFloors != null ? String(listing.totalFloors) : '');
+    setFurnishingStatus(listing.furnishingStatus ?? '');
+    setWashrooms(listing.washrooms != null ? String(listing.washrooms) : '');
+    setParkingCount(listing.parkingCount != null ? String(listing.parkingCount) : '');
+    setRoadFrontageFt(listing.roadFrontageFt != null ? String(listing.roadFrontageFt) : '');
+    setCommercialUsage(listing.commercialUsage ?? '');
+    setNumberOfUnits(listing.numberOfUnits != null ? String(listing.numberOfUnits) : '');
+    setMonthlyRent(listing.monthlyRent != null ? String(listing.monthlyRent) : '');
+    setSecurityDepositMonths(listing.securityDepositMonths != null ? String(listing.securityDepositMonths) : '');
+    setLockInMonths(listing.lockInMonths != null ? String(listing.lockInMonths) : '');
   }, [listing]);
 
   // Auth guard
@@ -214,9 +259,13 @@ export default function EditListing() {
   };
 
   // Derived visibility flags — declared before handlers that reference them
-  const showLandArea = propertyType === 'land';
+  const isCommercialType = COMMERCIAL_TYPES.has(propertyType);
+  const isRent = listingPurpose === 'rent';
+  const showLandArea = propertyType === 'land' || propertyType === 'commercial_land'
+    || propertyType === 'commercial_building' || propertyType === 'warehouse';
   const showBedrooms = propertyType === 'apartment' || propertyType === 'house';
-  const showBuiltArea = propertyType === 'apartment' || propertyType === 'house';
+  const showBuiltArea = propertyType === 'apartment' || propertyType === 'house'
+    || propertyType === 'commercial_building' || propertyType === 'warehouse';
 
   // Saves step 1 form fields, then advances to step 2 (or back to review)
   const handleStep1Save = (e: React.FormEvent) => {
@@ -231,11 +280,15 @@ export default function EditListing() {
     setLandAreaUnitError('');
     setBuiltAreaUnitError('');
 
+    const carpetAreaVal = carpetArea != null && carpetArea > 0 ? carpetArea : undefined;
+    const intOrUndef = (v: string) => { const n = parseInt(v, 10); return !isNaN(n) && n > 0 ? n : undefined; };
+    const floatOrUndef = (v: string) => { const n = parseFloat(v); return !isNaN(n) && n > 0 ? n : undefined; };
+
     updateListing.mutate(
       {
         title: title.trim() || undefined,
         description: description.trim() || undefined,
-        price: priceRupees ?? undefined,
+        price: isRent ? undefined : (priceRupees ?? undefined),
         propertyType: propertyType || undefined,
         locality: locality.trim() || undefined,
         landArea: landAreaVal,
@@ -246,6 +299,20 @@ export default function EditListing() {
         reraNumber: (propertyType === 'apartment' || propertyType === 'house')
           ? (reraNumber.trim() || null)
           : undefined,
+        listingPurpose,
+        carpetArea: carpetAreaVal,
+        carpetAreaUnit: carpetAreaVal !== undefined ? carpetAreaUnit : undefined,
+        floorNumber: intOrUndef(floorNumber),
+        totalFloors: intOrUndef(totalFloors),
+        furnishingStatus: furnishingStatus || undefined,
+        washrooms: intOrUndef(washrooms),
+        parkingCount: intOrUndef(parkingCount),
+        roadFrontageFt: floatOrUndef(roadFrontageFt),
+        commercialUsage: commercialUsage.trim() || undefined,
+        numberOfUnits: intOrUndef(numberOfUnits),
+        monthlyRent: isRent ? intOrUndef(monthlyRent) : undefined,
+        securityDepositMonths: isRent ? intOrUndef(securityDepositMonths) : undefined,
+        lockInMonths: isRent ? intOrUndef(lockInMonths) : undefined,
       },
       {
         onSuccess: () => {
@@ -321,7 +388,9 @@ export default function EditListing() {
     ? 'secondary'
     : 'outline';
 
-  const requiredFieldsComplete = priceRupees != null && priceRupees > 0 && !!propertyType && !!locality;
+  const requiredFieldsComplete = isRent
+    ? (monthlyRent !== '' && parseInt(monthlyRent, 10) > 0 && !!propertyType && !!locality)
+    : (priceRupees != null && priceRupees > 0 && !!propertyType && !!locality);
   const allConditionsMet = canSubmitImages && !!listing.addressConfirmed && requiredFieldsComplete;
 
   return (
@@ -414,7 +483,30 @@ export default function EditListing() {
                   />
                 </div>
 
-                {/* Land Area — land only */}
+                {/* Listing Purpose (Sale / Rent) */}
+                <div className="space-y-2">
+                  <Label>Listing Purpose</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={listingPurpose === 'sale' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setListingPurpose('sale')}
+                    >
+                      For Sale
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={listingPurpose === 'rent' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setListingPurpose('rent')}
+                    >
+                      For Rent
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Land Area — land, commercial_land, commercial_building, warehouse */}
                 {showLandArea && (
                   <AreaField
                     id="landArea"
@@ -424,6 +516,21 @@ export default function EditListing() {
                     onChange={(area, unit) => {
                       setLandArea(area);
                       setLandAreaUnit(unit);
+                    }}
+                  />
+                )}
+
+                {/* Built Area — apartment, house, commercial_building, warehouse */}
+                {showBuiltArea && (
+                  <AreaField
+                    id="builtArea"
+                    label="Built Area"
+                    propertyType={isCommercialType ? 'commercial' : (propertyType as 'house' | 'apartment')}
+                    initialArea={builtArea}
+                    initialUnit={builtAreaUnit}
+                    onChange={(area, unit) => {
+                      setBuiltArea(area);
+                      setBuiltAreaUnit(unit);
                     }}
                   />
                 )}
@@ -444,19 +551,179 @@ export default function EditListing() {
                   </div>
                 )}
 
-                {/* Built Area — apartment / house */}
-                {showBuiltArea && (
+                {/* Carpet Area — commercial shop/office */}
+                {propertyType === 'commercial' && (
                   <AreaField
-                    id="builtArea"
-                    label="Built Area"
-                    propertyType={propertyType as 'house' | 'apartment'}
-                    initialArea={builtArea}
-                    initialUnit={builtAreaUnit}
+                    id="carpetArea"
+                    label="Carpet Area"
+                    propertyType="commercial"
+                    initialArea={carpetArea}
+                    initialUnit={carpetAreaUnit}
                     onChange={(area, unit) => {
-                      setBuiltArea(area);
-                      setBuiltAreaUnit(unit);
+                      setCarpetArea(area);
+                      setCarpetAreaUnit(unit);
                     }}
                   />
+                )}
+
+                {/* Floor Number — commercial */}
+                {propertyType === 'commercial' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="floorNumber">Floor Number *</Label>
+                    <Input
+                      id="floorNumber"
+                      type="number"
+                      min="0"
+                      max="100"
+                      placeholder="e.g. 2"
+                      value={floorNumber}
+                      onChange={(e) => setFloorNumber(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Total Floors — commercial_building */}
+                {propertyType === 'commercial_building' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="totalFloors">Total Floors *</Label>
+                    <Input
+                      id="totalFloors"
+                      type="number"
+                      min="1"
+                      max="100"
+                      placeholder="e.g. 5"
+                      value={totalFloors}
+                      onChange={(e) => setTotalFloors(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {/* Commercial shared fields */}
+                {isCommercialType && propertyType !== 'commercial_land' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="furnishingStatus">Furnishing Status</Label>
+                      <Select value={furnishingStatus} onValueChange={setFurnishingStatus}>
+                        <SelectTrigger id="furnishingStatus">
+                          <SelectValue placeholder="Select furnishing" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FURNISHING_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="washrooms">Washrooms</Label>
+                        <Input
+                          id="washrooms"
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 2"
+                          value={washrooms}
+                          onChange={(e) => setWashrooms(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="parkingCount">Parking Spots</Label>
+                        <Input
+                          id="parkingCount"
+                          type="number"
+                          min="0"
+                          placeholder="e.g. 4"
+                          value={parkingCount}
+                          onChange={(e) => setParkingCount(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {isCommercialType && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="roadFrontageFt">Road Frontage (ft)</Label>
+                      <Input
+                        id="roadFrontageFt"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="e.g. 30"
+                        value={roadFrontageFt}
+                        onChange={(e) => setRoadFrontageFt(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="commercialUsage">Usage / Business Type</Label>
+                      <Input
+                        id="commercialUsage"
+                        placeholder="e.g. Retail, Office, Restaurant"
+                        value={commercialUsage}
+                        onChange={(e) => setCommercialUsage(e.target.value)}
+                      />
+                    </div>
+                    {(propertyType === 'commercial_building' || propertyType === 'warehouse') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="numberOfUnits">Number of Units</Label>
+                        <Input
+                          id="numberOfUnits"
+                          type="number"
+                          min="1"
+                          placeholder="e.g. 8"
+                          value={numberOfUnits}
+                          onChange={(e) => setNumberOfUnits(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Rent fields */}
+                {isRent && (
+                  <div className="space-y-4 rounded-md border p-4 bg-muted/30">
+                    <p className="text-sm font-medium">Rent Details</p>
+                    <div className="space-y-2">
+                      <Label htmlFor="monthlyRent">Monthly Rent (₹) *</Label>
+                      <Input
+                        id="monthlyRent"
+                        type="number"
+                        min="1"
+                        placeholder="e.g. 15000"
+                        value={monthlyRent}
+                        onChange={(e) => setMonthlyRent(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="securityDepositMonths">Security Deposit (months) *</Label>
+                        <Input
+                          id="securityDepositMonths"
+                          type="number"
+                          min="0"
+                          max="24"
+                          placeholder="e.g. 10"
+                          value={securityDepositMonths}
+                          onChange={(e) => setSecurityDepositMonths(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="lockInMonths">Lock-in Period (months)</Label>
+                        <Input
+                          id="lockInMonths"
+                          type="number"
+                          min="0"
+                          max="60"
+                          placeholder="e.g. 12"
+                          value={lockInMonths}
+                          onChange={(e) => setLockInMonths(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {/* RERA Number — apartment / house only */}
@@ -611,11 +878,16 @@ export default function EditListing() {
                   <p className="text-sm font-medium">Property Details</p>
                   <p className="text-sm text-muted-foreground">
                     {listing.propertyType || '—'} · {listing.title || '—'}
+                    {listing.listingPurpose === 'rent' && ' · For Rent'}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    {listing.price != null
-                      ? `₹${listing.price.toLocaleString('en-IN')}`
-                      : '—'}
+                    {listing.listingPurpose === 'rent'
+                      ? listing.monthlyRent != null
+                        ? `₹${listing.monthlyRent.toLocaleString('en-IN')}/mo`
+                        : '—'
+                      : listing.price != null
+                        ? `₹${listing.price.toLocaleString('en-IN')}`
+                        : '—'}
                   </p>
                 </div>
                 <Button
@@ -742,7 +1014,9 @@ export default function EditListing() {
                       met: requiredFieldsComplete,
                       detail: requiredFieldsComplete
                         ? 'All required fields filled in'
-                        : 'Price, property type, and locality required',
+                        : isRent
+                          ? 'Monthly rent, property type, and locality required'
+                          : 'Price, property type, and locality required',
                       step: 1,
                     },
                   ].map(({ label, met, detail, step }) => (

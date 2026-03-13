@@ -356,10 +356,19 @@ export default function DealerListings() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2 text-sm text-muted-foreground mb-4">
-                    <Badge variant="secondary" className="capitalize text-xs">{listing.propertyType}</Badge>
+                    <Badge variant="secondary" className="capitalize text-xs">{listing.propertyType?.replace(/_/g, ' ')}</Badge>
+                    {listing.listingPurpose === 'rent' && (
+                      <Badge variant="outline" className="text-xs">Rent</Badge>
+                    )}
                     {listing.locality && <span>· {listing.locality}</span>}
-                    {listing.price != null && (
-                      <span>· &#8377;{listing.price.toLocaleString('en-IN')}</span>
+                    {listing.listingPurpose === 'rent' ? (
+                      listing.monthlyRent != null && (
+                        <span>· &#8377;{listing.monthlyRent.toLocaleString('en-IN')}/mo</span>
+                      )
+                    ) : (
+                      listing.price != null && (
+                        <span>· &#8377;{listing.price.toLocaleString('en-IN')}</span>
+                      )
                     )}
                   </div>
                   {listing.rejectionReason && (

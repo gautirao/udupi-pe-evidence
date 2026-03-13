@@ -14,6 +14,21 @@ interface CreateListingRequest {
   bedrooms?: number;
   builtArea?: number;
   builtAreaUnit?: string;
+  // Commercial & rent fields
+  listingPurpose?: string;
+  carpetArea?: number;
+  carpetAreaUnit?: string;
+  floorNumber?: number;
+  totalFloors?: number;
+  furnishingStatus?: string;
+  washrooms?: number;
+  parkingCount?: number;
+  roadFrontageFt?: number;
+  commercialUsage?: string;
+  numberOfUnits?: number;
+  monthlyRent?: number;
+  securityDepositMonths?: number;
+  lockInMonths?: number;
 }
 
 // Mirrors backend UpdateRequest DTO
@@ -34,6 +49,21 @@ export interface UpdateListingRequest {
   videoUrl?: string | null;
   applyVideoUrl?: boolean;
   reraNumber?: string | null;
+  // Commercial & rent fields
+  listingPurpose?: string;
+  carpetArea?: number;
+  carpetAreaUnit?: string;
+  floorNumber?: number;
+  totalFloors?: number;
+  furnishingStatus?: string;
+  washrooms?: number;
+  parkingCount?: number;
+  roadFrontageFt?: number;
+  commercialUsage?: string;
+  numberOfUnits?: number;
+  monthlyRent?: number;
+  securityDepositMonths?: number;
+  lockInMonths?: number;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -62,6 +92,21 @@ export interface ListingResponse {
   displayId?: string;
   createdAt: string;
   updatedAt: string;
+  // Commercial & rent fields
+  listingPurpose: string | null;
+  carpetArea: number | null;
+  carpetAreaUnit: string | null;
+  floorNumber: number | null;
+  totalFloors: number | null;
+  furnishingStatus: string | null;
+  washrooms: number | null;
+  parkingCount: number | null;
+  roadFrontageFt: number | null;
+  commercialUsage: string | null;
+  numberOfUnits: number | null;
+  monthlyRent: number | null;
+  securityDepositMonths: number | null;
+  lockInMonths: number | null;
 }
 
 /**
@@ -254,6 +299,20 @@ export function useDuplicateListing() {
         bedrooms: source.bedrooms ?? undefined,
         builtArea: source.builtArea ?? undefined,
         builtAreaUnit: source.builtAreaUnit ?? undefined,
+        listingPurpose: source.listingPurpose ?? undefined,
+        carpetArea: source.carpetArea ?? undefined,
+        carpetAreaUnit: source.carpetAreaUnit ?? undefined,
+        floorNumber: source.floorNumber ?? undefined,
+        totalFloors: source.totalFloors ?? undefined,
+        furnishingStatus: source.furnishingStatus ?? undefined,
+        washrooms: source.washrooms ?? undefined,
+        parkingCount: source.parkingCount ?? undefined,
+        roadFrontageFt: source.roadFrontageFt ?? undefined,
+        commercialUsage: source.commercialUsage ?? undefined,
+        numberOfUnits: source.numberOfUnits ?? undefined,
+        monthlyRent: source.monthlyRent ?? undefined,
+        securityDepositMonths: source.securityDepositMonths ?? undefined,
+        lockInMonths: source.lockInMonths ?? undefined,
       });
     },
     onSuccess: () => {
