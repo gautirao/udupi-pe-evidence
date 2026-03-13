@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -425,9 +426,10 @@ public class ListingService {
                                BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
                                Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
                                String sellerType) {
-        // Enforce owner listing limit: max 3 LIVE listings for owner accounts
+        // Enforce owner listing limit: max 3 LIVE listings for owner accounts.
+        // Archived listings must not count against this limit.
         if ("owner".equals(sellerType)) {
-            long liveCount = listingRepository.countByCreatedByAndSellerTypeAndStatus(
+            long liveCount = listingRepository.countByCreatedByAndSellerTypeAndStatusAndArchivedAtIsNull(
                     createdBy, "owner", ListingStatus.LIVE.toDbValue());
             if (liveCount >= 3) {
                 throw new OwnerListingLimitException("Owner accounts are limited to 3 active listings");
@@ -517,16 +519,17 @@ public class ListingService {
     }
 
     /**
-     * Return paginated listings owned by the given user.
+     * Return paginated non-archived listings owned by the given user.
      * When {@code status} is non-null, only listings with that status are returned.
+     * Archived listings are always excluded regardless of the status filter.
      * Sort order is determined by the supplied {@link Pageable} (default: createdAt DESC).
      */
     @Transactional(readOnly = true)
     public Page<Listing> getListingsByOwner(UUID createdBy, String status, Pageable pageable) {
         if (status != null && !status.isBlank()) {
-            return listingRepository.findByCreatedByAndStatus(createdBy, status, pageable);
+            return listingRepository.findByCreatedByAndStatusAndArchivedAtIsNull(createdBy, status, pageable);
         }
-        return listingRepository.findByCreatedBy(createdBy, pageable);
+        return listingRepository.findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(createdBy, pageable);
     }
 
     /**
@@ -682,9 +685,11 @@ public class ListingService {
     }
 
     /**
-     * Delete a listing. Only DRAFT or REJECTED status allowed. Enforces ownership unless admin.
+     * Soft-delete a listing. Only DRAFT or REJECTED status allowed. Enforces ownership unless admin.
+     * Sets {@code archived_at = now()} and {@code status = ARCHIVED}; no rows are hard-deleted so
+     * all related data (listing_images, pois, viewing_requests) is preserved.
      *
-     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingNotFoundException if listing not found, not owned, or already archived
      * @throws ListingStatusException   if status is not DRAFT or REJECTED
      */
     @Transactional
@@ -696,8 +701,11 @@ public class ListingService {
             throw new ListingStatusException("Cannot delete listing with status " + status);
         }
 
-        listingRepository.delete(listing);
-        log.info("Deleted listing listingId={} by userId={}", listingId, userId);
+        listing.setArchivedAt(Instant.now());
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setUpdatedAt(OffsetDateTime.now());
+        listingRepository.save(listing);
+        log.info("Soft-deleted (archived) listing listingId={} by userId={}", listingId, userId);
     }
 
     /**
@@ -719,6 +727,9 @@ public class ListingService {
             } catch (ListingNotFoundException | ListingOwnershipException | ListingStatusException e) {
                 skipped++;
                 errors.add(id + ": " + e.getMessage());
+            } catch (org.springframework.dao.DataAccessException e) {
+                skipped++;
+                errors.add(id + ": " + e.getMessage());
             }
         }
         return new ListingController.BulkDeleteResult(deleted, skipped, errors);
@@ -726,12 +737,19 @@ public class ListingService {
 
     /**
      * Find a listing that the user owns (or any listing if admin).
-     * Throws ListingNotFoundException if the listing does not exist.
+     * Throws ListingNotFoundException if the listing does not exist or has been archived.
+     * Archived listings are treated as not found to prevent dealers from accessing or
+     * modifying them via update, image upload, or any other owner-scoped endpoint.
      * Throws ListingOwnershipException if the listing exists but is owned by someone else.
      */
     private Listing findOwnedListing(UUID listingId, UUID userId, boolean isAdmin) {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        // Archived listings are invisible to all owner-scoped operations.
+        if (listing.getArchivedAt() != null) {
+            throw new ListingNotFoundException(listingId);
+        }
 
         if (!isAdmin && !userId.equals(listing.getCreatedBy())) {
             throw new ListingOwnershipException(listingId);
@@ -980,6 +998,34 @@ public class ListingService {
         return saved;
     }
 
+    // ===== Admin restore =====
+
+    /**
+     * Admin-only: restores an archived listing to DRAFT status.
+     * Clears {@code archived_at} and sets {@code status = DRAFT}.
+     * Returns 409 (via {@link ListingNotArchivedException}) if the listing is not currently archived.
+     *
+     * @throws ListingNotFoundException    if listing does not exist
+     * @throws ListingNotArchivedException if the listing is not currently archived (409)
+     */
+    @Transactional
+    public Listing restoreListing(UUID listingId, UUID adminId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (listing.getArchivedAt() == null) {
+            throw new ListingNotArchivedException(listingId);
+        }
+
+        listing.setArchivedAt(null);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        Listing saved = listingRepository.save(listing);
+        log.info("Restored listing listingId={} to status=DRAFT by adminId={}", listingId, adminId);
+        return saved;
+    }
+
     // ===== Dealer CRUD exceptions =====
 
     public static class ListingNotFoundException extends RuntimeException {
@@ -1016,6 +1062,16 @@ public class ListingService {
     public static class OwnerListingLimitException extends RuntimeException {
         public OwnerListingLimitException(String message) {
             super(message);
+        }
+    }
+
+    /**
+     * Thrown when an admin attempts to restore a listing that is not currently archived.
+     * Maps to HTTP 409 Conflict.
+     */
+    public static class ListingNotArchivedException extends RuntimeException {
+        public ListingNotArchivedException(UUID id) {
+            super("Listing is not archived: " + id);
         }
     }
 

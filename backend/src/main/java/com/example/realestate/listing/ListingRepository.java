@@ -40,17 +40,30 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
 
     Optional<Listing> findByListingNumber(Integer listingNumber);
 
-    Page<Listing> findByCreatedBy(UUID createdBy, Pageable pageable);
-
-    Page<Listing> findByCreatedByAndStatus(UUID createdBy, String status, Pageable pageable);
-
-    long countByCreatedByAndSellerTypeAndStatus(UUID createdBy, String sellerType, String status);
+    /**
+     * Returns non-archived (active) listings for a given owner, ordered by creation date descending.
+     * Excludes listings where archived_at IS NOT NULL so soft-deleted listings disappear from My Listings.
+     */
+    Page<Listing> findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(UUID createdBy, Pageable pageable);
 
     /**
-     * Count listings grouped by status for a given user.
-     * Returns rows of [status (String), count (Long)].
+     * Returns non-archived listings for a given owner filtered by status.
+     * Used by GET /api/listings/mine?status=... to filter without surfacing archived listings.
      */
-    @Query("SELECT l.status, COUNT(l) FROM Listing l WHERE l.createdBy = :userId GROUP BY l.status")
+    Page<Listing> findByCreatedByAndStatusAndArchivedAtIsNull(UUID createdBy, String status, Pageable pageable);
+
+    /**
+     * Counts non-archived LIVE listings for the per-owner listing limit check.
+     * Archived listings must NOT count against the owner's limit of 3 active listings.
+     */
+    long countByCreatedByAndSellerTypeAndStatusAndArchivedAtIsNull(UUID createdBy, String sellerType, String status);
+
+    /**
+     * Count non-archived listings grouped by status for a given user.
+     * Returns rows of [status (String), count (Long)].
+     * Excludes archived listings so they do not appear in the My Listings status counts.
+     */
+    @Query("SELECT l.status, COUNT(l) FROM Listing l WHERE l.createdBy = :userId AND l.archivedAt IS NULL GROUP BY l.status")
     List<Object[]> countByStatusForUser(@Param("userId") UUID userId);
 
     @Query(value = "SELECT COUNT(*) FROM public.listing_images WHERE listing_id = :listingId",

@@ -1484,47 +1484,52 @@ class ListingServiceTest {
     }
 
     // ==================== RE-72: getListingsByOwner with status filter ====================
+    // Note: after RE-89, the repository methods include the archivedAt IS NULL constraint.
 
     @Test
-    void getListingsByOwner_withNullStatus_callsFindByCreatedBy() {
+    void getListingsByOwner_withNullStatus_callsFindByCreatedByAndArchivedAtIsNull() {
         UUID userId = UUID.randomUUID();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Listing> expected = new PageImpl<>(List.of());
-        when(listingRepository.findByCreatedBy(userId, pageable)).thenReturn(expected);
+        when(listingRepository.findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(userId, pageable))
+                .thenReturn(expected);
 
         Page<Listing> result = listingService.getListingsByOwner(userId, null, pageable);
 
         assertThat(result).isSameAs(expected);
-        verify(listingRepository).findByCreatedBy(userId, pageable);
-        verify(listingRepository, never()).findByCreatedByAndStatus(any(), any(), any());
+        verify(listingRepository).findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(userId, pageable);
+        verify(listingRepository, never()).findByCreatedByAndStatusAndArchivedAtIsNull(any(), any(), any());
     }
 
     @Test
-    void getListingsByOwner_withBlankStatus_callsFindByCreatedBy() {
+    void getListingsByOwner_withBlankStatus_callsFindByCreatedByAndArchivedAtIsNull() {
         UUID userId = UUID.randomUUID();
         Pageable pageable = PageRequest.of(0, 20);
         Page<Listing> expected = new PageImpl<>(List.of());
-        when(listingRepository.findByCreatedBy(userId, pageable)).thenReturn(expected);
+        when(listingRepository.findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(userId, pageable))
+                .thenReturn(expected);
 
         Page<Listing> result = listingService.getListingsByOwner(userId, "  ", pageable);
 
         assertThat(result).isSameAs(expected);
-        verify(listingRepository).findByCreatedBy(userId, pageable);
-        verify(listingRepository, never()).findByCreatedByAndStatus(any(), any(), any());
+        verify(listingRepository).findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(userId, pageable);
+        verify(listingRepository, never()).findByCreatedByAndStatusAndArchivedAtIsNull(any(), any(), any());
     }
 
     @Test
-    void getListingsByOwner_withDraftStatus_callsFindByCreatedByAndStatus() {
+    void getListingsByOwner_withDraftStatus_callsFindByCreatedByAndStatusAndArchivedAtIsNull() {
         UUID userId = UUID.randomUUID();
         Pageable pageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Listing> expected = new PageImpl<>(List.of());
-        when(listingRepository.findByCreatedByAndStatus(userId, "DRAFT", pageable)).thenReturn(expected);
+        when(listingRepository.findByCreatedByAndStatusAndArchivedAtIsNull(userId, "DRAFT", pageable))
+                .thenReturn(expected);
 
         Page<Listing> result = listingService.getListingsByOwner(userId, "DRAFT", pageable);
 
         assertThat(result).isSameAs(expected);
-        verify(listingRepository).findByCreatedByAndStatus(userId, "DRAFT", pageable);
-        verify(listingRepository, never()).findByCreatedBy(any(), any());
+        verify(listingRepository).findByCreatedByAndStatusAndArchivedAtIsNull(userId, "DRAFT", pageable);
+        verify(listingRepository, never())
+                .findByCreatedByAndArchivedAtIsNullOrderByCreatedAtDesc(any(), any());
     }
 
     // --- RE-75: getListingStats ---
@@ -1578,5 +1583,210 @@ class ListingServiceTest {
         assertThat(stats.liveCount()).isEqualTo(0);
         assertThat(stats.rejectedCount()).isEqualTo(0);
         assertThat(stats.totalCount()).isEqualTo(5);
+    }
+
+    // ==================== RE-89: Soft delete ====================
+
+    @Test
+    void deleteListing_draftListing_setsArchivedAtAndStatusArchived() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(userId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        listingService.deleteListing(listingId, userId, false);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getArchivedAt()).isNotNull();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+        // Must NOT call delete() — this is the critical invariant
+        verify(listingRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteListing_rejectedListing_setsArchivedAtAndStatusArchived() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(userId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        listingService.deleteListing(listingId, userId, false);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+        assertThat(captor.getValue().getArchivedAt()).isNotNull();
+        verify(listingRepository, never()).delete(any());
+    }
+
+    @Test
+    void deleteListing_liveListing_throwsListingStatusException() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(userId);
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ListingService.ListingStatusException.class,
+                () -> listingService.deleteListing(listingId, userId, false));
+
+        verify(listingRepository, never()).save(any());
+        verify(listingRepository, never()).delete(any());
+    }
+
+    @Test
+    void findOwnedListing_archivedListing_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(userId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        // updateListing calls findOwnedListing internally — use it to exercise the guard
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ListingService.ListingNotFoundException.class,
+                () -> listingService.updateListing(listingId, userId, false,
+                        null, null, null, null, null,
+                        null, null, null, null,
+                        null, null, null, null, null, false, null));
+    }
+
+    @Test
+    void restoreListing_archivedListing_clearsArchivedAtAndSetsDraft() {
+        UUID listingId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing restored = listingService.restoreListing(listingId, UUID.randomUUID());
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getArchivedAt()).isNull();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+    }
+
+    @Test
+    void restoreListing_activeListing_throwsListingNotArchivedException() {
+        UUID listingId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        // archivedAt is null — listing is active
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ListingService.ListingNotArchivedException.class,
+                () -> listingService.restoreListing(listingId, UUID.randomUUID()));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreListing_notFound_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ListingService.ListingNotFoundException.class,
+                () -> listingService.restoreListing(listingId, UUID.randomUUID()));
+    }
+
+    // ===== bulkDeleteListings =====
+
+    @Test
+    void bulkDeleteListings_mixedBatch_returnsCorrectCounts() {
+        UUID userId = UUID.randomUUID();
+        UUID draftId = UUID.randomUUID();
+        UUID liveId = UUID.randomUUID();
+        UUID notFoundId = UUID.randomUUID();
+
+        Listing draftListing = new Listing();
+        draftListing.setId(draftId);
+        draftListing.setCreatedBy(userId);
+        draftListing.setStatus(ListingStatus.DRAFT.toDbValue());
+
+        Listing liveListing = new Listing();
+        liveListing.setId(liveId);
+        liveListing.setCreatedBy(userId);
+        liveListing.setStatus(ListingStatus.LIVE.toDbValue());
+
+        when(listingRepository.findById(draftId)).thenReturn(java.util.Optional.of(draftListing));
+        when(listingRepository.findById(liveId)).thenReturn(java.util.Optional.of(liveListing));
+        when(listingRepository.findById(notFoundId)).thenReturn(java.util.Optional.empty());
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ListingController.BulkDeleteResult result = listingService.bulkDeleteListings(
+                java.util.List.of(draftId, liveId, notFoundId), userId, false);
+
+        assertThat(result.deleted()).isEqualTo(1);
+        assertThat(result.skipped()).isEqualTo(2);
+        assertThat(result.errors()).hasSize(2);
+
+        // draft was soft-deleted
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository, org.mockito.Mockito.times(1)).save(captor.capture());
+        assertThat(captor.getValue().getArchivedAt()).isNotNull();
+        assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+    }
+
+    @Test
+    void bulkDeleteListings_allArchived_returnsZeroDeleted() {
+        UUID userId = UUID.randomUUID();
+        UUID id1 = UUID.randomUUID();
+        UUID id2 = UUID.randomUUID();
+
+        Listing l1 = new Listing();
+        l1.setId(id1);
+        l1.setCreatedBy(userId);
+        l1.setStatus(ListingStatus.LIVE.toDbValue());
+
+        Listing l2 = new Listing();
+        l2.setId(id2);
+        l2.setCreatedBy(userId);
+        l2.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+
+        when(listingRepository.findById(id1)).thenReturn(java.util.Optional.of(l1));
+        when(listingRepository.findById(id2)).thenReturn(java.util.Optional.of(l2));
+
+        ListingController.BulkDeleteResult result = listingService.bulkDeleteListings(
+                java.util.List.of(id1, id2), userId, false);
+
+        assertThat(result.deleted()).isEqualTo(0);
+        assertThat(result.skipped()).isEqualTo(2);
+        verify(listingRepository, never()).save(any());
     }
 }

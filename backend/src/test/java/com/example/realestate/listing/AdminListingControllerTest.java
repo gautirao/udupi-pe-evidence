@@ -243,6 +243,65 @@ class AdminListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Cannot reject listing with status DRAFT"));
     }
 
+    // ==================== RE-89: Restore endpoint ====================
+
+    @Test
+    void restore_withAdminRole_archivedListing_returns200WithDraftStatus() throws Exception {
+        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        Listing restored = buildListing(LISTING_ID, "DRAFT", "land", "Plot in Manipal",
+                "Manipal", new BigDecimal("5000000"), "Nice plot");
+        when(listingService.restoreListing(eq(LISTING_ID), any())).thenReturn(restored);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+
+        verify(listingService).restoreListing(eq(LISTING_ID), eq(ADMIN_ID));
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_restored"), eq("listing"),
+                eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void restore_listingNotArchived_returns409() throws Exception {
+        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingService.restoreListing(eq(LISTING_ID), any()))
+                .thenThrow(new ListingService.ListingNotArchivedException(LISTING_ID));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Listing is not archived: " + LISTING_ID));
+
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void restore_listingNotFound_returns404() throws Exception {
+        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingService.restoreListing(eq(LISTING_ID), any()))
+                .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    @Test
+    void restore_withDealerRole_returns403() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingService, never()).restoreListing(any(), any());
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(UUID id, String status, String propertyType, String title,
