@@ -74,7 +74,12 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
 
   const handleSellerTypeToggle = (value: string) => {
     const current = filters.sellerTypes || [];
-    const next = current.includes(value) ? current.filter((s) => s !== value) : [...current, value];
+    // "Dealer" toggle controls both 'dealer' and 'builder' seller types
+    const valuesToToggle = value === 'dealer' ? ['dealer', 'builder'] : [value];
+    const isActive = valuesToToggle.some((v) => current.includes(v));
+    const next = isActive
+      ? current.filter((s) => !valuesToToggle.includes(s))
+      : [...current, ...valuesToToggle];
     onFiltersChange({ ...filters, sellerTypes: next.length > 0 ? next : undefined });
   };
 
@@ -178,13 +183,16 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
           <Label className="text-sm font-medium">Listed By</Label>
           <div className="flex gap-2 flex-wrap">
             {[{ label: 'Owner', value: 'owner' }, { label: 'Dealer', value: 'dealer' }].map(({ label, value }) => {
-              const active = filters.sellerTypes?.includes(value) || false;
+              const active = value === 'dealer'
+                ? (filters.sellerTypes?.includes('dealer') || false)
+                : (filters.sellerTypes?.includes(value) || false);
               return (
                 <Button
                   key={value}
                   variant={active ? 'default' : 'outline'}
                   size="sm"
                   className="h-8 px-3 text-sm"
+                  aria-pressed={active}
                   onClick={() => handleSellerTypeToggle(value)}
                 >
                   {label}

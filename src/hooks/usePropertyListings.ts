@@ -55,7 +55,7 @@ export interface PropertyListing {
   monthly_rent: number | null;
   security_deposit_months: number | null;
   lock_in_months: number | null;
-  seller_type: string | null;
+  seller_type: 'owner' | 'dealer' | 'builder' | null;
 }
 
 export interface PropertyFilters {
