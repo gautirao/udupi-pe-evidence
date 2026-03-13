@@ -11,7 +11,8 @@ import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
-  ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck
+  ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck,
+  Layers, ParkingCircle, Armchair, Store, IndianRupee
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
@@ -311,10 +312,19 @@ export default function ListingDetail() {
                   {formatListingId(listing.listing_number)}
                 </p>
               )}
-              {listing.price && (
+              {listing.listing_purpose === 'rent' ? (
+                listing.monthly_rent != null && (
+                  <p className="text-2xl font-bold text-primary">
+                    ₹{listing.monthly_rent.toLocaleString('en-IN')}<span className="text-base font-normal text-muted-foreground"> / month</span>
+                  </p>
+                )
+              ) : listing.price ? (
                 <p className="text-2xl font-bold text-primary">
                   {formatPrice(listing.price, listing.price_unit)}
                 </p>
+              ) : null}
+              {listing.listing_purpose === 'rent' && (
+                <Badge variant="outline" className="mt-1 text-xs">For Rent</Badge>
               )}
               {listing.property_type === 'land' && listing.price_per_cent_paise ? (
                 <p className="text-sm text-muted-foreground mt-0.5">
@@ -402,7 +412,116 @@ export default function ListingDetail() {
                       </div>
                     </div>
                   )}
+
+                  {listing.carpet_area != null && (
+                    <div className="flex items-center gap-2">
+                      <Layers className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Carpet Area</p>
+                        <p className="font-medium">{formatArea(listing.carpet_area, listing.carpet_area_unit)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.washrooms != null && (
+                    <div className="flex items-center gap-2">
+                      <Bath className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Washrooms</p>
+                        <p className="font-medium">{listing.washrooms}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.floor_number != null && (
+                    <div className="flex items-center gap-2">
+                      <Building className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Floor</p>
+                        <p className="font-medium">
+                          {listing.floor_number}{listing.total_floors != null ? ` / ${listing.total_floors}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.furnishing_status && (
+                    <div className="flex items-center gap-2">
+                      <Armchair className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Furnishing</p>
+                        <p className="font-medium capitalize">{listing.furnishing_status.replace(/_/g, ' ')}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.parking_count != null && (
+                    <div className="flex items-center gap-2">
+                      <ParkingCircle className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Parking</p>
+                        <p className="font-medium">{listing.parking_count}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.road_frontage_ft != null && (
+                    <div className="flex items-center gap-2">
+                      <Ruler className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Road Frontage</p>
+                        <p className="font-medium">{listing.road_frontage_ft} ft</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.commercial_usage && (
+                    <div className="flex items-center gap-2">
+                      <Store className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Usage</p>
+                        <p className="font-medium capitalize">{listing.commercial_usage}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {listing.number_of_units != null && (
+                    <div className="flex items-center gap-2">
+                      <Building className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm text-muted-foreground">Units</p>
+                        <p className="font-medium">{listing.number_of_units}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* Rent details */}
+                {listing.listing_purpose === 'rent' && (listing.security_deposit_months != null || listing.lock_in_months != null) && (
+                  <div className="mt-4 pt-4 border-t">
+                    <h4 className="text-sm font-semibold mb-3">Rental Terms</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {listing.security_deposit_months != null && (
+                        <div className="flex items-center gap-2">
+                          <IndianRupee className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">Security Deposit</p>
+                            <p className="font-medium">{listing.security_deposit_months} month{listing.security_deposit_months !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                      )}
+                      {listing.lock_in_months != null && (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <p className="text-sm text-muted-foreground">Lock-in Period</p>
+                            <p className="font-medium">{listing.lock_in_months} month{listing.lock_in_months !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

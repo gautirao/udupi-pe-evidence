@@ -40,6 +40,21 @@ export interface PropertyListing {
   updated_at: string;
   rera_number?: string | null;
   raw_post_id: string | null;
+  // Commercial & rent fields
+  listing_purpose: string;
+  carpet_area: number | null;
+  carpet_area_unit: string | null;
+  floor_number: number | null;
+  total_floors: number | null;
+  furnishing_status: string | null;
+  washrooms: number | null;
+  parking_count: number | null;
+  road_frontage_ft: number | null;
+  commercial_usage: string | null;
+  number_of_units: number | null;
+  monthly_rent: number | null;
+  security_deposit_months: number | null;
+  lock_in_months: number | null;
 }
 
 export interface PropertyFilters {
