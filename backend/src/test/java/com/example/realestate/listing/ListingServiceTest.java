@@ -45,13 +45,17 @@ class ListingServiceTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
 
+    @Mock
+    private ProximityDuplicateService proximityDuplicateService;
+
     private ListingService listingService;
 
     @BeforeEach
     void setUp() {
         listingService = new ListingService(
                 listingRepository, rawPostRepository, geocodingPort,
-                new ObjectMapper(), applicationEventPublisher);
+                new ObjectMapper(), applicationEventPublisher,
+                proximityDuplicateService);
     }
 
     private RawPost makePost() {
@@ -1788,5 +1792,38 @@ class ListingServiceTest {
         assertThat(result.deleted()).isEqualTo(0);
         assertThat(result.skipped()).isEqualTo(2);
         verify(listingRepository, never()).save(any());
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 12: approveListing — detection failure does not roll back the approval
+    // -----------------------------------------------------------------------
+
+    @Test
+    void approveListing_detectionFailure_doesNotRollback() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId   = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test Property");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        // Simulate detection throwing an exception
+        doThrow(new RuntimeException("Detection DB error"))
+                .when(proximityDuplicateService).detectAndRecord(any(Listing.class));
+
+        // approveListing must still succeed and return the saved listing
+        Listing result = listingService.approveListing(listingId, adminId);
+
+        assertThat(result).isNotNull();
+        // Listing must have been saved (approval went through)
+        verify(listingRepository).save(any(Listing.class));
+        // Detection was attempted on the LIVE listing
+        verify(proximityDuplicateService).detectAndRecord(
+                argThat(l -> ListingStatus.LIVE.toDbValue().equals(l.getStatus())));
     }
 }
