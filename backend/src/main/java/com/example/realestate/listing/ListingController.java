@@ -55,7 +55,7 @@ public class ListingController {
         CallerInfo caller = resolveCallerOrForbid(auth);
         if (caller == null) return forbidden();
 
-        String sellerType = "user".equals(caller.role()) ? "owner" : caller.role();
+        String sellerType = "user".equals(caller.role()) ? "owner" : "dealer";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         try {
             Listing saved = listingService.createDraft(
