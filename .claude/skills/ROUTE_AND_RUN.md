@@ -171,6 +171,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 | `ui-designer` | `.claude/agents/ui-designer.md` | Screen audit, UX guidance | Read-only design output |
 | `team-lead` | `.claude/agents/team-lead.md` | Decompose + delegate heavy tasks | Subtask plan + agent delegation |
 | `qa` | `.claude/agents/qa.md` | Write tests (only when explicitly required) | Test files |
+| `spec-enricher` | `.claude/agents/spec-enricher.md` | Sprint kickoff only — convert raw issue descriptions to structured specs | Enriched spec blocks (read-only) |
 
 ### Invocation Rules
 

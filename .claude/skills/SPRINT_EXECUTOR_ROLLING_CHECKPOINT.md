@@ -24,24 +24,12 @@ Checkpoint is the single source of truth.
 Before the first PR:
 1. Fetch all sprint issue IDs + titles in one Linear call — store in checkpoint preamble as `Sprint issues:` list.
 2. Fetch full descriptions for all issues (one `get_issue` call each) — needed for spec enrichment and team-lead pre-flight.
-3. **Spec enrichment (all issues, once)** — for each issue, derive a structured spec from the title + description:
+3. **Spec enrichment (all issues, once)** — invoke the `spec-enricher` agent (Task tool) with all issue IDs, titles, and descriptions:
+   > "Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
 
-   For each issue produce:
-   ```
-   [RE-XX] <title>
-   AC:
-   - [ ] <testable acceptance criterion>
-   - [ ] <testable acceptance criterion>
-   (2–5 criteria max; each must be verifiable by a test or manual step)
-   Out of scope: <explicit or inferred exclusions, or NONE>
-   Key unknowns: <ambiguities that block safe implementation, or NONE>
-   ```
+   `spec-enricher` runs on `opus` regardless of your current model — consistent quality is the reason it is a dedicated agent.
 
-   Rules:
-   - Derive AC from description. If description is too sparse (< 50 chars or no behavior stated), treat as spec gap — do NOT invent criteria.
-   - "Out of scope" captures implicit exclusions (e.g., "no mobile layout changes" if work is backend-only).
-   - "Key unknowns" are ambiguities that could block safe implementation — feed these directly into team-lead step 4.
-   - Store all enriched specs in the checkpoint preamble as `Enriched specs:` — one block per issue.
+   - Store all enriched spec blocks returned by the agent in the checkpoint preamble as `Enriched specs:` — one block per issue.
    - These specs are the authoritative input to team-lead, qa-fast, and engineers for the rest of the sprint. Do NOT re-derive them per-PR.
 
 4. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, descriptions, AND enriched specs as context:
