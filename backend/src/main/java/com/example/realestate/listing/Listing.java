@@ -205,6 +205,11 @@ public class Listing {
     @Column(name = "lock_in_months")
     private Integer lockInMonths;
 
+    // --- Seller type ---
+
+    @Column(name = "seller_type", nullable = false, length = 10)
+    private String sellerType = "dealer";
+
     // --- Dealer workflow fields ---
 
     @Column(name = "rera_number", length = 80)
@@ -724,6 +729,16 @@ public class Listing {
 
     public void setLockInMonths(Integer lockInMonths) {
         this.lockInMonths = lockInMonths;
+    }
+
+    // --- Seller type getter/setter ---
+
+    public String getSellerType() {
+        return sellerType;
+    }
+
+    public void setSellerType(String sellerType) {
+        this.sellerType = sellerType;
     }
 
     @PrePersist

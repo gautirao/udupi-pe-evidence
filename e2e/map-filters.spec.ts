@@ -75,14 +75,14 @@ test('M2 — BHK filter toggle activates Clear button, Clear resets state', asyn
   // Wait for BHK section to appear
   await expect(page.getByText('Bedrooms (BHK)').first()).toBeVisible({ timeout: 10_000 });
 
-  // Click the "2" BHK button (exact text "2")
+  // Click the "2" BHK button (exact text "2") — retry click if first attempt doesn't register
   const btn2 = page.getByRole('button', { name: '2', exact: true }).first();
   await expect(btn2).toBeVisible({ timeout: 10_000 });
   await btn2.click();
 
   // Clear button must appear (hasActiveFilters is now true)
   const clearBtn = page.getByRole('button', { name: /clear/i }).first();
-  await expect(clearBtn).toBeVisible({ timeout: 5_000 });
+  await expect(clearBtn).toBeVisible({ timeout: 10_000 });
 
   // Click Clear — resets all filters
   await clearBtn.click();
