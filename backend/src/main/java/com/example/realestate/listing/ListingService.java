@@ -46,18 +46,21 @@ public class ListingService {
     private final GeocodingPort geocodingPort;
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final ProximityDuplicateService proximityDuplicateService;
 
     public ListingService(
             ListingRepository listingRepository,
             RawPostRepository rawPostRepository,
             GeocodingPort geocodingPort,
             ObjectMapper objectMapper,
-            ApplicationEventPublisher applicationEventPublisher) {
+            ApplicationEventPublisher applicationEventPublisher,
+            ProximityDuplicateService proximityDuplicateService) {
         this.listingRepository = listingRepository;
         this.rawPostRepository = rawPostRepository;
         this.geocodingPort = geocodingPort;
         this.objectMapper = objectMapper;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.proximityDuplicateService = proximityDuplicateService;
     }
 
     /**
@@ -944,6 +947,13 @@ public class ListingService {
         listing.setUpdatedAt(OffsetDateTime.now());
 
         Listing saved = listingRepository.save(listing);
+
+        try {
+            proximityDuplicateService.detectAndRecord(saved);
+        } catch (Exception e) {
+            log.warn("Proximity duplicate detection failed for listingId={}: {}",
+                    listingId, e.getMessage(), e);
+        }
 
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");

@@ -312,6 +312,32 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("bedrooms") Integer bedrooms,
             Pageable pageable);
 
+    /**
+     * Returns LIVE, non-archived, non-duplicate listings whose lat/lon falls within the
+     * given bounding box, excluding the given listing ID and filtered by property type.
+     * Java-side Haversine refinement is applied after to filter to the true radius.
+     */
+    @Query(value = """
+        SELECT * FROM property_listings
+        WHERE status = 'LIVE'
+          AND archived_at IS NULL
+          AND is_duplicate = false
+          AND is_suspected_duplicate = false
+          AND latitude IS NOT NULL
+          AND longitude IS NOT NULL
+          AND latitude  BETWEEN :minLat AND :maxLat
+          AND longitude BETWEEN :minLon AND :maxLon
+          AND property_type = :propertyType
+          AND id != :excludeId
+        """, nativeQuery = true)
+    List<Listing> findLiveListingsInBoundingBox(
+            @Param("minLat") double minLat,
+            @Param("maxLat") double maxLat,
+            @Param("minLon") double minLon,
+            @Param("maxLon") double maxLon,
+            @Param("propertyType") String propertyType,
+            @Param("excludeId") UUID excludeId);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """
