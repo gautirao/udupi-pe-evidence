@@ -17,25 +17,13 @@
 --   5. Recreates the partial index with WHERE status = 'PENDING'.
 
 -- ============================================================
--- 1. Drop the existing lowercase CHECK constraint on status
---    (name is Postgres-generated, so we find it dynamically)
+-- 1. Drop the existing lowercase CHECK constraint on status.
+--    Postgres auto-names it <table>_<column>_check, which is
+--    duplicate_candidates_status_check — confirmed from V36 schema.
+--    IF EXISTS makes this idempotent.
 -- ============================================================
-DO $$
-DECLARE
-    v_constraint text;
-BEGIN
-    SELECT conname
-      INTO v_constraint
-      FROM pg_constraint
-      JOIN pg_class ON pg_class.oid = pg_constraint.conrelid
-     WHERE pg_class.relname = 'duplicate_candidates'
-       AND pg_constraint.contype = 'c'
-       AND pg_get_constraintdef(pg_constraint.oid) LIKE '%status IN%';
-
-    IF v_constraint IS NOT NULL THEN
-        EXECUTE 'ALTER TABLE duplicate_candidates DROP CONSTRAINT ' || quote_ident(v_constraint);
-    END IF;
-END $$;
+ALTER TABLE duplicate_candidates
+    DROP CONSTRAINT IF EXISTS duplicate_candidates_status_check;
 
 -- ============================================================
 -- 2. Migrate any existing rows from lowercase to uppercase
