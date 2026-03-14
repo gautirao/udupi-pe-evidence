@@ -33,7 +33,7 @@ const FacebookGroups = lazy(() => import("./pages/admin/FacebookGroups"));
 const FeedRuns = lazy(() => import("./pages/admin/FeedRuns"));
 const ManualPost = lazy(() => import("./pages/admin/ManualPost"));
 const Listings = lazy(() => import("./pages/admin/Listings"));
-const Duplicates = lazy(() => import("./pages/admin/Duplicates"));
+const SuspectedDuplicates = lazy(() => import("./pages/admin/SuspectedDuplicates"));
 const ChromeExtensionSetup = lazy(() => import("./pages/admin/ChromeExtensionSetup"));
 const ProcessPosts = lazy(() => import("./pages/admin/ProcessPosts"));
 const PendingListings = lazy(() => import("./pages/admin/PendingListings"));
@@ -221,7 +221,7 @@ const App = () => (
                 path="/admin/duplicates"
                 element={
                   <ProtectedRoute requireAdmin>
-                    <Duplicates />
+                    <SuspectedDuplicates />
                   </ProtectedRoute>
                 }
               />
