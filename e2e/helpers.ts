@@ -3,7 +3,12 @@
  *
  * hasRealCredentials() — use instead of Boolean(email && password) to avoid
  * false positives when .env.e2e contains placeholder values from the example file.
+ *
+ * loginAsAdmin() — navigate to /auth, fill admin credentials, wait for redirect.
  */
+
+import { type Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 
 /**
  * Returns true only when ALL provided credential strings are non-empty.
@@ -15,4 +20,21 @@
  */
 export function hasRealCredentials(...values: string[]): boolean {
   return values.length > 0 && values.every((v) => Boolean(v));
+}
+
+/**
+ * Sign in as an admin user via the /auth page UI.
+ * Waits until the URL no longer matches /auth before returning.
+ */
+export async function loginAsAdmin(page: Page, email: string, password: string): Promise<void> {
+  await page.goto('/auth');
+  await page.waitForLoadState('domcontentloaded');
+  await page.locator('#signin-email').fill(email);
+  await page.locator('#signin-password').fill(password);
+  await page
+    .locator('button[type="submit"]')
+    .filter({ hasText: /sign in/i })
+    .first()
+    .click();
+  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
 }
