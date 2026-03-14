@@ -21,6 +21,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -300,6 +301,60 @@ class AdminListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Requires admin role"));
 
         verify(listingService, never()).restoreListing(any(), any());
+    }
+
+    // ==================== RE-93: Force-delete endpoint ====================
+
+    @Test
+    void adminForceDelete_asAdmin_returns204() throws Exception {
+        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(true);
+
+        mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isNoContent());
+
+        verify(listingService).adminForceDelete(LISTING_ID, ADMIN_ID);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_force_deleted"),
+                eq("listing"), eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void adminForceDelete_alreadyArchived_returns204WithoutAudit() throws Exception {
+        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(false);
+
+        mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isNoContent());
+
+        verify(listingService).adminForceDelete(LISTING_ID, ADMIN_ID);
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminForceDelete_notFound_returns404() throws Exception {
+        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        doThrow(new ListingService.ListingNotFoundException(LISTING_ID))
+                .when(listingService).adminForceDelete(LISTING_ID, ADMIN_ID);
+
+        mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isNotFound());
+
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void adminForceDelete_asDealer_returns403() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden());
+
+        verify(listingService, never()).adminForceDelete(any(), any());
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
     }
 
     // ==================== Helper ====================

@@ -3,7 +3,11 @@
  *
  * Responsibilities:
  *   1. Read e2e/.test-listing-id to find the listing created by global-setup.
- *   2. Authenticate as dealer and DELETE /api/listings/{id}.
+ *   2a. PRIMARY: If ADMIN_EMAIL / ADMIN_PASSWORD are set, obtain an admin token and
+ *       call DELETE /api/admin/listings/{id} (idempotent — works for any status).
+ *   2b. FALLBACK: If admin creds are absent (or admin token could not be obtained),
+ *       authenticate as dealer and DELETE /api/listings/{id}.
+ *       WARNING is emitted because this path only works for REJECTED listings.
  *   3. Remove e2e/.test-listing-id regardless of whether the DELETE succeeded.
  *
  * This function MUST NOT throw — cleanup is best-effort only. Any failure is
@@ -75,8 +79,69 @@ export default async function globalTeardown(): Promise<void> {
   }
 
   // ------------------------------------------------------------------
-  // Step 2: Authenticate as dealer
+  // Step 2: PRIMARY — delete via admin endpoint if creds are available
   // ------------------------------------------------------------------
+  const adminEmail = process.env.ADMIN_EMAIL ?? '';
+  const adminPassword = process.env.ADMIN_PASSWORD ?? '';
+
+  if (adminEmail && adminPassword) {
+    const adminToken = await getToken(adminEmail, adminPassword);
+
+    if (adminToken) {
+      let adminDeleteSucceeded = false;
+      try {
+        const res = await fetch(`${BACKEND}/api/admin/listings/${listingId}`, {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${adminToken}`,
+          },
+        });
+
+        if (res.ok || res.status === 404) {
+          console.log(`[global-teardown] Admin deleted listing ${listingId} (status ${res.status})`);
+          adminDeleteSucceeded = true;
+        } else {
+          const text = await res.text().catch(() => '<unreadable>');
+          console.log(
+            `[global-teardown] DELETE /api/admin/listings/${listingId} returned ${res.status}: ${text}. ` +
+            'Falling back to dealer flow.',
+          );
+        }
+      } catch (err) {
+        console.log(
+          `[global-teardown] DELETE /api/admin/listings/${listingId} threw: ${String(err)}. ` +
+          'Falling back to dealer flow.',
+        );
+      }
+
+      if (adminDeleteSucceeded) {
+        // Remove the ID file and exit — primary path done.
+        try {
+          fs.unlinkSync(ID_FILE);
+          console.log(`[global-teardown] Removed ${ID_FILE}`);
+        } catch (err) {
+          console.log(`[global-teardown] Could not remove ${ID_FILE}: ${String(err)}`);
+        }
+        return;
+      }
+      // Non-ok, non-404 response — fall through to dealer fallback below.
+    } else {
+      console.log(
+        `[global-teardown] Could not obtain admin token — falling back to reject+delete flow.`,
+      );
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Step 2 (FALLBACK): reject-then-dealer-delete flow
+  // ------------------------------------------------------------------
+  // Reached when: admin creds absent, admin token fetch failed, or admin DELETE returned
+  // a non-ok/non-404 status (e.g. 500, 403).
+  console.log(
+    '[teardown] WARNING: Entering fallback reject+delete flow. ' +
+    'Test listing may leak if listing is not REJECTED.',
+  );
+
   const dealerEmail = process.env.DEALER_EMAIL ?? '';
   const dealerPassword = process.env.DEALER_PASSWORD ?? '';
 
@@ -101,7 +166,7 @@ export default async function globalTeardown(): Promise<void> {
   }
 
   // ------------------------------------------------------------------
-  // Step 3: DELETE the listing
+  // Step 3: DELETE the listing via dealer endpoint
   // ------------------------------------------------------------------
   try {
     const res = await fetch(`${BACKEND}/api/listings/${listingId}`, {

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -97,6 +98,24 @@ public class AdminListingController {
             return notFound();
         } catch (ListingService.ListingStatusException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> forceDelete(JwtAuthenticationToken auth, @PathVariable UUID id) {
+        UUID adminId = resolveAdminOrForbid(auth);
+        if (adminId == null) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+
+        try {
+            boolean archived = listingService.adminForceDelete(id, adminId);
+            log.info("DELETE /api/admin/listings/{} -> 204 adminId={} archived={}", id, adminId, archived);
+            if (archived) {
+                adminAuditService.record(adminId, "listing_force_deleted", "listing", id, null,
+                        "{\"status\":\"ARCHIVED\"}");
+            }
+            return ResponseEntity.noContent().build();
+        } catch (ListingService.ListingNotFoundException e) {
+            return ResponseEntity.notFound().build();
         }
     }
 

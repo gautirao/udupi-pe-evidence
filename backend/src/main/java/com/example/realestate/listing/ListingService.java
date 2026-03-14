@@ -1008,6 +1008,35 @@ public class ListingService {
         return saved;
     }
 
+    // ===== Admin force-delete =====
+
+    /**
+     * Admin-only force-archive: sets {@code status = ARCHIVED} and {@code archived_at = now()}
+     * regardless of the listing's current status.  Idempotent — if the listing is already
+     * ARCHIVED the method returns {@code false} without saving or re-auditing.
+     *
+     * @return {@code true} if the listing was actually archived; {@code false} if it was
+     *         already ARCHIVED (no-op path — caller must not write a second audit row)
+     * @throws ListingNotFoundException if the listing does not exist
+     */
+    @Transactional
+    public boolean adminForceDelete(UUID listingId, UUID adminId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        if (ListingStatus.ARCHIVED.toDbValue().equals(listing.getStatus())) {
+            log.info("adminForceDelete: listingId={} already ARCHIVED — no-op", listingId);
+            return false;
+        }
+
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(Instant.now());
+        listing.setUpdatedAt(OffsetDateTime.now());
+        listingRepository.save(listing);
+        log.info("adminForceDelete: archived listingId={} by adminId={}", listingId, adminId);
+        return true;
+    }
+
     // ===== Admin restore =====
 
     /**

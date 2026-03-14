@@ -1729,6 +1729,62 @@ class ListingServiceTest {
                 () -> listingService.restoreListing(listingId, UUID.randomUUID()));
     }
 
+    // ===== adminForceDelete =====
+
+    @Test
+    void adminForceDelete_liveListing_returnsTrue() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        boolean result = listingService.adminForceDelete(listingId, adminId);
+
+        assertThat(result).isTrue();
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+        assertThat(saved.getArchivedAt()).isNotNull();
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void adminForceDelete_alreadyArchived_isIdempotent() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        boolean result = listingService.adminForceDelete(listingId, adminId);
+
+        assertThat(result).isFalse();
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void adminForceDelete_notFound_throws() {
+        UUID listingId = UUID.randomUUID();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                ListingService.ListingNotFoundException.class,
+                () -> listingService.adminForceDelete(listingId, UUID.randomUUID()));
+
+        verify(listingRepository, never()).save(any());
+    }
+
     // ===== bulkDeleteListings =====
 
     @Test
