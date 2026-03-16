@@ -255,7 +255,7 @@ public class ListingPoiController {
 
     private static ResponseEntity<Map<String, String>> forbidden() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer, owner, or admin role"));
+                .body(Map.of("error", "Access denied: not listing owner or admin"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound() {

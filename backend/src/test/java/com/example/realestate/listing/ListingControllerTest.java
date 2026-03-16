@@ -255,7 +255,7 @@ class ListingControllerTest {
                                  "price":100,"description":"d"}
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
 
         verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
@@ -866,7 +866,7 @@ class ListingControllerTest {
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
 
         verify(listingService, never()).getListingStats(any());
     }

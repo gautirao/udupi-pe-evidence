@@ -333,7 +333,7 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/dealer")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
 
         verify(bookingService, never()).getBookingsForDealerPaged(any(), any());
     }
