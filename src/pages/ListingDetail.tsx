@@ -22,6 +22,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
 import { SimilarListings } from '@/components/listing/SimilarListings';
 import { ListingTransparencyCard, PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
+import { RERACard } from '@/components/listing/RERACard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 
@@ -540,6 +541,15 @@ export default function ListingDetail() {
               lastUpdatedAt={listing.lastUpdatedAt}
               isSuspectedDuplicate={listing.isSuspectedDuplicate}
               priceHistory={priceHistory}
+            />
+
+            {/* RERA & Legal Readiness Card (RE-99) */}
+            <RERACard
+              reraNumber={listing.rera_number}
+              reraValid={listing.reraValid}
+              possessionStatus={listing.possessionStatus}
+              expectedPossessionDate={listing.expectedPossessionDate}
+              approvalsDeclared={listing.approvalsDeclared}
             />
 
             {/* Land listings show location panel above photos — skip here */}

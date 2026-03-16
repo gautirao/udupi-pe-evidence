@@ -83,7 +83,7 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     onFiltersChange({ ...filters, sellerTypes: next.length > 0 ? next : undefined });
   };
 
-  const handleListingStatusToggle = (key: 'priceReduced' | 'backOnMarket' | 'newToMarket') => {
+  const handleListingStatusToggle = (key: 'priceReduced' | 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove') => {
     onFiltersChange({ ...filters, [key]: filters[key] ? undefined : true });
   };
 
@@ -99,7 +99,9 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     filters.dateTo !== undefined ||
     !!filters.priceReduced ||
     !!filters.backOnMarket ||
-    !!filters.newToMarket;
+    !!filters.newToMarket ||
+    !!filters.reraRegistered ||
+    !!filters.readyToMove;
 
   return (
     <Card className="h-full overflow-hidden flex flex-col">
@@ -300,6 +302,8 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
               { key: 'newToMarket' as const, label: 'New to Market' },
               { key: 'priceReduced' as const, label: 'Price Reduced' },
               { key: 'backOnMarket' as const, label: 'Back on Market' },
+              { key: 'reraRegistered' as const, label: 'RERA Registered' },
+              { key: 'readyToMove' as const, label: 'Ready to Move' },
             ]).map(({ key, label }) => {
               const active = !!filters[key];
               return (

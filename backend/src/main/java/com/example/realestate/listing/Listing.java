@@ -235,6 +235,17 @@ public class Listing {
     @Column(name = "rera_number", length = 80)
     private String reraNumber;
 
+    @Column(name = "possession_status", length = 30)
+    private String possessionStatus;
+
+    @Column(name = "expected_possession_date")
+    private java.time.LocalDate expectedPossessionDate;
+
+    /** Stored as a JSON string; logical shape is {@code Map<String,Boolean>}. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "approvals_declared", columnDefinition = "jsonb")
+    private String approvalsDeclared;
+
     @Column(name = "address_confirmed", nullable = false)
     private boolean addressConfirmed = false;
 
@@ -581,6 +592,30 @@ public class Listing {
 
     public void setReraNumber(String reraNumber) {
         this.reraNumber = reraNumber;
+    }
+
+    public String getPossessionStatus() {
+        return possessionStatus;
+    }
+
+    public void setPossessionStatus(String possessionStatus) {
+        this.possessionStatus = possessionStatus;
+    }
+
+    public java.time.LocalDate getExpectedPossessionDate() {
+        return expectedPossessionDate;
+    }
+
+    public void setExpectedPossessionDate(java.time.LocalDate expectedPossessionDate) {
+        this.expectedPossessionDate = expectedPossessionDate;
+    }
+
+    public String getApprovalsDeclared() {
+        return approvalsDeclared;
+    }
+
+    public void setApprovalsDeclared(String approvalsDeclared) {
+        this.approvalsDeclared = approvalsDeclared;
     }
 
     public String getRejectionReason() {

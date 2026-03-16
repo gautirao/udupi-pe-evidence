@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -142,7 +143,8 @@ class ListingControllerTest {
                 eq("land"), eq("Updated title"), eq("Manipal"),
                 eq(new BigDecimal("6000000")), eq("Updated desc"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(false), isNull(),
-                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -160,7 +162,8 @@ class ListingControllerTest {
                 "land", "Updated title", "Manipal",
                 new BigDecimal("6000000"), "Updated desc",
                 null, null, null, null, null, null, null, null, null, false, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null);
     }
 
     // ==================== Test 4: DELETE -> 204 ====================
@@ -218,7 +221,8 @@ class ListingControllerTest {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -238,7 +242,8 @@ class ListingControllerTest {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -460,7 +465,8 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Updated draft");
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -482,7 +488,8 @@ class ListingControllerTest {
                 "Udupi", new BigDecimal("8000000"), "Fixed after rejection");
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -500,7 +507,8 @@ class ListingControllerTest {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingService.ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -518,7 +526,8 @@ class ListingControllerTest {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status PENDING_REVIEW"));
 
@@ -537,7 +546,8 @@ class ListingControllerTest {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -556,7 +566,8 @@ class ListingControllerTest {
         when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -659,7 +670,8 @@ class ListingControllerTest {
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -674,7 +686,8 @@ class ListingControllerTest {
         verify(listingService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
     }
 
     @Test
@@ -687,7 +700,8 @@ class ListingControllerTest {
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -702,7 +716,62 @@ class ListingControllerTest {
         verify(listingService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
+    }
+
+    // ==================== RE-99: RERA & docs readiness fields ====================
+
+    @Test
+    void get_withValidReraNumber_reraValidIsTrue() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing l = buildListing(LISTING_ID, "DRAFT", "house", "My House",
+                "Manipal", new BigDecimal("5000000"), "Desc");
+        l.setCreatedBy(DEALER_ID);
+        l.setReraNumber("PRM/KA/2023/0042");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(java.util.Optional.of(l));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reraValid").value(true));
+    }
+
+    @Test
+    void get_withMalformedReraNumber_reraValidIsFalse() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing l = buildListing(LISTING_ID, "DRAFT", "house", "My House",
+                "Manipal", new BigDecimal("5000000"), "Desc");
+        l.setCreatedBy(DEALER_ID);
+        l.setReraNumber("INVALID-RERA");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(java.util.Optional.of(l));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reraValid").value(false));
+    }
+
+    @Test
+    void get_withReraAndPossessionFields_responseIncludesAllFields() throws Exception {
+        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing l = buildListing(LISTING_ID, "DRAFT", "house", "My House",
+                "Manipal", new BigDecimal("5000000"), "Desc");
+        l.setCreatedBy(DEALER_ID);
+        l.setReraNumber("PRM/KA/2023/0042");
+        l.setPossessionStatus("under_construction");
+        l.setExpectedPossessionDate(LocalDate.of(2026, 12, 31));
+        l.setApprovalsDeclared("{\"building_plan\":true,\"occupancy_certificate\":false,\"local_authority_approval\":true}");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(java.util.Optional.of(l));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reraValid").value(true))
+                .andExpect(jsonPath("$.possessionStatus").value("under_construction"))
+                .andExpect(jsonPath("$.expectedPossessionDate").value("2026-12-31"))
+                .andExpect(jsonPath("$.approvalsDeclared").value(
+                        "{\"building_plan\":true,\"occupancy_certificate\":false,\"local_authority_approval\":true}"));
     }
 
     // ==================== RE-75: GET /mine/stats ====================

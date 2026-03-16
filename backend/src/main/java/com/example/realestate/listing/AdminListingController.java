@@ -165,6 +165,9 @@ public class AdminListingController {
                 ? l.getLastUpdatedAt()
                 : l.getUpdatedAt();
 
+        boolean reraValid = l.getReraNumber() != null
+                && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
+
         return new ListingController.ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
@@ -183,7 +186,9 @@ public class AdminListingController {
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                 l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                 l.getSellerType(),
-                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt());
+                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
+                l.getPossessionStatus(), l.getExpectedPossessionDate(),
+                l.getApprovalsDeclared(), reraValid);
     }
 
     // ===== DTOs =====

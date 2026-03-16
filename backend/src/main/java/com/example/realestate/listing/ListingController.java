@@ -41,6 +41,9 @@ public class ListingController {
     private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
     /** Number of days within which a back-to-market listing is still badged. */
     private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
+    /** Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
+    static final java.util.regex.Pattern RERA_PATTERN =
+            java.util.regex.Pattern.compile("^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$");
 
     private final ListingService listingService;
     private final ListingRepository listingRepository;
@@ -146,7 +149,8 @@ public class ListingController {
                     req.floorNumber(), req.totalFloors(),
                     req.furnishingStatus(), req.washrooms(), req.parkingCount(),
                     req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
-                    req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
+                    req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
+                    req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared());
             return ResponseEntity.ok(toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
@@ -258,6 +262,9 @@ public class ListingController {
                 ? l.getLastUpdatedAt()
                 : l.getUpdatedAt();
 
+        boolean reraValid = l.getReraNumber() != null
+                && RERA_PATTERN.matcher(l.getReraNumber()).matches();
+
         return new ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
@@ -276,7 +283,9 @@ public class ListingController {
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                 l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                 l.getSellerType(),
-                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt());
+                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
+                l.getPossessionStatus(), l.getExpectedPossessionDate(),
+                l.getApprovalsDeclared(), reraValid);
     }
 
     // ===== DTOs =====
@@ -349,7 +358,13 @@ public class ListingController {
             Integer numberOfUnits,
             Long monthlyRent,
             Integer securityDepositMonths,
-            Integer lockInMonths
+            Integer lockInMonths,
+            // RERA & possession fields (RE-99)
+            // TODO(RE-99): add @Pattern validation for reraNumber once test coverage exists.
+            //   Regex: ^[A-Z]{3}/[A-Z]{2}/\d{4}/\d{4}$ — Karnataka RERA format.
+            String possessionStatus,
+            java.time.LocalDate expectedPossessionDate,
+            String approvalsDeclared
     ) {}
 
     public record ListingResponse(
@@ -397,7 +412,13 @@ public class ListingController {
             int daysOnMarket,
             boolean backOnMarket,
             OffsetDateTime lastUpdatedAt,
-            OffsetDateTime firstPublishedAt
+            OffsetDateTime firstPublishedAt,
+            // RERA & possession fields (RE-99)
+            String possessionStatus,
+            java.time.LocalDate expectedPossessionDate,
+            String approvalsDeclared,
+            /** true when reraNumber matches Karnataka RERA format; computed at read time, not stored. */
+            boolean reraValid
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

@@ -62,6 +62,13 @@ export interface PropertyListing {
   daysOnMarket?: number;
   backOnMarket?: boolean;
   isSuspectedDuplicate?: boolean;
+  // Fields added by Spring Boot ListingResponse (RE-99)
+  possessionStatus?: string | null;
+  expectedPossessionDate?: string | null;
+  /** Raw JSON string: {"building_plan":bool,"occupancy_certificate":bool,"local_authority_approval":bool} */
+  approvalsDeclared?: string | null;
+  /** Computed by backend: true when reraNumber is present and matches the expected format */
+  reraValid?: boolean;
 }
 
 export interface PropertyFilters {
@@ -81,6 +88,10 @@ export interface PropertyFilters {
   backOnMarket?: boolean;
   /** Client-side: show only listings where daysOnMarket <= 7 */
   newToMarket?: boolean;
+  /** Client-side: show only listings where reraNumber is non-null and non-empty */
+  reraRegistered?: boolean;
+  /** Client-side: show only listings where possessionStatus === 'ready_to_move' */
+  readyToMove?: boolean;
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
@@ -166,6 +177,12 @@ export function usePropertyListings(filters?: PropertyFilters) {
       if (filters?.priceReduced) {
         // No price history data on the list response; skip silently (filter is a no-op here)
         // The ListingDetail page shows actual price history per-listing.
+      }
+      if (filters?.reraRegistered) {
+        results = results.filter((l) => l.rera_number != null && l.rera_number !== '');
+      }
+      if (filters?.readyToMove) {
+        results = results.filter((l) => l.possessionStatus === 'ready_to_move');
       }
 
       return results;
