@@ -133,7 +133,7 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
               <Label htmlFor="requester-message">Message (optional)</Label>
               <Textarea
                 id="requester-message"
-                placeholder="Any questions or notes for the dealer..."
+                placeholder="Any questions or notes for the broker..."
                 value={requesterMessage}
                 onChange={(e) => setRequesterMessage(e.target.value)}
                 maxLength={500}

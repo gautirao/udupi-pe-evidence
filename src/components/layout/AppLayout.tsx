@@ -65,11 +65,11 @@ const adminNavigation = [
   { name: 'Audit Log', href: '/admin/audit-log', icon: Shield },
 ];
 
-const dealerNavigation = [
-  { name: 'Dashboard', href: '/dealer/dashboard', icon: Home },
-  { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
-  { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
-  { name: 'Bookings', href: '/dealer/bookings', icon: CalendarCheck2 },
+const brokerNavigation = [
+  { name: 'Dashboard', href: '/broker/dashboard', icon: Home },
+  { name: 'My Listings', href: '/broker/listings', icon: Building2 },
+  { name: 'New Listing', href: '/broker/listings/new', icon: Plus },
+  { name: 'Bookings', href: '/broker/bookings', icon: CalendarCheck2 },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
@@ -77,8 +77,8 @@ const ownerNavigation = [
   { name: 'Home', href: '/', icon: Home },
   { name: 'Insights', href: '/insights', icon: BarChart3 },
   { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
-  { name: 'My Listings', href: '/dealer/listings', icon: Building2 },
-  { name: 'New Listing', href: '/dealer/listings/new', icon: Plus },
+  { name: 'My Listings', href: '/broker/listings', icon: Building2 },
+  { name: 'New Listing', href: '/broker/listings/new', icon: Plus },
   { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
@@ -99,12 +99,12 @@ export function AppLayout({ children }: AppLayoutProps) {
     .slice(0, 2)
     .toUpperCase() || 'U';
 
-  const roleLabel = isAdmin ? 'Administrator' : isDealer ? 'Dealer' : 'User';
+  const roleLabel = isAdmin ? 'Administrator' : isDealer ? 'Broker' : 'User';
 
   const primaryNav = isAdmin
     ? adminPrimaryNavigation
     : isDealer
-    ? dealerNavigation
+    ? brokerNavigation
     : user
     ? ownerNavigation
     : loggedOutNavigation;

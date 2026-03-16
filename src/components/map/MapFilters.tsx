@@ -191,7 +191,7 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
         <div className="space-y-3">
           <Label className="text-sm font-medium">Listed By</Label>
           <div className="flex gap-2 flex-wrap">
-            {[{ label: 'Owner', value: 'owner' }, { label: 'Dealer', value: 'dealer' }].map(({ label, value }) => {
+            {[{ label: 'Owner', value: 'owner' }, { label: 'Broker', value: 'dealer' }].map(({ label, value }) => {
               const active = value === 'dealer'
                 ? (filters.sellerTypes?.includes('dealer') || false)
                 : (filters.sellerTypes?.includes(value) || false);

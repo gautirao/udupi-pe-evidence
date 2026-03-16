@@ -156,14 +156,14 @@ export default function ListingDetail() {
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => navigate(isPreview ? '/dealer/listings' : '/')}>
+          <Button variant="ghost" onClick={() => navigate(isPreview ? '/broker/listings' : '/')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             {isPreview ? 'Back to My Listings' : 'Back to Map'}
           </Button>
           <div className="flex items-center gap-2">
             {isPreview && (listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
               <Button variant="outline" size="sm" asChild>
-                <Link to={`/dealer/listings/${id}/edit`}>Edit Listing</Link>
+                <Link to={`/broker/listings/${id}/edit`}>Edit Listing</Link>
               </Button>
             )}
             <Button variant="outline" onClick={handleShare} className="gap-2">
@@ -288,7 +288,7 @@ export default function ListingDetail() {
                   <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">Owner</Badge>
                 )}
                 {listing.seller_type === 'dealer' && (
-                  <Badge variant="outline" className="border-sky-300 text-sky-700 bg-sky-50">Dealer</Badge>
+                  <Badge variant="outline" className="border-sky-300 text-sky-700 bg-sky-50">Broker</Badge>
                 )}
                 {listing.confidence_score && listing.confidence_score < 70 && (
                   <TooltipProvider>

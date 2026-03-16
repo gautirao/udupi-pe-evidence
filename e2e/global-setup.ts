@@ -70,8 +70,8 @@ function getUserIdFromToken(token: string): string {
 }
 
 export default async function globalSetup(): Promise<void> {
-  const dealerEmail = process.env.DEALER_EMAIL ?? '';
-  const dealerPassword = process.env.DEALER_PASSWORD ?? '';
+  const dealerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+  const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
   // ------------------------------------------------------------------
   // Guard: dealer creds required to create the listing

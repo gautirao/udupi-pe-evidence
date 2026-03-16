@@ -9,7 +9,7 @@ import {
   useUpdateListing,
   useSubmitListing,
   ListingResponse,
-} from '@/hooks/useDealerListings';
+} from '@/hooks/useBrokerListings';
 
 // ─── Hoisted mock handles ──────────────────────────────────────────────────────
 
@@ -18,7 +18,7 @@ const mockUseSearchParams = vi.hoisted(() => vi.fn());
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock('@/hooks/useDealerListings', () => ({
+vi.mock('@/hooks/useBrokerListings', () => ({
   useGetListing: vi.fn(),
   useUpdateListing: vi.fn(),
   useSubmitListing: vi.fn(),
@@ -426,7 +426,7 @@ describe('EditListing page', () => {
   it('step2_withZeroImages_disablesSaveButton_andShowsHint', async () => {
     // Override the ImageUploader mock to fire onCanSubmitChange(false) so the
     // 3-image gate is active for this test only.
-    const uploaderModule = await import('@/components/dealer/ImageUploader');
+    const uploaderModule = await import('@/components/dealer/ImageUploader'); // broker/EditListing still imports from dealer path
     vi.spyOn(uploaderModule, 'ImageUploader').mockImplementationOnce(
       ({ onCanSubmitChange }: { listingId: string; onCanSubmitChange?: (v: boolean) => void }) => {
         React.useEffect(() => {

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Loader2 } from "lucide-react";
@@ -17,14 +17,14 @@ import ListingDetail from "./pages/ListingDetail";
 // Lazily loaded — Insights uses Recharts (~200 KB); load only when navigated to
 const Insights = lazy(() => import("./pages/Insights"));
 
-// Lazily loaded — Dealer routes; not needed for public/admin users
+// Lazily loaded — Broker routes; not needed for public/admin users
 const Onboarding = lazy(() => import("./pages/Onboarding"));
-const NewListing = lazy(() => import("./pages/dealer/NewListing"));
-const EditListing = lazy(() => import("./pages/dealer/EditListing"));
-const DealerSetup = lazy(() => import("./pages/dealer/DealerSetup"));
-const DealerDashboard = lazy(() => import("./pages/dealer/DealerDashboard"));
-const DealerListings = lazy(() => import("./pages/dealer/DealerListings"));
-const DealerBookings = lazy(() => import("./pages/dealer/DealerBookings"));
+const NewListing = lazy(() => import("./pages/broker/NewListing"));
+const EditListing = lazy(() => import("./pages/broker/EditListing"));
+const BrokerSetup = lazy(() => import("./pages/broker/BrokerSetup"));
+const BrokerDashboard = lazy(() => import("./pages/broker/BrokerDashboard"));
+const BrokerListings = lazy(() => import("./pages/broker/BrokerListings"));
+const BrokerBookings = lazy(() => import("./pages/broker/BrokerBookings"));
 const MyBookings = lazy(() => import("./pages/MyBookings"));
 const SavedAreas = lazy(() => import("./pages/SavedAreas"));
 
@@ -48,6 +48,28 @@ function PageLoader() {
       <Loader2 className="h-8 w-8 animate-spin text-primary" />
     </div>
   );
+}
+
+/** Redirect /dealer/listings/:id/edit?... → /broker/listings/:id/edit?... preserving query params */
+function DealerListingEditRedirect() {
+  const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  return <Navigate to={`/broker/listings/${id}/edit${query ? `?${query}` : ''}`} replace />;
+}
+
+/** Redirect /dealer/listings?... → /broker/listings?... preserving query params */
+function DealerListingsRedirect() {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  return <Navigate to={`/broker/listings${query ? `?${query}` : ''}`} replace />;
+}
+
+/** Redirect /dealer/bookings?... → /broker/bookings?... preserving query params */
+function DealerBookingsRedirect() {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  return <Navigate to={`/broker/bookings${query ? `?${query}` : ''}`} replace />;
 }
 
 const App = () => (
@@ -93,17 +115,17 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              {/* Dealer Routes */}
+              {/* Broker Routes */}
               <Route
-                path="/dealer/setup"
+                path="/broker/setup"
                 element={
                   <ProtectedRoute>
-                    <DealerSetup />
+                    <BrokerSetup />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/dealer/listings/new"
+                path="/broker/listings/new"
                 element={
                   <ProtectedRoute>
                     <NewListing />
@@ -111,7 +133,7 @@ const App = () => (
                 }
               />
               <Route
-                path="/dealer/listings/:id/edit"
+                path="/broker/listings/:id/edit"
                 element={
                   <ProtectedRoute>
                     <EditListing />
@@ -119,29 +141,36 @@ const App = () => (
                 }
               />
               <Route
-                path="/dealer/dashboard"
+                path="/broker/dashboard"
                 element={
                   <ProtectedRoute>
-                    <DealerDashboard />
+                    <BrokerDashboard />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/dealer/listings"
+                path="/broker/listings"
                 element={
                   <ProtectedRoute>
-                    <DealerListings />
+                    <BrokerListings />
                   </ProtectedRoute>
                 }
               />
               <Route
-                path="/dealer/bookings"
+                path="/broker/bookings"
                 element={
                   <ProtectedRoute>
-                    <DealerBookings />
+                    <BrokerBookings />
                   </ProtectedRoute>
                 }
               />
+              {/* Legacy /dealer/* redirects — preserve query params via window.location */}
+              <Route path="/dealer/setup" element={<Navigate to="/broker/setup" replace />} />
+              <Route path="/dealer/dashboard" element={<Navigate to="/broker/dashboard" replace />} />
+              <Route path="/dealer/listings/new" element={<Navigate to="/broker/listings/new" replace />} />
+              <Route path="/dealer/listings/:id/edit" element={<DealerListingEditRedirect />} />
+              <Route path="/dealer/listings" element={<DealerListingsRedirect />} />
+              <Route path="/dealer/bookings" element={<DealerBookingsRedirect />} />
               {/* User Routes */}
               <Route
                 path="/my-bookings"

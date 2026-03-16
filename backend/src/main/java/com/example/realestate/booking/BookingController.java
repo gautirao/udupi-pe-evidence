@@ -189,9 +189,9 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getBookingsForRequesterPaged(requesterId, pageable).map(this::toResponse));
     }
 
-    // ===== GET /api/bookings/dealer =====
+    // ===== GET /api/bookings/dealer (alias: /api/bookings/broker) =====
 
-    @GetMapping("/dealer")
+    @GetMapping({"/dealer", "/broker"})
     public ResponseEntity<?> dealer(
             JwtAuthenticationToken auth,
             @RequestParam(required = false) UUID listingId,

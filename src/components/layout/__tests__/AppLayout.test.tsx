@@ -208,13 +208,13 @@ describe('AppLayout — role label in dropdown', () => {
     expect(screen.getByText('User')).toBeInTheDocument();
   });
 
-  it('shows "Dealer" label for dealer role', async () => {
+  it('shows "Broker" label for dealer role', async () => {
     mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isDealer: true });
     const user = userEvent.setup();
     renderLayout();
 
     await user.click(screen.getByRole('button', { name: /^DE$/i }));
-    expect(screen.getByText('Dealer')).toBeInTheDocument();
+    expect(screen.getByText('Broker')).toBeInTheDocument();
   });
 
   it('shows "Administrator" label for admin role', async () => {
@@ -227,8 +227,8 @@ describe('AppLayout — role label in dropdown', () => {
   });
 });
 
-describe('AppLayout — dealer nav link hrefs', () => {
-  it('dealer role: My Listings link points to /dealer/listings', () => {
+describe('AppLayout — broker nav link hrefs', () => {
+  it('dealer role: My Listings link points to /broker/listings', () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
@@ -237,7 +237,7 @@ describe('AppLayout — dealer nav link hrefs', () => {
     renderLayout();
 
     const links = screen.getAllByRole('link', { name: /my listings/i });
-    expect(links[0]).toHaveAttribute('href', '/dealer/listings');
+    expect(links[0]).toHaveAttribute('href', '/broker/listings');
   });
 });
 

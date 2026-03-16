@@ -111,7 +111,7 @@ export default function PendingListings() {
       queryClient.invalidateQueries({ queryKey: ['pending-listings'] });
       setRejectTarget(null);
       setRejectionReason('');
-      toast({ title: 'Listing Rejected', description: 'The dealer has been notified.' });
+      toast({ title: 'Listing Rejected', description: 'The broker has been notified.' });
     },
     onError: (error: Error) => {
       toast({ title: 'Rejection Failed', description: error.message, variant: 'destructive' });
@@ -135,7 +135,7 @@ export default function PendingListings() {
               Pending Approval
             </h1>
             <p className="text-muted-foreground">
-              Review dealer-submitted listings
+              Review broker-submitted listings
             </p>
           </div>
           <Badge variant="secondary" className="text-sm">
@@ -234,7 +234,7 @@ export default function PendingListings() {
             <DialogHeader>
               <DialogTitle>Reject Listing</DialogTitle>
               <DialogDescription>
-                Provide a reason for rejection. The dealer will be notified.
+                Provide a reason for rejection. The broker will be notified.
               </DialogDescription>
             </DialogHeader>
 
