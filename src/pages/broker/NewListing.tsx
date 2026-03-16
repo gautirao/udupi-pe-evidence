@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { PriceField } from '@/components/dealer/PriceField';
-import { AreaField } from '@/components/dealer/AreaField';
-import { StepIndicator } from '@/components/dealer/StepIndicator';
+import { PriceField } from '@/components/broker/PriceField';
+import { AreaField } from '@/components/broker/AreaField';
+import { StepIndicator } from '@/components/broker/StepIndicator';
 import {
   Select,
   SelectContent,
