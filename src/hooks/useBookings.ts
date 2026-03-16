@@ -52,7 +52,7 @@ export function useCreateBooking() {
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
       toast({
         title: 'Viewing request sent',
-        description: 'The dealer will confirm your request shortly.',
+        description: 'The broker will confirm your request shortly.',
       });
     },
     onError: (error: Error) => {
@@ -101,7 +101,7 @@ export function useDealerBookings(listingId?: string) {
   const query = useQuery({
     queryKey: ['dealer-bookings', listingId ?? 'all'],
     queryFn: () => api.get<PageResponse<BookingResponse>>(
-      listingId ? `/api/bookings/dealer?listingId=${listingId}` : '/api/bookings/dealer'
+      listingId ? `/api/bookings/broker?listingId=${listingId}` : '/api/bookings/broker'
     ),
     enabled: !!user && (isDealer || isAdmin),
     staleTime: 5 * 60 * 1000,

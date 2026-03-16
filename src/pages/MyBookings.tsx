@@ -88,7 +88,7 @@ function BookingCard({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Cancel this booking?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This can't be undone. The dealer will be notified.
+                        This can't be undone. The broker will be notified.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

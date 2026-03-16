@@ -96,7 +96,7 @@ public class ListingController {
         if (listing == null) return notFound();
         if (!caller.isAdmin() && !listing.getCreatedBy().equals(caller.userId())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "Listing belongs to a different dealer"));
+                    .body(Map.of("error", "Listing belongs to a different broker"));
         }
         return ResponseEntity.ok(toResponse(listing));
     }
@@ -156,7 +156,7 @@ public class ListingController {
             return notFound();
         } catch (ListingService.ListingOwnershipException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "Listing belongs to a different dealer"));
+                    .body(Map.of("error", "Listing belongs to a different broker"));
         } catch (ListingService.ListingStatusException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
@@ -231,7 +231,7 @@ public class ListingController {
 
     private static ResponseEntity<Map<String, String>> forbidden() {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer, owner, or admin role"));
+                .body(Map.of("error", "Requires broker, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound() {

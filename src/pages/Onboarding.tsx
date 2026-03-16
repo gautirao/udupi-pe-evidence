@@ -7,7 +7,7 @@ import { Loader2, MapPin, Building2, Home } from 'lucide-react';
 
 /**
  * First-run intent screen shown after signup.
- * Lets the user choose between browsing (stays 'user') or listing (goes to /dealer/setup).
+ * Lets the user choose between browsing (stays 'user') or listing (goes to /broker/setup).
  *
  * Guards:
  *  - Unauthenticated: ProtectedRoute redirects to /auth before this component renders.
@@ -66,7 +66,7 @@ export default function Onboarding() {
           {/* Owner path */}
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
-            onClick={() => navigate('/dealer/listings/new')}
+            onClick={() => navigate('/broker/listings/new')}
           >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-3">
@@ -74,11 +74,11 @@ export default function Onboarding() {
               </div>
               <CardTitle>List Your Property</CardTitle>
               <CardDescription>
-                List up to 3 of your own properties. No dealer registration needed.
+                List up to 3 of your own properties. No broker registration needed.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); navigate('/dealer/listings/new'); }}>
+              <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); navigate('/broker/listings/new'); }}>
                 List as Owner
               </Button>
             </CardContent>
@@ -87,7 +87,7 @@ export default function Onboarding() {
           {/* Dealer path */}
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
-            onClick={() => navigate('/dealer/setup')}
+            onClick={() => navigate('/broker/setup')}
           >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-3">
@@ -95,12 +95,12 @@ export default function Onboarding() {
               </div>
               <CardTitle>List a Property</CardTitle>
               <CardDescription>
-                Register as a dealer to create listings, get approved, and manage viewings.
+                Register as a broker to create listings, get approved, and manage viewings.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" onClick={() => navigate('/dealer/setup')}>
-                Become a Dealer
+              <Button className="w-full" onClick={() => navigate('/broker/setup')}>
+                Become a Broker
               </Button>
             </CardContent>
           </Card>

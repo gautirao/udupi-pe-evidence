@@ -547,6 +547,31 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
 
+    // ==================== RE-102: /broker alias tests ====================
+
+    @Test
+    void broker_alias_withDealerRole_returns200() throws Exception {
+        when(bookingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Page<ViewingRequest> page = new PageImpl<>(List.of(
+                buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID, BookingService.STATUS_REQUESTED)));
+        when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/bookings/broker")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1));
+    }
+
+    @Test
+    void broker_alias_withoutDealerRole_returns403() throws Exception {
+        when(bookingService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
+
+        mockMvc.perform(get("/api/bookings/broker")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isForbidden());
+    }
+
     // ==================== Helpers ====================
 
     private ViewingRequest buildBooking(UUID id, UUID requesterId, UUID dealerId, String status) {
