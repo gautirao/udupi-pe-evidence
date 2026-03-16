@@ -44,6 +44,7 @@ import {
   Image as ImageIcon,
   Globe,
   Eye,
+  AlertTriangle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -346,7 +347,15 @@ export default function Listings() {
                       {listing.price ? formatPrice(listing.price, listing.price_unit) : '—'}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={listing.status} />
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <StatusBadge status={listing.status} />
+                        {listing.rera_number != null && listing.rera_number !== '' && listing.reraValid === false && (
+                          <Badge className="bg-amber-100 text-amber-800 border-0 text-xs gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            RERA unverified
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {listing.latitude && listing.longitude ? (

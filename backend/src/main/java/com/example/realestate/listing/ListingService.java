@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HexFormat;
@@ -563,7 +564,8 @@ public class ListingService {
                                  BigDecimal price, String description) {
         return updateListing(listingId, userId, isAdmin,
                 propertyType, title, locality, price, description, null, null, null, null, null, null, null, null, null, false, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null);
     }
 
     /**
@@ -583,7 +585,8 @@ public class ListingService {
                                  Boolean addressConfirmed) {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, null, null, false, null,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null);
     }
 
     /**
@@ -601,7 +604,8 @@ public class ListingService {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
                 landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null);
     }
 
     /**
@@ -631,7 +635,11 @@ public class ListingService {
                                  Integer floorNumber, Integer totalFloors,
                                  String furnishingStatus, Integer washrooms, Integer parkingCount,
                                  BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
-                                 Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths) {
+                                 Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                                 // RERA & possession fields (RE-99)
+                                 String possessionStatus,
+                                 LocalDate expectedPossessionDate,
+                                 String approvalsDeclared) {
         Listing listing = findOwnedListing(listingId, userId, isAdmin);
 
         if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
@@ -685,6 +693,13 @@ public class ListingService {
         if (monthlyRent != null) listing.setMonthlyRent(monthlyRent);
         if (securityDepositMonths != null) listing.setSecurityDepositMonths(securityDepositMonths);
         if (lockInMonths != null) listing.setLockInMonths(lockInMonths);
+
+        // RERA & possession fields (RE-99). These fields are intentionally one-way-set:
+        // once written, they cannot be cleared to null via a PUT (no apply* flag).
+        // Clearing support can be added in a follow-up if needed (RE-99 product decision).
+        if (possessionStatus != null) listing.setPossessionStatus(possessionStatus);
+        if (expectedPossessionDate != null) listing.setExpectedPossessionDate(expectedPossessionDate);
+        if (approvalsDeclared != null) listing.setApprovalsDeclared(approvalsDeclared);
 
         // Recompute dedupe hash if any hash-relevant field changed
         if (description != null || locality != null || price != null) {

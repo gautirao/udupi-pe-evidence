@@ -108,6 +108,9 @@ public class PublicListingController {
                 ? l.getLastUpdatedAt()
                 : l.getUpdatedAt();
 
+        boolean reraValid = l.getReraNumber() != null
+                && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
+
         // rejectionReason is an internal moderation note — never expose it to unauthenticated callers.
         return new ListingController.ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
@@ -127,7 +130,9 @@ public class PublicListingController {
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                 l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                 l.getSellerType(),
-                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt());
+                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
+                l.getPossessionStatus(), l.getExpectedPossessionDate(),
+                l.getApprovalsDeclared(), reraValid);
     }
 
     private List<PriceHistoryEntry> buildPriceHistory(List<PriceChangeLog> logs) {
