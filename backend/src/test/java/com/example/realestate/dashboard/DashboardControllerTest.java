@@ -3,6 +3,7 @@ package com.example.realestate.dashboard;
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+import com.example.realestate.security.UserRoleService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,8 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -71,6 +74,9 @@ class DashboardControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private UserRoleService userRoleService;
 
     @Autowired
     private AreaPriceWeeklyRepository areaPriceWeeklyRepository;

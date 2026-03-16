@@ -2,6 +2,7 @@ package com.example.realestate.config;
 
 import com.example.realestate.notification.NotificationController;
 import com.example.realestate.notification.NotificationRepository;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -63,6 +64,9 @@ class CorsPreflightTest {
 
     @MockitoBean
     private NotificationRepository notificationRepository;
+
+    @MockitoBean
+    private UserRoleService userRoleService;
 
     // ==================== Regression: OPTIONS on a protected endpoint ====================
 

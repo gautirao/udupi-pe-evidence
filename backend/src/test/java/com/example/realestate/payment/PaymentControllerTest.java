@@ -1,6 +1,7 @@
 package com.example.realestate.payment;
 
 import com.example.realestate.exception.RateLimiterService;
+import com.example.realestate.security.UserRoleService;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,6 +77,9 @@ class PaymentControllerTest {
 
     @MockitoBean
     private RateLimiterService rateLimiterService;
+
+    @MockitoBean
+    private UserRoleService userRoleService;
 
     @BeforeEach
     void setUp() {
