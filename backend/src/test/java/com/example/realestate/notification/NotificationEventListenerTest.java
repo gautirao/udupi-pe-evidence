@@ -2,7 +2,6 @@ package com.example.realestate.notification;
 
 import com.example.realestate.insights.SavedArea;
 import com.example.realestate.insights.SavedAreaRepository;
-import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.listing.ListingService.NewListingInAreaEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +31,6 @@ class NotificationEventListenerTest {
         notificationRepository = mock(NotificationRepository.class);
         emailService = mock(EmailService.class);
         listener = new NotificationEventListener(
-                mock(ListingRepository.class),
                 new ObjectMapper(),
                 savedAreaRepository,
                 notificationRepository,

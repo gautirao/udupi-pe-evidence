@@ -70,16 +70,6 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             nativeQuery = true)
     long countImagesByListingId(@Param("listingId") UUID listingId);
 
-    @Modifying
-    @Query(value = "INSERT INTO public.notifications (user_id, type, title, message, metadata) " +
-            "VALUES (:userId, :type, :title, :message, CAST(:metadata AS jsonb))",
-            nativeQuery = true)
-    void insertNotification(@Param("userId") UUID userId,
-                            @Param("type") String type,
-                            @Param("title") String title,
-                            @Param("message") String message,
-                            @Param("metadata") String metadata);
-
     @Query(value = "SELECT role::text FROM public.user_roles WHERE user_id = :userId LIMIT 1",
             nativeQuery = true)
     Optional<String> findUserRole(@Param("userId") UUID userId);

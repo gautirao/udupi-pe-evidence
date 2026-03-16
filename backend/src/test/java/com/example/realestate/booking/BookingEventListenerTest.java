@@ -3,6 +3,7 @@ package com.example.realestate.booking;
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.notification.EmailService;
+import com.example.realestate.notification.NotificationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import static org.mockito.Mockito.*;
 class BookingEventListenerTest {
 
     private ListingRepository listingRepository;
+    private NotificationRepository notificationRepository;
     private EmailService emailService;
     private ViewingRequestRepository viewingRequestRepository;
     private BookingEventListener listener;
@@ -29,10 +31,12 @@ class BookingEventListenerTest {
     @BeforeEach
     void setUp() {
         listingRepository = mock(ListingRepository.class);
+        notificationRepository = mock(NotificationRepository.class);
         emailService = mock(EmailService.class);
         viewingRequestRepository = mock(ViewingRequestRepository.class);
         listener = new BookingEventListener(
                 listingRepository,
+                notificationRepository,
                 new ObjectMapper(),
                 emailService,
                 viewingRequestRepository);
@@ -75,7 +79,7 @@ class BookingEventListenerTest {
                 eq(LISTING_ID));
 
         // In-app notification was also sent
-        verify(listingRepository).insertNotification(
+        verify(notificationRepository).insertNotification(
                 eq(DEALER_ID), eq("viewing_requested"), anyString(), anyString(), anyString());
     }
 
@@ -95,7 +99,7 @@ class BookingEventListenerTest {
         listener.onViewingRequested(new BookingService.ViewingRequestedEvent(booking));
 
         // In-app notification was still sent
-        verify(listingRepository).insertNotification(
+        verify(notificationRepository).insertNotification(
                 eq(DEALER_ID), eq("viewing_requested"), anyString(), anyString(), anyString());
     }
 
@@ -111,7 +115,7 @@ class BookingEventListenerTest {
         verify(emailService, never()).sendBookingNotification(any(), any(), any(), any());
 
         // In-app notification was still sent
-        verify(listingRepository).insertNotification(
+        verify(notificationRepository).insertNotification(
                 eq(DEALER_ID), eq("viewing_requested"), anyString(), anyString(), anyString());
     }
 
