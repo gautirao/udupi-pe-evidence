@@ -2,7 +2,7 @@ package com.example.realestate.poi;
 
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,12 +70,12 @@ class ListingPoiManagementControllerTest {
 
     @MockitoBean private ListingPoiService service;
     @MockitoBean private OverpassService overpassService;
-    @MockitoBean private ListingService listingService;
     @MockitoBean private ListingRepository listingRepository;
+    @MockitoBean private UserRoleService userRoleService;
 
     @BeforeEach
     void setUp() {
-        reset(service, overpassService, listingService, listingRepository);
+        reset(service, overpassService, listingRepository, userRoleService);
     }
 
     // ===== Helpers =====
@@ -108,7 +108,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void suggestions_ownerCanAccess_returns200() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
                 .thenReturn(List.of());
@@ -127,7 +127,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void suggestions_nonOwner_returns403() throws Exception {
-        when(listingService.getUserRole(OTHER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
@@ -141,7 +141,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void approve_ownerApprovesOwnPoi_returns200() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         ListingPoi unapproved = buildPoi(false, false);
@@ -165,7 +165,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void manualAdd_validCategory_returns201() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         when(service.save(any(ListingPoi.class))).thenAnswer(inv -> {
@@ -188,7 +188,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void manualAdd_invalidCategory_returns400() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
@@ -206,7 +206,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void delete_ownerDeletes_returns204() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         ListingPoi poi = buildPoi(true, false);
@@ -223,7 +223,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void delete_nonOwner_returns403() throws Exception {
-        when(listingService.getUserRole(OTHER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         mockMvc.perform(delete("/api/listings/{listingId}/pois/{poiId}", LISTING_ID, POI_ID)
@@ -239,7 +239,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void approve_settlementCategory_returns400() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         ListingPoi townCenterPoi = buildPoi(false, false);
@@ -257,7 +257,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void delete_settlementCategory_returns400() throws Exception {
-        when(listingService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
 
         ListingPoi highwayPoi = buildPoi(true, false);
@@ -274,7 +274,7 @@ class ListingPoiManagementControllerTest {
     @Test
     void admin_canAccessAnyListing() throws Exception {
         // Admin accesses a listing owned by a different dealer (OWNER_ID)
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
                 .thenReturn(List.of());

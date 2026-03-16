@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -48,13 +49,16 @@ public class ListingController {
     private final ListingService listingService;
     private final ListingRepository listingRepository;
     private final ListingImageRepository listingImageRepository;
+    private final UserRoleService userRoleService;
 
     public ListingController(ListingService listingService,
                              ListingRepository listingRepository,
-                             ListingImageRepository listingImageRepository) {
+                             ListingImageRepository listingImageRepository,
+                             UserRoleService userRoleService) {
         this.listingService = listingService;
         this.listingRepository = listingRepository;
         this.listingImageRepository = listingImageRepository;
+        this.userRoleService = userRoleService;
     }
 
     @PostMapping
@@ -218,7 +222,7 @@ public class ListingController {
 
     private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (role == null || !ALLOWED_ROLES.contains(role)) {
             return null;
         }

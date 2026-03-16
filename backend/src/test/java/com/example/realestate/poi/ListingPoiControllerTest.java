@@ -1,7 +1,7 @@
 package com.example.realestate.poi;
 
 import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -60,8 +60,8 @@ class ListingPoiControllerTest {
 
     @MockitoBean private ListingPoiService service;
     @MockitoBean private OverpassService overpassService;
-    @MockitoBean private ListingService listingService;
     @MockitoBean private ListingRepository listingRepository;
+    @MockitoBean private UserRoleService userRoleService;
 
     // ==================== Test 1: returns only approved POIs ====================
 

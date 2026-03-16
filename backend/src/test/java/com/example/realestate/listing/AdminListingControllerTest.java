@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,9 +65,12 @@ class AdminListingControllerTest {
     @MockitoBean
     private AdminAuditService adminAuditService;
 
+    @MockitoBean
+    private UserRoleService userRoleService;
+
     @BeforeEach
     void setUp() {
-        reset(listingService, listingImageRepository, adminAuditService);
+        reset(listingService, listingImageRepository, adminAuditService, userRoleService);
         // Default stub: no images for any listing; tests that check imageCount override this.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
     }
@@ -75,7 +79,7 @@ class AdminListingControllerTest {
 
     @Test
     void approve_withAdminRole_returns200WithLiveStatus() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
         Listing approved = buildListing(LISTING_ID, "LIVE", "land", "Plot in Manipal",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -96,7 +100,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_withReasonAndAdminRole_returns200WithRejectedStatus() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
         Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
@@ -124,7 +128,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_withoutReason_returns400() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
@@ -142,7 +146,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_withNullReason_returns400() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
@@ -160,7 +164,7 @@ class AdminListingControllerTest {
 
     @Test
     void approve_withDealerRole_returns403() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -182,7 +186,7 @@ class AdminListingControllerTest {
 
     @Test
     void approve_wrongStatus_returns400() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.approveListing(LISTING_ID, ADMIN_ID))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot approve listing with status DRAFT"));
@@ -197,7 +201,7 @@ class AdminListingControllerTest {
 
     @Test
     void approve_listingNotFound_returns404() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.approveListing(LISTING_ID, ADMIN_ID))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
@@ -211,7 +215,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_listingNotFound_returns404() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.rejectListing(LISTING_ID, ADMIN_ID, "Bad listing"))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
@@ -229,7 +233,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_wrongStatus_returns400() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.rejectListing(LISTING_ID, ADMIN_ID, "Reason"))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot reject listing with status DRAFT"));
@@ -248,7 +252,7 @@ class AdminListingControllerTest {
 
     @Test
     void restore_withAdminRole_archivedListing_returns200WithDraftStatus() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
         Listing restored = buildListing(LISTING_ID, "DRAFT", "land", "Plot in Manipal",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -267,7 +271,7 @@ class AdminListingControllerTest {
 
     @Test
     void restore_listingNotArchived_returns409() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.restoreListing(eq(LISTING_ID), any()))
                 .thenThrow(new ListingService.ListingNotArchivedException(LISTING_ID));
 
@@ -281,7 +285,7 @@ class AdminListingControllerTest {
 
     @Test
     void restore_listingNotFound_returns404() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.restoreListing(eq(LISTING_ID), any()))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
@@ -293,7 +297,7 @@ class AdminListingControllerTest {
 
     @Test
     void restore_withDealerRole_returns403() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -307,7 +311,7 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_asAdmin_returns204() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(true);
 
         mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
@@ -321,7 +325,7 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_alreadyArchived_returns204WithoutAudit() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(false);
 
         mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
@@ -334,7 +338,7 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_notFound_returns404() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         doThrow(new ListingService.ListingNotFoundException(LISTING_ID))
                 .when(listingService).adminForceDelete(LISTING_ID, ADMIN_ID);
 
@@ -347,7 +351,7 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_asDealer_returns403() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))

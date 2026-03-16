@@ -70,10 +70,6 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             nativeQuery = true)
     long countImagesByListingId(@Param("listingId") UUID listingId);
 
-    @Query(value = "SELECT role::text FROM public.user_roles WHERE user_id = :userId LIMIT 1",
-            nativeQuery = true)
-    Optional<String> findUserRole(@Param("userId") UUID userId);
-
     @Query(value = """
             SELECT * FROM public.property_listings
             WHERE latitude BETWEEN :minLat AND :maxLat

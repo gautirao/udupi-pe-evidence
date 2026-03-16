@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -47,17 +48,20 @@ public class ListingImageController {
     private final ListingService listingService;
     private final SupabaseStorageService storageService;
     private final ListingImageRegistrar imageRegistrar;
+    private final UserRoleService userRoleService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
                                    ListingService listingService,
                                    SupabaseStorageService storageService,
-                                   ListingImageRegistrar imageRegistrar) {
+                                   ListingImageRegistrar imageRegistrar,
+                                   UserRoleService userRoleService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.listingService = listingService;
         this.storageService = storageService;
         this.imageRegistrar = imageRegistrar;
+        this.userRoleService = userRoleService;
     }
 
     // ==================== GET — list images ====================
@@ -214,7 +218,7 @@ public class ListingImageController {
 
     private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (role == null || !ALLOWED_ROLES.contains(role)) {
             return null;
         }

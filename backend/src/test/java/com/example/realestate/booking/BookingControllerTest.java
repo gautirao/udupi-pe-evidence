@@ -1,6 +1,7 @@
 package com.example.realestate.booking;
 
 import com.example.realestate.exception.RateLimiterService;
+import com.example.realestate.security.UserRoleService;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,9 +78,12 @@ class BookingControllerTest {
     @MockitoBean
     private RateLimiterService rateLimiterService;
 
+    @MockitoBean
+    private UserRoleService userRoleService;
+
     @BeforeEach
     void setUp() {
-        reset(bookingService, transactionManager, rateLimiterService);
+        reset(bookingService, transactionManager, rateLimiterService, userRoleService);
         // Default: bucket allows all requests (tryConsume returns true)
         Bucket allowBucket = Mockito.mock(Bucket.class);
         when(allowBucket.tryConsume(1)).thenReturn(true);
@@ -301,7 +305,7 @@ class BookingControllerTest {
 
     @Test
     void dealer_withDealerRole_returns200WithPage() throws Exception {
-        when(bookingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         ViewingRequest item = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_REQUESTED);
         Page<ViewingRequest> page = new PageImpl<>(List.of(item));
@@ -322,7 +326,7 @@ class BookingControllerTest {
 
     @Test
     void dealer_withoutDealerRole_returns403() throws Exception {
-        when(bookingService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
+        when(userRoleService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/bookings/dealer")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
@@ -400,7 +404,7 @@ class BookingControllerTest {
 
     @Test
     void dealer_getBookings_returnsPage_withPaginationMetadata() throws Exception {
-        when(bookingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         UUID booking2Id = UUID.fromString("00000000-0000-0000-0000-000000000097");
         ViewingRequest item1 = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_REQUESTED);
@@ -551,7 +555,7 @@ class BookingControllerTest {
 
     @Test
     void broker_alias_withDealerRole_returns200() throws Exception {
-        when(bookingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         Page<ViewingRequest> page = new PageImpl<>(List.of(
                 buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID, BookingService.STATUS_REQUESTED)));
         when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
@@ -565,7 +569,7 @@ class BookingControllerTest {
 
     @Test
     void broker_alias_withoutDealerRole_returns403() throws Exception {
-        when(bookingService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
+        when(userRoleService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
