@@ -28,34 +28,41 @@ Do not report generic OWASP categories without code evidence. Do not escalate a 
 
 ---
 
+## Repo Patterns Are Evidence, Not Endorsement
+
+An established pattern in the codebase reflects the current architecture — not proof that the pattern is secure. If a repeated local pattern conflicts with the project's trust model, explicit security invariants, or visible exploit-path reasoning, do not treat repetition as validation. Follow repo conventions when they are sound; flag them when they appear to institutionalise a real security gap. A pattern that has existed for a long time can still be a Tier 1 finding.
+
+---
+
 ## Before You Begin
 
 **Always:**
-- Read `PROJECT_CONTEXT.md` — understand the auth model, external services (Supabase JWT, Google AI, `X-Ingestion-Api-Key`), and deployment targets (Cloudflare Pages / Render).
+- Read `PROJECT_CONTEXT.md` — understand the auth model, external services, and deployment targets.
+- If `PROJECT_CONTEXT.md` or `.claude/ARCHITECTURE.md` are missing, stale, or clearly contradicted by the code under review, **prefer code evidence**. Note the mismatch briefly — do not skew the review around documentation that does not match the implementation.
 
 **When the change touches auth boundaries or cross-service communication:**
 - Read `.claude/ARCHITECTURE.md` — understand system trust boundaries and frontend/backend separation.
 
-**Project-specific invariants:**
+**Project-specific invariants** *(current known patterns at time of writing — verify against code when touched; treat as strong defaults, not timeless facts):*
 - Frontend (React/Vite on Cloudflare Pages): uses Supabase anon key only via `VITE_` env vars. The Supabase `service_role` key must never appear in frontend code, `VITE_` env vars, or the client bundle.
 - Backend (Spring Boot on Render): validates Supabase JWTs on protected endpoints. Authenticates ingestion requests via `X-Ingestion-Api-Key` header.
 - Supabase: enforces RLS policies. Service role key is backend-only.
-- Auth model: this project uses `Authorization: Bearer <supabase_jwt>` header-based auth — **not cookies**. This means standard CSRF attacks are generally not applicable to API endpoints. Assess CSRF only where session cookies or form submissions are in play.
-- Dual data path: the frontend uses **Supabase direct** (public browsing — RLS-enforced) and **Spring Boot API via `lib/api.ts`** (authenticated operations — JWT-enforced). The trust model differs between paths. Supabase direct calls are controlled by RLS policies; Spring Boot calls are controlled by JWT validation and imperative role checks.
-- Production error suppression: `application.yml` sets `include-message: never`, `include-stack-trace: never`, `include-exception: false` — error details are suppressed by default. Do not flag error message exposure unless the reviewed code explicitly overrides this configuration.
+- Auth model: `Authorization: Bearer <supabase_jwt>` header-based auth — **not cookies**. CSRF is not applicable to the backend API unless a change introduces cookie-based sessions or form submission flows.
+- Dual data path: frontend uses **Supabase direct** (public browsing — RLS-enforced) and **Spring Boot API via `lib/api.ts`** (authenticated — JWT-enforced). The trust model differs; verify which path a change affects.
+- Production error suppression: `application.yml` currently sets `include-message: never`, `include-stack-trace: never`, `include-exception: false`. Do not flag error message exposure unless the reviewed code explicitly overrides this.
 
-**Role authorization pattern (imperative — no `@PreAuthorize`):**
-This project does NOT use Spring Security annotations (`@PreAuthorize`, `@Secured`). All role checks are imperative, called at the top of each protected controller method:
-- `resolveAdminOrForbid(userId)` — throws 403 if the caller is not an admin
+**Role authorization pattern** *(current known pattern — verify when reviewing any new or changed controller):*
+This project does NOT use `@PreAuthorize` or `@Secured`. All role checks are imperative, called at the top of each protected method:
+- `resolveAdminOrForbid(userId)` — throws 403 if not admin
 - `resolveCallerOrForbid(userId, resourceOwnerId)` — throws 403 if not the resource owner
-- `listingService.getUserRole(userId)` — DB lookup (from `user_roles` table, not JWT claims)
+- `listingService.getUserRole(userId)` — DB lookup from `user_roles` table, not JWT claims
 
-When reviewing a new or changed endpoint, verify the appropriate `resolveXxxOrForbid()` call is present. Its absence is a missing access control, not a framework misconfiguration.
+Absence of `resolveXxxOrForbid()` on a protected endpoint is a missing access control finding, not a framework misconfiguration. Do not flag the imperative style itself — evaluate whether the enforcement is present and correct.
 
-**Input validation gap (known architecture gap):**
-Backend DTOs (`CreateRequest`, `UpdateRequest`, `CreateBookingRequest`) are plain Java records with almost no `@Valid`/`@Pattern` annotations. This is a known gap. Some imperative validation exists (geocoding: `q` length 2–200 chars, lat/lon bounds; admin reject: `rejectionReason` not blank; bulk delete: size ≤ 50), but most fields pass through unchecked. When reviewing new endpoints: flag any user-controlled input that is passed downstream without any validation — whether imperative or annotation-based.
+**Input validation gap** *(known architecture gap at time of writing):*
+Backend DTOs are plain Java records with almost no `@Valid`/`@Pattern` annotations. Some imperative validation exists (geocoding: `q` length 2–200 chars, lat/lon bounds; admin reject: `rejectionReason` not blank; bulk delete: size ≤ 50), but most fields pass through unchecked. When reviewing new endpoints: flag user-controlled input passed downstream without any validation.
 
-**Rate limiting inventory (Bucket4j, per-user in-memory):**
+**Rate limiting inventory** *(current known state — verify if changed):*
 | Endpoint | Limit |
 |---|---|
 | `POST /api/payments` | 3 / user / hour |
@@ -63,31 +70,32 @@ Backend DTOs (`CreateRequest`, `UpdateRequest`, `CreateBookingRequest`) are plai
 | `GET /api/geocode` | 10 / user / minute |
 | `POST /api/ingestion/ingest-posts` | 10 / key / minute |
 
-Not rate-limited: listing creation/update, admin endpoints, auth (delegated to Supabase). When reviewing new state-changing or high-value endpoints, assess whether rate limiting is warranted.
+Not currently rate-limited: listing creation/update, admin endpoints, auth (delegated to Supabase). Assess new state-changing or high-value endpoints against this inventory.
 
-**RLS policy patterns:**
+**RLS policy patterns** *(current known patterns — verify against migrations when touched):*
 - Ownership: `auth.uid() = user_id`
 - Status-gated writes: dealers/owners can only INSERT/UPDATE/DELETE on DRAFT or REJECTED listings
 - Admin: `FOR ALL USING (has_role(auth.uid(), 'admin'))`
 - Public read: only `status = 'LIVE' OR (status = 'SCRAPED' AND is_valid = true)`
-- Storage: path-based ownership `storage.foldername(name)[2] = auth.uid()::text` (upload path: `listings/{userId}/{listingId}/...`)
+- Storage: path-based ownership `storage.foldername(name)[2] = auth.uid()::text`
 
-When reviewing Flyway migrations that add tables, verify RLS is enabled and policies match these patterns.
-
-**Public API response sanitization:**
-`PublicListingController` explicitly nulls internal fields (e.g., `rejectionReason`) before returning public responses to prevent leaking moderation data. Apply the same pattern on any new public-facing endpoint — internal/moderation fields must not appear in unauthenticated responses.
+**Public API response sanitization** *(current pattern):*
+`PublicListingController` explicitly nulls internal fields (e.g., `rejectionReason`) before returning public responses. Apply the same pattern on any new public-facing endpoint — internal/moderation fields must not appear in unauthenticated responses.
 
 ---
 
 ## Changed-Code Focus
 
-Start with the changed files. Trace the security impact outward from there:
+Start with the changed files. Expand only along the directly affected trust path:
+
+**changed file → called service → auth/validation boundary → response surface**
+
 1. Read the changed files first.
 2. Identify which trust boundaries the change touches or crosses.
-3. Follow impacted code paths: callers, middleware, adjacent endpoints.
-4. Only expand to unrelated files if a changed code path leads there.
+3. Follow the impacted path: called services, middleware, adjacent endpoints that share the same auth or data path.
+4. Only expand further if the changed path demonstrably leads there.
 
-Do not perform a broad whole-repo audit for a scoped change. Stay focused on what the change can plausibly affect.
+Do not fan out into a broad whole-repo audit for a scoped change. If the changed file touches auth or data access, that does not justify auditing the entire auth system — stay on the affected path.
 
 ---
 
@@ -110,9 +118,20 @@ A LOW in domain 8 should never appear before a HIGH in domain 1.
 
 ## Review Methodology
 
-### Step 0: Trust Boundary Review
+### Step 0: Surface Classification and Trust Boundary Review
 
-Before applying any domain checklist, map which boundaries the change touches. For this project:
+Before applying any domain checklist, classify the surface type of each changed endpoint or entry point:
+
+| Surface | Expected controls |
+|---|---|
+| **Public / unauthenticated** | Minimal-trust: input validation, response field filtering, rate limiting if high-value |
+| **Authenticated user** | Valid JWT required; `resolveCallerOrForbid()` for owner-scoped resources |
+| **Owner-scoped** | Authenticated + resource ownership check via `resolveCallerOrForbid()` |
+| **Admin-only** | `resolveAdminOrForbid()` required |
+| **Ingestion-only** | `X-Ingestion-Api-Key` header validated before any processing |
+| **Backend-internal** | Not externally exposed — note if that assumption holds given the change |
+
+A control gap is only meaningful relative to the surface's exposure. Then map trust boundaries:
 
 | Boundary | What to verify |
 |---|---|
@@ -120,9 +139,9 @@ Before applying any domain checklist, map which boundaries the change touches. F
 | Frontend bundle → Secrets | No `service_role` key in `VITE_` vars or frontend source; only `anon` key in bundle |
 | Ingestion client → Backend | `X-Ingestion-Api-Key` header validated before any ingestion processing |
 | Backend → Supabase | Service role operations use the backend key only; JWT user context passed correctly for user-scoped queries |
-| Frontend role claims → Backend | Backend independently validates roles from JWT claims; does not trust frontend-supplied role parameters |
+| Frontend role claims → Backend | Backend independently validates roles; does not trust frontend-supplied role parameters |
 
-Flag any violation of these boundaries as HIGH or CRITICAL depending on exploit path. If the change does not touch a boundary, note it briefly and move on.
+Flag any boundary violation as HIGH or CRITICAL depending on exploit path. If the change does not touch a boundary, note it briefly and move on.
 
 ### 1. Authentication & Authorization
 - JWT: `alg` pinned (not `none`), signature verified, expiry enforced
@@ -132,17 +151,24 @@ Flag any violation of these boundaries as HIGH or CRITICAL depending on exploit 
 - Authentication bypass via parameter manipulation or missing filter/middleware
 
 ### 2. Input Validation & Injection
-- SQL injection — including raw queries within JPA/Hibernate
-- XSS: `dangerouslySetInnerHTML`, unescaped string interpolation in JSX, `innerHTML` assignments
-- Command injection in shell/exec calls
-- Path traversal in file operations
 - Server-side validation present — client-only validation is not sufficient
 
+**Validation ≠ injection:** Missing or weak input validation is not automatically an injection finding. Report injection only when user-controlled input demonstrably reaches an exploit-relevant sink: query construction, HTML sink (`innerHTML`, `dangerouslySetInnerHTML`), command execution, file path, template/script evaluation, or equivalent. If no such sink is visible in the reviewed path, report the issue as *missing or insufficient validation* — not injection. Severity should reflect the downstream exposure, not just the presence of unchecked input.
+
+Sinks to check:
+- SQL: raw queries or string concatenation in JPA/Hibernate
+- XSS: `dangerouslySetInnerHTML`, unescaped string interpolation in JSX, `innerHTML` assignments
+- Command: shell/exec calls with user-controlled arguments
+- Path traversal: file operations with user-controlled path components
+
 ### 3. Secrets & Configuration
+**Secret reference ≠ secret exposure:** Backend environment access and config wiring (`@Value("${API_KEY}")`, `System.getenv()`, Spring `application.yml` property injection) are normal operations — do not flag them as vulnerabilities. Only flag secret handling when the secret value is: hardcoded in source, written to logs, returned in a response, exposed to the client bundle, or passed in a URL or other client-visible surface.
+
+Specific checks:
 - Hardcoded secrets, API keys, or tokens in source code
-- Secrets not in logs, error responses, or client bundle
-- `.env` files in `.gitignore`
-- Secrets not passed in URL query parameters
+- Secrets appearing in logs, error responses, or API response bodies
+- `.env` files committed to source (verify `.gitignore`)
+- Secrets passed in URL query parameters
 - For this project: `service_role` key absent from frontend source and `VITE_` vars
 
 ### 4. Data Exposure
@@ -166,10 +192,9 @@ Flag any violation of these boundaries as HIGH or CRITICAL depending on exploit 
 Security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options) can only be assessed when the configuration is visible in the reviewed files (e.g., Spring Security config, nginx config, Cloudflare headers). If not visible: flag as Tier 2 (manual verification), not as a confirmed finding. Do not report missing headers as MEDIUM or HIGH based on assumption alone.
 
 ### 8. Dependency Risks (code-detectable only)
-This agent cannot query CVE databases or run `npm audit` / `mvn dependency:check`. Only flag what is visible:
-- Wildcard or unpinned dependency versions (`*`, `latest`)
-- `eval()`, `Function()`, or `vm.runInNewContext()` with user-controlled input
-- Known-unsafe packages (e.g., `node-serialize`, deprecated crypto libraries)
+Do not speculate about CVEs or supply-chain risks from package names or versions alone. A dependency is not a finding just because it exists or is not the latest version. Flag dependency risk only when:
+- Insecure usage is directly visible in code (e.g., `eval()` with user-controlled input, a known-unsafe API in use)
+- The version expression itself is obviously uncontrolled: `*`, `latest`, or equivalent
 
 For a full dependency audit, run `npm audit` and `mvn dependency:check` separately.
 
@@ -178,9 +203,9 @@ When the change includes a SQL migration file (`Vxx__*.sql`):
 - **RLS enabled**: new tables must have `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
 - **Policy completeness**: policies must cover expected roles (admin, dealer/user, public anon). An absence of any policy on a table with sensitive data = Tier 1 HIGH.
 - **No open access**: `FOR ALL TO PUBLIC` or `USING (true)` on a sensitive table without explicit justification = HIGH.
-- **SQL functions and triggers**: verify they do not run as `SECURITY DEFINER` without a clear audit trail. `SECURITY DEFINER` functions bypass RLS — flag any new ones that are not clearly justified.
+- **SQL functions and triggers**: `SECURITY DEFINER` functions bypass RLS — flag any new ones that are not clearly justified.
 - **Data exposure via views**: new views should apply the same status/ownership filtering as the base table RLS policies.
-- **Pattern conformance**: new policies should follow the project RLS patterns (see Project-specific invariants above). A policy that deviates — e.g., allows DRAFT listing edits by any authenticated user, not just the owner — is a Tier 1 finding.
+- **Pattern conformance**: new policies should follow the project RLS patterns (see Project-specific invariants above).
 
 ---
 
@@ -200,13 +225,16 @@ Assign severity based on the **exploit path**, not the category:
 - Defense-in-depth gaps (e.g., no rate limit on a low-value endpoint) are LOW or INFO, not MEDIUM/HIGH
 - Tier 2 (manual verification) items must not exceed MEDIUM, and typically belong at INFO/LOW
 
+**Compensating controls:** Before assigning severity to a missing control, consider visible compensating controls in the reviewed code. A gap may still be real, but severity should reflect the practical exploit path after accounting for those controls. Examples: controller-level auth already gating the service, a DTO already filtering sensitive fields, an endpoint reachable only by admins or internal systems. Compensating controls reduce severity; they do not erase a finding when the underlying gap is genuine.
+
 **Project-specific calibration examples:**
 | Scenario | Severity |
 |---|---|
 | New admin endpoint missing `resolveAdminOrForbid()` call | HIGH |
 | New public endpoint returning `rejectionReason` or internal moderation fields | MEDIUM |
 | New table in Flyway migration with no RLS or no policies | HIGH |
-| User-controlled string passed to a DB query with no validation | HIGH (if unparameterised) / MEDIUM (parameterised but no length/format check) |
+| User-controlled string reaching a raw query sink without parameterisation | HIGH |
+| User-controlled string with no length/format check but parameterised query | MEDIUM |
 | Missing rate limit on a new low-frequency internal endpoint | LOW |
 | Missing rate limit on a new unauthenticated or high-value endpoint | MEDIUM |
 | `service_role` key found in `VITE_` env var or frontend source | CRITICAL |
@@ -233,6 +261,8 @@ Do not report:
 - CSRF as a finding on a Bearer-token API endpoint where cookies are not in use
 - Missing threat model documentation as a security vulnerability (it is a process concern, not a code defect)
 - Speculative risks based on what code *might* do — only what it demonstrably does
+- Absence of framework security annotations (`@PreAuthorize`, `@Secured`, `@Valid`) when equivalent imperative controls are visibly present and correctly placed — evaluate actual enforcement, not framework style conformance
+- Backend env-var references or config wiring as secret exposure findings
 
 ---
 
@@ -287,15 +317,19 @@ Rules:
 
 Before finalising output:
 - [ ] Did I start with the changed files before expanding scope?
+- [ ] Did I stay on the directly affected trust path and avoid broad fan-out?
 - [ ] Is every confirmed finding backed by a specific file:line or grep result?
+- [ ] Did I classify the surface type (public / authenticated / owner / admin / ingestion) before checking controls?
 - [ ] Did I check which trust boundaries the change touches?
 - [ ] Did I verify JWT validation on newly touched or adjacent protected endpoints?
 - [ ] Did I verify that new/changed protected endpoints call the appropriate `resolveAdminOrForbid()` or `resolveCallerOrForbid()` method?
 - [ ] For Flyway migrations: did I check RLS is enabled on new tables and policies match project patterns?
 - [ ] Did I grep for hardcoded secrets and `service_role` key in frontend code?
-- [ ] Did I check injection vectors on user-controlled inputs in changed paths?
+- [ ] Did I check injection vectors — and did I verify that user input actually reaches a dangerous sink before calling it injection?
+- [ ] Did I consider visible compensating controls before assigning severity?
 - [ ] Did I avoid reporting CSRF on Bearer-token endpoints?
 - [ ] Did I avoid reporting security headers as confirmed findings when config is not visible?
+- [ ] Did I avoid flagging backend env-var references or config wiring as secret exposure?
 - [ ] Are all confirmed findings Tier 1 (code-backed), and Tier 2 items in the separate section?
 - [ ] Does severity reflect the exploit path, not just the category?
 - [ ] Does the verdict match the threshold table and treat Tier 2 correctly?
