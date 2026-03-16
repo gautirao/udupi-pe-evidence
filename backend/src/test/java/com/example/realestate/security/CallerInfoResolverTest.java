@@ -119,7 +119,7 @@ class CallerInfoResolverTest {
                 .satisfies(ex -> {
                     ResponseStatusException rse = (ResponseStatusException) ex;
                     assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-                    assertThat(rse.getReason()).contains("Requires dealer, owner, or admin role");
+                    assertThat(rse.getReason()).contains("Requires dealer, user, or admin role");
                 });
     }
 

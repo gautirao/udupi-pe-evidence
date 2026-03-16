@@ -50,10 +50,8 @@ public class CallerInfoResolver implements HandlerMethodArgumentResolver {
                                    NativeWebRequest webRequest,
                                    WebDataBinderFactory binderFactory) {
 
-        JwtAuthenticationToken token =
-                (JwtAuthenticationToken) SecurityContextHolder.getContext().getAuthentication();
-
-        if (token == null) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (!(auth instanceof JwtAuthenticationToken token)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication required");
         }
 
@@ -69,7 +67,7 @@ public class CallerInfoResolver implements HandlerMethodArgumentResolver {
         if (role == null || !ALLOWED_ROLES.contains(role)) {
             log.warn("CallerInfoResolver: access denied userId={} role={}", userId, role);
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Requires dealer, owner, or admin role");
+                    "Requires dealer, user, or admin role");
         }
 
         return new CallerInfo(userId, role, "admin".equals(role));
