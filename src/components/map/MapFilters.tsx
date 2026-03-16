@@ -83,6 +83,10 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     onFiltersChange({ ...filters, sellerTypes: next.length > 0 ? next : undefined });
   };
 
+  const handleListingStatusToggle = (key: 'priceReduced' | 'backOnMarket' | 'newToMarket') => {
+    onFiltersChange({ ...filters, [key]: filters[key] ? undefined : true });
+  };
+
   const hasActiveFilters =
     !!searchQuery ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
@@ -92,7 +96,10 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     filters.priceMin !== undefined ||
     filters.priceMax !== undefined ||
     filters.dateFrom !== undefined ||
-    filters.dateTo !== undefined;
+    filters.dateTo !== undefined ||
+    !!filters.priceReduced ||
+    !!filters.backOnMarket ||
+    !!filters.newToMarket;
 
   return (
     <Card className="h-full overflow-hidden flex flex-col">
@@ -283,6 +290,32 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
               </div>
             </>
           )}
+        </div>
+
+        {/* Listing Status */}
+        <div className="space-y-3">
+          <Label className="text-sm font-medium">Listing Status</Label>
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { key: 'newToMarket' as const, label: 'New to Market' },
+              { key: 'priceReduced' as const, label: 'Price Reduced' },
+              { key: 'backOnMarket' as const, label: 'Back on Market' },
+            ]).map(({ key, label }) => {
+              const active = !!filters[key];
+              return (
+                <Button
+                  key={key}
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 px-3 text-sm"
+                  aria-pressed={active}
+                  onClick={() => handleListingStatusToggle(key)}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Date Range */}

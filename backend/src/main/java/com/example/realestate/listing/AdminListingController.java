@@ -27,6 +27,9 @@ public class AdminListingController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminListingController.class);
 
+    /** Number of days within which a back-to-market listing is still badged. */
+    private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
+
     private final ListingService listingService;
     private final ListingImageRepository listingImageRepository;
     private final AdminAuditService adminAuditService;
@@ -149,6 +152,19 @@ public class AdminListingController {
                 .stream().findFirst()
                 .map(ListingImage::getUrl)
                 .orElse(null);
+
+        java.time.LocalDate referenceDate = l.getFirstPublishedAt() != null
+                ? l.getFirstPublishedAt().toLocalDate()
+                : (l.getCreatedAt() != null ? l.getCreatedAt().toLocalDate() : java.time.LocalDate.now());
+        int daysOnMarket = (int) java.time.temporal.ChronoUnit.DAYS.between(referenceDate, java.time.LocalDate.now());
+
+        boolean backOnMarket = l.getBackToMarketAt() != null
+                && l.getBackToMarketAt().isAfter(java.time.OffsetDateTime.now().minusDays(BACK_ON_MARKET_WINDOW_DAYS));
+
+        java.time.OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
+                ? l.getLastUpdatedAt()
+                : l.getUpdatedAt();
+
         return new ListingController.ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
@@ -166,7 +182,8 @@ public class AdminListingController {
                 l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                 l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
-                l.getSellerType());
+                l.getSellerType(),
+                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt());
     }
 
     // ===== DTOs =====

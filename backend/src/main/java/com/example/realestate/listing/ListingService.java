@@ -47,6 +47,7 @@ public class ListingService {
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ProximityDuplicateService proximityDuplicateService;
+    private final PriceChangeLogRepository priceChangeLogRepository;
 
     public ListingService(
             ListingRepository listingRepository,
@@ -54,13 +55,15 @@ public class ListingService {
             GeocodingPort geocodingPort,
             ObjectMapper objectMapper,
             ApplicationEventPublisher applicationEventPublisher,
-            ProximityDuplicateService proximityDuplicateService) {
+            ProximityDuplicateService proximityDuplicateService,
+            PriceChangeLogRepository priceChangeLogRepository) {
         this.listingRepository = listingRepository;
         this.rawPostRepository = rawPostRepository;
         this.geocodingPort = geocodingPort;
         this.objectMapper = objectMapper;
         this.applicationEventPublisher = applicationEventPublisher;
         this.proximityDuplicateService = proximityDuplicateService;
+        this.priceChangeLogRepository = priceChangeLogRepository;
     }
 
     /**
@@ -233,6 +236,17 @@ public class ListingService {
             return "";
         }
         return value.trim().toLowerCase();
+    }
+
+    /**
+     * Convert a rupee price (BigDecimal) to paise (Long: rupees * 100).
+     * Returns null when the input is null.
+     */
+    private static Long rupeesToPaise(BigDecimal rupees) {
+        if (rupees == null) {
+            return null;
+        }
+        return rupees.multiply(BigDecimal.valueOf(100)).setScale(0, java.math.RoundingMode.HALF_UP).longValue();
     }
 
     /**
@@ -624,10 +638,21 @@ public class ListingService {
             throw new ListingStatusException("Cannot update listing with status " + listing.getStatus());
         }
 
+        // Capture the old price in paise before applying changes, for price-change logging.
+        // pricePaise and price (rupees BigDecimal) are independent fields; pricePaise may be null
+        // on listings created before the paise column was added. Prefer the stored pricePaise when
+        // present; fall back to converting the rupee price (price * 100) when pricePaise is absent.
+        Long oldPricePaise = listing.getPricePaise() != null
+                ? listing.getPricePaise()
+                : rupeesToPaise(listing.getPrice());
+
         if (propertyType != null) listing.setPropertyType(propertyType);
         if (title != null) listing.setTitle(title);
         if (locality != null) listing.setLocality(locality);
-        if (price != null) listing.setPrice(price);
+        if (price != null) {
+            listing.setPrice(price);
+            listing.setPricePaise(rupeesToPaise(price));
+        }
         if (description != null) listing.setDescription(description);
         if (landArea != null) listing.setLandArea(landArea);
         if (bedrooms != null) listing.setBedrooms(bedrooms);
@@ -667,7 +692,26 @@ public class ListingService {
             checkAndMarkDuplicateExcludingSelf(listing);
         }
 
-        listing.setUpdatedAt(OffsetDateTime.now());
+        OffsetDateTime now = OffsetDateTime.now();
+        listing.setUpdatedAt(now);
+        listing.setLastUpdatedAt(now);
+
+        // Insert a price-change record when the price actually changed for non-DRAFT listings.
+        // DRAFT price edits are internal and do not belong in the market transparency log.
+        // Convert the new price (rupees BigDecimal) to paise for storage; setPrice() does not
+        // auto-populate pricePaise, so we compute it explicitly here.
+        if (price != null
+                && !ListingStatus.DRAFT.toDbValue().equals(listing.getStatus())) {
+            Long newPricePaise = rupeesToPaise(price);
+            if (!Objects.equals(oldPricePaise, newPricePaise)) {
+                PriceChangeLog log2 = new PriceChangeLog();
+                log2.setListingId(listing.getId());
+                log2.setOldPricePaise(oldPricePaise);
+                log2.setNewPricePaise(newPricePaise);
+                log2.setChangedAt(now);
+                priceChangeLogRepository.save(log2);
+            }
+        }
 
         Listing saved = listingRepository.save(listing);
         log.info("Updated listing listingId={} by userId={}", listingId, userId);
@@ -941,10 +985,18 @@ public class ListingService {
                     "Cannot approve listing with status " + listing.getStatus());
         }
 
+        OffsetDateTime approvedAt = OffsetDateTime.now();
         listing.setStatus(ListingStatus.LIVE.toDbValue());
-        listing.setReviewedAt(OffsetDateTime.now());
+        listing.setReviewedAt(approvedAt);
         listing.setReviewedBy(adminUserId);
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(approvedAt);
+
+        // Transparency timestamps: firstPublishedAt set only on the first LIVE transition;
+        // lastLiveAt is always refreshed.
+        if (listing.getFirstPublishedAt() == null) {
+            listing.setFirstPublishedAt(approvedAt);
+        }
+        listing.setLastLiveAt(approvedAt);
 
         Listing saved = listingRepository.save(listing);
 

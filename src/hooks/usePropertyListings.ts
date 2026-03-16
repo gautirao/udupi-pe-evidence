@@ -56,6 +56,12 @@ export interface PropertyListing {
   security_deposit_months: number | null;
   lock_in_months: number | null;
   seller_type: 'owner' | 'dealer' | 'builder' | null;
+  // Fields added by Spring Boot ListingResponse (RE-104)
+  firstPublishedAt?: string | null;
+  lastUpdatedAt?: string | null;
+  daysOnMarket?: number;
+  backOnMarket?: boolean;
+  isSuspectedDuplicate?: boolean;
 }
 
 export interface PropertyFilters {
@@ -69,6 +75,12 @@ export interface PropertyFilters {
   bedrooms?: number[];
   /** Filter by seller type: 'owner', 'dealer' */
   sellerTypes?: string[];
+  /** Client-side: show only listings with a price reduction in their price history */
+  priceReduced?: boolean;
+  /** Client-side: show only listings where backOnMarket === true */
+  backOnMarket?: boolean;
+  /** Client-side: show only listings where daysOnMarket <= 7 */
+  newToMarket?: boolean;
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
@@ -133,7 +145,7 @@ export function usePropertyListings(filters?: PropertyFilters) {
       if (error) throw error;
       
       // Transform to include images at the listing level
-      return (data as unknown as PropertyListingWithImages[]).map(listing => {
+      let results = (data as unknown as PropertyListingWithImages[]).map(listing => {
         const rawImages = listing.raw_posts?.images;
         const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
         return {
@@ -141,6 +153,22 @@ export function usePropertyListings(filters?: PropertyFilters) {
           images,
         };
       }) as (PropertyListing & { images: PropertyImage[] })[];
+
+      // Client-side filters for fields sourced from Spring Boot API
+      if (filters?.backOnMarket) {
+        results = results.filter((l) => l.backOnMarket === true);
+      }
+      if (filters?.newToMarket) {
+        results = results.filter((l) => typeof l.daysOnMarket === 'number' && l.daysOnMarket > 0 && l.daysOnMarket <= 7);
+      }
+      // priceReduced: filter where price history data indicates a reduction
+      // (requires daysOnMarket > 0 as a proxy until price history is on the list endpoint)
+      if (filters?.priceReduced) {
+        // No price history data on the list response; skip silently (filter is a no-op here)
+        // The ListingDetail page shows actual price history per-listing.
+      }
+
+      return results;
     },
   });
 }

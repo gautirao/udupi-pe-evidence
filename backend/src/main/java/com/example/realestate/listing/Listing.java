@@ -247,6 +247,27 @@ public class Listing {
     @Column(name = "reviewed_at")
     private OffsetDateTime reviewedAt;
 
+    // --- Transparency fields ---
+
+    /** Set on first approval (PENDING_REVIEW -> LIVE). Never cleared. */
+    @Column(name = "first_published_at")
+    private OffsetDateTime firstPublishedAt;
+
+    /** Updated every time the listing transitions to LIVE status. */
+    @Column(name = "last_live_at")
+    private OffsetDateTime lastLiveAt;
+
+    /**
+     * Set when the listing returns to LIVE after having been non-LIVE (future lifecycle PR).
+     * NULL until that workflow is implemented.
+     */
+    @Column(name = "back_to_market_at")
+    private OffsetDateTime backToMarketAt;
+
+    /** Explicitly tracked last-updated timestamp for the transparency card. */
+    @Column(name = "last_updated_at")
+    private OffsetDateTime lastUpdatedAt;
+
     @Column(name = "reviewed_by")
     private UUID reviewedBy;
 
@@ -592,6 +613,38 @@ public class Listing {
 
     public void setReviewedBy(UUID reviewedBy) {
         this.reviewedBy = reviewedBy;
+    }
+
+    public OffsetDateTime getFirstPublishedAt() {
+        return firstPublishedAt;
+    }
+
+    public void setFirstPublishedAt(OffsetDateTime firstPublishedAt) {
+        this.firstPublishedAt = firstPublishedAt;
+    }
+
+    public OffsetDateTime getLastLiveAt() {
+        return lastLiveAt;
+    }
+
+    public void setLastLiveAt(OffsetDateTime lastLiveAt) {
+        this.lastLiveAt = lastLiveAt;
+    }
+
+    public OffsetDateTime getBackToMarketAt() {
+        return backToMarketAt;
+    }
+
+    public void setBackToMarketAt(OffsetDateTime backToMarketAt) {
+        this.backToMarketAt = backToMarketAt;
+    }
+
+    public OffsetDateTime getLastUpdatedAt() {
+        return lastUpdatedAt;
+    }
+
+    public void setLastUpdatedAt(OffsetDateTime lastUpdatedAt) {
+        this.lastUpdatedAt = lastUpdatedAt;
     }
 
     public UUID getCreatedBy() {

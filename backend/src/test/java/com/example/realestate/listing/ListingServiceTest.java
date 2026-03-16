@@ -48,6 +48,9 @@ class ListingServiceTest {
     @Mock
     private ProximityDuplicateService proximityDuplicateService;
 
+    @Mock
+    private PriceChangeLogRepository priceChangeLogRepository;
+
     private ListingService listingService;
 
     @BeforeEach
@@ -55,7 +58,7 @@ class ListingServiceTest {
         listingService = new ListingService(
                 listingRepository, rawPostRepository, geocodingPort,
                 new ObjectMapper(), applicationEventPublisher,
-                proximityDuplicateService);
+                proximityDuplicateService, priceChangeLogRepository);
     }
 
     private RawPost makePost() {
@@ -1881,5 +1884,149 @@ class ListingServiceTest {
         // Detection was attempted on the LIVE listing
         verify(proximityDuplicateService).detectAndRecord(
                 argThat(l -> ListingStatus.LIVE.toDbValue().equals(l.getStatus())));
+    }
+
+    // ===== RE-94: approveListing — transparency timestamps =====
+
+    @Test
+    void approveListing_firstApproval_setsFirstPublishedAtAndLastLiveAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+        // firstPublishedAt is null — first-time approval
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        listingService.approveListing(listingId, adminId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+
+        assertThat(saved.getFirstPublishedAt()).isNotNull();
+        assertThat(saved.getLastLiveAt()).isNotNull();
+        // Both should be set on first approval; values should be very close
+        assertThat(saved.getFirstPublishedAt()).isEqualTo(saved.getLastLiveAt());
+    }
+
+    @Test
+    void approveListing_secondApproval_preservesFirstPublishedAtAndUpdatesLastLiveAt()
+            throws InterruptedException {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        java.time.OffsetDateTime originalFirstPublished =
+                java.time.OffsetDateTime.now().minusDays(10);
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+        listing.setFirstPublishedAt(originalFirstPublished);  // already set from first approval
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        listingService.approveListing(listingId, adminId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+
+        // firstPublishedAt must NOT be overwritten on re-approval
+        assertThat(saved.getFirstPublishedAt()).isEqualTo(originalFirstPublished);
+        // lastLiveAt must be updated to now
+        assertThat(saved.getLastLiveAt()).isNotNull();
+        assertThat(saved.getLastLiveAt()).isAfter(originalFirstPublished);
+    }
+
+    // ===== RE-94: updateListing — price change logging =====
+
+    @Test
+    void updateListing_priceChanged_rejectedListing_insertsPriceChangeLog() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.REJECTED.toDbValue());
+        // 5,000,000 rupees → 500,000,000 paise
+        existing.setPrice(new java.math.BigDecimal("5000000"));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.countByDedupeHashAndIdNot(any(), any())).thenReturn(0L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(priceChangeLogRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // 6,000,000 rupees → 600,000,000 paise
+        listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, new java.math.BigDecimal("6000000"), null,
+                null, null, null, null,
+                null, null, null, null, null, false, null);
+
+        ArgumentCaptor<PriceChangeLog> logCaptor = ArgumentCaptor.forClass(PriceChangeLog.class);
+        verify(priceChangeLogRepository).save(logCaptor.capture());
+        PriceChangeLog logged = logCaptor.getValue();
+        assertThat(logged.getListingId()).isEqualTo(listingId);
+        assertThat(logged.getOldPricePaise()).isEqualTo(500_000_000L);  // 5,000,000 rupees in paise
+        assertThat(logged.getNewPricePaise()).isEqualTo(600_000_000L);  // 6,000,000 rupees in paise
+        assertThat(logged.getChangedAt()).isNotNull();
+    }
+
+    @Test
+    void updateListing_priceUnchanged_doesNotInsertPriceChangeLog() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.REJECTED.toDbValue());
+        existing.setPrice(new java.math.BigDecimal("5000000"));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Update with same price
+        listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, new java.math.BigDecimal("5000000"), null,
+                null, null, null, null,
+                null, null, null, null, null, false, null);
+
+        verify(priceChangeLogRepository, never()).save(any());
+    }
+
+    @Test
+    void updateListing_draftListing_priceChanged_doesNotInsertPriceChangeLog() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPrice(new java.math.BigDecimal("5000000"));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(existing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // DRAFT listing — price change should NOT be logged
+        listingService.updateListing(
+                listingId, userId, false,
+                null, null, null, new java.math.BigDecimal("7000000"), null,
+                null, null, null, null,
+                null, null, null, null, null, false, null);
+
+        verify(priceChangeLogRepository, never()).save(any());
     }
 }
