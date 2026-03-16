@@ -381,13 +381,6 @@ public class ListingService {
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
 
     /**
-     * Look up the app_role for a user. Returns empty if user has no role row.
-     */
-    public Optional<String> getUserRole(UUID userId) {
-        return listingRepository.findUserRole(userId);
-    }
-
-    /**
      * Create a new dealer-owned listing with status DRAFT.
      */
     @Transactional

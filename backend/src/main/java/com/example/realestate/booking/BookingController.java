@@ -1,6 +1,7 @@
 package com.example.realestate.booking;
 
 import com.example.realestate.exception.RateLimiterService;
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -47,10 +48,14 @@ public class BookingController {
 
     private final BookingService bookingService;
     private final RateLimiterService rateLimiterService;
+    private final UserRoleService userRoleService;
 
-    public BookingController(BookingService bookingService, RateLimiterService rateLimiterService) {
+    public BookingController(BookingService bookingService,
+                             RateLimiterService rateLimiterService,
+                             UserRoleService userRoleService) {
         this.bookingService = bookingService;
         this.rateLimiterService = rateLimiterService;
+        this.userRoleService = userRoleService;
     }
 
     // ===== POST /api/bookings =====
@@ -223,7 +228,7 @@ public class BookingController {
 
     private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = bookingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (role == null || !DEALER_ROLES.contains(role)) {
             return null;
         }

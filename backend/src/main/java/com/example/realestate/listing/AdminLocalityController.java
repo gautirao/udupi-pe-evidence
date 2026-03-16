@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -29,15 +30,15 @@ public class AdminLocalityController {
     private static final Logger log = LoggerFactory.getLogger(AdminLocalityController.class);
 
     private final LocalityNormalizerService normalizerService;
-    private final ListingService listingService;
     private final AdminAuditService adminAuditService;
+    private final UserRoleService userRoleService;
 
     public AdminLocalityController(LocalityNormalizerService normalizerService,
-                                   ListingService listingService,
-                                   AdminAuditService adminAuditService) {
+                                   AdminAuditService adminAuditService,
+                                   UserRoleService userRoleService) {
         this.normalizerService = normalizerService;
-        this.listingService = listingService;
         this.adminAuditService = adminAuditService;
+        this.userRoleService = userRoleService;
     }
 
     @GetMapping("/candidates")
@@ -85,7 +86,7 @@ public class AdminLocalityController {
 
     private UUID resolveAdminOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (!"admin".equals(role)) return null;
         return userId;
     }

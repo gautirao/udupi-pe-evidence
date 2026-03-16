@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,11 +79,14 @@ class ListingImageControllerTest {
     @MockitoBean
     private ListingImageRegistrar imageRegistrar;
 
+    @MockitoBean
+    private UserRoleService userRoleService;
+
     private Listing draftListing;
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, imageRepository, listingService);
+        reset(listingRepository, imageRepository, listingService, userRoleService);
 
         draftListing = new Listing();
         draftListing.setId(LISTING_ID);
@@ -102,7 +106,7 @@ class ListingImageControllerTest {
     }
 
     private void stubDealerWithDraftListing() {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
     }
 
@@ -154,7 +158,7 @@ class ListingImageControllerTest {
 
     @Test
     void register_liveStatus_returns400() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         draftListing.setStatus(ListingStatus.LIVE.toDbValue());
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
 
@@ -206,7 +210,7 @@ class ListingImageControllerTest {
 
     @Test
     void register_otherDealerListing_returns404() throws Exception {
-        when(listingService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
         // draftListing.createdBy = DEALER_ID, but caller is OTHER_DEALER
 
@@ -389,7 +393,7 @@ class ListingImageControllerTest {
 
     @Test
     void getImages_differentDealer_returns403or404() throws Exception {
-        when(listingService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
         // draftListing.createdBy = DEALER_ID, but caller is OTHER_DEALER
 
@@ -404,7 +408,7 @@ class ListingImageControllerTest {
     @Test
     void getImages_liveListing_returns200() throws Exception {
         // getImages has no status guard; it intentionally works for any status the caller owns.
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         Listing liveListing = new Listing();
         liveListing.setId(LISTING_ID);
         liveListing.setCreatedBy(DEALER_ID);

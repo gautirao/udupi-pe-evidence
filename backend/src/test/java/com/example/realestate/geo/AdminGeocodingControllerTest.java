@@ -1,6 +1,6 @@
 package com.example.realestate.geo;
 
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,7 +61,7 @@ class AdminGeocodingControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private ListingService listingService;
+    private UserRoleService userRoleService;
 
     @MockitoBean
     private GeocodingService geocodingService;
@@ -71,14 +71,14 @@ class AdminGeocodingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingService, geocodingService, jdbc);
+        reset(userRoleService, geocodingService, jdbc);
     }
 
     // ===== Auth guard =====
 
     @Test
     void geocodeMissing_nonAdmin_returns403() throws Exception {
-        when(listingService.getUserRole(USER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/admin/geocode/missing")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -89,7 +89,7 @@ class AdminGeocodingControllerTest {
 
     @Test
     void geocodeMissing_unknownUser_returns403() throws Exception {
-        when(listingService.getUserRole(USER_ID)).thenReturn(Optional.empty());
+        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/admin/geocode/missing")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -102,7 +102,7 @@ class AdminGeocodingControllerTest {
 
     @Test
     void geocodeMissing_emptyBatch_emitsDoneEventWithZeros() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
         MvcResult mvcResult = mockMvc.perform(post("/api/admin/geocode/missing")
@@ -127,7 +127,7 @@ class AdminGeocodingControllerTest {
     @Test
     void geocodeMissing_oneListing_geocodesAndEmitsSuccess() throws Exception {
         String listingId = UUID.randomUUID().toString();
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(
                 List.of(Map.of("id", listingId, "locality", "Manipal")));
         when(geocodingService.geocode("Manipal"))
@@ -155,7 +155,7 @@ class AdminGeocodingControllerTest {
     @Test
     void geocodeMissing_geocodeFailure_emitsWarningAndCountsFailed() throws Exception {
         String listingId = UUID.randomUUID().toString();
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(
                 List.of(Map.of("id", listingId, "locality", "Unknown Place XYZ")));
         when(geocodingService.geocode("Unknown Place XYZ")).thenReturn(null);
@@ -179,7 +179,7 @@ class AdminGeocodingControllerTest {
 
     @Test
     void geocodeMissing_batchSizeZero_clampedToOne() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
         MvcResult mvcResult = mockMvc.perform(post("/api/admin/geocode/missing?batchSize=0")
@@ -198,7 +198,7 @@ class AdminGeocodingControllerTest {
 
     @Test
     void geocodeMissing_batchSizeOver50_clampedTo50() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(jdbc.queryForList(anyString(), any(Object[].class))).thenReturn(List.of());
 
         MvcResult mvcResult = mockMvc.perform(post("/api/admin/geocode/missing?batchSize=999")

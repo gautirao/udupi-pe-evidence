@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,18 +67,18 @@ class AdminDuplicateControllerTest {
     private DuplicateCandidateService duplicateCandidateService;
 
     @MockitoBean
-    private ListingService listingService;
+    private UserRoleService userRoleService;
 
     @BeforeEach
     void setUp() {
-        reset(duplicateCandidateService, listingService);
+        reset(duplicateCandidateService, userRoleService);
     }
 
     // ==================== GET /api/admin/duplicates ====================
 
     @Test
     void list_withAdminRole_returns200WithPageContent() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
         DuplicateCandidate candidate = buildCandidate();
         Page<DuplicateCandidate> page = new PageImpl<>(
@@ -98,7 +99,7 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_withAdminRole_returns200() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         doNothing().when(duplicateCandidateService).confirm(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/confirm")
@@ -113,7 +114,7 @@ class AdminDuplicateControllerTest {
 
     @Test
     void dismiss_withAdminRole_returns200() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         doNothing().when(duplicateCandidateService).dismiss(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/dismiss")
@@ -128,7 +129,7 @@ class AdminDuplicateControllerTest {
 
     @Test
     void undo_withAdminRole_returns200() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         doNothing().when(duplicateCandidateService).undo(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/undo")
@@ -143,7 +144,7 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_notFound_returns404() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         doThrow(new DuplicateCandidateService.DuplicateCandidateNotFoundException(CANDIDATE_ID))
                 .when(duplicateCandidateService).confirm(CANDIDATE_ID, ADMIN_ID);
 
@@ -156,7 +157,7 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_notPending_returns409() throws Exception {
-        when(listingService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         doThrow(new IllegalStateException("Candidate is not PENDING"))
                 .when(duplicateCandidateService).confirm(CANDIDATE_ID, ADMIN_ID);
 
@@ -170,7 +171,7 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_withDealerRole_returns403() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/confirm")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))

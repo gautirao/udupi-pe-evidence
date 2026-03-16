@@ -1,6 +1,6 @@
 package com.example.realestate.geo;
 
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -36,14 +36,14 @@ public class AdminGeocodingController {
     /** Nominatim usage policy: max 1 req/sec */
     private static final long RATE_LIMIT_MS = 1_100;
 
-    private final ListingService listingService;
+    private final UserRoleService userRoleService;
     private final GeocodingService geocodingService;
     private final JdbcTemplate jdbc;
 
-    public AdminGeocodingController(ListingService listingService,
+    public AdminGeocodingController(UserRoleService userRoleService,
                                     GeocodingService geocodingService,
                                     JdbcTemplate jdbc) {
-        this.listingService = listingService;
+        this.userRoleService = userRoleService;
         this.geocodingService = geocodingService;
         this.jdbc = jdbc;
     }
@@ -182,7 +182,7 @@ public class AdminGeocodingController {
 
     private UUID resolveAdminOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         return "admin".equals(role) ? userId : null;
     }
 }

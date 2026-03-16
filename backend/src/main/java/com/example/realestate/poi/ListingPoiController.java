@@ -2,7 +2,7 @@ package com.example.realestate.poi;
 
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -59,17 +59,17 @@ public class ListingPoiController {
 
     private final ListingPoiService service;
     private final OverpassService overpassService;
-    private final ListingService listingService;
     private final ListingRepository listingRepository;
+    private final UserRoleService userRoleService;
 
     public ListingPoiController(ListingPoiService service,
                                 OverpassService overpassService,
-                                ListingService listingService,
-                                ListingRepository listingRepository) {
+                                ListingRepository listingRepository,
+                                UserRoleService userRoleService) {
         this.service = service;
         this.overpassService = overpassService;
-        this.listingService = listingService;
         this.listingRepository = listingRepository;
+        this.userRoleService = userRoleService;
     }
 
     // ===== Public endpoint =====
@@ -265,7 +265,7 @@ public class ListingPoiController {
 
     private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (role == null || !ALLOWED_ROLES.contains(role)) {
             log.warn("AUTH DENIED caller={} reason=insufficient_role role={}", userId, role);
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires dealer, owner, or admin role");

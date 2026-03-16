@@ -2,6 +2,7 @@ package com.example.realestate.exception;
 
 import com.example.realestate.booking.BookingController;
 import com.example.realestate.booking.BookingService;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -76,6 +77,9 @@ class GlobalExceptionHandlerTest {
 
     @MockitoBean
     private BookingService bookingService;
+
+    @MockitoBean
+    private UserRoleService userRoleService;
 
     @MockitoBean
     private PlatformTransactionManager transactionManager;

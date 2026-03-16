@@ -68,12 +68,6 @@ public class BookingService {
         this.eventPublisher = eventPublisher;
     }
 
-    // ===== Role lookup (for controller resolveCallerOrForbid) =====
-
-    public Optional<String> getUserRole(UUID userId) {
-        return listingRepository.findUserRole(userId);
-    }
-
     // ===== Create booking =====
 
     /**

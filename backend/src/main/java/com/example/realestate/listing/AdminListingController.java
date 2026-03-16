@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -33,13 +34,16 @@ public class AdminListingController {
     private final ListingService listingService;
     private final ListingImageRepository listingImageRepository;
     private final AdminAuditService adminAuditService;
+    private final UserRoleService userRoleService;
 
     public AdminListingController(ListingService listingService,
                                   ListingImageRepository listingImageRepository,
-                                  AdminAuditService adminAuditService) {
+                                  AdminAuditService adminAuditService,
+                                  UserRoleService userRoleService) {
         this.listingService = listingService;
         this.listingImageRepository = listingImageRepository;
         this.adminAuditService = adminAuditService;
+        this.userRoleService = userRoleService;
     }
 
     @PostMapping("/{id}/approve")
@@ -126,7 +130,7 @@ public class AdminListingController {
 
     private UUID resolveAdminOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (!"admin".equals(role)) {
             return null;
         }

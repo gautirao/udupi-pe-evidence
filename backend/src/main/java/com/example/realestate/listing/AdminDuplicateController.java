@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -32,12 +33,12 @@ public class AdminDuplicateController {
     private static final Logger log = LoggerFactory.getLogger(AdminDuplicateController.class);
 
     private final DuplicateCandidateService duplicateCandidateService;
-    private final ListingService listingService;
+    private final UserRoleService userRoleService;
 
     public AdminDuplicateController(DuplicateCandidateService duplicateCandidateService,
-                                    ListingService listingService) {
+                                    UserRoleService userRoleService) {
         this.duplicateCandidateService = duplicateCandidateService;
-        this.listingService = listingService;
+        this.userRoleService = userRoleService;
     }
 
     // ===== Endpoints =====
@@ -121,7 +122,7 @@ public class AdminDuplicateController {
 
     private UUID resolveAdminOrForbid(JwtAuthenticationToken auth) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = listingService.getUserRole(userId).orElse(null);
+        String role = userRoleService.getUserRole(userId).orElse(null);
         if (!"admin".equals(role)) {
             return null;
         }

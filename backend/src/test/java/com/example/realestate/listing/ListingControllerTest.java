@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -68,9 +69,12 @@ class ListingControllerTest {
     @MockitoBean
     private ListingImageRepository listingImageRepository;
 
+    @MockitoBean
+    private UserRoleService userRoleService;
+
     @BeforeEach
     void setUp() {
-        reset(listingService, listingRepository, listingImageRepository);
+        reset(listingService, listingRepository, listingImageRepository, userRoleService);
         // Default stub: no images; individual tests override when imageCount matters.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
     }
@@ -79,7 +83,7 @@ class ListingControllerTest {
 
     @Test
     void create_withDealerRole_returns201WithIdAndStatus() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -114,7 +118,7 @@ class ListingControllerTest {
 
     @Test
     void mine_withDealerRole_returns200WithArray() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
@@ -135,7 +139,7 @@ class ListingControllerTest {
 
     @Test
     void update_withDealerRole_returns200() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Updated title",
                 "Manipal", new BigDecimal("6000000"), "Updated desc");
@@ -170,7 +174,7 @@ class ListingControllerTest {
 
     @Test
     void delete_withDealerRole_returns204() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -196,7 +200,7 @@ class ListingControllerTest {
 
     @Test
     void create_withViewerRole_returnsForbidden() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(post("/api/listings")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -218,7 +222,7 @@ class ListingControllerTest {
 
     @Test
     void update_listingNotFound_returns404() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -239,7 +243,7 @@ class ListingControllerTest {
 
     @Test
     void update_wrongStatus_returns409() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -261,7 +265,7 @@ class ListingControllerTest {
 
     @Test
     void delete_listingNotFound_returns404() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingService.ListingNotFoundException(LISTING_ID))
                 .when(listingService).deleteListing(LISTING_ID, DEALER_ID, false);
 
@@ -275,7 +279,7 @@ class ListingControllerTest {
 
     @Test
     void delete_wrongStatus_returns400() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingService.ListingStatusException(
                 "Cannot delete listing with status LIVE"))
                 .when(listingService).deleteListing(LISTING_ID, DEALER_ID, false);
@@ -290,7 +294,7 @@ class ListingControllerTest {
 
     @Test
     void submit_happyPath_returns200WithPendingReview() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -310,7 +314,7 @@ class ListingControllerTest {
 
     @Test
     void submit_rejectedListing_returns200() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "Resubmitted");
@@ -326,7 +330,7 @@ class ListingControllerTest {
 
     @Test
     void submit_missingLandArea_returns422() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingValidationException(List.of(
                         Map.of("field", "land_area",
@@ -342,7 +346,7 @@ class ListingControllerTest {
 
     @Test
     void submit_missingBedrooms_returns422() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingValidationException(List.of(
                         Map.of("field", "bedrooms",
@@ -358,7 +362,7 @@ class ListingControllerTest {
 
     @Test
     void submit_tooFewImages_returns422() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingValidationException(List.of(
                         Map.of("field", "images",
@@ -375,7 +379,7 @@ class ListingControllerTest {
 
     @Test
     void submit_addressNotConfirmed_returns422() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingValidationException(List.of(
                         Map.of("field", "address_confirmed",
@@ -391,7 +395,7 @@ class ListingControllerTest {
 
     @Test
     void submit_otherDealerListing_returns404() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
 
@@ -405,7 +409,7 @@ class ListingControllerTest {
 
     @Test
     void submit_commercialType_returns422() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingValidationException(List.of(
                         Map.of("field", "property_type",
@@ -422,7 +426,7 @@ class ListingControllerTest {
 
     @Test
     void submit_wrongStatus_returns400() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingStatusException(
                         "Cannot submit listing with status LIVE"));
@@ -437,7 +441,7 @@ class ListingControllerTest {
 
     @Test
     void submit_multipleErrors_returnsAllErrors() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingService.ListingValidationException(List.of(
                         Map.of("field", "price", "message", "Price must be greater than 0"),
@@ -459,7 +463,7 @@ class ListingControllerTest {
 
     @Test
     void updateListing_draftListing_returns200() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Draft Plot",
                 "Manipal", new BigDecimal("5000000"), "Updated draft");
@@ -482,7 +486,7 @@ class ListingControllerTest {
 
     @Test
     void updateListing_rejectedListing_returns200() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "REJECTED", "house", "Fixed House",
                 "Udupi", new BigDecimal("8000000"), "Fixed after rejection");
@@ -504,7 +508,7 @@ class ListingControllerTest {
 
     @Test
     void updateListing_wrongOwner_returns403() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -523,7 +527,7 @@ class ListingControllerTest {
 
     @Test
     void updateListing_pendingReviewStatus_returns409() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -543,7 +547,7 @@ class ListingControllerTest {
 
     @Test
     void updateListing_liveListing_returns409() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -563,7 +567,7 @@ class ListingControllerTest {
 
     @Test
     void updateListing_listingNotFound_returns404() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -584,7 +588,7 @@ class ListingControllerTest {
 
     @Test
     void create_responseIncludesImageCount() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -608,7 +612,7 @@ class ListingControllerTest {
 
     @Test
     void mine_responseIncludesImageCount() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
@@ -626,7 +630,7 @@ class ListingControllerTest {
 
     @Test
     void mine_withStatusFilter_passesStatusToService() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
@@ -645,7 +649,7 @@ class ListingControllerTest {
 
     @Test
     void mine_withoutStatusFilter_passesNullStatusToService() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Page<Listing> page = new PageImpl<>(List.of());
         when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class)))
@@ -662,7 +666,7 @@ class ListingControllerTest {
 
     @Test
     void update_withVideoUrl_responseIncludesVideoUrl() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -692,7 +696,7 @@ class ListingControllerTest {
 
     @Test
     void update_withBlankVideoUrl_responseHasNullVideoUrl() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -724,7 +728,7 @@ class ListingControllerTest {
 
     @Test
     void get_withValidReraNumber_reraValidIsTrue() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         Listing l = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Manipal", new BigDecimal("5000000"), "Desc");
         l.setCreatedBy(DEALER_ID);
@@ -739,7 +743,7 @@ class ListingControllerTest {
 
     @Test
     void get_withMalformedReraNumber_reraValidIsFalse() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         Listing l = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Manipal", new BigDecimal("5000000"), "Desc");
         l.setCreatedBy(DEALER_ID);
@@ -754,7 +758,7 @@ class ListingControllerTest {
 
     @Test
     void get_withReraAndPossessionFields_responseIncludesAllFields() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         Listing l = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Manipal", new BigDecimal("5000000"), "Desc");
         l.setCreatedBy(DEALER_ID);
@@ -778,7 +782,7 @@ class ListingControllerTest {
 
     @Test
     void stats_withDealerRole_returnsCorrectCounts() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.getListingStats(DEALER_ID))
                 .thenReturn(new ListingController.ListingStatsResponse(2, 1, 3, 1, 7));
 
@@ -796,7 +800,7 @@ class ListingControllerTest {
 
     @Test
     void stats_withNoListings_returnsAllZeros() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingService.getListingStats(DEALER_ID))
                 .thenReturn(new ListingController.ListingStatsResponse(0, 0, 0, 0, 0));
 
@@ -812,7 +816,7 @@ class ListingControllerTest {
 
     @Test
     void stats_withViewerRole_returnsForbidden() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -825,7 +829,7 @@ class ListingControllerTest {
     @Test
     void stats_withAdminRole_returnsOk() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        when(listingService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
         when(listingService.getListingStats(adminId))
                 .thenReturn(new ListingController.ListingStatsResponse(0, 0, 0, 0, 0));
 
@@ -840,7 +844,7 @@ class ListingControllerTest {
 
     @Test
     void create_withUserRole_setsSellerTypeOwner() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "My plot",
                 "Manipal", new BigDecimal("3000000"), "Owner listing");
@@ -873,7 +877,7 @@ class ListingControllerTest {
 
     @Test
     void create_withUserRole_atLimit_returns409() throws Exception {
-        when(listingService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
         when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -895,7 +899,7 @@ class ListingControllerTest {
     @Test
     void create_withAdminRole_setsSellerTypeDealer() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        when(listingService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
+        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "house", "Admin house",
                 "Udupi", new BigDecimal("7000000"), "Admin-created");
