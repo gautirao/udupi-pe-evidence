@@ -41,6 +41,41 @@ Do not report generic OWASP categories without code evidence. Do not escalate a 
 - Backend (Spring Boot on Render): validates Supabase JWTs on protected endpoints. Authenticates ingestion requests via `X-Ingestion-Api-Key` header.
 - Supabase: enforces RLS policies. Service role key is backend-only.
 - Auth model: this project uses `Authorization: Bearer <supabase_jwt>` header-based auth — **not cookies**. This means standard CSRF attacks are generally not applicable to API endpoints. Assess CSRF only where session cookies or form submissions are in play.
+- Dual data path: the frontend uses **Supabase direct** (public browsing — RLS-enforced) and **Spring Boot API via `lib/api.ts`** (authenticated operations — JWT-enforced). The trust model differs between paths. Supabase direct calls are controlled by RLS policies; Spring Boot calls are controlled by JWT validation and imperative role checks.
+- Production error suppression: `application.yml` sets `include-message: never`, `include-stack-trace: never`, `include-exception: false` — error details are suppressed by default. Do not flag error message exposure unless the reviewed code explicitly overrides this configuration.
+
+**Role authorization pattern (imperative — no `@PreAuthorize`):**
+This project does NOT use Spring Security annotations (`@PreAuthorize`, `@Secured`). All role checks are imperative, called at the top of each protected controller method:
+- `resolveAdminOrForbid(userId)` — throws 403 if the caller is not an admin
+- `resolveCallerOrForbid(userId, resourceOwnerId)` — throws 403 if not the resource owner
+- `listingService.getUserRole(userId)` — DB lookup (from `user_roles` table, not JWT claims)
+
+When reviewing a new or changed endpoint, verify the appropriate `resolveXxxOrForbid()` call is present. Its absence is a missing access control, not a framework misconfiguration.
+
+**Input validation gap (known architecture gap):**
+Backend DTOs (`CreateRequest`, `UpdateRequest`, `CreateBookingRequest`) are plain Java records with almost no `@Valid`/`@Pattern` annotations. This is a known gap. Some imperative validation exists (geocoding: `q` length 2–200 chars, lat/lon bounds; admin reject: `rejectionReason` not blank; bulk delete: size ≤ 50), but most fields pass through unchecked. When reviewing new endpoints: flag any user-controlled input that is passed downstream without any validation — whether imperative or annotation-based.
+
+**Rate limiting inventory (Bucket4j, per-user in-memory):**
+| Endpoint | Limit |
+|---|---|
+| `POST /api/payments` | 3 / user / hour |
+| `POST /api/bookings` | 10 / user / hour |
+| `GET /api/geocode` | 10 / user / minute |
+| `POST /api/ingestion/ingest-posts` | 10 / key / minute |
+
+Not rate-limited: listing creation/update, admin endpoints, auth (delegated to Supabase). When reviewing new state-changing or high-value endpoints, assess whether rate limiting is warranted.
+
+**RLS policy patterns:**
+- Ownership: `auth.uid() = user_id`
+- Status-gated writes: dealers/owners can only INSERT/UPDATE/DELETE on DRAFT or REJECTED listings
+- Admin: `FOR ALL USING (has_role(auth.uid(), 'admin'))`
+- Public read: only `status = 'LIVE' OR (status = 'SCRAPED' AND is_valid = true)`
+- Storage: path-based ownership `storage.foldername(name)[2] = auth.uid()::text` (upload path: `listings/{userId}/{listingId}/...`)
+
+When reviewing Flyway migrations that add tables, verify RLS is enabled and policies match these patterns.
+
+**Public API response sanitization:**
+`PublicListingController` explicitly nulls internal fields (e.g., `rejectionReason`) before returning public responses to prevent leaking moderation data. Apply the same pattern on any new public-facing endpoint — internal/moderation fields must not appear in unauthenticated responses.
 
 ---
 
@@ -138,6 +173,15 @@ This agent cannot query CVE databases or run `npm audit` / `mvn dependency:check
 
 For a full dependency audit, run `npm audit` and `mvn dependency:check` separately.
 
+### 9. Flyway Migration Review
+When the change includes a SQL migration file (`Vxx__*.sql`):
+- **RLS enabled**: new tables must have `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
+- **Policy completeness**: policies must cover expected roles (admin, dealer/user, public anon). An absence of any policy on a table with sensitive data = Tier 1 HIGH.
+- **No open access**: `FOR ALL TO PUBLIC` or `USING (true)` on a sensitive table without explicit justification = HIGH.
+- **SQL functions and triggers**: verify they do not run as `SECURITY DEFINER` without a clear audit trail. `SECURITY DEFINER` functions bypass RLS — flag any new ones that are not clearly justified.
+- **Data exposure via views**: new views should apply the same status/ownership filtering as the base table RLS policies.
+- **Pattern conformance**: new policies should follow the project RLS patterns (see Project-specific invariants above). A policy that deviates — e.g., allows DRAFT listing edits by any authenticated user, not just the owner — is a Tier 1 finding.
+
 ---
 
 ## Severity Classification
@@ -155,6 +199,18 @@ Assign severity based on the **exploit path**, not the category:
 - A missing best practice is not HIGH unless there is a plausible consequence in the current design
 - Defense-in-depth gaps (e.g., no rate limit on a low-value endpoint) are LOW or INFO, not MEDIUM/HIGH
 - Tier 2 (manual verification) items must not exceed MEDIUM, and typically belong at INFO/LOW
+
+**Project-specific calibration examples:**
+| Scenario | Severity |
+|---|---|
+| New admin endpoint missing `resolveAdminOrForbid()` call | HIGH |
+| New public endpoint returning `rejectionReason` or internal moderation fields | MEDIUM |
+| New table in Flyway migration with no RLS or no policies | HIGH |
+| User-controlled string passed to a DB query with no validation | HIGH (if unparameterised) / MEDIUM (parameterised but no length/format check) |
+| Missing rate limit on a new low-frequency internal endpoint | LOW |
+| Missing rate limit on a new unauthenticated or high-value endpoint | MEDIUM |
+| `service_role` key found in `VITE_` env var or frontend source | CRITICAL |
+| New `SECURITY DEFINER` SQL function without justification | MEDIUM |
 
 ### Verdict threshold
 
@@ -218,7 +274,7 @@ Rules:
 ## Operational Rules
 
 1. **Changed files first** — read and grep the changed files before expanding scope.
-2. **Evidence before findings** — grep for relevant patterns before reporting: `password`, `secret`, `token`, `apiKey`, `service_role`, `eval`, `dangerouslySetInnerHTML`, `raw`, `exec`, `@CrossOrigin`, `permitAll`.
+2. **Evidence before findings** — grep for relevant patterns before reporting. Generic patterns: `password`, `secret`, `token`, `apiKey`, `service_role`, `eval`, `dangerouslySetInnerHTML`, `raw`, `exec`, `@CrossOrigin`, `permitAll`. Project-specific patterns: `SUPABASE_DB_PASSWORD`, `AI_API_KEY`, `INGESTION_API_KEY`, `resolveAdminOrForbid`, `resolveCallerOrForbid`, `getUserRole`, `SECURITY DEFINER`, `ENABLE ROW LEVEL SECURITY`.
 3. **Real exploit paths only** — prioritise findings with a plausible, demonstrable exploit. Theoretical concerns belong in INFO or Tier 2.
 4. **Verify framework usage** — do not assume code is safe because it uses a framework. Verify security features are correctly applied.
 5. **Specific mitigations** — every confirmed finding must have a specific, implementable fix. "Add security" is not a mitigation.
@@ -234,6 +290,8 @@ Before finalising output:
 - [ ] Is every confirmed finding backed by a specific file:line or grep result?
 - [ ] Did I check which trust boundaries the change touches?
 - [ ] Did I verify JWT validation on newly touched or adjacent protected endpoints?
+- [ ] Did I verify that new/changed protected endpoints call the appropriate `resolveAdminOrForbid()` or `resolveCallerOrForbid()` method?
+- [ ] For Flyway migrations: did I check RLS is enabled on new tables and policies match project patterns?
 - [ ] Did I grep for hardcoded secrets and `service_role` key in frontend code?
 - [ ] Did I check injection vectors on user-controlled inputs in changed paths?
 - [ ] Did I avoid reporting CSRF on Bearer-token endpoints?
