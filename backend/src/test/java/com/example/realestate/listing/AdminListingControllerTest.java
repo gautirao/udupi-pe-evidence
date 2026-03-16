@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -60,7 +61,7 @@ class AdminListingControllerTest {
     private ListingService listingService;
 
     @MockitoBean
-    private ListingImageRepository listingImageRepository;
+    private ListingResponseMapper listingResponseMapper;
 
     @MockitoBean
     private AdminAuditService adminAuditService;
@@ -70,9 +71,34 @@ class AdminListingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingService, listingImageRepository, adminAuditService, userRoleService);
-        // Default stub: no images for any listing; tests that check imageCount override this.
-        when(listingImageRepository.countByListingId(any())).thenReturn(0L);
+        reset(listingService, listingResponseMapper, adminAuditService, userRoleService);
+        // Delegate mapper to a minimal implementation so existing response-field assertions keep working.
+        when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
+            Listing l = inv.getArgument(0);
+            java.time.OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
+                    ? l.getLastUpdatedAt() : l.getUpdatedAt();
+            boolean reraValid = l.getReraNumber() != null
+                    && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
+            return new ListingController.ListingResponse(
+                    l.getId(), l.getListingNumber(), l.getDisplayId(),
+                    l.getStatus(), l.getPropertyType(), l.getTitle(),
+                    l.getLocality(), l.getPrice(), l.getDescription(),
+                    l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
+                    l.getLandAreaUnit(), l.getBuiltAreaUnit(),
+                    l.getLatitude(), l.getLongitude(),
+                    l.isAddressConfirmed(), l.getRejectionReason(),
+                    l.getCreatedAt(), l.getUpdatedAt(),
+                    0, null, l.getVideoUrl(),
+                    l.getReraNumber(), l.getListingPurpose(),
+                    l.getCarpetArea(), l.getCarpetAreaUnit(),
+                    l.getFloorNumber(), l.getTotalFloors(),
+                    l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
+                    l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
+                    l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
+                    l.getSellerType(), 0, false, lastUpdatedAt,
+                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid);
+        });
     }
 
     // ==================== Test 1: Approve -> 200, LIVE ====================

@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,24 +39,22 @@ public class ListingController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingController.class);
     private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
-    /** Number of days within which a back-to-market listing is still badged. */
-    private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
     /** Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     static final java.util.regex.Pattern RERA_PATTERN =
             java.util.regex.Pattern.compile("^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$");
 
     private final ListingService listingService;
     private final ListingRepository listingRepository;
-    private final ListingImageRepository listingImageRepository;
+    private final ListingResponseMapper listingResponseMapper;
     private final UserRoleService userRoleService;
 
     public ListingController(ListingService listingService,
                              ListingRepository listingRepository,
-                             ListingImageRepository listingImageRepository,
+                             ListingResponseMapper listingResponseMapper,
                              UserRoleService userRoleService) {
         this.listingService = listingService;
         this.listingRepository = listingRepository;
-        this.listingImageRepository = listingImageRepository;
+        this.listingResponseMapper = listingResponseMapper;
         this.userRoleService = userRoleService;
     }
 
@@ -84,7 +81,7 @@ public class ListingController {
 
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
                     saved.getId(), caller.userId(), sellerType);
-            return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(saved));
+            return ResponseEntity.status(HttpStatus.CREATED).body(listingResponseMapper.toResponse(saved));
         } catch (ListingService.OwnerListingLimitException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
@@ -102,7 +99,7 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         }
-        return ResponseEntity.ok(toResponse(listing));
+        return ResponseEntity.ok(listingResponseMapper.toResponse(listing));
     }
 
     @GetMapping("/mine/stats")
@@ -124,7 +121,7 @@ public class ListingController {
 
         Page<Listing> listings = listingService.getListingsByOwner(caller.userId(), status, pageable);
 
-        Page<ListingResponse> response = listings.map(this::toResponse);
+        Page<ListingResponse> response = listings.map(listingResponseMapper::toResponse);
         return ResponseEntity.ok(response);
     }
 
@@ -155,7 +152,7 @@ public class ListingController {
                     req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
                     req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
                     req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared());
-            return ResponseEntity.ok(toResponse(updated));
+            return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
         } catch (ListingService.ListingOwnershipException e) {
@@ -208,7 +205,7 @@ public class ListingController {
         try {
             Listing submitted = listingService.submitListing(id, caller.userId(), caller.isAdmin());
             log.info("POST /api/listings/{}/submit -> 200 status=PENDING_REVIEW", id);
-            return ResponseEntity.ok(toResponse(submitted));
+            return ResponseEntity.ok(listingResponseMapper.toResponse(submitted));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
         } catch (ListingService.ListingStatusException e) {
@@ -241,55 +238,6 @@ public class ListingController {
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "Listing not found"));
-    }
-
-    private ListingResponse toResponse(Listing l) {
-        int imageCount = (int) listingImageRepository.countByListingId(l.getId());
-        String firstImageUrl = listingImageRepository
-                .findByListingIdOrderByPositionAsc(l.getId())
-                .stream().findFirst()
-                .map(ListingImage::getUrl)
-                .orElse(null);
-
-        // daysOnMarket: days since first publish; fall back to createdAt when never published
-        LocalDate referenceDate = l.getFirstPublishedAt() != null
-                ? l.getFirstPublishedAt().toLocalDate()
-                : (l.getCreatedAt() != null ? l.getCreatedAt().toLocalDate() : LocalDate.now());
-        int daysOnMarket = (int) ChronoUnit.DAYS.between(referenceDate, LocalDate.now());
-
-        // backOnMarket: true only when back_to_market_at is within the last BACK_ON_MARKET_WINDOW_DAYS days
-        boolean backOnMarket = l.getBackToMarketAt() != null
-                && l.getBackToMarketAt().isAfter(OffsetDateTime.now().minusDays(BACK_ON_MARKET_WINDOW_DAYS));
-
-        // lastUpdatedAt: use explicit transparency column; fall back to updatedAt
-        OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
-                ? l.getLastUpdatedAt()
-                : l.getUpdatedAt();
-
-        boolean reraValid = l.getReraNumber() != null
-                && RERA_PATTERN.matcher(l.getReraNumber()).matches();
-
-        return new ListingResponse(
-                l.getId(), l.getListingNumber(), l.getDisplayId(),
-                l.getStatus(), l.getPropertyType(), l.getTitle(),
-                l.getLocality(), l.getPrice(), l.getDescription(),
-                l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
-                l.getLandAreaUnit(), l.getBuiltAreaUnit(),
-                l.getLatitude(), l.getLongitude(),
-                l.isAddressConfirmed(), l.getRejectionReason(),
-                l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount, firstImageUrl, l.getVideoUrl(),
-                l.getReraNumber(),
-                l.getListingPurpose(),
-                l.getCarpetArea(), l.getCarpetAreaUnit(),
-                l.getFloorNumber(), l.getTotalFloors(),
-                l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
-                l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
-                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
-                l.getSellerType(),
-                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
-                l.getPossessionStatus(), l.getExpectedPossessionDate(),
-                l.getApprovalsDeclared(), reraValid);
     }
 
     // ===== DTOs =====

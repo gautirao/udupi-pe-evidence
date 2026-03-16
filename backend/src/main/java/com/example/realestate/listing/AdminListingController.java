@@ -13,8 +13,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -28,20 +26,17 @@ public class AdminListingController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminListingController.class);
 
-    /** Number of days within which a back-to-market listing is still badged. */
-    private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
-
     private final ListingService listingService;
-    private final ListingImageRepository listingImageRepository;
+    private final ListingResponseMapper listingResponseMapper;
     private final AdminAuditService adminAuditService;
     private final UserRoleService userRoleService;
 
     public AdminListingController(ListingService listingService,
-                                  ListingImageRepository listingImageRepository,
+                                  ListingResponseMapper listingResponseMapper,
                                   AdminAuditService adminAuditService,
                                   UserRoleService userRoleService) {
         this.listingService = listingService;
-        this.listingImageRepository = listingImageRepository;
+        this.listingResponseMapper = listingResponseMapper;
         this.adminAuditService = adminAuditService;
         this.userRoleService = userRoleService;
     }
@@ -56,7 +51,7 @@ public class AdminListingController {
             log.info("POST /api/admin/listings/{}/approve -> 200 status=LIVE", id);
             adminAuditService.record(adminId, "listing_approved", "listing", id, null,
                     "{\"status\":\"LIVE\"}");
-            return ResponseEntity.ok(toResponse(approved));
+            return ResponseEntity.ok(listingResponseMapper.toResponse(approved));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
         } catch (ListingService.ListingStatusException e) {
@@ -74,7 +69,7 @@ public class AdminListingController {
             log.info("POST /api/admin/listings/{}/restore -> 200 status=DRAFT adminId={}", id, adminId);
             adminAuditService.record(adminId, "listing_restored", "listing", id, null,
                     "{\"status\":\"DRAFT\"}");
-            return ResponseEntity.ok(toResponse(restored));
+            return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
         } catch (ListingService.ListingNotArchivedException e) {
@@ -100,7 +95,7 @@ public class AdminListingController {
             log.info("POST /api/admin/listings/{}/reject -> 200 status=REJECTED", id);
             adminAuditService.record(adminId, "listing_rejected", "listing", id, null,
                     "{\"status\":\"REJECTED\",\"reason\":\"" + req.rejectionReason().replace("\"", "\\\"") + "\"}");
-            return ResponseEntity.ok(toResponse(rejected));
+            return ResponseEntity.ok(listingResponseMapper.toResponse(rejected));
         } catch (ListingService.ListingNotFoundException e) {
             return notFound();
         } catch (ListingService.ListingStatusException e) {
@@ -147,52 +142,6 @@ public class AdminListingController {
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(Map.of("error", "Listing not found"));
-    }
-
-    private ListingController.ListingResponse toResponse(Listing l) {
-        int imageCount = (int) listingImageRepository.countByListingId(l.getId());
-        String firstImageUrl = listingImageRepository
-                .findByListingIdOrderByPositionAsc(l.getId())
-                .stream().findFirst()
-                .map(ListingImage::getUrl)
-                .orElse(null);
-
-        java.time.LocalDate referenceDate = l.getFirstPublishedAt() != null
-                ? l.getFirstPublishedAt().toLocalDate()
-                : (l.getCreatedAt() != null ? l.getCreatedAt().toLocalDate() : java.time.LocalDate.now());
-        int daysOnMarket = (int) java.time.temporal.ChronoUnit.DAYS.between(referenceDate, java.time.LocalDate.now());
-
-        boolean backOnMarket = l.getBackToMarketAt() != null
-                && l.getBackToMarketAt().isAfter(java.time.OffsetDateTime.now().minusDays(BACK_ON_MARKET_WINDOW_DAYS));
-
-        java.time.OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
-                ? l.getLastUpdatedAt()
-                : l.getUpdatedAt();
-
-        boolean reraValid = l.getReraNumber() != null
-                && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
-
-        return new ListingController.ListingResponse(
-                l.getId(), l.getListingNumber(), l.getDisplayId(),
-                l.getStatus(), l.getPropertyType(), l.getTitle(),
-                l.getLocality(), l.getPrice(), l.getDescription(),
-                l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
-                l.getLandAreaUnit(), l.getBuiltAreaUnit(),
-                l.getLatitude(), l.getLongitude(),
-                l.isAddressConfirmed(), l.getRejectionReason(),
-                l.getCreatedAt(), l.getUpdatedAt(),
-                imageCount, firstImageUrl, l.getVideoUrl(),
-                l.getReraNumber(),
-                l.getListingPurpose(),
-                l.getCarpetArea(), l.getCarpetAreaUnit(),
-                l.getFloorNumber(), l.getTotalFloors(),
-                l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
-                l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
-                l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
-                l.getSellerType(),
-                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
-                l.getPossessionStatus(), l.getExpectedPossessionDate(),
-                l.getApprovalsDeclared(), reraValid);
     }
 
     // ===== DTOs =====
