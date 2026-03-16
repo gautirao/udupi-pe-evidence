@@ -20,13 +20,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X, Link } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { ImageUploader } from '@/components/dealer/ImageUploader';
+import { ImageUploader } from '@/components/broker/ImageUploader';
 import { useListingImages } from '@/hooks/useListingImages';
-import { PriceField } from '@/components/dealer/PriceField';
-import { AreaField } from '@/components/dealer/AreaField';
-import { AddressPicker } from '@/components/dealer/AddressPicker';
+import { PriceField } from '@/components/broker/PriceField';
+import { AreaField } from '@/components/broker/AreaField';
+import { AddressPicker } from '@/components/broker/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
-import { StepIndicator } from '@/components/dealer/StepIndicator';
+import { StepIndicator } from '@/components/broker/StepIndicator';
 import { ApiError } from '@/lib/api';
 
 const VIDEO_URL_REGEX =

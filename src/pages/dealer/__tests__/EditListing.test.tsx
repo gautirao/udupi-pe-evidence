@@ -28,7 +28,7 @@ vi.mock('@/hooks/useListingImages', () => ({
   useListingImages: vi.fn(() => ({ images: [], isLoading: false })),
 }));
 
-vi.mock('@/components/dealer/ImageUploader', () => ({
+vi.mock('@/components/broker/ImageUploader', () => ({
   // Default: report canSubmit=true so step-2 "Save & Continue" is enabled in
   // tests that don't care about the 3-image gate. Tests that need to exercise
   // the disabled state can fire onCanSubmitChange(false) themselves via the
@@ -48,7 +48,7 @@ vi.mock('@/components/dealer/ImageUploader', () => ({
 
 // AreaField uses Radix UI Select which needs portal mounting. Mock it with a
 // simple input + select so EditListing unit tests stay focused on page behaviour.
-vi.mock('@/components/dealer/AreaField', () => ({
+vi.mock('@/components/broker/AreaField', () => ({
   AreaField: ({
     id,
     label,
@@ -97,7 +97,7 @@ vi.mock('@/components/dealer/AreaField', () => ({
 
 // PriceField uses Radix UI Slider which requires ResizeObserver. Mock it with a
 // simple controlled input so EditListing unit tests stay focused on page behaviour.
-vi.mock('@/components/dealer/PriceField', () => ({
+vi.mock('@/components/broker/PriceField', () => ({
   PriceField: ({
     initialRupees,
     onChange,
@@ -137,7 +137,7 @@ vi.mock('@/components/poi/PoiManager', () => ({
     React.createElement('div', { 'data-testid': 'poi-manager', 'data-listing-id': listingId }),
 }));
 
-vi.mock('@/components/dealer/AddressPicker', () => ({
+vi.mock('@/components/broker/AddressPicker', () => ({
   AddressPicker: ({
     onConfirm,
     onUnconfirm,
@@ -171,7 +171,7 @@ vi.mock('@/components/dealer/AddressPicker', () => ({
     ),
 }));
 
-vi.mock('@/components/dealer/StepIndicator', () => ({
+vi.mock('@/components/broker/StepIndicator', () => ({
   StepIndicator: () => React.createElement('div', { 'data-testid': 'step-indicator' }),
 }));
 
@@ -426,7 +426,7 @@ describe('EditListing page', () => {
   it('step2_withZeroImages_disablesSaveButton_andShowsHint', async () => {
     // Override the ImageUploader mock to fire onCanSubmitChange(false) so the
     // 3-image gate is active for this test only.
-    const uploaderModule = await import('@/components/dealer/ImageUploader'); // broker/EditListing still imports from dealer path
+    const uploaderModule = await import('@/components/broker/ImageUploader');
     vi.spyOn(uploaderModule, 'ImageUploader').mockImplementationOnce(
       ({ onCanSubmitChange }: { listingId: string; onCanSubmitChange?: (v: boolean) => void }) => {
         React.useEffect(() => {
