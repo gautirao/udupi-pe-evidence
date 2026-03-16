@@ -2,12 +2,11 @@ package com.example.realestate.poi;
 
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -45,7 +44,6 @@ import java.util.UUID;
 public class ListingPoiController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingPoiController.class);
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
 
     /**
      * Settlement-derived categories (TOWN_CENTER, VILLAGE_CENTER, HIGHWAY) are auto-approved
@@ -60,16 +58,13 @@ public class ListingPoiController {
     private final ListingPoiService service;
     private final OverpassService overpassService;
     private final ListingRepository listingRepository;
-    private final UserRoleService userRoleService;
 
     public ListingPoiController(ListingPoiService service,
                                 OverpassService overpassService,
-                                ListingRepository listingRepository,
-                                UserRoleService userRoleService) {
+                                ListingRepository listingRepository) {
         this.service = service;
         this.overpassService = overpassService;
         this.listingRepository = listingRepository;
-        this.userRoleService = userRoleService;
     }
 
     // ===== Public endpoint =====
@@ -91,9 +86,8 @@ public class ListingPoiController {
      * Auth: listing owner or admin.
      */
     @GetMapping("/suggestions")
-    public ResponseEntity<?> getSuggestions(JwtAuthenticationToken auth,
+    public ResponseEntity<?> getSuggestions(CallerInfo caller,
                                             @PathVariable UUID listingId) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
 
         Listing listing = listingRepository.findById(listingId).orElse(null);
         if (listing == null) return notFound();
@@ -123,10 +117,9 @@ public class ListingPoiController {
      * Auth: listing owner or admin.
      */
     @PatchMapping("/{poiId}/approve")
-    public ResponseEntity<?> approvePoi(JwtAuthenticationToken auth,
+    public ResponseEntity<?> approvePoi(CallerInfo caller,
                                         @PathVariable UUID listingId,
                                         @PathVariable UUID poiId) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
 
         Listing listing = listingRepository.findById(listingId).orElse(null);
         if (listing == null) return notFound();
@@ -156,10 +149,9 @@ public class ListingPoiController {
      * Auth: listing owner or admin.
      */
     @PatchMapping("/{poiId}/pin")
-    public ResponseEntity<?> pinPoi(JwtAuthenticationToken auth,
+    public ResponseEntity<?> pinPoi(CallerInfo caller,
                                     @PathVariable UUID listingId,
                                     @PathVariable UUID poiId) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
 
         Listing listing = listingRepository.findById(listingId).orElse(null);
         if (listing == null) return notFound();
@@ -184,10 +176,9 @@ public class ListingPoiController {
      * Auth: listing owner or admin.
      */
     @PostMapping("/manual")
-    public ResponseEntity<?> addManual(JwtAuthenticationToken auth,
+    public ResponseEntity<?> addManual(CallerInfo caller,
                                        @PathVariable UUID listingId,
                                        @RequestBody ManualPoiRequest request) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
 
         Listing listing = listingRepository.findById(listingId).orElse(null);
         if (listing == null) return notFound();
@@ -236,10 +227,9 @@ public class ListingPoiController {
      * Auth: listing owner or admin.
      */
     @DeleteMapping("/{poiId}")
-    public ResponseEntity<?> deletePoi(JwtAuthenticationToken auth,
+    public ResponseEntity<?> deletePoi(CallerInfo caller,
                                        @PathVariable UUID listingId,
                                        @PathVariable UUID poiId) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
 
         Listing listing = listingRepository.findById(listingId).orElse(null);
         if (listing == null) return notFound();
@@ -260,20 +250,6 @@ public class ListingPoiController {
         log.info("DELETE poiId={} listingId={} caller={}", poiId, listingId, caller.userId());
         return ResponseEntity.noContent().build();
     }
-
-    // ===== Auth helpers =====
-
-    private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
-        UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = userRoleService.getUserRole(userId).orElse(null);
-        if (role == null || !ALLOWED_ROLES.contains(role)) {
-            log.warn("AUTH DENIED caller={} reason=insufficient_role role={}", userId, role);
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires dealer, owner, or admin role");
-        }
-        return new CallerInfo(userId, role, "admin".equals(role));
-    }
-
-    private record CallerInfo(UUID userId, String role, boolean isAdmin) {}
 
     // ===== Response helpers =====
 

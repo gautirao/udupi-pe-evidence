@@ -1,7 +1,7 @@
 package com.example.realestate.booking;
 
 import com.example.realestate.exception.RateLimiterService;
-import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -43,19 +43,15 @@ import java.util.UUID;
 public class BookingController {
 
     private static final Logger log = LoggerFactory.getLogger(BookingController.class);
-    private static final Set<String> DEALER_ROLES = Set.of("dealer", "admin", "user");
     private static final Set<String> BOOKING_SORT_FIELDS = Set.of("createdAt", "requestedDate");
 
     private final BookingService bookingService;
     private final RateLimiterService rateLimiterService;
-    private final UserRoleService userRoleService;
 
     public BookingController(BookingService bookingService,
-                             RateLimiterService rateLimiterService,
-                             UserRoleService userRoleService) {
+                             RateLimiterService rateLimiterService) {
         this.bookingService = bookingService;
         this.rateLimiterService = rateLimiterService;
-        this.userRoleService = userRoleService;
     }
 
     // ===== POST /api/bookings =====
@@ -198,12 +194,10 @@ public class BookingController {
 
     @GetMapping({"/dealer", "/broker"})
     public ResponseEntity<?> dealer(
-            JwtAuthenticationToken auth,
+            CallerInfo caller,
             @RequestParam(required = false) UUID listingId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         validateSort(pageable);
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         if (listingId != null) {
             return ResponseEntity.ok(bookingService
@@ -222,24 +216,6 @@ public class BookingController {
                         "Invalid sort field. Allowed: " + BOOKING_SORT_FIELDS);
             }
         }
-    }
-
-    // ===== Auth helpers =====
-
-    private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
-        UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = userRoleService.getUserRole(userId).orElse(null);
-        if (role == null || !DEALER_ROLES.contains(role)) {
-            return null;
-        }
-        return new CallerInfo(userId);
-    }
-
-    private record CallerInfo(UUID userId) {}
-
-    private static ResponseEntity<Map<String, String>> forbidden() {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound() {

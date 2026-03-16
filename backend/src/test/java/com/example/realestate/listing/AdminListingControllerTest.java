@@ -1,6 +1,8 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import(AdminListingControllerTest.TestConfig.class)
+@Import({AdminListingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
 class AdminListingControllerTest {
 
     private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");

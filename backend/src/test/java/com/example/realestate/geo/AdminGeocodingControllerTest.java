@@ -1,6 +1,8 @@
 package com.example.realestate.geo;
 
+import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,7 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import(AdminGeocodingControllerTest.TestConfig.class)
+@Import({AdminGeocodingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
 @TestPropertySource(properties = "spring.test.mockmvc.print=NONE")
 class AdminGeocodingControllerTest {
 
