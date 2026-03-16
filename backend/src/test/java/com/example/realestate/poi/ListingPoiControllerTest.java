@@ -1,7 +1,9 @@
 package com.example.realestate.poi;
 
 import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -32,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import(ListingPoiControllerTest.TestConfig.class)
+@Import({ListingPoiControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
 class ListingPoiControllerTest {
 
     private static final UUID LISTING_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");

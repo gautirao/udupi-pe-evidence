@@ -1,12 +1,11 @@
 package com.example.realestate.geo;
 
-import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -17,7 +16,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -36,14 +34,11 @@ public class AdminGeocodingController {
     /** Nominatim usage policy: max 1 req/sec */
     private static final long RATE_LIMIT_MS = 1_100;
 
-    private final UserRoleService userRoleService;
     private final GeocodingService geocodingService;
     private final JdbcTemplate jdbc;
 
-    public AdminGeocodingController(UserRoleService userRoleService,
-                                    GeocodingService geocodingService,
+    public AdminGeocodingController(GeocodingService geocodingService,
                                     JdbcTemplate jdbc) {
-        this.userRoleService = userRoleService;
         this.geocodingService = geocodingService;
         this.jdbc = jdbc;
     }
@@ -58,16 +53,13 @@ public class AdminGeocodingController {
      */
     @PostMapping(value = "/missing", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter geocodeMissing(
-            JwtAuthenticationToken auth,
+            CallerInfo caller,
             @RequestParam(defaultValue = "20") int batchSize) {
 
-        UUID adminId = resolveAdminOrForbid(auth);
-        if (adminId == null) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
-        }
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         int effectiveBatch = Math.min(Math.max(batchSize, 1), MAX_BATCH);
-        log.info("POST /api/admin/geocode/missing batchSize={} adminId={}", effectiveBatch, adminId);
+        log.info("POST /api/admin/geocode/missing batchSize={} adminId={}", effectiveBatch, caller.userId());
 
         SseEmitter emitter = new SseEmitter(0L); // no timeout
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -178,11 +170,4 @@ public class AdminGeocodingController {
         }
     }
 
-    // ===== Auth =====
-
-    private UUID resolveAdminOrForbid(JwtAuthenticationToken auth) {
-        UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = userRoleService.getUserRole(userId).orElse(null);
-        return "admin".equals(role) ? userId : null;
-    }
 }

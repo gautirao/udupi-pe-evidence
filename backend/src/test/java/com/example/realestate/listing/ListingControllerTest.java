@@ -1,6 +1,8 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,7 +44,7 @@ import org.mockito.invocation.InvocationOnMock;
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import(ListingControllerTest.TestConfig.class)
+@Import({ListingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
 class ListingControllerTest {
 
     private static final UUID DEALER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -253,7 +255,7 @@ class ListingControllerTest {
                                  "price":100,"description":"d"}
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires broker, owner, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
 
         verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
@@ -864,7 +866,7 @@ class ListingControllerTest {
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires broker, owner, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
 
         verify(listingService, never()).getListingStats(any());
     }

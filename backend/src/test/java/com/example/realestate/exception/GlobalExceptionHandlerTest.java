@@ -2,7 +2,9 @@ package com.example.realestate.exception;
 
 import com.example.realestate.booking.BookingController;
 import com.example.realestate.booking.BookingService;
+import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,7 +58,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.TestConfig.class})
+@Import({GlobalExceptionHandler.class, GlobalExceptionHandlerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
 class GlobalExceptionHandlerTest {
 
     private static final UUID REQUESTER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");

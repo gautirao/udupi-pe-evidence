@@ -1,17 +1,17 @@
 package com.example.realestate.listing;
 
-import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.UUID;
@@ -29,27 +29,23 @@ public class AdminListingController {
     private final ListingService listingService;
     private final ListingResponseMapper listingResponseMapper;
     private final AdminAuditService adminAuditService;
-    private final UserRoleService userRoleService;
 
     public AdminListingController(ListingService listingService,
                                   ListingResponseMapper listingResponseMapper,
-                                  AdminAuditService adminAuditService,
-                                  UserRoleService userRoleService) {
+                                  AdminAuditService adminAuditService) {
         this.listingService = listingService;
         this.listingResponseMapper = listingResponseMapper;
         this.adminAuditService = adminAuditService;
-        this.userRoleService = userRoleService;
     }
 
     @PostMapping("/{id}/approve")
-    public ResponseEntity<?> approve(JwtAuthenticationToken auth, @PathVariable UUID id) {
-        UUID adminId = resolveAdminOrForbid(auth);
-        if (adminId == null) return forbidden();
+    public ResponseEntity<?> approve(CallerInfo caller, @PathVariable UUID id) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         try {
-            Listing approved = listingService.approveListing(id, adminId);
+            Listing approved = listingService.approveListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/approve -> 200 status=LIVE", id);
-            adminAuditService.record(adminId, "listing_approved", "listing", id, null,
+            adminAuditService.record(caller.userId(), "listing_approved", "listing", id, null,
                     "{\"status\":\"LIVE\"}");
             return ResponseEntity.ok(listingResponseMapper.toResponse(approved));
         } catch (ListingService.ListingNotFoundException e) {
@@ -60,14 +56,13 @@ public class AdminListingController {
     }
 
     @PostMapping("/{id}/restore")
-    public ResponseEntity<?> restore(JwtAuthenticationToken auth, @PathVariable UUID id) {
-        UUID adminId = resolveAdminOrForbid(auth);
-        if (adminId == null) return forbidden();
+    public ResponseEntity<?> restore(CallerInfo caller, @PathVariable UUID id) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         try {
-            Listing restored = listingService.restoreListing(id, adminId);
-            log.info("POST /api/admin/listings/{}/restore -> 200 status=DRAFT adminId={}", id, adminId);
-            adminAuditService.record(adminId, "listing_restored", "listing", id, null,
+            Listing restored = listingService.restoreListing(id, caller.userId());
+            log.info("POST /api/admin/listings/{}/restore -> 200 status=DRAFT adminId={}", id, caller.userId());
+            adminAuditService.record(caller.userId(), "listing_restored", "listing", id, null,
                     "{\"status\":\"DRAFT\"}");
             return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
         } catch (ListingService.ListingNotFoundException e) {
@@ -79,11 +74,10 @@ public class AdminListingController {
     }
 
     @PostMapping("/{id}/reject")
-    public ResponseEntity<?> reject(JwtAuthenticationToken auth,
+    public ResponseEntity<?> reject(CallerInfo caller,
                                     @PathVariable UUID id,
                                     @RequestBody RejectRequest req) {
-        UUID adminId = resolveAdminOrForbid(auth);
-        if (adminId == null) return forbidden();
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         if (req.rejectionReason() == null || req.rejectionReason().isBlank()) {
             return ResponseEntity.badRequest()
@@ -91,9 +85,9 @@ public class AdminListingController {
         }
 
         try {
-            Listing rejected = listingService.rejectListing(id, adminId, req.rejectionReason());
+            Listing rejected = listingService.rejectListing(id, caller.userId(), req.rejectionReason());
             log.info("POST /api/admin/listings/{}/reject -> 200 status=REJECTED", id);
-            adminAuditService.record(adminId, "listing_rejected", "listing", id, null,
+            adminAuditService.record(caller.userId(), "listing_rejected", "listing", id, null,
                     "{\"status\":\"REJECTED\",\"reason\":\"" + req.rejectionReason().replace("\"", "\\\"") + "\"}");
             return ResponseEntity.ok(listingResponseMapper.toResponse(rejected));
         } catch (ListingService.ListingNotFoundException e) {
@@ -104,15 +98,14 @@ public class AdminListingController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> forceDelete(JwtAuthenticationToken auth, @PathVariable UUID id) {
-        UUID adminId = resolveAdminOrForbid(auth);
-        if (adminId == null) return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    public ResponseEntity<Void> forceDelete(CallerInfo caller, @PathVariable UUID id) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         try {
-            boolean archived = listingService.adminForceDelete(id, adminId);
-            log.info("DELETE /api/admin/listings/{} -> 204 adminId={} archived={}", id, adminId, archived);
+            boolean archived = listingService.adminForceDelete(id, caller.userId());
+            log.info("DELETE /api/admin/listings/{} -> 204 adminId={} archived={}", id, caller.userId(), archived);
             if (archived) {
-                adminAuditService.record(adminId, "listing_force_deleted", "listing", id, null,
+                adminAuditService.record(caller.userId(), "listing_force_deleted", "listing", id, null,
                         "{\"status\":\"ARCHIVED\"}");
             }
             return ResponseEntity.noContent().build();
@@ -121,23 +114,7 @@ public class AdminListingController {
         }
     }
 
-    // ===== Auth =====
-
-    private UUID resolveAdminOrForbid(JwtAuthenticationToken auth) {
-        UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = userRoleService.getUserRole(userId).orElse(null);
-        if (!"admin".equals(role)) {
-            return null;
-        }
-        return userId;
-    }
-
     // ===== Response helpers =====
-
-    private static ResponseEntity<Map<String, String>> forbidden() {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires admin role"));
-    }
 
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)

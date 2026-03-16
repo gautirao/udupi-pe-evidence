@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import java.util.List;
@@ -20,15 +21,20 @@ import java.util.Objects;
 /**
  * Global exception handler that converts uncaught Spring MVC and infrastructure exceptions
  * into consistent {"error":"..."} JSON responses.
- *
- * IMPORTANT: ResponseStatusException is handled by Spring's framework — do NOT add a handler
- * for it here. Controllers throw ResponseStatusException explicitly for known business errors
- * (404, 409, etc.) and Spring maps them correctly without our involvement.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    // ===== ResponseStatusException → preserves status + {"error":"..."} body =====
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Map<String, String>> handleResponseStatus(ResponseStatusException ex) {
+        String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(Map.of("error", message));
+    }
 
     // ===== PropertyReferenceException → 400 =====
 

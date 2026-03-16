@@ -1,7 +1,9 @@
 package com.example.realestate.booking;
 
 import com.example.realestate.exception.RateLimiterService;
+import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.WebMvcConfig;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import(BookingControllerTest.TestConfig.class)
+@Import({BookingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
 class BookingControllerTest {
 
     private static final UUID REQUESTER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -331,7 +333,7 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/dealer")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, owner, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
 
         verify(bookingService, never()).getBookingsForDealerPaged(any(), any());
     }

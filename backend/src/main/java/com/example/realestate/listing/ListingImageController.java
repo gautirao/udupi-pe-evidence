@@ -1,11 +1,10 @@
 package com.example.realestate.listing;
 
-import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,7 +39,6 @@ public class ListingImageController {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
     private static final Set<String> MUTABLE_STATUSES = Set.of(
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
     private static final Pattern EXTENSION_PATTERN = Pattern.compile(".*\\.([a-zA-Z]+)$");
 
     private final ListingRepository listingRepository;
@@ -48,30 +46,25 @@ public class ListingImageController {
     private final ListingService listingService;
     private final SupabaseStorageService storageService;
     private final ListingImageRegistrar imageRegistrar;
-    private final UserRoleService userRoleService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
                                    ListingService listingService,
                                    SupabaseStorageService storageService,
-                                   ListingImageRegistrar imageRegistrar,
-                                   UserRoleService userRoleService) {
+                                   ListingImageRegistrar imageRegistrar) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.listingService = listingService;
         this.storageService = storageService;
         this.imageRegistrar = imageRegistrar;
-        this.userRoleService = userRoleService;
     }
 
     // ==================== GET — list images ====================
 
     @GetMapping
     @Transactional(readOnly = true)
-    public ResponseEntity<?> getImages(JwtAuthenticationToken auth,
+    public ResponseEntity<?> getImages(CallerInfo caller,
                                        @PathVariable UUID listingId) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         Listing listing = findOwnedListing(listingId, caller);
         if (listing == null) return notFound("Listing not found");
@@ -85,11 +78,9 @@ public class ListingImageController {
     // ==================== POST — register image metadata ====================
 
     @PostMapping
-    public ResponseEntity<?> registerImage(JwtAuthenticationToken auth,
+    public ResponseEntity<?> registerImage(CallerInfo caller,
                                             @PathVariable UUID listingId,
                                             @RequestBody RegisterImageRequest req) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         Listing listing = findOwnedListing(listingId, caller);
         if (listing == null) return notFound("Listing not found");
@@ -125,11 +116,9 @@ public class ListingImageController {
 
     @DeleteMapping("/{imageId}")
     @Transactional
-    public ResponseEntity<?> deleteImage(JwtAuthenticationToken auth,
+    public ResponseEntity<?> deleteImage(CallerInfo caller,
                                           @PathVariable UUID listingId,
                                           @PathVariable UUID imageId) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         Listing listing = findOwnedListing(listingId, caller);
         if (listing == null) return notFound("Listing not found");
@@ -159,11 +148,9 @@ public class ListingImageController {
 
     @PutMapping("/reorder")
     @Transactional
-    public ResponseEntity<?> reorderImages(JwtAuthenticationToken auth,
+    public ResponseEntity<?> reorderImages(CallerInfo caller,
                                             @PathVariable UUID listingId,
                                             @RequestBody ReorderRequest req) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         Listing listing = findOwnedListing(listingId, caller);
         if (listing == null) return notFound("Listing not found");
@@ -214,19 +201,6 @@ public class ListingImageController {
         return ResponseEntity.ok(reordered.stream().map(ListingImageController::toResponse).toList());
     }
 
-    // ===== Auth =====
-
-    private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
-        UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = userRoleService.getUserRole(userId).orElse(null);
-        if (role == null || !ALLOWED_ROLES.contains(role)) {
-            return null;
-        }
-        return new CallerInfo(userId, role, "admin".equals(role));
-    }
-
-    private record CallerInfo(UUID userId, String role, boolean isAdmin) {}
-
     private Listing findOwnedListing(UUID listingId, CallerInfo caller) {
         Listing listing = listingRepository.findById(listingId).orElse(null);
         if (listing == null) return null;
@@ -244,11 +218,6 @@ public class ListingImageController {
             return matcher.group(1).toLowerCase();
         }
         return null;
-    }
-
-    private static ResponseEntity<Map<String, String>> forbidden() {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires dealer, owner, or admin role"));
     }
 
     private static ResponseEntity<Map<String, String>> notFound(String message) {

@@ -1,6 +1,6 @@
 package com.example.realestate.listing;
 
-import com.example.realestate.security.UserRoleService;
+import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -9,7 +9,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,7 +24,6 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -38,7 +36,6 @@ import java.util.UUID;
 public class ListingController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingController.class);
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
     /** Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     static final java.util.regex.Pattern RERA_PATTERN =
             java.util.regex.Pattern.compile("^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$");
@@ -46,22 +43,17 @@ public class ListingController {
     private final ListingService listingService;
     private final ListingRepository listingRepository;
     private final ListingResponseMapper listingResponseMapper;
-    private final UserRoleService userRoleService;
 
     public ListingController(ListingService listingService,
                              ListingRepository listingRepository,
-                             ListingResponseMapper listingResponseMapper,
-                             UserRoleService userRoleService) {
+                             ListingResponseMapper listingResponseMapper) {
         this.listingService = listingService;
         this.listingRepository = listingRepository;
         this.listingResponseMapper = listingResponseMapper;
-        this.userRoleService = userRoleService;
     }
 
     @PostMapping
-    public ResponseEntity<?> create(JwtAuthenticationToken auth, @RequestBody CreateRequest req) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
+    public ResponseEntity<?> create(CallerInfo caller, @RequestBody CreateRequest req) {
 
         String sellerType = "user".equals(caller.role()) ? "owner" : "dealer";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
@@ -89,9 +81,7 @@ public class ListingController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getById(JwtAuthenticationToken auth, @PathVariable UUID id) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
+    public ResponseEntity<?> getById(CallerInfo caller, @PathVariable UUID id) {
 
         Listing listing = listingRepository.findById(id).orElse(null);
         if (listing == null) return notFound();
@@ -103,9 +93,7 @@ public class ListingController {
     }
 
     @GetMapping("/mine/stats")
-    public ResponseEntity<?> stats(JwtAuthenticationToken auth) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
+    public ResponseEntity<?> stats(CallerInfo caller) {
 
         ListingStatsResponse stats = listingService.getListingStats(caller.userId());
         return ResponseEntity.ok(stats);
@@ -113,11 +101,9 @@ public class ListingController {
 
     @GetMapping("/mine")
     public ResponseEntity<?> mine(
-            JwtAuthenticationToken auth,
+            CallerInfo caller,
             @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         Page<Listing> listings = listingService.getListingsByOwner(caller.userId(), status, pageable);
 
@@ -126,11 +112,9 @@ public class ListingController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(JwtAuthenticationToken auth,
+    public ResponseEntity<?> update(CallerInfo caller,
                                     @PathVariable UUID id,
                                     @RequestBody UpdateRequest req) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
 
         try {
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
@@ -165,9 +149,7 @@ public class ListingController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> delete(JwtAuthenticationToken auth, @PathVariable UUID id) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
+    public ResponseEntity<?> delete(CallerInfo caller, @PathVariable UUID id) {
 
         try {
             listingService.deleteListing(id, caller.userId(), caller.isAdmin());
@@ -180,9 +162,7 @@ public class ListingController {
     }
 
     @PostMapping("/bulk-delete")
-    public ResponseEntity<?> bulkDelete(JwtAuthenticationToken auth, @RequestBody BulkDeleteRequest req) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
+    public ResponseEntity<?> bulkDelete(CallerInfo caller, @RequestBody BulkDeleteRequest req) {
 
         if (req.ids() == null || req.ids().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "ids must not be empty"));
@@ -198,9 +178,7 @@ public class ListingController {
     }
 
     @PostMapping("/{id}/submit")
-    public ResponseEntity<?> submit(JwtAuthenticationToken auth, @PathVariable UUID id) {
-        CallerInfo caller = resolveCallerOrForbid(auth);
-        if (caller == null) return forbidden();
+    public ResponseEntity<?> submit(CallerInfo caller, @PathVariable UUID id) {
 
         try {
             Listing submitted = listingService.submitListing(id, caller.userId(), caller.isAdmin());
@@ -215,25 +193,7 @@ public class ListingController {
         }
     }
 
-    // ===== Auth helpers =====
-
-    private CallerInfo resolveCallerOrForbid(JwtAuthenticationToken auth) {
-        UUID userId = UUID.fromString(auth.getToken().getSubject());
-        String role = userRoleService.getUserRole(userId).orElse(null);
-        if (role == null || !ALLOWED_ROLES.contains(role)) {
-            return null;
-        }
-        return new CallerInfo(userId, role, "admin".equals(role));
-    }
-
-    private record CallerInfo(UUID userId, String role, boolean isAdmin) {}
-
     // ===== Response helpers =====
-
-    private static ResponseEntity<Map<String, String>> forbidden() {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(Map.of("error", "Requires broker, owner, or admin role"));
-    }
 
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
