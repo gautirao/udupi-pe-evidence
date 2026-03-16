@@ -62,16 +62,49 @@ class PublicListingControllerTest {
     private ListingRepository listingRepository;
 
     @MockitoBean
-    private ListingImageRepository listingImageRepository;
+    private ListingResponseMapper listingResponseMapper;
 
     @MockitoBean
     private PriceChangeLogRepository priceChangeLogRepository;
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, listingImageRepository, priceChangeLogRepository);
-        when(listingImageRepository.countByListingId(any())).thenReturn(0L);
-        when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
+        reset(listingRepository, listingResponseMapper, priceChangeLogRepository);
+        // Delegate public mapper to a minimal implementation.
+        // CRITICAL: rejectionReason must always be null (security invariant tested explicitly).
+        when(listingResponseMapper.toPublicResponse(any(Listing.class))).thenAnswer(inv -> {
+            Listing l = inv.getArgument(0);
+            int daysOnMarket = l.getFirstPublishedAt() != null
+                    ? (int) java.time.temporal.ChronoUnit.DAYS.between(
+                            l.getFirstPublishedAt().toLocalDate(), java.time.LocalDate.now())
+                    : (l.getCreatedAt() != null
+                            ? (int) java.time.temporal.ChronoUnit.DAYS.between(
+                                    l.getCreatedAt().toLocalDate(), java.time.LocalDate.now())
+                            : 0);
+            java.time.OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
+                    ? l.getLastUpdatedAt() : l.getUpdatedAt();
+            boolean reraValid = l.getReraNumber() != null
+                    && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
+            return new ListingController.ListingResponse(
+                    l.getId(), l.getListingNumber(), l.getDisplayId(),
+                    l.getStatus(), l.getPropertyType(), l.getTitle(),
+                    l.getLocality(), l.getPrice(), l.getDescription(),
+                    l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
+                    l.getLandAreaUnit(), l.getBuiltAreaUnit(),
+                    l.getLatitude(), l.getLongitude(),
+                    l.isAddressConfirmed(), null /* rejectionReason always null for public */,
+                    l.getCreatedAt(), l.getUpdatedAt(),
+                    0, null, l.getVideoUrl(),
+                    l.getReraNumber(), l.getListingPurpose(),
+                    l.getCarpetArea(), l.getCarpetAreaUnit(),
+                    l.getFloorNumber(), l.getTotalFloors(),
+                    l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
+                    l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
+                    l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
+                    l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
+                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid);
+        });
     }
 
     // ==================== GET /{id} — happy path (LIVE listing) ====================

@@ -30,6 +30,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import org.mockito.invocation.InvocationOnMock;
 
 /**
  * WebMvcTest for ListingController (dealer CRUD endpoints).
@@ -70,13 +71,55 @@ class ListingControllerTest {
     private ListingImageRepository listingImageRepository;
 
     @MockitoBean
+    private ListingResponseMapper listingResponseMapper;
+
+    @MockitoBean
     private UserRoleService userRoleService;
 
     @BeforeEach
     void setUp() {
-        reset(listingService, listingRepository, listingImageRepository, userRoleService);
+        reset(listingService, listingRepository, listingImageRepository, listingResponseMapper, userRoleService);
         // Default stub: no images; individual tests override when imageCount matters.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
+        // Delegate mapper to a real-ish implementation so existing response-field assertions keep working.
+        when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
+            Listing l = inv.getArgument(0);
+            int imageCount = (int) listingImageRepository.countByListingId(l.getId());
+            String firstImageUrl = listingImageRepository
+                    .findByListingIdOrderByPositionAsc(l.getId())
+                    .stream().findFirst().map(ListingImage::getUrl).orElse(null);
+            boolean reraValid = l.getReraNumber() != null
+                    && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
+            int daysOnMarket = l.getFirstPublishedAt() != null
+                    ? (int) java.time.temporal.ChronoUnit.DAYS.between(
+                            l.getFirstPublishedAt().toLocalDate(), java.time.LocalDate.now())
+                    : (l.getCreatedAt() != null
+                            ? (int) java.time.temporal.ChronoUnit.DAYS.between(
+                                    l.getCreatedAt().toLocalDate(), java.time.LocalDate.now())
+                            : 0);
+            java.time.OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
+                    ? l.getLastUpdatedAt() : l.getUpdatedAt();
+            return new ListingController.ListingResponse(
+                    l.getId(), l.getListingNumber(), l.getDisplayId(),
+                    l.getStatus(), l.getPropertyType(), l.getTitle(),
+                    l.getLocality(), l.getPrice(), l.getDescription(),
+                    l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
+                    l.getLandAreaUnit(), l.getBuiltAreaUnit(),
+                    l.getLatitude(), l.getLongitude(),
+                    l.isAddressConfirmed(), l.getRejectionReason(),
+                    l.getCreatedAt(), l.getUpdatedAt(),
+                    imageCount, firstImageUrl, l.getVideoUrl(),
+                    l.getReraNumber(), l.getListingPurpose(),
+                    l.getCarpetArea(), l.getCarpetAreaUnit(),
+                    l.getFloorNumber(), l.getTotalFloors(),
+                    l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
+                    l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
+                    l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
+                    l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
+                    l.getFirstPublishedAt(), l.getPossessionStatus(),
+                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid);
+        });
     }
 
     // ==================== Test 1: POST creates draft -> 201 ====================
