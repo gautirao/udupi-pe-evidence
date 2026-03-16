@@ -1,7 +1,6 @@
 package com.example.realestate.security;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -22,8 +21,8 @@ public class UserRoleService {
 
     /**
      * Returns the app_role for the given user, or empty if no role row exists.
+     * No @Transactional — single SELECT reuses the enclosing transaction if present.
      */
-    @Transactional(readOnly = true)
     public Optional<String> getUserRole(UUID userId) {
         return userRoleRepository.findUserRole(userId);
     }
