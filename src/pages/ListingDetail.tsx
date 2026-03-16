@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
 import { SimilarListings } from '@/components/listing/SimilarListings';
+import { ListingTransparencyCard, PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 
@@ -38,27 +39,17 @@ const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }
 function useListingById(id: string | undefined) {
   return useQuery({
     queryKey: ['listing', id],
-    queryFn: async () => {
-      if (!id) return null;
-      
-      const { data, error } = await supabase
-        .from('property_listings')
-        .select('*, raw_posts(images)')
-        .eq('id', id)
-        .maybeSingle();
-      
-      if (error) throw error;
-      if (!data) return null;
-      
-      // Transform to include images
-      const rawImages = (data.raw_posts as { images?: PropertyImage[] } | null)?.images;
-      const images: PropertyImage[] = Array.isArray(rawImages) ? rawImages : [];
-      
-      return {
-        ...data,
-        images,
-      } as PropertyListing & { images: PropertyImage[] };
-    },
+    queryFn: () =>
+      api.get<PropertyListing & { images: PropertyImage[] }>(`/api/public/listings/${id}`),
+    enabled: !!id,
+  });
+}
+
+function useListingPriceHistory(id: string | undefined) {
+  return useQuery({
+    queryKey: ['listing-price-history', id],
+    queryFn: () =>
+      api.get<PriceHistoryEntry[]>(`/api/public/listings/${id}/price-history`),
     enabled: !!id,
   });
 }
@@ -70,7 +61,8 @@ export default function ListingDetail() {
   const isPreview = searchParams.get('preview') === 'true';
   const { toast } = useToast();
   const { data: listing, isLoading, error } = useListingById(id);
-  
+  const { data: priceHistory = [] } = useListingPriceHistory(id);
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
   const [copied, setCopied] = useState(false);
@@ -540,6 +532,15 @@ export default function ListingDetail() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Listing Transparency Card (RE-94) */}
+            <ListingTransparencyCard
+              daysOnMarket={listing.daysOnMarket}
+              backOnMarket={listing.backOnMarket}
+              lastUpdatedAt={listing.lastUpdatedAt}
+              isSuspectedDuplicate={listing.isSuspectedDuplicate}
+              priceHistory={priceHistory}
+            />
 
             {/* Land listings show location panel above photos — skip here */}
             {listing.property_type !== 'land' && (

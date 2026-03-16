@@ -20,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,6 +39,8 @@ public class ListingController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingController.class);
     private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
+    /** Number of days within which a back-to-market listing is still badged. */
+    private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
 
     private final ListingService listingService;
     private final ListingRepository listingRepository;
@@ -238,6 +242,22 @@ public class ListingController {
                 .stream().findFirst()
                 .map(ListingImage::getUrl)
                 .orElse(null);
+
+        // daysOnMarket: days since first publish; fall back to createdAt when never published
+        LocalDate referenceDate = l.getFirstPublishedAt() != null
+                ? l.getFirstPublishedAt().toLocalDate()
+                : (l.getCreatedAt() != null ? l.getCreatedAt().toLocalDate() : LocalDate.now());
+        int daysOnMarket = (int) ChronoUnit.DAYS.between(referenceDate, LocalDate.now());
+
+        // backOnMarket: true only when back_to_market_at is within the last BACK_ON_MARKET_WINDOW_DAYS days
+        boolean backOnMarket = l.getBackToMarketAt() != null
+                && l.getBackToMarketAt().isAfter(OffsetDateTime.now().minusDays(BACK_ON_MARKET_WINDOW_DAYS));
+
+        // lastUpdatedAt: use explicit transparency column; fall back to updatedAt
+        OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
+                ? l.getLastUpdatedAt()
+                : l.getUpdatedAt();
+
         return new ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
@@ -255,7 +275,8 @@ public class ListingController {
                 l.getFurnishingStatus(), l.getWashrooms(), l.getParkingCount(),
                 l.getRoadFrontageFt(), l.getCommercialUsage(), l.getNumberOfUnits(),
                 l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
-                l.getSellerType());
+                l.getSellerType(),
+                daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt());
     }
 
     // ===== DTOs =====
@@ -371,7 +392,12 @@ public class ListingController {
             Long monthlyRent,
             Integer securityDepositMonths,
             Integer lockInMonths,
-            String sellerType
+            String sellerType,
+            // Transparency fields (RE-94)
+            int daysOnMarket,
+            boolean backOnMarket,
+            OffsetDateTime lastUpdatedAt,
+            OffsetDateTime firstPublishedAt
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

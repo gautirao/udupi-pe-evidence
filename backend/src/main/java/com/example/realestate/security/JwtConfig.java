@@ -37,6 +37,8 @@ public class JwtConfig {
                         // permitAll() here so Spring Security does not apply JWT validation;
                         // the actual auth check is enforced by IngestionApiKeyFilter.
                         .requestMatchers("/api/ingestion/ingest-posts").permitAll()
+                        // Public listing endpoints — no auth required (RE-104)
+                        .requestMatchers(HttpMethod.GET, "/api/public/listings/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));

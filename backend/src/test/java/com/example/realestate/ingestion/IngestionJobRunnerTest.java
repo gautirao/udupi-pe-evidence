@@ -8,6 +8,7 @@ import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.listing.ListingService;
+import com.example.realestate.listing.PriceChangeLogRepository;
 import com.example.realestate.listing.ProximityDuplicateService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,9 @@ class IngestionJobRunnerTest {
     @Mock
     private ProximityDuplicateService proximityDuplicateService;
 
+    @Mock
+    private PriceChangeLogRepository priceChangeLogRepository;
+
     private RawPostService rawPostService;
     private ClassificationService classificationService;
     private ListingService listingService;
@@ -58,7 +62,7 @@ class IngestionJobRunnerTest {
         listingService = new ListingService(
                 listingRepository, rawPostRepository, geocodingPort,
                 new ObjectMapper(), applicationEventPublisher,
-                proximityDuplicateService);
+                proximityDuplicateService, priceChangeLogRepository);
         jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingService, 10);
     }
 

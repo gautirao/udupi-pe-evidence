@@ -38,6 +38,16 @@ vi.mock('@/components/listing/SimilarListings', () => ({
   SimilarListings: () => React.createElement('div', { 'data-testid': 'similar-listings' }),
 }));
 
+vi.mock('@/components/listing/ListingTransparencyCard', () => ({
+  ListingTransparencyCard: (props: Record<string, unknown>) =>
+    React.createElement('div', {
+      'data-testid': 'listing-transparency-card',
+      'data-days': props.daysOnMarket,
+      'data-back': String(props.backOnMarket),
+      'data-duplicate': String(props.isSuspectedDuplicate),
+    }),
+}));
+
 vi.mock('@/components/poi/NearbyPois', () => ({
   NearbyPois: () => React.createElement('div', { 'data-testid': 'nearby-pois' }),
 }));
@@ -50,16 +60,12 @@ vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 
-// Mock supabase — useListingById calls supabase internally via useQuery
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          maybeSingle: vi.fn(),
-        })),
-      })),
-    })),
+// Mock api — useListingById and useListingPriceHistory now call api.get;
+// cache is pre-populated in tests so queryFn is never reached, but the mock
+// prevents accidental real fetch calls if cache misses in future tests.
+vi.mock('@/lib/api', () => ({
+  api: {
+    get: vi.fn(() => Promise.resolve(null)),
   },
 }));
 
@@ -112,6 +118,8 @@ function renderWithListing(listing: ReturnType<typeof makeListing> | null, loadi
   if (listing !== null) {
     queryClient.setQueryData(['listing', 'listing-123'], listing);
   }
+  // Pre-populate price history cache with empty array (no price changes by default)
+  queryClient.setQueryData(['listing-price-history', 'listing-123'], []);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -273,5 +281,34 @@ describe('ListingDetail — display ID (RE-83)', () => {
   it('does NOT show display ID when listing_number is absent', () => {
     renderWithListing(makeListing());
     expect(screen.queryByText(/PROP-/)).not.toBeInTheDocument();
+  });
+});
+
+// ── F. ListingTransparencyCard integration (RE-94) ──────────────
+
+describe('ListingDetail — ListingTransparencyCard (RE-94)', () => {
+  it('renders the transparency card for a listing with daysOnMarket', () => {
+    renderWithListing(makeListing({ daysOnMarket: 5 }));
+    const card = screen.getByTestId('listing-transparency-card');
+    expect(card).toBeInTheDocument();
+    expect(card.getAttribute('data-days')).toBe('5');
+  });
+
+  it('renders transparency card even when all new fields are absent (card renders null internally)', () => {
+    // The card is always rendered by ListingDetail; it returns null internally when nothing to show
+    renderWithListing(makeListing());
+    expect(screen.getByTestId('listing-transparency-card')).toBeInTheDocument();
+  });
+
+  it('passes backOnMarket flag to the transparency card', () => {
+    renderWithListing(makeListing({ backOnMarket: true }));
+    const card = screen.getByTestId('listing-transparency-card');
+    expect(card.getAttribute('data-back')).toBe('true');
+  });
+
+  it('passes isSuspectedDuplicate flag to the transparency card', () => {
+    renderWithListing(makeListing({ isSuspectedDuplicate: true }));
+    const card = screen.getByTestId('listing-transparency-card');
+    expect(card.getAttribute('data-duplicate')).toBe('true');
   });
 });
