@@ -4,6 +4,7 @@ spring:
     username: ${SUPABASE_DB_USER}
     password: ${SUPABASE_DB_PASSWORD}
     hikari:
+      pool-name: udupi-pool
       maximum-pool-size: 10
       minimum-idle: 2
       data-source-properties:
@@ -55,10 +56,16 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health, info, metrics
   endpoint:
     health:
       show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name:udupi-property-explorer}
+  info:
+    env:
+      enabled: false
 
 server:
   port: ${SERVER_PORT:8085}
