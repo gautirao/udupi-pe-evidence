@@ -1051,9 +1051,6 @@ class ListingServiceTest {
 
         // Event must be published (notification is now async/decoupled)
         verify(applicationEventPublisher).publishEvent(any(ListingService.ListingApprovedEvent.class));
-
-        // insertNotification must NEVER be called directly — this is the critical decoupling assertion
-        verify(listingRepository, never()).insertNotification(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -1080,9 +1077,6 @@ class ListingServiceTest {
 
         // Event must be published (notification is now async/decoupled)
         verify(applicationEventPublisher).publishEvent(any(ListingService.ListingRejectedEvent.class));
-
-        // insertNotification must NEVER be called directly — this is the critical decoupling assertion
-        verify(listingRepository, never()).insertNotification(any(), any(), any(), any(), any());
     }
 
     // --- RE-69: lat/lng persisted on location confirmation ---

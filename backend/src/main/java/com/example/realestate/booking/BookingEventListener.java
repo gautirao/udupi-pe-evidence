@@ -3,6 +3,7 @@ package com.example.realestate.booking;
 import com.example.realestate.listing.Listing;
 import com.example.realestate.listing.ListingRepository;
 import com.example.realestate.notification.EmailService;
+import com.example.realestate.notification.NotificationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
@@ -29,13 +30,18 @@ public class BookingEventListener {
     private static final Logger log = LoggerFactory.getLogger(BookingEventListener.class);
 
     private final ListingRepository listingRepository;
+    private final NotificationRepository notificationRepository;
     private final ObjectMapper objectMapper;
     private final EmailService emailService;
     private final ViewingRequestRepository viewingRequestRepository;
 
-    public BookingEventListener(ListingRepository listingRepository, ObjectMapper objectMapper,
-                                EmailService emailService, ViewingRequestRepository viewingRequestRepository) {
+    public BookingEventListener(ListingRepository listingRepository,
+                                NotificationRepository notificationRepository,
+                                ObjectMapper objectMapper,
+                                EmailService emailService,
+                                ViewingRequestRepository viewingRequestRepository) {
         this.listingRepository = listingRepository;
+        this.notificationRepository = notificationRepository;
         this.objectMapper = objectMapper;
         this.emailService = emailService;
         this.viewingRequestRepository = viewingRequestRepository;
@@ -48,7 +54,7 @@ public class BookingEventListener {
         ViewingRequest booking = event.booking();
         try {
             String metadata = buildMetadata(booking);
-            listingRepository.insertNotification(
+            notificationRepository.insertNotification(
                     booking.getDealerId(),
                     "viewing_requested",
                     "New viewing request",
@@ -72,7 +78,7 @@ public class BookingEventListener {
         ViewingRequest booking = event.booking();
         try {
             String metadata = buildMetadata(booking);
-            listingRepository.insertNotification(
+            notificationRepository.insertNotification(
                     booking.getRequesterId(),
                     "viewing_confirmed",
                     "Viewing confirmed",
@@ -93,7 +99,7 @@ public class BookingEventListener {
         ViewingRequest booking = event.booking();
         try {
             String metadata = buildMetadata(booking);
-            listingRepository.insertNotification(
+            notificationRepository.insertNotification(
                     booking.getRequesterId(),
                     "viewing_declined",
                     "Viewing declined",
@@ -118,7 +124,7 @@ public class BookingEventListener {
             boolean cancelledByUser = "user".equals(booking.getCancelledBy());
             java.util.UUID recipientId = cancelledByUser ? booking.getDealerId() : booking.getRequesterId();
 
-            listingRepository.insertNotification(
+            notificationRepository.insertNotification(
                     recipientId,
                     "viewing_cancelled",
                     "Viewing cancelled",

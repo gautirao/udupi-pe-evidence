@@ -5,7 +5,6 @@ import com.example.realestate.insights.SavedAreaRepository;
 import com.example.realestate.listing.ListingService.ListingApprovedEvent;
 import com.example.realestate.listing.ListingService.ListingRejectedEvent;
 import com.example.realestate.listing.ListingService.NewListingInAreaEvent;
-import com.example.realestate.listing.ListingRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
@@ -27,17 +26,15 @@ public class NotificationEventListener {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationEventListener.class);
 
-    private final ListingRepository listingRepository;
     private final ObjectMapper objectMapper;
     private final SavedAreaRepository savedAreaRepository;
     private final NotificationRepository notificationRepository;
     private final EmailService emailService;
 
-    public NotificationEventListener(ListingRepository listingRepository, ObjectMapper objectMapper,
+    public NotificationEventListener(ObjectMapper objectMapper,
                                       SavedAreaRepository savedAreaRepository,
                                       NotificationRepository notificationRepository,
                                       EmailService emailService) {
-        this.listingRepository = listingRepository;
         this.objectMapper = objectMapper;
         this.savedAreaRepository = savedAreaRepository;
         this.notificationRepository = notificationRepository;
@@ -52,7 +49,7 @@ public class NotificationEventListener {
             ObjectNode metadata = objectMapper.createObjectNode();
             metadata.put("listing_id", event.listing().getId().toString());
             String metadataJson = objectMapper.writeValueAsString(metadata);
-            listingRepository.insertNotification(
+            notificationRepository.insertNotification(
                     event.ownerId(),
                     "listing_approved",
                     "Listing approved",
@@ -141,7 +138,7 @@ public class NotificationEventListener {
             metadata.put("listing_id", event.listing().getId().toString());
             metadata.put("reason", event.reason());
             String metadataJson = objectMapper.writeValueAsString(metadata);
-            listingRepository.insertNotification(
+            notificationRepository.insertNotification(
                     event.ownerId(),
                     "listing_rejected",
                     "Listing rejected",
