@@ -17,6 +17,11 @@ Checkpoint is the single source of truth.
 - Auto-advance to next PR after merge — emit checkpoint and continue without pausing
 - Always emit checkpoint before stopping
 
+**This skill is a pure orchestrator — it NEVER writes, patches, or edits code itself.**
+All code changes are delegated exclusively to engineer agents (`backend-engineer`, `frontend-engineer`, `supabase-engineer`) via the Task tool.
+When a reviewer (`code-reviewer`, `security-reviewer`) returns REQUEST CHANGES, the orchestrator MUST re-invoke the relevant engineer agent with the reviewer's findings — it must NOT apply the fix inline, interpret the diff, or make edits directly.
+If the orchestrator catches itself about to write or edit code, STOP and invoke the engineer agent instead.
+
 ---
 
 ## Sprint Start (Once per sprint, not per PR)
@@ -64,6 +69,14 @@ For each Linear issue (PR N):
    > "Review the codebase and identify risks for this planned change: [issue description]. Acceptance criteria: [AC from enriched spec]. The feature does not exist yet."
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
+
+   **Reviewer feedback cycle (HARD RULE — orchestrator must not break this):**
+   When `code-reviewer` or `security-reviewer` returns REQUEST CHANGES:
+   - The orchestrator MUST re-invoke the **engineer agent** (Task tool) with the reviewer's exact findings attached.
+   - The orchestrator MUST NOT apply the fix itself, even for "trivial" or "one-line" changes.
+   - After the engineer fixes, re-invoke `code-reviewer` or `security-reviewer` once for a second pass.
+   - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
+   - There are no exceptions to this rule — inline fixes by the orchestrator are always a violation.
 
 5. **E2E validation** — E2E is handled by the pre-push git hook (see `ROUTE_AND_RUN` Step 3). No explicit E2E step is needed here — it runs automatically during `git push` in step 6.
 
