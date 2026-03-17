@@ -114,7 +114,7 @@ test('D4 — unauthenticated user cannot access /broker/dashboard', async ({ pag
 
   // ProtectedRoute waits for Supabase auth to initialise, then redirects.
   // Allow up to 10 s for the redirect to /auth to complete.
-  await expect(page).toHaveURL(/\/(auth)?/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/auth(\?.*)?$/, { timeout: 10_000 });
 
   // Must not show the broker dashboard content
   await expect(

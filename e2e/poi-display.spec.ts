@@ -14,7 +14,7 @@
  * All tests skip gracefully when SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD are not set.
  *
  * Implementation notes:
- *   - Supabase property_listings REST endpoint is intercepted to inject a
+ *   - Spring backend public listing endpoint is intercepted to inject a
  *     deterministic listing fixture (avoids live-DB dependency).
  *   - Spring backend POI endpoint is intercepted separately to control the
  *     POI list returned for each test.
@@ -32,18 +32,16 @@ const FIXTURE_LISTING_ID = 'e2e-poi-listing-fixture';
 /** Fixture listing with coordinates so NearbyPois can attempt to display. */
 const LISTING_FIXTURE = {
   id: FIXTURE_LISTING_ID,
-  raw_post_id: null,
-  property_type: 'land',
+  propertyType: 'land',
   status: 'LIVE',
   title: 'E2E POI Test Plot',
   locality: 'Udupi',
   price: 5_000_000,
-  price_paise: 500_000_000,
   price_unit: 'INR',
-  land_area: 10,
-  land_area_unit: 'cent',
-  built_area: null,
-  built_area_unit: null,
+  landArea: 10,
+  landAreaUnit: 'cent',
+  builtArea: null,
+  builtAreaUnit: null,
   bedrooms: null,
   bathrooms: null,
   contact_info: null,
@@ -51,16 +49,34 @@ const LISTING_FIXTURE = {
   description: null,
   latitude: 13.3409,
   longitude: 74.7421,
-  area_key: 'udupi',
-  area_label: 'Udupi',
   confidence_score: 90,
-  language_detected: null,
   price_per_cent_paise: null,
-  is_valid: true,
-  is_duplicate: false,
-  created_at: '2026-01-01T00:00:00+00:00',
-  updated_at: '2026-01-01T00:00:00+00:00',
-  raw_posts: null,
+  createdAt: '2026-01-01T00:00:00+00:00',
+  updatedAt: '2026-01-01T00:00:00+00:00',
+  // Required ListingResponse fields
+  addressConfirmed: true,
+  imageCount: 0,
+  firstImageUrl: null,
+  rejectionReason: null,
+  videoUrl: null,
+  reraNumber: null,
+  listingPurpose: null,
+  sellerType: null,
+  carpetArea: null,
+  carpetAreaUnit: null,
+  floorNumber: null,
+  totalFloors: null,
+  furnishingStatus: null,
+  washrooms: null,
+  parkingCount: null,
+  roadFrontageFt: null,
+  commercialUsage: null,
+  numberOfUnits: null,
+  monthlyRent: null,
+  securityDepositMonths: null,
+  lockInMonths: null,
+  // Required by PublicListingDetail interface in ListingDetail.tsx
+  images: [],
 };
 
 /** Two approved POIs covering two distinct categories. */
@@ -82,9 +98,9 @@ async function loginAsUser(page: import('@playwright/test').Page): Promise<void>
   await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
 }
 
-/** Intercept Supabase REST to return a single deterministic listing fixture. */
+/** Intercept Spring backend public listing endpoint to return a deterministic listing fixture. */
 async function stubListing(page: import('@playwright/test').Page): Promise<void> {
-  await page.route('**/rest/v1/property_listings*', async (route) => {
+  await page.route(`**/api/public/listings/${FIXTURE_LISTING_ID}`, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
       return;
@@ -92,8 +108,7 @@ async function stubListing(page: import('@playwright/test').Page): Promise<void>
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      headers: { 'Content-Range': '0-0/1' },
-      body: JSON.stringify([LISTING_FIXTURE]),
+      body: JSON.stringify(LISTING_FIXTURE),
     });
   });
 }

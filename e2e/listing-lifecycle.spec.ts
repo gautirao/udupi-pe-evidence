@@ -8,7 +8,7 @@
  * remains green in CI environments where creds are absent.
  *
  * Tests:
- *   L1 — created listing appears in dealer /dealer/listings page
+ *   L1 — created listing appears in broker /broker/listings page
  *   L2 — listing detail page loads without error
  *   L3 — "Request Viewing" button visible when listing is LIVE
  *   L4 — duplicate booking is rejected with 409
@@ -51,8 +51,8 @@ function readListingFixture(): ListingFixture | null {
 const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
 
-const dealerEmail = process.env.DEALER_EMAIL ?? '';
-const dealerPassword = process.env.DEALER_PASSWORD ?? '';
+const dealerEmail    = process.env.BROKER_EMAIL    ?? process.env.DEALER_EMAIL    ?? '';
+const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 
@@ -88,12 +88,12 @@ async function loginAsUser(page: import('@playwright/test').Page): Promise<void>
 }
 
 // ---------------------------------------------------------------------------
-// L1 — Created listing appears in dealer /dealer/listings page
+// L1 — Created listing appears in broker /broker/listings page
 // ---------------------------------------------------------------------------
-test('L1 — created listing appears in dealer /dealer/listings', async ({ page }) => {
+test('L1 — created listing appears in broker /broker/listings', async ({ page }) => {
   test.skip(
     !hasDealerCreds,
-    'DEALER_EMAIL / DEALER_PASSWORD not set — skipping L1',
+    'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — skipping L1',
   );
 
   const fixture = readListingFixture();
@@ -109,7 +109,7 @@ test('L1 — created listing appears in dealer /dealer/listings', async ({ page 
   await page.goto('/dealer/listings');
   await page.waitForLoadState('domcontentloaded');
 
-  await expect(page).toHaveURL(/\/broker\/listings/, { timeout: 8_000 });
+  await expect(page).toHaveURL(/\/dealer\/listings/, { timeout: 8_000 });
 
   // ProtectedRoute shows a "Loading..." paragraph while Supabase auth resolves.
   // Wait for it to disappear before asserting listing content.
@@ -127,7 +127,7 @@ test('L1 — created listing appears in dealer /dealer/listings', async ({ page 
 
   if (!idVisible && !titleVisible) {
     throw new Error(
-      `L1: Neither the listing ID (${id}) nor the test title was visible on /dealer/listings`,
+      `L1: Neither the listing ID (${id}) nor the test title was visible on /broker/listings`,
     );
   }
 });
@@ -143,7 +143,7 @@ test('L2 — listing detail page loads without error', async ({ page }) => {
   );
   test.skip(
     !hasDealerCreds,
-    'DEALER_EMAIL / DEALER_PASSWORD not set — /listing/:id requires auth; skipping L2',
+    'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — /listing/:id requires auth; skipping L2',
   );
 
   const { id } = fixture!;
