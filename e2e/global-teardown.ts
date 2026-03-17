@@ -142,12 +142,12 @@ export default async function globalTeardown(): Promise<void> {
     'Test listing may leak if listing is not REJECTED.',
   );
 
-  const dealerEmail = process.env.DEALER_EMAIL ?? '';
-  const dealerPassword = process.env.DEALER_PASSWORD ?? '';
+  const dealerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+  const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
   if (!dealerEmail || !dealerPassword) {
     console.log(
-      `[global-teardown] DEALER_EMAIL / DEALER_PASSWORD not set — cannot delete listing ${listingId}. ` +
+      `[global-teardown] BROKER_EMAIL / DEALER_EMAIL not set — cannot delete listing ${listingId}. ` +
       'Remove it manually.',
     );
     // Still remove the ID file so stale data doesn't affect future runs.
