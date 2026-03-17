@@ -78,17 +78,16 @@ import ListingDetail from '../ListingDetail';
 function makeListing(overrides = {}) {
   return {
     id: 'listing-123',
-    property_type: 'land',
+    propertyType: 'land',
     title: 'Test Land Plot',
     locality: 'Udupi',
     price: 500000,
     price_unit: 'INR',
     price_per_cent_paise: 150000, // ₹1,500 / cent
-    price_paise: null,
-    built_area: null,
-    built_area_unit: null,
-    land_area: 10,
-    land_area_unit: 'cent',
+    builtArea: null,
+    builtAreaUnit: null,
+    landArea: 10,
+    landAreaUnit: 'cent',
     bedrooms: null,
     bathrooms: null,
     description: 'A nice plot',
@@ -97,13 +96,31 @@ function makeListing(overrides = {}) {
     confidence_score: 85,
     latitude: 13.34,
     longitude: 74.74,
-    area_key: 'IN|Karnataka|Udupi|Udupi',
-    area_label: 'Udupi',
-    is_valid: true,
-    is_duplicate: false,
     status: 'LIVE',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    // Required by ListingResponse but not exercised by these tests
+    addressConfirmed: false,
+    imageCount: 0,
+    firstImageUrl: null,
+    rejectionReason: null,
+    videoUrl: null,
+    reraNumber: null,
+    listingPurpose: null,
+    carpetArea: null,
+    carpetAreaUnit: null,
+    floorNumber: null,
+    totalFloors: null,
+    furnishingStatus: null,
+    washrooms: null,
+    parkingCount: null,
+    roadFrontageFt: null,
+    commercialUsage: null,
+    numberOfUnits: null,
+    monthlyRent: null,
+    securityDepositMonths: null,
+    lockInMonths: null,
+    sellerType: null,
     images: [],
     ...overrides,
   };
@@ -142,7 +159,7 @@ beforeEach(() => {
 describe('ListingDetail — price-per-unit (PR-11.4)', () => {
   it('shows price-per-cent for land listings with price_per_cent_paise', () => {
     renderWithListing(makeListing({
-      property_type: 'land',
+      propertyType: 'land',
       price_per_cent_paise: 150000, // ₹1,500 / cent
     }));
     expect(screen.getByText(/1,500.*cent/)).toBeInTheDocument();
@@ -150,10 +167,10 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
 
   it('shows price-per-sqft for apartment with built_area (sqft) + price', () => {
     renderWithListing(makeListing({
-      property_type: 'apartment',
+      propertyType: 'apartment',
       price: 3200000,
-      built_area: 1000,
-      built_area_unit: 'sqft',
+      builtArea: 1000,
+      builtAreaUnit: 'sqft',
       price_per_cent_paise: null,
     }));
     // ₹3,200,000 / 1000 sqft = ₹3,200 / sqft
@@ -162,10 +179,10 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
 
   it('shows price-per-sqft for house with built_area (sqft) + price', () => {
     renderWithListing(makeListing({
-      property_type: 'house',
+      propertyType: 'house',
       price: 2000000,
-      built_area: 800,
-      built_area_unit: 'sqft',
+      builtArea: 800,
+      builtAreaUnit: 'sqft',
       price_per_cent_paise: null,
     }));
     // ₹2,000,000 / 800 sqft = ₹2,500 / sqft
@@ -174,7 +191,7 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
 
   it('does NOT show per-unit line for land without price_per_cent_paise', () => {
     renderWithListing(makeListing({
-      property_type: 'land',
+      propertyType: 'land',
       price_per_cent_paise: null,
     }));
     expect(screen.queryByText(/\/\s*cent/)).not.toBeInTheDocument();
@@ -182,8 +199,8 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
 
   it('does NOT show per-sqft for apartment without built_area', () => {
     renderWithListing(makeListing({
-      property_type: 'apartment',
-      built_area: null,
+      propertyType: 'apartment',
+      builtArea: null,
       price_per_cent_paise: null,
     }));
     expect(screen.queryByText(/\/\s*sqft/)).not.toBeInTheDocument();
@@ -191,10 +208,10 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
 
   it('does NOT show per-sqft when built_area_unit is not sqft', () => {
     renderWithListing(makeListing({
-      property_type: 'apartment',
+      propertyType: 'apartment',
       price: 2000000,
-      built_area: 200,
-      built_area_unit: 'sqm', // not sqft
+      builtArea: 200,
+      builtAreaUnit: 'sqm', // not sqft
       price_per_cent_paise: null,
     }));
     expect(screen.queryByText(/\/\s*sqft/)).not.toBeInTheDocument();
@@ -274,7 +291,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
 
 describe('ListingDetail — display ID (RE-83)', () => {
   it('shows formatted PROP-XXXXX when listing_number is present', () => {
-    renderWithListing(makeListing({ listing_number: 42 }));
+    renderWithListing(makeListing({ listingNumber: 42 }));
     expect(screen.getByText('PROP-00042')).toBeInTheDocument();
   });
 

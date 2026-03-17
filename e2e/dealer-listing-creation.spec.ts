@@ -206,7 +206,7 @@ test('DL1 — full dealer listing creation journey', async ({ page }) => {
   await page.getByRole('button', { name: /save & continue/i }).click();
 
   // Wait for navigation to EditListing URL
-  await page.waitForURL(/\/dealer\/listings\/.+\/edit/, { timeout: 30_000 });
+  await page.waitForURL(/\/broker\/listings\/.+\/edit/, { timeout: 30_000 });
 
   // Capture listing ID from URL
   const urlMatch = page.url().match(/\/listings\/([^/]+)\/edit/);
@@ -363,7 +363,7 @@ test('DL1 — full dealer listing creation journey', async ({ page }) => {
   await submitButton.click();
 
   // After submission the UI navigates to /dealer/listings
-  await page.waitForURL(/\/dealer\/listings$/, { timeout: 30_000 });
+  await page.waitForURL(/\/broker\/listings$/, { timeout: 30_000 });
 
   // The newly submitted listing should appear with "Under Review" badge
   // Use .first() — dealer may have other PENDING_REVIEW listings visible on the same page

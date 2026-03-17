@@ -109,7 +109,7 @@ test('L1 — created listing appears in dealer /dealer/listings', async ({ page 
   await page.goto('/dealer/listings');
   await page.waitForLoadState('domcontentloaded');
 
-  await expect(page).toHaveURL(/\/dealer\/listings/, { timeout: 8_000 });
+  await expect(page).toHaveURL(/\/broker\/listings/, { timeout: 8_000 });
 
   // ProtectedRoute shows a "Loading..." paragraph while Supabase auth resolves.
   // Wait for it to disappear before asserting listing content.

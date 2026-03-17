@@ -48,12 +48,12 @@ test('D1 — dealer can access /dealer/dashboard', async ({ page }) => {
   await page.goto('/dealer/dashboard');
   await page.waitForLoadState('domcontentloaded');
 
-  // Must not redirect away from the dealer dashboard
-  await expect(page).toHaveURL(/\/dealer\/dashboard/, { timeout: 8_000 });
+  // Must not redirect away from the broker dashboard
+  await expect(page).toHaveURL(/\/broker\/dashboard/, { timeout: 8_000 });
 
   // Page heading must be present
   await expect(
-    page.getByRole('heading', { name: /dealer dashboard/i }),
+    page.getByRole('heading', { name: /broker dashboard/i }),
   ).toBeVisible({ timeout: 8_000 });
 
   // Quick action buttons must be present
@@ -71,7 +71,7 @@ test('D2 — dealer can access /dealer/listings', async ({ page }) => {
   await page.goto('/dealer/listings');
   await page.waitForLoadState('domcontentloaded');
 
-  await expect(page).toHaveURL(/\/dealer\/listings$/, { timeout: 8_000 });
+  await expect(page).toHaveURL(/\/broker\/listings$/, { timeout: 8_000 });
 
   // "My Listings" heading must be present
   await expect(
@@ -89,7 +89,7 @@ test('D3 — dealer can access /dealer/bookings', async ({ page }) => {
   await page.goto('/dealer/bookings');
   await page.waitForLoadState('domcontentloaded');
 
-  await expect(page).toHaveURL(/\/dealer\/bookings/, { timeout: 8_000 });
+  await expect(page).toHaveURL(/\/broker\/bookings/, { timeout: 8_000 });
 
   // "Booking Requests" heading must be present
   await expect(
