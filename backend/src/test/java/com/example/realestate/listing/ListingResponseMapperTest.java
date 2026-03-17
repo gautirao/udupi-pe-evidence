@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.listing.api.ListingResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -39,7 +40,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("REJECTED");
         l.setRejectionReason("Blurry images");
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.rejectionReason()).isEqualTo("Blurry images");
     }
@@ -51,7 +52,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setRejectionReason("Internal moderation note");
 
-        ListingController.ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l);
 
         assertThat(response.rejectionReason()).isNull();
     }
@@ -61,7 +62,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setRejectionReason(null);
 
-        ListingController.ListingResponse response = mapper.toPublicResponse(l);
+        ListingResponse response = mapper.toPublicResponse(l);
 
         assertThat(response.rejectionReason()).isNull();
     }
@@ -72,7 +73,7 @@ class ListingResponseMapperTest {
     void toResponse_firstImageUrlIsNullWhenNoImages() {
         Listing l = buildListing("DRAFT");
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.firstImageUrl()).isNull();
         assertThat(response.imageCount()).isZero();
@@ -89,7 +90,7 @@ class ListingResponseMapperTest {
         when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId()))
                 .thenReturn(List.of(img));
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.firstImageUrl()).isEqualTo("https://example.com/photo.jpg");
         assertThat(response.imageCount()).isEqualTo(1);
@@ -102,7 +103,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setFirstPublishedAt(OffsetDateTime.now().minusDays(10));
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.daysOnMarket()).isEqualTo(10);
     }
@@ -115,7 +116,7 @@ class ListingResponseMapperTest {
         l.setFirstPublishedAt(null);
         l.setCreatedAt(OffsetDateTime.now().minusDays(7));
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.daysOnMarket()).isEqualTo(7);
     }
@@ -129,7 +130,7 @@ class ListingResponseMapperTest {
         l.setLocality("Manipal");
         l.setStatus("DRAFT");
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.id()).isEqualTo(l.getId());
         assertThat(response.status()).isEqualTo("DRAFT");
@@ -144,7 +145,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("DRAFT");
         l.setReraNumber("PRM/KA/2023/0042");
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.reraValid()).isTrue();
     }
@@ -156,7 +157,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("DRAFT");
         l.setReraNumber("INVALID-RERA");
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.reraValid()).isFalse();
     }
@@ -168,7 +169,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("DRAFT");
         l.setReraNumber(null);
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.reraValid()).isFalse();
     }
@@ -181,7 +182,7 @@ class ListingResponseMapperTest {
         l.setFirstPublishedAt(null);
         l.setCreatedAt(null);
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.daysOnMarket()).isEqualTo(0);
     }
@@ -193,7 +194,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setBackToMarketAt(OffsetDateTime.now().minusDays(10));
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.backOnMarket()).isTrue();
     }
@@ -205,7 +206,7 @@ class ListingResponseMapperTest {
         Listing l = buildListing("LIVE");
         l.setBackToMarketAt(OffsetDateTime.now().minusDays(31));
 
-        ListingController.ListingResponse response = mapper.toResponse(l);
+        ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.backOnMarket()).isFalse();
     }

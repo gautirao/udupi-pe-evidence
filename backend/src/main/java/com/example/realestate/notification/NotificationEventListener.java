@@ -2,9 +2,9 @@ package com.example.realestate.notification;
 
 import com.example.realestate.insights.SavedArea;
 import com.example.realestate.insights.SavedAreaRepository;
-import com.example.realestate.listing.ListingService.ListingApprovedEvent;
-import com.example.realestate.listing.ListingService.ListingRejectedEvent;
-import com.example.realestate.listing.ListingService.NewListingInAreaEvent;
+import com.example.realestate.listing.event.ListingApprovedEvent;
+import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.event.NewListingInAreaEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;

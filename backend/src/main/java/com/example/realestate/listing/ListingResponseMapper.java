@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.listing.api.ListingResponse;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -7,7 +8,7 @@ import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 
 /**
- * Maps a {@link Listing} entity to {@link ListingController.ListingResponse}.
+ * Maps a {@link Listing} entity to {@link ListingResponse}.
  *
  * <p>Two variants are provided:
  * <ul>
@@ -32,7 +33,7 @@ public class ListingResponseMapper {
     /**
      * Full response including rejectionReason. For broker/admin-facing endpoints only.
      */
-    public ListingController.ListingResponse toResponse(Listing l) {
+    public ListingResponse toResponse(Listing l) {
         return build(l, l.getRejectionReason());
     }
 
@@ -40,11 +41,11 @@ public class ListingResponseMapper {
      * Public response with rejectionReason always null.
      * rejectionReason is an internal moderation note — never expose it to unauthenticated callers.
      */
-    public ListingController.ListingResponse toPublicResponse(Listing l) {
+    public ListingResponse toPublicResponse(Listing l) {
         return build(l, null);
     }
 
-    private ListingController.ListingResponse build(Listing l, String rejectionReason) {
+    private ListingResponse build(Listing l, String rejectionReason) {
         var images = listingImageRepository.findByListingIdOrderByPositionAsc(l.getId());
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
@@ -67,9 +68,9 @@ public class ListingResponseMapper {
                 : l.getUpdatedAt();
 
         boolean reraValid = l.getReraNumber() != null
-                && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
+                && ListingResponse.RERA_PATTERN.matcher(l.getReraNumber()).matches();
 
-        return new ListingController.ListingResponse(
+        return new ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
                 l.getLocality(), l.getPrice(), l.getDescription(),

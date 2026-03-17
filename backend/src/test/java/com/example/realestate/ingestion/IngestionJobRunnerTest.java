@@ -6,10 +6,9 @@ import com.example.realestate.ai.ClassificationService;
 import com.example.realestate.ai.PropertyType;
 import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.listing.Listing;
+import com.example.realestate.listing.ListingDeduplicationService;
 import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingService;
-import com.example.realestate.listing.PriceChangeLogRepository;
-import com.example.realestate.listing.ProximityDuplicateService;
+import com.example.realestate.listing.ingestion.ListingIngestionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,26 +43,22 @@ class IngestionJobRunnerTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
 
-    @Mock
-    private ProximityDuplicateService proximityDuplicateService;
-
-    @Mock
-    private PriceChangeLogRepository priceChangeLogRepository;
-
     private RawPostService rawPostService;
     private ClassificationService classificationService;
-    private ListingService listingService;
+    private ListingIngestionService listingIngestionService;
     private IngestionJobRunner jobRunner;
 
     @BeforeEach
     void setUp() {
         rawPostService = new RawPostService(rawPostRepository);
         classificationService = new ClassificationService(aiClient);
-        listingService = new ListingService(
+        ListingDeduplicationService deduplicationService =
+                new ListingDeduplicationService(listingRepository);
+        listingIngestionService = new ListingIngestionService(
                 listingRepository, rawPostRepository, geocodingPort,
                 new ObjectMapper(), applicationEventPublisher,
-                proximityDuplicateService, priceChangeLogRepository);
-        jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingService, 10);
+                deduplicationService);
+        jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingIngestionService, 10);
     }
 
     private RawPost makePost(String content) {

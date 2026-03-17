@@ -29,16 +29,13 @@ public class PublicListingController {
 
     private static final Logger log = LoggerFactory.getLogger(PublicListingController.class);
 
-    private final ListingService listingService;
     private final ListingRepository listingRepository;
     private final ListingResponseMapper listingResponseMapper;
     private final PriceChangeLogRepository priceChangeLogRepository;
 
-    public PublicListingController(ListingService listingService,
-                                   ListingRepository listingRepository,
+    public PublicListingController(ListingRepository listingRepository,
                                    ListingResponseMapper listingResponseMapper,
                                    PriceChangeLogRepository priceChangeLogRepository) {
-        this.listingService = listingService;
         this.listingRepository = listingRepository;
         this.listingResponseMapper = listingResponseMapper;
         this.priceChangeLogRepository = priceChangeLogRepository;
