@@ -43,18 +43,15 @@ public class ListingImageController {
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
-    private final ListingService listingService;
     private final SupabaseStorageService storageService;
     private final ListingImageRegistrar imageRegistrar;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
-                                   ListingService listingService,
                                    SupabaseStorageService storageService,
                                    ListingImageRegistrar imageRegistrar) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
-        this.listingService = listingService;
         this.storageService = storageService;
         this.imageRegistrar = imageRegistrar;
     }

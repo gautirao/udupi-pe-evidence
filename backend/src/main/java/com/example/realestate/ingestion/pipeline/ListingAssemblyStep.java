@@ -4,13 +4,13 @@ import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.ClassificationService;
 import com.example.realestate.ingestion.RawPost;
 import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.listing.ingestion.ListingIngestionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * Delegates to ListingService.createFrom which handles:
+ * Delegates to ListingIngestionService.createFrom which handles:
  * - Confidence thresholds and discard logging
  * - Idempotency via raw_post_id
  * - Transactional listing insert + raw post processed update
@@ -20,11 +20,11 @@ public class ListingAssemblyStep implements PipelineStep<ClassificationResult, L
 
     private static final Logger log = LoggerFactory.getLogger(ListingAssemblyStep.class);
 
-    private final ListingService listingService;
+    private final ListingIngestionService listingIngestionService;
     private final ClassificationService classificationService;
 
-    public ListingAssemblyStep(ListingService listingService, ClassificationService classificationService) {
-        this.listingService = listingService;
+    public ListingAssemblyStep(ListingIngestionService listingIngestionService, ClassificationService classificationService) {
+        this.listingIngestionService = listingIngestionService;
         this.classificationService = classificationService;
     }
 
@@ -37,6 +37,6 @@ public class ListingAssemblyStep implements PipelineStep<ClassificationResult, L
     public Listing process(RawPost post, ClassificationResult result) {
         log.info("Evaluating classification postId={} step={} isRealEstate={} confidence={}",
                 post.getId(), name(), result.isRealEstate(), result.confidenceScore());
-        return listingService.createFrom(post, result, classificationService.getModel());
+        return listingIngestionService.createFrom(post, result, classificationService.getModel());
     }
 }

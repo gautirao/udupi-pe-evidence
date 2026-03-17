@@ -6,6 +6,14 @@ import com.example.realestate.geo.GeocodingPort;
 import com.example.realestate.geo.GeocodingService;
 import com.example.realestate.ingestion.RawPost;
 import com.example.realestate.ingestion.RawPostRepository;
+import com.example.realestate.listing.api.BulkDeleteResult;
+import com.example.realestate.listing.api.ListingStatsResponse;
+import com.example.realestate.listing.crud.ListingCrudService;
+import com.example.realestate.listing.event.ListingApprovedEvent;
+import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.event.SettlementEnrichmentRequestedEvent;
+import com.example.realestate.listing.ingestion.ListingIngestionService;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,13 +60,22 @@ class ListingServiceTest {
     private PriceChangeLogRepository priceChangeLogRepository;
 
     private ListingService listingService;
+    private ListingIngestionService listingIngestionService;
 
     @BeforeEach
     void setUp() {
-        listingService = new ListingService(
+        ListingDeduplicationService deduplicationService =
+                new ListingDeduplicationService(listingRepository);
+        listingIngestionService = new ListingIngestionService(
                 listingRepository, rawPostRepository, geocodingPort,
-                new ObjectMapper(), applicationEventPublisher,
-                proximityDuplicateService, priceChangeLogRepository);
+                new ObjectMapper(), applicationEventPublisher, deduplicationService);
+        ListingOwnershipGuard ownershipGuard = new ListingOwnershipGuard(listingRepository);
+        ListingCrudService crudService = new ListingCrudService(
+                listingRepository, applicationEventPublisher, ownershipGuard,
+                deduplicationService, priceChangeLogRepository);
+        ListingWorkflowService workflowService = new ListingWorkflowService(
+                listingRepository, applicationEventPublisher, ownershipGuard, proximityDuplicateService);
+        listingService = new ListingService(listingIngestionService, crudService, workflowService);
     }
 
     private RawPost makePost() {
@@ -621,7 +638,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Udupi", "Ambalpady", null);
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isEqualTo("india|karnataka|udupi|ambalpady");
     }
@@ -632,7 +649,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Udupi", null, "Manipal");
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isEqualTo("india|karnataka|udupi|manipal");
     }
@@ -643,7 +660,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Udupi", null, null);
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isEqualTo("india|karnataka|udupi|udupi");
     }
@@ -654,7 +671,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Tamil Nadu", "Chennai", "Anna Nagar East", null);
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isEqualTo("india|tamil-nadu|chennai|anna-nagar-east");
     }
@@ -665,14 +682,14 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Bengaluru", "M.G. Road", null);
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isEqualTo("india|karnataka|bengaluru|mg-road");
     }
 
     @Test
     void computeAreaKey_nullGeoResult_returnsNull() {
-        String areaKey = listingService.computeAreaKey(null);
+        String areaKey = listingIngestionService.computeAreaKey(null);
 
         assertThat(areaKey).isNull();
     }
@@ -683,7 +700,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 null, "Karnataka", "Udupi", "Ambalpady", null);
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isNull();
     }
@@ -694,7 +711,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", null, "Ambalpady", null);
 
-        String areaKey = listingService.computeAreaKey(geoResult);
+        String areaKey = listingIngestionService.computeAreaKey(geoResult);
 
         assertThat(areaKey).isNull();
     }
@@ -705,7 +722,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Udupi", "Ambalpady", null);
 
-        String areaLabel = listingService.computeAreaLabel(geoResult);
+        String areaLabel = listingIngestionService.computeAreaLabel(geoResult);
 
         assertThat(areaLabel).isEqualTo("Ambalpady, Udupi");
     }
@@ -716,7 +733,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Udupi", null, "Manipal");
 
-        String areaLabel = listingService.computeAreaLabel(geoResult);
+        String areaLabel = listingIngestionService.computeAreaLabel(geoResult);
 
         assertThat(areaLabel).isEqualTo("Manipal, Udupi");
     }
@@ -727,14 +744,14 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "Udupi", null, null);
 
-        String areaLabel = listingService.computeAreaLabel(geoResult);
+        String areaLabel = listingIngestionService.computeAreaLabel(geoResult);
 
         assertThat(areaLabel).isEqualTo("Udupi");
     }
 
     @Test
     void computeAreaLabel_nullGeoResult_returnsNull() {
-        String areaLabel = listingService.computeAreaLabel(null);
+        String areaLabel = listingIngestionService.computeAreaLabel(null);
 
         assertThat(areaLabel).isNull();
     }
@@ -745,7 +762,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", null, "Ambalpady", null);
 
-        String areaLabel = listingService.computeAreaLabel(geoResult);
+        String areaLabel = listingIngestionService.computeAreaLabel(geoResult);
 
         assertThat(areaLabel).isNull();
     }
@@ -756,7 +773,7 @@ class ListingServiceTest {
                 13.35, 74.75, "Display",
                 "India", "Karnataka", "  Udupi  ", "  Ambalpady  ", null);
 
-        String areaLabel = listingService.computeAreaLabel(geoResult);
+        String areaLabel = listingIngestionService.computeAreaLabel(geoResult);
 
         assertThat(areaLabel).isEqualTo("Ambalpady, Udupi");
     }
@@ -1050,7 +1067,7 @@ class ListingServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
 
         // Event must be published (notification is now async/decoupled)
-        verify(applicationEventPublisher).publishEvent(any(ListingService.ListingApprovedEvent.class));
+        verify(applicationEventPublisher).publishEvent(any(ListingApprovedEvent.class));
     }
 
     @Test
@@ -1076,7 +1093,7 @@ class ListingServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
 
         // Event must be published (notification is now async/decoupled)
-        verify(applicationEventPublisher).publishEvent(any(ListingService.ListingRejectedEvent.class));
+        verify(applicationEventPublisher).publishEvent(any(ListingRejectedEvent.class));
     }
 
     // --- RE-69: lat/lng persisted on location confirmation ---
@@ -1240,9 +1257,9 @@ class ListingServiceTest {
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(applicationEventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue())
-                .isInstanceOf(ListingService.SettlementEnrichmentRequestedEvent.class);
-        ListingService.SettlementEnrichmentRequestedEvent event =
-                (ListingService.SettlementEnrichmentRequestedEvent) eventCaptor.getValue();
+                .isInstanceOf(SettlementEnrichmentRequestedEvent.class);
+        SettlementEnrichmentRequestedEvent event =
+                (SettlementEnrichmentRequestedEvent) eventCaptor.getValue();
         assertThat(event.listingId()).isEqualTo(listingId);
         assertThat(event.propertyType()).isEqualTo("land");
     }
@@ -1270,7 +1287,7 @@ class ListingServiceTest {
                 null, null, null, null, null, false, null);
 
         verify(applicationEventPublisher, never()).publishEvent(
-                any(ListingService.SettlementEnrichmentRequestedEvent.class));
+                any(SettlementEnrichmentRequestedEvent.class));
     }
 
     @Test
@@ -1297,7 +1314,7 @@ class ListingServiceTest {
                 null, null, null, null, null, false, null);
 
         verify(applicationEventPublisher, never()).publishEvent(
-                any(ListingService.SettlementEnrichmentRequestedEvent.class));
+                any(SettlementEnrichmentRequestedEvent.class));
     }
 
     // --- RE-83: getDisplayId() ---
@@ -1546,7 +1563,7 @@ class ListingServiceTest {
         );
         when(listingRepository.countByStatusForUser(userId)).thenReturn(rows);
 
-        ListingController.ListingStatsResponse stats = listingService.getListingStats(userId);
+        ListingStatsResponse stats = listingService.getListingStats(userId);
 
         assertThat(stats.draftCount()).isEqualTo(2);
         assertThat(stats.pendingReviewCount()).isEqualTo(1);
@@ -1560,7 +1577,7 @@ class ListingServiceTest {
         UUID userId = UUID.randomUUID();
         when(listingRepository.countByStatusForUser(userId)).thenReturn(java.util.List.of());
 
-        ListingController.ListingStatsResponse stats = listingService.getListingStats(userId);
+        ListingStatsResponse stats = listingService.getListingStats(userId);
 
         assertThat(stats.draftCount()).isEqualTo(0);
         assertThat(stats.pendingReviewCount()).isEqualTo(0);
@@ -1577,7 +1594,7 @@ class ListingServiceTest {
         );
         when(listingRepository.countByStatusForUser(userId)).thenReturn(rows);
 
-        ListingController.ListingStatsResponse stats = listingService.getListingStats(userId);
+        ListingStatsResponse stats = listingService.getListingStats(userId);
 
         assertThat(stats.draftCount()).isEqualTo(5);
         assertThat(stats.pendingReviewCount()).isEqualTo(0);
@@ -1647,7 +1664,7 @@ class ListingServiceTest {
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
 
         org.junit.jupiter.api.Assertions.assertThrows(
-                ListingService.ListingStatusException.class,
+                com.example.realestate.listing.exception.ListingStatusException.class,
                 () -> listingService.deleteListing(listingId, userId, false));
 
         verify(listingRepository, never()).save(any());
@@ -1669,7 +1686,7 @@ class ListingServiceTest {
 
         // updateListing calls findOwnedListing internally — use it to exercise the guard
         org.junit.jupiter.api.Assertions.assertThrows(
-                ListingService.ListingNotFoundException.class,
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
                 () -> listingService.updateListing(listingId, userId, false,
                         null, null, null, null, null,
                         null, null, null, null,
@@ -1709,7 +1726,7 @@ class ListingServiceTest {
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
 
         org.junit.jupiter.api.Assertions.assertThrows(
-                ListingService.ListingNotArchivedException.class,
+                com.example.realestate.listing.exception.ListingNotArchivedException.class,
                 () -> listingService.restoreListing(listingId, UUID.randomUUID()));
 
         verify(listingRepository, never()).save(any());
@@ -1722,7 +1739,7 @@ class ListingServiceTest {
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
 
         org.junit.jupiter.api.Assertions.assertThrows(
-                ListingService.ListingNotFoundException.class,
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
                 () -> listingService.restoreListing(listingId, UUID.randomUUID()));
     }
 
@@ -1776,7 +1793,7 @@ class ListingServiceTest {
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
 
         org.junit.jupiter.api.Assertions.assertThrows(
-                ListingService.ListingNotFoundException.class,
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
                 () -> listingService.adminForceDelete(listingId, UUID.randomUUID()));
 
         verify(listingRepository, never()).save(any());
@@ -1806,7 +1823,7 @@ class ListingServiceTest {
         when(listingRepository.findById(notFoundId)).thenReturn(java.util.Optional.empty());
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ListingController.BulkDeleteResult result = listingService.bulkDeleteListings(
+        BulkDeleteResult result = listingService.bulkDeleteListings(
                 java.util.List.of(draftId, liveId, notFoundId), userId, false);
 
         assertThat(result.deleted()).isEqualTo(1);
@@ -1839,7 +1856,7 @@ class ListingServiceTest {
         when(listingRepository.findById(id1)).thenReturn(java.util.Optional.of(l1));
         when(listingRepository.findById(id2)).thenReturn(java.util.Optional.of(l2));
 
-        ListingController.BulkDeleteResult result = listingService.bulkDeleteListings(
+        BulkDeleteResult result = listingService.bulkDeleteListings(
                 java.util.List.of(id1, id2), userId, false);
 
         assertThat(result.deleted()).isEqualTo(0);

@@ -1,5 +1,15 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.listing.api.BulkDeleteResult;
+import com.example.realestate.listing.api.ListingResponse;
+import com.example.realestate.listing.api.ListingStatsResponse;
+import com.example.realestate.listing.crud.ListingCrudService;
+import com.example.realestate.listing.exception.ListingNotFoundException;
+import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.listing.exception.OwnerListingLimitException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,8 +30,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,18 +44,23 @@ import java.util.UUID;
 public class ListingController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingController.class);
-    /** Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
-    static final java.util.regex.Pattern RERA_PATTERN =
-            java.util.regex.Pattern.compile("^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$");
+    /**
+     * Karnataka RERA registration number format (e.g. PRM/KA/2023/0042).
+     * Canonical definition lives in {@link ListingResponse#RERA_PATTERN}.
+     */
+    static final java.util.regex.Pattern RERA_PATTERN = ListingResponse.RERA_PATTERN;
 
-    private final ListingService listingService;
+    private final ListingCrudService listingCrudService;
+    private final ListingWorkflowService listingWorkflowService;
     private final ListingRepository listingRepository;
     private final ListingResponseMapper listingResponseMapper;
 
-    public ListingController(ListingService listingService,
+    public ListingController(ListingCrudService listingCrudService,
+                             ListingWorkflowService listingWorkflowService,
                              ListingRepository listingRepository,
                              ListingResponseMapper listingResponseMapper) {
-        this.listingService = listingService;
+        this.listingCrudService = listingCrudService;
+        this.listingWorkflowService = listingWorkflowService;
         this.listingRepository = listingRepository;
         this.listingResponseMapper = listingResponseMapper;
     }
@@ -58,7 +71,7 @@ public class ListingController {
         String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         try {
-            Listing saved = listingService.createDraft(
+            Listing saved = listingCrudService.createDraft(
                     caller.userId(), req.propertyType(), req.title(),
                     req.locality(), req.price(), req.description(),
                     req.landArea(), req.bedrooms(), req.builtArea(),
@@ -74,7 +87,7 @@ public class ListingController {
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
                     saved.getId(), caller.userId(), sellerType);
             return ResponseEntity.status(HttpStatus.CREATED).body(listingResponseMapper.toResponse(saved));
-        } catch (ListingService.OwnerListingLimitException e) {
+        } catch (OwnerListingLimitException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
         }
@@ -95,7 +108,7 @@ public class ListingController {
     @GetMapping("/mine/stats")
     public ResponseEntity<?> stats(CallerInfo caller) {
 
-        ListingStatsResponse stats = listingService.getListingStats(caller.userId());
+        ListingStatsResponse stats = listingCrudService.getListingStats(caller.userId());
         return ResponseEntity.ok(stats);
     }
 
@@ -105,7 +118,7 @@ public class ListingController {
             @RequestParam(required = false) String status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        Page<Listing> listings = listingService.getListingsByOwner(caller.userId(), status, pageable);
+        Page<Listing> listings = listingCrudService.getListingsByOwner(caller.userId(), status, pageable);
 
         Page<ListingResponse> response = listings.map(listingResponseMapper::toResponse);
         return ResponseEntity.ok(response);
@@ -121,7 +134,7 @@ public class ListingController {
             String updateVideoUrl = applyVideo
                     ? ((req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl())
                     : null;
-            Listing updated = listingService.updateListing(
+            Listing updated = listingCrudService.updateListing(
                     id, caller.userId(), caller.isAdmin(),
                     req.propertyType(), req.title(), req.locality(),
                     req.price(), req.description(),
@@ -137,12 +150,12 @@ public class ListingController {
                     req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
                     req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared());
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return notFound();
-        } catch (ListingService.ListingOwnershipException e) {
+        } catch (ListingOwnershipException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
-        } catch (ListingService.ListingStatusException e) {
+        } catch (ListingStatusException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
         }
@@ -152,11 +165,11 @@ public class ListingController {
     public ResponseEntity<?> delete(CallerInfo caller, @PathVariable UUID id) {
 
         try {
-            listingService.deleteListing(id, caller.userId(), caller.isAdmin());
+            listingCrudService.deleteListing(id, caller.userId(), caller.isAdmin());
             return ResponseEntity.noContent().build();
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return notFound();
-        } catch (ListingService.ListingStatusException e) {
+        } catch (ListingStatusException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -171,7 +184,7 @@ public class ListingController {
             return ResponseEntity.badRequest().body(Map.of("error", "Cannot delete more than 50 listings at once"));
         }
 
-        BulkDeleteResult result = listingService.bulkDeleteListings(req.ids(), caller.userId(), caller.isAdmin());
+        BulkDeleteResult result = listingCrudService.bulkDeleteListings(req.ids(), caller.userId(), caller.isAdmin());
         log.info("POST /api/listings/bulk-delete -> deleted={} skipped={} userId={}",
                 result.deleted(), result.skipped(), caller.userId());
         return ResponseEntity.ok(result);
@@ -181,14 +194,14 @@ public class ListingController {
     public ResponseEntity<?> submit(CallerInfo caller, @PathVariable UUID id) {
 
         try {
-            Listing submitted = listingService.submitListing(id, caller.userId(), caller.isAdmin());
+            Listing submitted = listingWorkflowService.submitListing(id, caller.userId(), caller.isAdmin());
             log.info("POST /api/listings/{}/submit -> 200 status=PENDING_REVIEW", id);
             return ResponseEntity.ok(listingResponseMapper.toResponse(submitted));
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return notFound();
-        } catch (ListingService.ListingStatusException e) {
+        } catch (ListingStatusException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        } catch (ListingService.ListingValidationException e) {
+        } catch (ListingValidationException e) {
             return ResponseEntity.unprocessableEntity().body(Map.of("errors", e.getErrors()));
         }
     }
@@ -200,15 +213,7 @@ public class ListingController {
                 .body(Map.of("error", "Listing not found"));
     }
 
-    // ===== DTOs =====
-
-    public record ListingStatsResponse(
-            int draftCount,
-            int pendingReviewCount,
-            int liveCount,
-            int rejectedCount,
-            int totalCount
-    ) {}
+    // ===== Request DTOs (only used within this controller) =====
 
     public record CreateRequest(
             String propertyType,
@@ -279,61 +284,5 @@ public class ListingController {
             String approvalsDeclared
     ) {}
 
-    public record ListingResponse(
-            UUID id,
-            Integer listingNumber,
-            String displayId,
-            String status,
-            String propertyType,
-            String title,
-            String locality,
-            BigDecimal price,
-            String description,
-            BigDecimal landArea,
-            Integer bedrooms,
-            BigDecimal builtArea,
-            String landAreaUnit,
-            String builtAreaUnit,
-            Double latitude,
-            Double longitude,
-            boolean addressConfirmed,
-            String rejectionReason,
-            OffsetDateTime createdAt,
-            OffsetDateTime updatedAt,
-            int imageCount,
-            String firstImageUrl,
-            String videoUrl,
-            String reraNumber,
-            // Commercial & rent fields
-            String listingPurpose,
-            BigDecimal carpetArea,
-            String carpetAreaUnit,
-            Integer floorNumber,
-            Integer totalFloors,
-            String furnishingStatus,
-            Integer washrooms,
-            Integer parkingCount,
-            BigDecimal roadFrontageFt,
-            String commercialUsage,
-            Integer numberOfUnits,
-            Long monthlyRent,
-            Integer securityDepositMonths,
-            Integer lockInMonths,
-            String sellerType,
-            // Transparency fields (RE-94)
-            int daysOnMarket,
-            boolean backOnMarket,
-            OffsetDateTime lastUpdatedAt,
-            OffsetDateTime firstPublishedAt,
-            // RERA & possession fields (RE-99)
-            String possessionStatus,
-            java.time.LocalDate expectedPossessionDate,
-            String approvalsDeclared,
-            /** true when reraNumber matches Karnataka RERA format; computed at read time, not stored. */
-            boolean reraValid
-    ) {}
-
     public record BulkDeleteRequest(List<UUID> ids) {}
-
-    public record BulkDeleteResult(int deleted, int skipped, List<String> errors) {}
 }

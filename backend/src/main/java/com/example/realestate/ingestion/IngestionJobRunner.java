@@ -4,7 +4,7 @@ import com.example.realestate.ai.ClassificationException;
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.ClassificationService;
 import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingService;
+import com.example.realestate.listing.ingestion.ListingIngestionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +21,7 @@ import java.util.List;
  * 2. Mark each as "processing" to prevent duplicate processing
  * 3. Classify using AI
  * 4. Create listing if classified as real estate with sufficient confidence
- * 5. Mark as processed (handled transactionally by ListingService)
+ * 5. Mark as processed (handled transactionally by ListingIngestionService)
  */
 @Component
 public class IngestionJobRunner {
@@ -30,17 +30,17 @@ public class IngestionJobRunner {
 
     private final RawPostService rawPostService;
     private final ClassificationService classificationService;
-    private final ListingService listingService;
+    private final ListingIngestionService listingIngestionService;
     private final int batchSize;
 
     public IngestionJobRunner(
             RawPostService rawPostService,
             ClassificationService classificationService,
-            ListingService listingService,
+            ListingIngestionService listingIngestionService,
             @Value("${app.ingestion.batch-size}") int batchSize) {
         this.rawPostService = rawPostService;
         this.classificationService = classificationService;
-        this.listingService = listingService;
+        this.listingIngestionService = listingIngestionService;
         this.batchSize = batchSize;
     }
 
@@ -100,7 +100,7 @@ public class IngestionJobRunner {
 
         // Create listing (handles marking as processed transactionally)
         String model = classificationService.getModel();
-        Listing listing = listingService.createFrom(post, result, model);
+        Listing listing = listingIngestionService.createFrom(post, result, model);
 
         if (listing != null) {
             log.info("Created listing listingId={} for post postId={}", listing.getId(), post.getId());

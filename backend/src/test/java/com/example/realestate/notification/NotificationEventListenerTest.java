@@ -2,7 +2,7 @@ package com.example.realestate.notification;
 
 import com.example.realestate.insights.SavedArea;
 import com.example.realestate.insights.SavedAreaRepository;
-import com.example.realestate.listing.ListingService.NewListingInAreaEvent;
+import com.example.realestate.listing.event.NewListingInAreaEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

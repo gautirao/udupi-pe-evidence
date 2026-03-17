@@ -1,5 +1,9 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.listing.exception.ListingNotArchivedException;
+import com.example.realestate.listing.exception.ListingNotFoundException;
+import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,14 +30,14 @@ public class AdminListingController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminListingController.class);
 
-    private final ListingService listingService;
+    private final ListingWorkflowService listingWorkflowService;
     private final ListingResponseMapper listingResponseMapper;
     private final AdminAuditService adminAuditService;
 
-    public AdminListingController(ListingService listingService,
+    public AdminListingController(ListingWorkflowService listingWorkflowService,
                                   ListingResponseMapper listingResponseMapper,
                                   AdminAuditService adminAuditService) {
-        this.listingService = listingService;
+        this.listingWorkflowService = listingWorkflowService;
         this.listingResponseMapper = listingResponseMapper;
         this.adminAuditService = adminAuditService;
     }
@@ -43,14 +47,14 @@ public class AdminListingController {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         try {
-            Listing approved = listingService.approveListing(id, caller.userId());
+            Listing approved = listingWorkflowService.approveListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/approve -> 200 status=LIVE", id);
             adminAuditService.record(caller.userId(), "listing_approved", "listing", id, null,
                     "{\"status\":\"LIVE\"}");
             return ResponseEntity.ok(listingResponseMapper.toResponse(approved));
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return notFound();
-        } catch (ListingService.ListingStatusException e) {
+        } catch (ListingStatusException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -60,14 +64,14 @@ public class AdminListingController {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         try {
-            Listing restored = listingService.restoreListing(id, caller.userId());
+            Listing restored = listingWorkflowService.restoreListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/restore -> 200 status=DRAFT adminId={}", id, caller.userId());
             adminAuditService.record(caller.userId(), "listing_restored", "listing", id, null,
                     "{\"status\":\"DRAFT\"}");
             return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return notFound();
-        } catch (ListingService.ListingNotArchivedException e) {
+        } catch (ListingNotArchivedException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
         }
@@ -85,14 +89,14 @@ public class AdminListingController {
         }
 
         try {
-            Listing rejected = listingService.rejectListing(id, caller.userId(), req.rejectionReason());
+            Listing rejected = listingWorkflowService.rejectListing(id, caller.userId(), req.rejectionReason());
             log.info("POST /api/admin/listings/{}/reject -> 200 status=REJECTED", id);
             adminAuditService.record(caller.userId(), "listing_rejected", "listing", id, null,
                     "{\"status\":\"REJECTED\",\"reason\":\"" + req.rejectionReason().replace("\"", "\\\"") + "\"}");
             return ResponseEntity.ok(listingResponseMapper.toResponse(rejected));
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return notFound();
-        } catch (ListingService.ListingStatusException e) {
+        } catch (ListingStatusException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -102,14 +106,14 @@ public class AdminListingController {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         try {
-            boolean archived = listingService.adminForceDelete(id, caller.userId());
+            boolean archived = listingWorkflowService.adminForceDelete(id, caller.userId());
             log.info("DELETE /api/admin/listings/{} -> 204 adminId={} archived={}", id, caller.userId(), archived);
             if (archived) {
                 adminAuditService.record(caller.userId(), "listing_force_deleted", "listing", id, null,
                         "{\"status\":\"ARCHIVED\"}");
             }
             return ResponseEntity.noContent().build();
-        } catch (ListingService.ListingNotFoundException e) {
+        } catch (ListingNotFoundException e) {
             return ResponseEntity.notFound().build();
         }
     }

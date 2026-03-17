@@ -1,5 +1,14 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.listing.api.ListingResponse;
+import com.example.realestate.listing.api.ListingStatsResponse;
+import com.example.realestate.listing.crud.ListingCrudService;
+import com.example.realestate.listing.exception.ListingNotFoundException;
+import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.listing.exception.OwnerListingLimitException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
@@ -32,11 +41,11 @@ import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import org.mockito.invocation.InvocationOnMock;
 
 /**
  * WebMvcTest for ListingController (broker CRUD endpoints).
- * Uses jwt() post-processor to inject JwtAuthenticationToken; mocks ListingService.
+ * Uses jwt() post-processor to inject JwtAuthenticationToken.
+ * Mocks ListingCrudService and ListingWorkflowService directly.
  */
 @WebMvcTest(
         controllers = ListingController.class,
@@ -64,7 +73,10 @@ class ListingControllerTest {
     private MockMvc mockMvc;
 
     @MockitoBean
-    private ListingService listingService;
+    private ListingCrudService listingCrudService;
+
+    @MockitoBean
+    private ListingWorkflowService listingWorkflowService;
 
     @MockitoBean
     private ListingRepository listingRepository;
@@ -80,7 +92,8 @@ class ListingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingService, listingRepository, listingImageRepository, listingResponseMapper, userRoleService);
+        reset(listingCrudService, listingWorkflowService, listingRepository, listingImageRepository,
+                listingResponseMapper, userRoleService);
         // Default stub: no images; individual tests override when imageCount matters.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -102,7 +115,7 @@ class ListingControllerTest {
                             : 0);
             java.time.OffsetDateTime lastUpdatedAt = l.getLastUpdatedAt() != null
                     ? l.getLastUpdatedAt() : l.getUpdatedAt();
-            return new ListingController.ListingResponse(
+            return new ListingResponse(
                     l.getId(), l.getListingNumber(), l.getDisplayId(),
                     l.getStatus(), l.getPropertyType(), l.getTitle(),
                     l.getLocality(), l.getPrice(), l.getDescription(),
@@ -132,7 +145,7 @@ class ListingControllerTest {
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
-        when(listingService.createDraft(eq(DEALER_ID), eq("land"), eq("Test plot"),
+        when(listingCrudService.createDraft(eq(DEALER_ID), eq("land"), eq("Test plot"),
                 eq("Manipal"), eq(new BigDecimal("5000000")), eq("Nice plot"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
@@ -151,7 +164,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("DRAFT"));
 
-        verify(listingService).createDraft(DEALER_ID, "land", "Test plot",
+        verify(listingCrudService).createDraft(DEALER_ID, "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
@@ -168,7 +181,7 @@ class ListingControllerTest {
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
         Page<Listing> page = new PageImpl<>(List.of(listing));
-        when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
+        when(listingCrudService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -177,7 +190,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"));
 
-        verify(listingService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
+        verify(listingCrudService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
     }
 
     // ==================== Test 3: PUT -> 200 ====================
@@ -188,7 +201,7 @@ class ListingControllerTest {
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Updated title",
                 "Manipal", new BigDecimal("6000000"), "Updated desc");
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 eq("land"), eq("Updated title"), eq("Manipal"),
                 eq(new BigDecimal("6000000")), eq("Updated desc"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(false), isNull(),
@@ -207,7 +220,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.title").value("Updated title"));
 
-        verify(listingService).updateListing(LISTING_ID, DEALER_ID, false,
+        verify(listingCrudService).updateListing(LISTING_ID, DEALER_ID, false,
                 "land", "Updated title", "Manipal",
                 new BigDecimal("6000000"), "Updated desc",
                 null, null, null, null, null, null, null, null, null, false, null,
@@ -225,7 +238,7 @@ class ListingControllerTest {
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isNoContent());
 
-        verify(listingService).deleteListing(LISTING_ID, DEALER_ID, false);
+        verify(listingCrudService).deleteListing(LISTING_ID, DEALER_ID, false);
     }
 
     // ==================== Test 5: No JWT -> 403 ====================
@@ -257,7 +270,7 @@ class ListingControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires broker, dealer, user, or admin role"));
 
-        verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
+        verify(listingCrudService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any());
@@ -268,11 +281,11 @@ class ListingControllerTest {
     @Test
     void update_listingNotFound_returns404() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
-                .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -289,11 +302,11 @@ class ListingControllerTest {
     @Test
     void update_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
-                .thenThrow(new ListingService.ListingStatusException(
+                .thenThrow(new ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -311,8 +324,8 @@ class ListingControllerTest {
     @Test
     void delete_listingNotFound_returns404() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        doThrow(new ListingService.ListingNotFoundException(LISTING_ID))
-                .when(listingService).deleteListing(LISTING_ID, DEALER_ID, false);
+        doThrow(new ListingNotFoundException(LISTING_ID))
+                .when(listingCrudService).deleteListing(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -325,9 +338,9 @@ class ListingControllerTest {
     @Test
     void delete_wrongStatus_returns400() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        doThrow(new ListingService.ListingStatusException(
+        doThrow(new ListingStatusException(
                 "Cannot delete listing with status LIVE"))
-                .when(listingService).deleteListing(LISTING_ID, DEALER_ID, false);
+                .when(listingCrudService).deleteListing(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -344,7 +357,7 @@ class ListingControllerTest {
         Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         submitted.setSubmittedAt(OffsetDateTime.now());
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -352,7 +365,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("PENDING_REVIEW"));
 
-        verify(listingService).submitListing(LISTING_ID, DEALER_ID, false);
+        verify(listingWorkflowService).submitListing(LISTING_ID, DEALER_ID, false);
     }
 
     // ==================== Submit: REJECTED -> PENDING_REVIEW ====================
@@ -363,7 +376,7 @@ class ListingControllerTest {
 
         Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "Resubmitted");
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -376,8 +389,8 @@ class ListingControllerTest {
     @Test
     void submit_missingLandArea_returns422() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingValidationException(List.of(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingValidationException(List.of(
                         Map.of("field", "land_area",
                                 "message", "Land area is required for land listings"))));
 
@@ -392,8 +405,8 @@ class ListingControllerTest {
     @Test
     void submit_missingBedrooms_returns422() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingValidationException(List.of(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingValidationException(List.of(
                         Map.of("field", "bedrooms",
                                 "message", "Bedrooms is required for apartment listings"))));
 
@@ -408,8 +421,8 @@ class ListingControllerTest {
     @Test
     void submit_tooFewImages_returns422() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingValidationException(List.of(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingValidationException(List.of(
                         Map.of("field", "images",
                                 "message", "At least 3 images required (found 1)"))));
 
@@ -425,8 +438,8 @@ class ListingControllerTest {
     @Test
     void submit_addressNotConfirmed_returns422() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingValidationException(List.of(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingValidationException(List.of(
                         Map.of("field", "address_confirmed",
                                 "message", "Address must be confirmed before submission"))));
 
@@ -441,8 +454,8 @@ class ListingControllerTest {
     @Test
     void submit_otherDealerListing_returns404() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -455,8 +468,8 @@ class ListingControllerTest {
     @Test
     void submit_commercialType_returns422() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingValidationException(List.of(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingValidationException(List.of(
                         Map.of("field", "property_type",
                                 "message", "Commercial submission not supported yet"))));
 
@@ -472,8 +485,8 @@ class ListingControllerTest {
     @Test
     void submit_wrongStatus_returns400() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingStatusException(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingStatusException(
                         "Cannot submit listing with status LIVE"));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
@@ -487,8 +500,8 @@ class ListingControllerTest {
     @Test
     void submit_multipleErrors_returnsAllErrors() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.submitListing(LISTING_ID, DEALER_ID, false))
-                .thenThrow(new ListingService.ListingValidationException(List.of(
+        when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingValidationException(List.of(
                         Map.of("field", "price", "message", "Price must be greater than 0"),
                         Map.of("field", "address_confirmed",
                                 "message", "Address must be confirmed before submission"),
@@ -512,7 +525,7 @@ class ListingControllerTest {
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Draft Plot",
                 "Manipal", new BigDecimal("5000000"), "Updated draft");
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
@@ -535,7 +548,7 @@ class ListingControllerTest {
 
         Listing updated = buildListing(LISTING_ID, "REJECTED", "house", "Fixed House",
                 "Udupi", new BigDecimal("8000000"), "Fixed after rejection");
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
@@ -554,11 +567,11 @@ class ListingControllerTest {
     @Test
     void updateListing_wrongOwner_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
-                .thenThrow(new ListingService.ListingOwnershipException(LISTING_ID));
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -573,11 +586,11 @@ class ListingControllerTest {
     @Test
     void updateListing_pendingReviewStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
-                .thenThrow(new ListingService.ListingStatusException(
+                .thenThrow(new ListingStatusException(
                         "Cannot update listing with status PENDING_REVIEW"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -593,11 +606,11 @@ class ListingControllerTest {
     @Test
     void updateListing_liveListing_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
-                .thenThrow(new ListingService.ListingStatusException(
+                .thenThrow(new ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -613,11 +626,11 @@ class ListingControllerTest {
     @Test
     void updateListing_listingNotFound_returns404() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any()))
-                .thenThrow(new ListingService.ListingNotFoundException(LISTING_ID));
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -637,7 +650,7 @@ class ListingControllerTest {
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
-        when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
+        when(listingCrudService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any()))
@@ -662,7 +675,7 @@ class ListingControllerTest {
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
         Page<Listing> page = new PageImpl<>(List.of(listing));
-        when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
+        when(listingCrudService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(4L);
 
         mockMvc.perform(get("/api/listings/mine")
@@ -680,7 +693,7 @@ class ListingControllerTest {
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
         Page<Listing> page = new PageImpl<>(List.of(listing));
-        when(listingService.getListingsByOwner(eq(DEALER_ID), eq("DRAFT"), any(Pageable.class)))
+        when(listingCrudService.getListingsByOwner(eq(DEALER_ID), eq("DRAFT"), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine?status=DRAFT")
@@ -689,7 +702,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"));
 
-        verify(listingService).getListingsByOwner(eq(DEALER_ID), eq("DRAFT"), any(Pageable.class));
+        verify(listingCrudService).getListingsByOwner(eq(DEALER_ID), eq("DRAFT"), any(Pageable.class));
     }
 
     @Test
@@ -697,14 +710,14 @@ class ListingControllerTest {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Page<Listing> page = new PageImpl<>(List.of());
-        when(listingService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class)))
+        when(listingCrudService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk());
 
-        verify(listingService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
+        verify(listingCrudService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
     }
 
     // ==================== RE-32: videoUrl in update ====================
@@ -716,7 +729,7 @@ class ListingControllerTest {
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         updated.setVideoUrl("https://www.youtube.com/watch?v=abc123");
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -732,7 +745,7 @@ class ListingControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.videoUrl").value("https://www.youtube.com/watch?v=abc123"));
 
-        verify(listingService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        verify(listingCrudService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -746,7 +759,7 @@ class ListingControllerTest {
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         // videoUrl is null — blank input normalised to null by the controller; applyVideoUrl=true clears it.
-        when(listingService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -762,7 +775,7 @@ class ListingControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.videoUrl").isEmpty());
 
-        verify(listingService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+        verify(listingCrudService).updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -828,8 +841,8 @@ class ListingControllerTest {
     @Test
     void stats_withDealerRole_returnsCorrectCounts() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.getListingStats(DEALER_ID))
-                .thenReturn(new ListingController.ListingStatsResponse(2, 1, 3, 1, 7));
+        when(listingCrudService.getListingStats(DEALER_ID))
+                .thenReturn(new ListingStatsResponse(2, 1, 3, 1, 7));
 
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -840,14 +853,14 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.rejectedCount").value(1))
                 .andExpect(jsonPath("$.totalCount").value(7));
 
-        verify(listingService).getListingStats(DEALER_ID);
+        verify(listingCrudService).getListingStats(DEALER_ID);
     }
 
     @Test
     void stats_withNoListings_returnsAllZeros() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingService.getListingStats(DEALER_ID))
-                .thenReturn(new ListingController.ListingStatsResponse(0, 0, 0, 0, 0));
+        when(listingCrudService.getListingStats(DEALER_ID))
+                .thenReturn(new ListingStatsResponse(0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -868,21 +881,21 @@ class ListingControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires broker, dealer, user, or admin role"));
 
-        verify(listingService, never()).getListingStats(any());
+        verify(listingCrudService, never()).getListingStats(any());
     }
 
     @Test
     void stats_withAdminRole_returnsOk() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
         when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
-        when(listingService.getListingStats(adminId))
-                .thenReturn(new ListingController.ListingStatsResponse(0, 0, 0, 0, 0));
+        when(listingCrudService.getListingStats(adminId))
+                .thenReturn(new ListingStatsResponse(0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(adminId.toString()))))
                 .andExpect(status().isOk());
 
-        verify(listingService).getListingStats(adminId);
+        verify(listingCrudService).getListingStats(adminId);
     }
 
     // ==================== RE-86: Owner seller type tests ====================
@@ -894,7 +907,7 @@ class ListingControllerTest {
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "My plot",
                 "Manipal", new BigDecimal("3000000"), "Owner listing");
         saved.setSellerType("owner");
-        when(listingService.createDraft(eq(DEALER_ID), eq("land"), eq("My plot"),
+        when(listingCrudService.createDraft(eq(DEALER_ID), eq("land"), eq("My plot"),
                 eq("Manipal"), eq(new BigDecimal("3000000")), eq("Owner listing"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
@@ -912,7 +925,7 @@ class ListingControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sellerType").value("owner"));
 
-        verify(listingService).createDraft(DEALER_ID, "land", "My plot",
+        verify(listingCrudService).createDraft(DEALER_ID, "land", "My plot",
                 "Manipal", new BigDecimal("3000000"), "Owner listing",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
@@ -923,11 +936,11 @@ class ListingControllerTest {
     @Test
     void create_withUserRole_atLimit_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
-        when(listingService.createDraft(any(), any(), any(), any(), any(), any(),
+        when(listingCrudService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("owner")))
-                .thenThrow(new ListingService.OwnerListingLimitException(
+                .thenThrow(new OwnerListingLimitException(
                         "Owner accounts are limited to 3 active listings"));
 
         mockMvc.perform(post("/api/listings")
@@ -949,7 +962,7 @@ class ListingControllerTest {
         Listing saved = buildListing(LISTING_ID, "DRAFT", "house", "Admin house",
                 "Udupi", new BigDecimal("7000000"), "Admin-created");
         saved.setSellerType("broker");
-        when(listingService.createDraft(eq(adminId), eq("house"), eq("Admin house"),
+        when(listingCrudService.createDraft(eq(adminId), eq("house"), eq("Admin house"),
                 eq("Udupi"), eq(new BigDecimal("7000000")), eq("Admin-created"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
@@ -967,7 +980,7 @@ class ListingControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.sellerType").value("broker"));
 
-        verify(listingService).createDraft(adminId, "house", "Admin house",
+        verify(listingCrudService).createDraft(adminId, "house", "Admin house",
                 "Udupi", new BigDecimal("7000000"), "Admin-created",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,

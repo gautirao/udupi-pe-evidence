@@ -73,9 +73,6 @@ class ListingImageControllerTest {
     private ListingImageRepository imageRepository;
 
     @MockitoBean
-    private ListingService listingService;
-
-    @MockitoBean
     private SupabaseStorageService storageService;
 
     @MockitoBean
@@ -88,7 +85,7 @@ class ListingImageControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, imageRepository, listingService, userRoleService);
+        reset(listingRepository, imageRepository, userRoleService);
 
         draftListing = new Listing();
         draftListing.setId(LISTING_ID);

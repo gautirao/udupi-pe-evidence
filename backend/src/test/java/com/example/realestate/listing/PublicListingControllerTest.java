@@ -1,5 +1,6 @@
 package com.example.realestate.listing;
 
+import com.example.realestate.listing.api.ListingResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,9 +61,6 @@ class PublicListingControllerTest {
     private UserRoleService userRoleService;
 
     @MockitoBean
-    private ListingService listingService;
-
-    @MockitoBean
     private ListingRepository listingRepository;
 
     @MockitoBean
@@ -73,7 +71,7 @@ class PublicListingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, listingResponseMapper, priceChangeLogRepository);
+        reset(listingRepository, listingResponseMapper, priceChangeLogRepository, userRoleService);
         // Delegate public mapper to a minimal implementation.
         // CRITICAL: rejectionReason must always be null (security invariant tested explicitly).
         when(listingResponseMapper.toPublicResponse(any(Listing.class))).thenAnswer(inv -> {
@@ -89,7 +87,7 @@ class PublicListingControllerTest {
                     ? l.getLastUpdatedAt() : l.getUpdatedAt();
             boolean reraValid = l.getReraNumber() != null
                     && ListingController.RERA_PATTERN.matcher(l.getReraNumber()).matches();
-            return new ListingController.ListingResponse(
+            return new ListingResponse(
                     l.getId(), l.getListingNumber(), l.getDisplayId(),
                     l.getStatus(), l.getPropertyType(), l.getTitle(),
                     l.getLocality(), l.getPrice(), l.getDescription(),
