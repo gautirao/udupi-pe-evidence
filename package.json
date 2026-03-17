@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:local": "bash scripts/run-e2e-local.sh",
+    "test:e2e:headed": "bash scripts/run-e2e-local.sh --headed --workers=1",
     "prepare": "chmod +x scripts/run-e2e-local.sh .githooks/pre-push && git config core.hooksPath .githooks",
     "predev": "git config core.hooksPath .githooks",
     "prebuild": "git config core.hooksPath .githooks"

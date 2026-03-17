@@ -54,7 +54,7 @@ fi
 
 # Warn if .env.e2e still has placeholder credentials
 if [[ "${SMOKE_USER_EMAIL:-}" == *"@example.com"* ]] || \
-   [[ "${DEALER_EMAIL:-}" == *"@example.com"* ]] || \
+   [[ "${BROKER_EMAIL:-${DEALER_EMAIL:-}}" == *"@example.com"* ]] || \
    [[ "${ADMIN_EMAIL:-}" == *"@example.com"* ]]; then
   echo "WARNING: .env.e2e contains placeholder credentials (*@example.com)."
   echo "Auth-dependent tests will skip instead of running."

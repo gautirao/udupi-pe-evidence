@@ -37,8 +37,8 @@ const BACKEND = process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer
 
 const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
-const dealerEmail = process.env.DEALER_EMAIL ?? '';
-const dealerPassword = process.env.DEALER_PASSWORD ?? '';
+const dealerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
 // ---------------------------------------------------------------------------
 // Shared auth helpers
