@@ -17,10 +17,10 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * AFTER_COMMIT listener for booking domain events.
  * Inserts notifications for the 4 booking types defined in spec §8:
- *   viewing_requested  → dealer
+ *   viewing_requested  → broker
  *   viewing_confirmed  → requester
  *   viewing_declined   → requester
- *   viewing_cancelled  → counterparty (user → dealer; dealer → requester)
+ *   viewing_cancelled  → counterparty (user → broker; broker → requester)
  *
  * Never rethrows — notification failures must not affect committed booking state.
  */
@@ -55,13 +55,13 @@ public class BookingEventListener {
         try {
             String metadata = buildMetadata(booking);
             notificationRepository.insertNotification(
-                    booking.getDealerId(),
+                    booking.getBrokerId(),
                     "viewing_requested",
                     "New viewing request",
                     "A viewing has been requested for your listing.",
                     metadata);
-            log.info("viewing_requested notification sent bookingId={} dealerId={}",
-                    booking.getId(), booking.getDealerId());
+            log.info("viewing_requested notification sent bookingId={} brokerId={}",
+                    booking.getId(), booking.getBrokerId());
 
             // Send email notification to dealer (failure must not propagate)
             sendBookingEmail(booking);
@@ -120,9 +120,9 @@ public class BookingEventListener {
         ViewingRequest booking = event.booking();
         try {
             String metadata = buildMetadata(booking);
-            // Notify the counterparty: user cancelled → notify dealer; dealer cancelled → notify requester
-            boolean cancelledByUser = "user".equals(booking.getCancelledBy());
-            java.util.UUID recipientId = cancelledByUser ? booking.getDealerId() : booking.getRequesterId();
+            // Notify the counterparty: user cancelled → notify broker; broker cancelled → notify requester
+            boolean cancelledByUser = "user".equals(booking.getCancelledBy()) || "requester".equals(booking.getCancelledBy());
+            java.util.UUID recipientId = cancelledByUser ? booking.getBrokerId() : booking.getRequesterId();
 
             notificationRepository.insertNotification(
                     recipientId,
@@ -140,10 +140,10 @@ public class BookingEventListener {
 
     private void sendBookingEmail(ViewingRequest booking) {
         try {
-            String dealerEmail = viewingRequestRepository.findEmailByUserId(booking.getDealerId())
+            String dealerEmail = viewingRequestRepository.findEmailByUserId(booking.getBrokerId())
                     .orElse(null);
             if (dealerEmail == null) {
-                log.warn("No email found for dealerId={}, skipping booking email", booking.getDealerId());
+                log.warn("No email found for brokerId={}, skipping booking email", booking.getBrokerId());
                 return;
             }
 
@@ -156,8 +156,8 @@ public class BookingEventListener {
 
             emailService.sendBookingNotification(dealerEmail, buyerName, listingTitle, booking.getListingId());
         } catch (Exception e) {
-            log.error("Failed to send booking email bookingId={} dealerId={}",
-                    booking.getId(), booking.getDealerId(), e);
+            log.error("Failed to send booking email bookingId={} brokerId={}",
+                    booking.getId(), booking.getBrokerId(), e);
         }
     }
 

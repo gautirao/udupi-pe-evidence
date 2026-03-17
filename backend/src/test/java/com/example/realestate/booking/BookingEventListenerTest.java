@@ -46,7 +46,7 @@ class BookingEventListenerTest {
         ViewingRequest booking = new ViewingRequest();
         booking.setId(BOOKING_ID);
         booking.setListingId(LISTING_ID);
-        booking.setDealerId(DEALER_ID);
+        booking.setBrokerId(DEALER_ID);
         booking.setRequesterId(REQUESTER_ID);
         booking.setStatus("REQUESTED");
         booking.setCreatedAt(OffsetDateTime.now());

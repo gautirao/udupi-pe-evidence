@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'admin' | 'user' | 'dealer';
+export type AppRole = 'admin' | 'user' | 'dealer' | 'broker';
 
 interface AuthContextType {
   user: User | null;
@@ -49,7 +49,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const role = (data?.role as AppRole) || 'user';
       setUserRole(role);
       setIsAdmin(role === 'admin');
-      setIsDealer(role === 'dealer');
+      // OR logic required during expand phase: existing sessions carry 'dealer' JWT,
+      // new sessions after V41 migration will carry 'broker'. Both must grant access.
+      setIsDealer(role === 'dealer' || role === 'broker');
     } catch (err) {
       console.error('Error in fetchUserRole:', err);
       setUserRole('user');

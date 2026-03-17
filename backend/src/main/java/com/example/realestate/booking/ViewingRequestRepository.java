@@ -21,27 +21,27 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
 
     List<ViewingRequest> findByRequesterIdOrderByCreatedAtDesc(UUID requesterId);
 
-    List<ViewingRequest> findByDealerIdAndStatusInOrderByCreatedAtDesc(UUID dealerId, List<String> statuses);
+    List<ViewingRequest> findByBrokerIdAndStatusInOrderByCreatedAtDesc(UUID brokerId, List<String> statuses);
 
     Page<ViewingRequest> findByRequesterId(UUID requesterId, Pageable pageable);
 
-    Page<ViewingRequest> findByDealerIdAndStatusIn(UUID dealerId, List<String> statuses, Pageable pageable);
+    Page<ViewingRequest> findByBrokerIdAndStatusIn(UUID brokerId, List<String> statuses, Pageable pageable);
 
-    Page<ViewingRequest> findByDealerIdAndListingIdAndStatusIn(UUID dealerId, UUID listingId, List<String> statuses, Pageable pageable);
+    Page<ViewingRequest> findByBrokerIdAndListingIdAndStatusIn(UUID brokerId, UUID listingId, List<String> statuses, Pageable pageable);
 
     @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("UPDATE ViewingRequest v SET v.status = 'CONFIRMED', v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.dealerId = :callerId")
+    @Query("UPDATE ViewingRequest v SET v.status = 'CONFIRMED', v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.brokerId = :callerId")
     int confirmAtomic(@Param("id") UUID id, @Param("expectedStatus") String expectedStatus, @Param("callerId") UUID callerId, @Param("now") OffsetDateTime now);
 
     @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("UPDATE ViewingRequest v SET v.status = 'DECLINED', v.declineReason = :declineReason, v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.dealerId = :callerId")
+    @Query("UPDATE ViewingRequest v SET v.status = 'DECLINED', v.declineReason = :declineReason, v.updatedAt = :now WHERE v.id = :id AND v.status = :expectedStatus AND v.brokerId = :callerId")
     int declineAtomic(@Param("id") UUID id, @Param("expectedStatus") String expectedStatus, @Param("callerId") UUID callerId, @Param("declineReason") String declineReason, @Param("now") OffsetDateTime now);
 
     @Modifying(clearAutomatically = true)
     @Transactional
-    @Query("UPDATE ViewingRequest v SET v.status = 'CANCELLED', v.cancelledBy = :cancelledBy, v.updatedAt = :now WHERE v.id = :id AND v.status IN :allowedStatuses AND (v.requesterId = :callerId OR v.dealerId = :callerId)")
+    @Query("UPDATE ViewingRequest v SET v.status = 'CANCELLED', v.cancelledBy = :cancelledBy, v.updatedAt = :now WHERE v.id = :id AND v.status IN :allowedStatuses AND (v.requesterId = :callerId OR v.brokerId = :callerId)")
     int cancelAtomic(@Param("id") UUID id, @Param("allowedStatuses") Collection<String> allowedStatuses, @Param("callerId") UUID callerId, @Param("cancelledBy") String cancelledBy, @Param("now") OffsetDateTime now);
 
     @Modifying(clearAutomatically = true)

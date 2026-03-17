@@ -18,13 +18,13 @@ export interface BookingResponse {
   id: string;
   listingId: string;
   requesterId: string;
-  dealerId: string;
+  brokerId: string;
   requestedDate: string;       // "YYYY-MM-DD"
   requestedTimeSlot: string;   // "HH:MM-HH:MM"
   status: 'REQUESTED' | 'CONFIRMED' | 'DECLINED' | 'CANCELLED' | 'COMPLETED';
   requesterMessage: string | null;
   declineReason: string | null;
-  cancelledBy: string | null;  // 'user' | 'dealer' | null
+  cancelledBy: string | null;  // 'user' | 'broker' | null
   createdAt: string;
   updatedAt: string;
 }

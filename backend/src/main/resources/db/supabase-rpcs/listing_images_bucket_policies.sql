@@ -1,6 +1,7 @@
 -- Reference copy only. Run this in the Supabase SQL editor (not via Flyway).
 -- Bucket: listing-images
 -- Sets up the Storage bucket and all RLS policies for listing image objects.
+-- Updated in V41 (expand phase): 'broker' added alongside 'dealer' in INSERT/DELETE policies.
 --
 -- Upload path format (from src/hooks/useListingImages.ts line 101):
 --   listings/{userId}/{listingId}/{timestamp}-{random}.{ext}
@@ -55,7 +56,7 @@ CREATE POLICY "listing_images_owner_insert" ON storage.objects
     bucket_id = 'listing-images'
     AND (storage.foldername(name))[1] = 'listings'
     AND (storage.foldername(name))[2] = auth.uid()::text
-    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'user') OR public.has_role(auth.uid(), 'admin'))
+    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'broker') OR public.has_role(auth.uid(), 'user') OR public.has_role(auth.uid(), 'admin'))
   );
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -71,5 +72,5 @@ CREATE POLICY "listing_images_owner_delete" ON storage.objects
     bucket_id = 'listing-images'
     AND (storage.foldername(name))[1] = 'listings'
     AND (storage.foldername(name))[2] = auth.uid()::text
-    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'user') OR public.has_role(auth.uid(), 'admin'))
+    AND (public.has_role(auth.uid(), 'dealer') OR public.has_role(auth.uid(), 'broker') OR public.has_role(auth.uid(), 'user') OR public.has_role(auth.uid(), 'admin'))
   );

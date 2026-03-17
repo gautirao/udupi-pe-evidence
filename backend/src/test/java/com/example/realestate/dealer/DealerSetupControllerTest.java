@@ -100,7 +100,7 @@ class DealerSetupControllerTest {
                                 {"phone":"+919876543210","acceptedTerms":true}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.role").value("dealer"));
+                .andExpect(jsonPath("$.role").value("broker"));
     }
 
     // ==================== Test 3: M2 pre-check — already dealer -> 409 ====================
@@ -117,7 +117,7 @@ class DealerSetupControllerTest {
                                 {"phone":"+919876543210","acceptedTerms":true}
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("You already have a dealer or admin role."));
+                .andExpect(jsonPath("$.error").value("You already have a broker or admin role."));
     }
 
     // ==================== Test 4: C-2 TOCTOU concurrent duplicate -> 409 ====================
@@ -137,7 +137,7 @@ class DealerSetupControllerTest {
                                 {"phone":"+919876543210","acceptedTerms":true}
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("You already have a dealer or admin role."));
+                .andExpect(jsonPath("$.error").value("You already have a broker or admin role."));
     }
 
     // ==================== Test 5: acceptedTerms=false -> 400 ====================

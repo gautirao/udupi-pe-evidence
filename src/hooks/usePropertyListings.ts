@@ -55,7 +55,7 @@ export interface PropertyListing {
   monthly_rent: number | null;
   security_deposit_months: number | null;
   lock_in_months: number | null;
-  seller_type: 'owner' | 'dealer' | 'builder' | null;
+  seller_type: 'owner' | 'dealer' | 'broker' | 'builder' | null;
   // Fields added by Spring Boot ListingResponse (RE-104)
   firstPublishedAt?: string | null;
   lastUpdatedAt?: string | null;
@@ -80,7 +80,7 @@ export interface PropertyFilters {
   dateTo?: Date;
   /** BHK values: 1, 2, 3, or 4 (meaning 4+) */
   bedrooms?: number[];
-  /** Filter by seller type: 'owner', 'dealer' */
+  /** Filter by seller type: 'owner', 'broker', 'builder' */
   sellerTypes?: string[];
   /** Client-side: show only listings with a price reduction in their price history */
   priceReduced?: boolean;

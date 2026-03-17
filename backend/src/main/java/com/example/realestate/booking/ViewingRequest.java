@@ -25,8 +25,8 @@ public class ViewingRequest {
     @Column(name = "requester_id", nullable = false)
     private UUID requesterId;
 
-    @Column(name = "dealer_id", nullable = false)
-    private UUID dealerId;
+    @Column(name = "broker_id", nullable = false)
+    private UUID brokerId;
 
     @Column(name = "requested_date", nullable = false)
     private LocalDate requestedDate;
@@ -78,12 +78,12 @@ public class ViewingRequest {
         this.requesterId = requesterId;
     }
 
-    public UUID getDealerId() {
-        return dealerId;
+    public UUID getBrokerId() {
+        return brokerId;
     }
 
-    public void setDealerId(UUID dealerId) {
-        this.dealerId = dealerId;
+    public void setBrokerId(UUID brokerId) {
+        this.brokerId = brokerId;
     }
 
     public LocalDate getRequestedDate() {

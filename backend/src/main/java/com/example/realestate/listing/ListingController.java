@@ -55,7 +55,7 @@ public class ListingController {
     @PostMapping
     public ResponseEntity<?> create(CallerInfo caller, @RequestBody CreateRequest req) {
 
-        String sellerType = "user".equals(caller.role()) ? "owner" : "dealer";
+        String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         try {
             Listing saved = listingService.createDraft(
