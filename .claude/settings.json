@@ -1,5 +1,8 @@
 {
   "permissions": {
+    "additionalDirectories": [
+      "/Users/gouthamrao/Documents/workspaces/lovable/worktrees"
+    ],
     "allow": [
       "Read",
       "Glob",

@@ -168,7 +168,7 @@ export function PropertyDetailModal({ listing, images, onClose }: PropertyDetail
               {listing.seller_type === 'owner' && (
                 <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">Owner</Badge>
               )}
-              {listing.seller_type === 'dealer' && (
+              {listing.seller_type === 'broker' && (
                 <Badge variant="outline" className="border-sky-300 text-sky-700 bg-sky-50">Broker</Badge>
               )}
               {listing.confidence_score && listing.confidence_score < 70 && (

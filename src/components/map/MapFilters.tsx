@@ -74,8 +74,8 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
 
   const handleSellerTypeToggle = (value: string) => {
     const current = filters.sellerTypes || [];
-    // "Dealer" toggle controls both 'dealer' and 'builder' seller types
-    const valuesToToggle = value === 'dealer' ? ['dealer', 'builder'] : [value];
+    // "Broker" toggle controls both 'broker' and 'builder' seller types
+    const valuesToToggle = value === 'broker' ? ['broker', 'builder'] : [value];
     const isActive = valuesToToggle.some((v) => current.includes(v));
     const next = isActive
       ? current.filter((s) => !valuesToToggle.includes(s))
@@ -191,9 +191,9 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
         <div className="space-y-3">
           <Label className="text-sm font-medium">Listed By</Label>
           <div className="flex gap-2 flex-wrap">
-            {[{ label: 'Owner', value: 'owner' }, { label: 'Broker', value: 'dealer' }].map(({ label, value }) => {
-              const active = value === 'dealer'
-                ? (filters.sellerTypes?.includes('dealer') || false)
+            {[{ label: 'Owner', value: 'owner' }, { label: 'Broker', value: 'broker' }].map(({ label, value }) => {
+              const active = value === 'broker'
+                ? (filters.sellerTypes?.includes('broker') || filters.sellerTypes?.includes('dealer') || false)
                 : (filters.sellerTypes?.includes(value) || false);
               return (
                 <Button

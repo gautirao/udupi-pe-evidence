@@ -137,7 +137,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq("dealer")))
+                eq("broker")))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -156,7 +156,7 @@ class ListingControllerTest {
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
-                "dealer");
+                "broker");
     }
 
     // ==================== Test 2: GET /mine -> 200, array ====================
@@ -255,7 +255,7 @@ class ListingControllerTest {
                                  "price":100,"description":"d"}
                                 """))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires broker, dealer, user, or admin role"));
 
         verify(listingService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
@@ -866,7 +866,7 @@ class ListingControllerTest {
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires broker, dealer, user, or admin role"));
 
         verify(listingService, never()).getListingStats(any());
     }
@@ -942,19 +942,19 @@ class ListingControllerTest {
     }
 
     @Test
-    void create_withAdminRole_setsSellerTypeDealer() throws Exception {
+    void create_withAdminRole_setsSellerTypeBroker() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
         when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "house", "Admin house",
                 "Udupi", new BigDecimal("7000000"), "Admin-created");
-        saved.setSellerType("dealer");
+        saved.setSellerType("broker");
         when(listingService.createDraft(eq(adminId), eq("house"), eq("Admin house"),
                 eq("Udupi"), eq(new BigDecimal("7000000")), eq("Admin-created"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq("dealer")))
+                eq("broker")))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -965,14 +965,14 @@ class ListingControllerTest {
                                  "price":7000000,"description":"Admin-created"}
                                 """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.sellerType").value("dealer"));
+                .andExpect(jsonPath("$.sellerType").value("broker"));
 
         verify(listingService).createDraft(adminId, "house", "Admin house",
                 "Udupi", new BigDecimal("7000000"), "Admin-created",
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
-                "dealer");
+                "broker");
     }
 
     // ==================== Helper ====================

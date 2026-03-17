@@ -92,8 +92,7 @@ class BrokerSetupControllerTest {
                                 {"phone":"+919876543210","acceptedTerms":true}
                                 """))
                 .andExpect(status().isOk())
-                // Response still returns role="dealer" (DB value unchanged)
-                .andExpect(jsonPath("$.role").value("dealer"));
+                .andExpect(jsonPath("$.role").value("broker"));
     }
 
     @Test

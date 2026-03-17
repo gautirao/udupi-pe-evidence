@@ -136,7 +136,7 @@ public class BookingService {
         ViewingRequest booking = new ViewingRequest();
         booking.setListingId(listingId);
         booking.setRequesterId(requesterId);
-        booking.setDealerId(dealerId);
+        booking.setBrokerId(dealerId);
         booking.setRequestedDate(requestedDate);
         booking.setRequestedTimeSlot(requestedTimeSlot);
         booking.setStatus(STATUS_REQUESTED);
@@ -234,7 +234,7 @@ public class BookingService {
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
 
         boolean isRequester = callerId.equals(booking.getRequesterId());
-        boolean isDealer = callerId.equals(booking.getDealerId());
+        boolean isDealer = callerId.equals(booking.getBrokerId());
 
         if (!isRequester && !isDealer) {
             // M5: return 404 — do not leak existence to non-participants
@@ -247,7 +247,7 @@ public class BookingService {
             cancelledBy = "user";
             allowedStatuses = CANCELLABLE_BY_USER;
         } else {
-            cancelledBy = "dealer";
+            cancelledBy = "broker";
             allowedStatuses = CANCELLABLE_BY_DEALER;
         }
 
@@ -284,7 +284,7 @@ public class BookingService {
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
 
         boolean isRequester = callerId.equals(booking.getRequesterId());
-        boolean isDealer = callerId.equals(booking.getDealerId());
+        boolean isDealer = callerId.equals(booking.getBrokerId());
 
         if (!isRequester && !isDealer) {
             throw new BookingForbiddenException();
@@ -296,7 +296,7 @@ public class BookingService {
             cancelledBy = "requester";
             allowedStatuses = CANCELLABLE_BY_USER;
         } else {
-            cancelledBy = "dealer";
+            cancelledBy = "broker";
             allowedStatuses = CANCELLABLE_BY_DEALER;
         }
 
@@ -321,7 +321,7 @@ public class BookingService {
     }
 
     public List<ViewingRequest> getBookingsForDealer(UUID dealerId) {
-        return viewingRequestRepository.findByDealerIdAndStatusInOrderByCreatedAtDesc(
+        return viewingRequestRepository.findByBrokerIdAndStatusInOrderByCreatedAtDesc(
                 dealerId, DEALER_ACTIVE_STATUSES);
     }
 
@@ -332,12 +332,12 @@ public class BookingService {
 
     public Page<ViewingRequest> getBookingsForDealerPaged(UUID dealerId, Pageable pageable) {
         return viewingRequestRepository
-                .findByDealerIdAndStatusIn(dealerId, DEALER_ACTIVE_STATUSES, pageable);
+                .findByBrokerIdAndStatusIn(dealerId, DEALER_ACTIVE_STATUSES, pageable);
     }
 
     public Page<ViewingRequest> getBookingsForDealerByListingPaged(UUID dealerId, UUID listingId, Pageable pageable) {
         return viewingRequestRepository
-                .findByDealerIdAndListingIdAndStatusIn(dealerId, listingId, DEALER_ACTIVE_STATUSES, pageable);
+                .findByBrokerIdAndListingIdAndStatusIn(dealerId, listingId, DEALER_ACTIVE_STATUSES, pageable);
     }
 
     // ===== Private helpers =====
@@ -350,8 +350,8 @@ public class BookingService {
         ViewingRequest booking = viewingRequestRepository.findById(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
 
-        if (!callerId.equals(booking.getDealerId())) {
-            // M5: return 404 — avoids leaking existence to non-dealers
+        if (!callerId.equals(booking.getBrokerId())) {
+            // M5: return 404 — avoids leaking existence to non-brokers
             throw new BookingNotFoundException(bookingId);
         }
         return booking;

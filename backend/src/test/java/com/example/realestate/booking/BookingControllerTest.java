@@ -333,7 +333,7 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/dealer")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires dealer, user, or admin role"));
+                .andExpect(jsonPath("$.error").value("Requires broker, dealer, user, or admin role"));
 
         verify(bookingService, never()).getBookingsForDealerPaged(any(), any());
     }
@@ -498,19 +498,19 @@ class BookingControllerTest {
         verify(bookingService).cancelBookingNew(BOOKING_ID, REQUESTER_ID);
     }
 
-    // Test 24: dealer cancels a CONFIRMED booking → 200, cancelledBy='dealer'
+    // Test 24: dealer cancels a CONFIRMED booking → 200, cancelledBy='broker'
     @Test
     void cancel_confirmedBooking_asDealer_returns200() throws Exception {
         ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_CANCELLED);
-        booking.setCancelledBy("dealer");
+        booking.setCancelledBy("broker");
         when(bookingService.cancelBookingNew(BOOKING_ID, DEALER_ID)).thenReturn(booking);
 
         mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
-                .andExpect(jsonPath("$.cancelledBy").value("dealer"));
+                .andExpect(jsonPath("$.cancelledBy").value("broker"));
 
         verify(bookingService).cancelBookingNew(BOOKING_ID, DEALER_ID);
     }
@@ -580,12 +580,12 @@ class BookingControllerTest {
 
     // ==================== Helpers ====================
 
-    private ViewingRequest buildBooking(UUID id, UUID requesterId, UUID dealerId, String status) {
+    private ViewingRequest buildBooking(UUID id, UUID requesterId, UUID brokerId, String status) {
         ViewingRequest b = new ViewingRequest();
         b.setId(id);
         b.setListingId(LISTING_ID);
         b.setRequesterId(requesterId);
-        b.setDealerId(dealerId);
+        b.setBrokerId(brokerId);
         b.setRequestedDate(LocalDate.of(2026, 4, 1));
         b.setRequestedTimeSlot("10:00-11:00");
         b.setStatus(status);

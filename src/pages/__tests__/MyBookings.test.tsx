@@ -40,7 +40,7 @@ const makeBooking = (overrides: Partial<BookingResponse>): BookingResponse => ({
   id: 'booking-1',
   listingId: 'listing-abc',
   requesterId: 'user-1',
-  dealerId: 'dealer-1',
+  brokerId: 'broker-1',
   requestedDate: '2026-03-01',
   requestedTimeSlot: '10:00-11:00',
   status: 'REQUESTED',

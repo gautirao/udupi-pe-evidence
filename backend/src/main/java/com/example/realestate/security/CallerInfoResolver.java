@@ -31,7 +31,7 @@ import java.util.UUID;
 public class CallerInfoResolver implements HandlerMethodArgumentResolver {
 
     private static final Logger log = LoggerFactory.getLogger(CallerInfoResolver.class);
-    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "admin", "user");
+    private static final Set<String> ALLOWED_ROLES = Set.of("dealer", "broker", "admin", "user");
 
     private final UserRoleService userRoleService;
 
@@ -67,7 +67,7 @@ public class CallerInfoResolver implements HandlerMethodArgumentResolver {
         if (role == null || !ALLOWED_ROLES.contains(role)) {
             log.warn("CallerInfoResolver: access denied userId={} role={}", userId, role);
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Requires dealer, user, or admin role");
+                    "Requires broker, dealer, user, or admin role");
         }
 
         return new CallerInfo(userId, role, "admin".equals(role));

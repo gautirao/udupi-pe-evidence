@@ -227,7 +227,7 @@ public class BookingController {
 
     private BookingResponse toResponse(ViewingRequest b) {
         return new BookingResponse(
-                b.getId(), b.getListingId(), b.getRequesterId(), b.getDealerId(),
+                b.getId(), b.getListingId(), b.getRequesterId(), b.getBrokerId(),
                 b.getRequestedDate(), b.getRequestedTimeSlot(), b.getStatus(),
                 b.getRequesterMessage(), b.getDeclineReason(), b.getCancelledBy(),
                 b.getCreatedAt(), b.getUpdatedAt());
@@ -248,7 +248,7 @@ public class BookingController {
             UUID id,
             UUID listingId,
             UUID requesterId,
-            UUID dealerId,
+            UUID brokerId,
             LocalDate requestedDate,
             String requestedTimeSlot,
             String status,

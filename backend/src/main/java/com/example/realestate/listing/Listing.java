@@ -228,7 +228,7 @@ public class Listing {
     // --- Seller type ---
 
     @Column(name = "seller_type", nullable = false, length = 10)
-    private String sellerType = "dealer";
+    private String sellerType = "broker";
 
     // --- Dealer workflow fields ---
 
