@@ -174,6 +174,9 @@ test('U4 — listing detail: AreaMarketWidget renders without crash', async ({ p
   const notEnough = page.locator('text=Not enough data for this area yet.');
   const loadError = page.locator('text=Could not load market data.');
 
+  // TODO: RE-XXX — strengthen AreaMarketWidget assertion once AreaMarketWidget is migrated
+  // from snake_case PropertyListing to camelCase PublicListingDetail shape. Currently the
+  // widget degrades to "Not enough data" for all listings (cast issue in ListingDetail.tsx:634).
   const anyStateVisible =
     (await areaMarket.isVisible().catch(() => false)) ||
     (await notEnough.isVisible().catch(() => false)) ||

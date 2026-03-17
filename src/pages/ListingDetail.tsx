@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PropertyImage, PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
+import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
+import { ListingResponse } from '@/hooks/useBrokerListings';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { formatListingId } from '@/lib/listing-id';
 import {
@@ -37,11 +38,39 @@ const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }
   other: { label: 'Other', badgeClass: 'bg-gray-100 text-gray-600 border-0' },
 };
 
+/**
+ * Shape returned by GET /api/public/listings/:id.
+ * Extends ListingResponse (camelCase backend DTO) with the images array
+ * injected by the backend and optional fields not present in all responses.
+ */
+interface PublicListingDetail extends ListingResponse {
+  images: PropertyImage[];
+  /** Not in ListingController.ListingResponse — may be present on legacy Supabase-sourced listings */
+  price_unit?: string | null;
+  bathrooms?: number | null;
+  contact_phone?: string | null;
+  contact_info?: string | null;
+  confidence_score?: number | null;
+  /** price_per_cent_paise is not in ListingController.ListingResponse — undefined on public endpoint */
+  price_per_cent_paise?: number | null;
+  /** Transparency fields — present in ListingController.ListingResponse but absent from the
+   *  ListingResponse TS interface in useBrokerListings.ts (which mirrors the broker endpoint only). */
+  daysOnMarket?: number;
+  backOnMarket?: boolean;
+  lastUpdatedAt?: string | null;
+  firstPublishedAt?: string | null;
+  isSuspectedDuplicate?: boolean;
+  possessionStatus?: string | null;
+  expectedPossessionDate?: string | null;
+  approvalsDeclared?: string | null;
+  reraValid?: boolean;
+}
+
 function useListingById(id: string | undefined) {
   return useQuery({
     queryKey: ['listing', id],
     queryFn: () =>
-      api.get<PropertyListing & { images: PropertyImage[] }>(`/api/public/listings/${id}`),
+      api.get<PublicListingDetail>(`/api/public/listings/${id}`),
     enabled: !!id,
   });
 }
@@ -105,7 +134,8 @@ export default function ListingDetail() {
     );
   }
 
-  const { label, badgeClass } = propertyConfig[listing.property_type];
+  const propertyTypeKey = listing.propertyType as PropertyType;
+  const { label, badgeClass } = propertyConfig[propertyTypeKey] ?? propertyConfig['other'];
   const images = listing.images || [];
   const hasImages = images.length > 0;
 
@@ -174,15 +204,15 @@ export default function ListingDetail() {
         </div>
 
         {/* For land listings: location panel appears before photos */}
-        {listing.property_type === 'land' && (
+        {listing.propertyType === 'land' && (
           <div className="space-y-4 mb-6">
-            <NearbyPois listingId={listing.id} propertyType={listing.property_type} />
+            <NearbyPois listingId={listing.id} propertyType={listing.propertyType} />
             {listing.latitude != null && listing.longitude != null && (
               <PoiMiniMap
                 listingId={listing.id}
                 latitude={listing.latitude}
                 longitude={listing.longitude}
-                propertyType={listing.property_type}
+                propertyType={listing.propertyType}
               />
             )}
           </div>
@@ -284,10 +314,10 @@ export default function ListingDetail() {
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Badge className={badgeClass}>{label}</Badge>
-                {listing.seller_type === 'owner' && (
+                {listing.sellerType === 'owner' && (
                   <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">Owner</Badge>
                 )}
-                {listing.seller_type === 'dealer' && (
+                {listing.sellerType === 'dealer' && (
                   <Badge variant="outline" className="border-sky-300 text-sky-700 bg-sky-50">Broker</Badge>
                 )}
                 {listing.confidence_score && listing.confidence_score < 70 && (
@@ -306,41 +336,41 @@ export default function ListingDetail() {
                 )}
               </div>
               <h1 className="text-2xl md:text-3xl font-bold mb-2">{title}</h1>
-              {listing.listing_number != null && (
+              {listing.listingNumber != null && (
                 <p className="font-mono text-sm text-muted-foreground mb-2">
-                  {formatListingId(listing.listing_number)}
+                  {formatListingId(listing.listingNumber)}
                 </p>
               )}
-              {listing.listing_purpose === 'rent' ? (
-                listing.monthly_rent != null && (
+              {listing.listingPurpose === 'rent' ? (
+                listing.monthlyRent != null && (
                   <p className="text-2xl font-bold text-primary">
-                    ₹{listing.monthly_rent.toLocaleString('en-IN')}<span className="text-base font-normal text-muted-foreground"> / month</span>
+                    ₹{listing.monthlyRent.toLocaleString('en-IN')}<span className="text-base font-normal text-muted-foreground"> / month</span>
                   </p>
                 )
               ) : listing.price ? (
                 <p className="text-2xl font-bold text-primary">
-                  {formatPrice(listing.price, listing.price_unit)}
+                  {formatPrice(listing.price, listing.price_unit ?? null)}
                 </p>
               ) : null}
-              {listing.listing_purpose === 'rent' && (
+              {listing.listingPurpose === 'rent' && (
                 <Badge variant="outline" className="mt-1 text-xs">For Rent</Badge>
               )}
-              {listing.property_type === 'land' && listing.price_per_cent_paise ? (
+              {listing.propertyType === 'land' && listing.price_per_cent_paise ? (
                 <p className="text-sm text-muted-foreground mt-0.5">
                   ₹{(listing.price_per_cent_paise / 100).toLocaleString('en-IN')} / cent
                 </p>
-              ) : (['apartment', 'house'].includes(listing.property_type) &&
-                  listing.built_area && listing.built_area > 0 &&
-                  listing.built_area_unit === 'sqft' && listing.price) ? (
+              ) : (['apartment', 'house'].includes(listing.propertyType) &&
+                  listing.builtArea && listing.builtArea > 0 &&
+                  listing.builtAreaUnit === 'sqft' && listing.price) ? (
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  ₹{Math.round(listing.price / listing.built_area!).toLocaleString('en-IN')} / sqft
+                  ₹{Math.round(listing.price / listing.builtArea!).toLocaleString('en-IN')} / sqft
                 </p>
               ) : null}
-              {listing.rera_number && (
+              {listing.reraNumber && (
                 <div className="mt-2">
                   <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 gap-1">
                     <ShieldCheck className="h-3.5 w-3.5" />
-                    RERA Registered — {listing.rera_number}
+                    RERA Registered — {listing.reraNumber}
                   </Badge>
                 </div>
               )}
@@ -372,22 +402,22 @@ export default function ListingDetail() {
               <CardContent className="p-4">
                 <h3 className="font-semibold mb-4">Property Details</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  {listing.land_area && (
+                  {listing.landArea && (
                     <div className="flex items-center gap-2">
                       <Ruler className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Land Area</p>
-                        <p className="font-medium">{formatArea(listing.land_area, listing.land_area_unit)}</p>
+                        <p className="font-medium">{formatArea(listing.landArea, listing.landAreaUnit)}</p>
                       </div>
                     </div>
                   )}
-                  
-                  {listing.built_area && (
+
+                  {listing.builtArea && (
                     <div className="flex items-center gap-2">
                       <Building className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Built Area</p>
-                        <p className="font-medium">{formatArea(listing.built_area, listing.built_area_unit)}</p>
+                        <p className="font-medium">{formatArea(listing.builtArea, listing.builtAreaUnit)}</p>
                       </div>
                     </div>
                   )}
@@ -412,12 +442,12 @@ export default function ListingDetail() {
                     </div>
                   )}
 
-                  {listing.carpet_area != null && (
+                  {listing.carpetArea != null && (
                     <div className="flex items-center gap-2">
                       <Layers className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Carpet Area</p>
-                        <p className="font-medium">{formatArea(listing.carpet_area, listing.carpet_area_unit)}</p>
+                        <p className="font-medium">{formatArea(listing.carpetArea, listing.carpetAreaUnit)}</p>
                       </div>
                     </div>
                   )}
@@ -432,89 +462,89 @@ export default function ListingDetail() {
                     </div>
                   )}
 
-                  {listing.floor_number != null && (
+                  {listing.floorNumber != null && (
                     <div className="flex items-center gap-2">
                       <Building className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Floor</p>
                         <p className="font-medium">
-                          {listing.floor_number}{listing.total_floors != null ? ` / ${listing.total_floors}` : ''}
+                          {listing.floorNumber}{listing.totalFloors != null ? ` / ${listing.totalFloors}` : ''}
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {listing.furnishing_status && (
+                  {listing.furnishingStatus && (
                     <div className="flex items-center gap-2">
                       <Armchair className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Furnishing</p>
-                        <p className="font-medium capitalize">{listing.furnishing_status.replace(/_/g, ' ')}</p>
+                        <p className="font-medium capitalize">{listing.furnishingStatus.replace(/_/g, ' ')}</p>
                       </div>
                     </div>
                   )}
 
-                  {listing.parking_count != null && (
+                  {listing.parkingCount != null && (
                     <div className="flex items-center gap-2">
                       <ParkingCircle className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Parking</p>
-                        <p className="font-medium">{listing.parking_count}</p>
+                        <p className="font-medium">{listing.parkingCount}</p>
                       </div>
                     </div>
                   )}
 
-                  {listing.road_frontage_ft != null && (
+                  {listing.roadFrontageFt != null && (
                     <div className="flex items-center gap-2">
                       <Ruler className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Road Frontage</p>
-                        <p className="font-medium">{listing.road_frontage_ft} ft</p>
+                        <p className="font-medium">{listing.roadFrontageFt} ft</p>
                       </div>
                     </div>
                   )}
 
-                  {listing.commercial_usage && (
+                  {listing.commercialUsage && (
                     <div className="flex items-center gap-2">
                       <Store className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Usage</p>
-                        <p className="font-medium capitalize">{listing.commercial_usage}</p>
+                        <p className="font-medium capitalize">{listing.commercialUsage}</p>
                       </div>
                     </div>
                   )}
 
-                  {listing.number_of_units != null && (
+                  {listing.numberOfUnits != null && (
                     <div className="flex items-center gap-2">
                       <Building className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Units</p>
-                        <p className="font-medium">{listing.number_of_units}</p>
+                        <p className="font-medium">{listing.numberOfUnits}</p>
                       </div>
                     </div>
                   )}
                 </div>
 
                 {/* Rent details */}
-                {listing.listing_purpose === 'rent' && (listing.security_deposit_months != null || listing.lock_in_months != null) && (
+                {listing.listingPurpose === 'rent' && (listing.securityDepositMonths != null || listing.lockInMonths != null) && (
                   <div className="mt-4 pt-4 border-t">
                     <h4 className="text-sm font-semibold mb-3">Rental Terms</h4>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                      {listing.security_deposit_months != null && (
+                      {listing.securityDepositMonths != null && (
                         <div className="flex items-center gap-2">
                           <IndianRupee className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm text-muted-foreground">Security Deposit</p>
-                            <p className="font-medium">{listing.security_deposit_months} month{listing.security_deposit_months !== 1 ? 's' : ''}</p>
+                            <p className="font-medium">{listing.securityDepositMonths} month{listing.securityDepositMonths !== 1 ? 's' : ''}</p>
                           </div>
                         </div>
                       )}
-                      {listing.lock_in_months != null && (
+                      {listing.lockInMonths != null && (
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <p className="text-sm text-muted-foreground">Lock-in Period</p>
-                            <p className="font-medium">{listing.lock_in_months} month{listing.lock_in_months !== 1 ? 's' : ''}</p>
+                            <p className="font-medium">{listing.lockInMonths} month{listing.lockInMonths !== 1 ? 's' : ''}</p>
                           </div>
                         </div>
                       )}
@@ -545,7 +575,7 @@ export default function ListingDetail() {
 
             {/* RERA & Legal Readiness Card (RE-99) */}
             <RERACard
-              reraNumber={listing.rera_number}
+              reraNumber={listing.reraNumber}
               reraValid={listing.reraValid}
               possessionStatus={listing.possessionStatus}
               expectedPossessionDate={listing.expectedPossessionDate}
@@ -553,15 +583,15 @@ export default function ListingDetail() {
             />
 
             {/* Land listings show location panel above photos — skip here */}
-            {listing.property_type !== 'land' && (
+            {listing.propertyType !== 'land' && (
               <>
-                <NearbyPois listingId={listing.id} propertyType={listing.property_type} />
+                <NearbyPois listingId={listing.id} propertyType={listing.propertyType} />
                 {listing.latitude != null && listing.longitude != null && (
                   <PoiMiniMap
                     listingId={listing.id}
                     latitude={listing.latitude}
                     longitude={listing.longitude}
-                    propertyType={listing.property_type}
+                    propertyType={listing.propertyType}
                   />
                 )}
               </>
@@ -570,16 +600,16 @@ export default function ListingDetail() {
             {/* Posted Date */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              <span>Posted {format(new Date(listing.created_at), 'MMMM d, yyyy')}</span>
+              <span>Posted {format(new Date(listing.createdAt), 'MMMM d, yyyy')}</span>
               <span className="text-muted-foreground/50">•</span>
-              <span>{formatRelativeDate(listing.created_at)}</span>
+              <span>{formatRelativeDate(listing.createdAt)}</span>
             </div>
 
             {/* Similar listings */}
             <SimilarListings
               listingId={listing.id}
               locality={listing.locality}
-              propertyType={listing.property_type}
+              propertyType={listing.propertyType}
             />
           </div>
 
@@ -598,7 +628,10 @@ export default function ListingDetail() {
               </CardContent>
             </Card>
 
-            <AreaMarketWidget listing={listing} />
+            {/* AreaMarketWidget still expects the snake_case PropertyListing shape;
+                the cast is safe here because the widget degrades gracefully when
+                snake_case fields are absent — it renders "Not enough data". */}
+            <AreaMarketWidget listing={listing as unknown as import('@/hooks/usePropertyListings').PropertyListing} />
 
             {listing.contact_phone && (
               <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">

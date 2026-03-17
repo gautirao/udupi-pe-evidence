@@ -11,8 +11,10 @@
  *        d. Admin approve (PENDING_REVIEW → LIVE)
  *   4. Write the result to e2e/.test-listing-id so individual specs can consume it.
  *
- * This function MUST NOT throw — any failure is logged and the suite runs in
- * degraded mode (listing-dependent tests will skip themselves).
+ * This function MUST NOT throw for missing credentials. It WILL throw if admin
+ * credentials are set but the approve endpoint fails — that is a hard failure,
+ * not graceful degradation. Listing-dependent tests without admin creds will
+ * skip themselves.
  */
 
 import * as fs from 'fs';
@@ -208,8 +210,9 @@ export default async function globalSetup(): Promise<void> {
     if (submitted) {
       const adminToken = await getToken(adminEmail, adminPassword);
       if (adminToken) {
+        let approveRes: Response;
         try {
-          const approveRes = await fetch(
+          approveRes = await fetch(
             `${BACKEND}/api/admin/listings/${listingId}/approve`,
             {
               method: 'POST',
@@ -219,18 +222,23 @@ export default async function globalSetup(): Promise<void> {
               },
             },
           );
-
-          if (approveRes.ok) {
-            status = 'LIVE';
-            console.log(`[global-setup] Listing ${listingId} approved — status: LIVE`);
-          } else {
-            const text = await approveRes.text().catch(() => '<unreadable>');
-            console.log(
-              `[global-setup] Approve failed (${approveRes.status}): ${text} — listing stays DRAFT`,
-            );
-          }
         } catch (err) {
-          console.log(`[global-setup] Approve request threw: ${String(err)} — listing stays DRAFT`);
+          throw new Error(
+            `[global-setup] Approve request threw: ${String(err)}. ` +
+            'Admin credentials are set — this is a hard failure.',
+          );
+        }
+
+        if (approveRes.ok) {
+          status = 'LIVE';
+          console.log(`[global-setup] Listing ${listingId} approved — status: LIVE`);
+        } else {
+          const text = await approveRes.text().catch(() => '<unreadable>');
+          throw new Error(
+            `[global-setup] Approve failed (${approveRes.status}): ${text}. ` +
+            'Admin credentials are set — this is a hard failure, not graceful degradation. ' +
+            'If approveListing is intentionally disabled, remove ADMIN_EMAIL/ADMIN_PASSWORD from .env.e2e.',
+          );
         }
       } else {
         console.log('[global-setup] Could not obtain admin token — listing stays DRAFT.');
