@@ -14,7 +14,7 @@ import { Loader2, MapPin, Building2, Home } from 'lucide-react';
  *  - Already dealer/admin: redirect to / (onboarding is not relevant).
  */
 export default function Onboarding() {
-  const { isDealer, isAdmin, isLoading } = useAuth();
+  const { isBroker, isAdmin, isLoading } = useAuth();
   const navigate = useNavigate();
 
   if (isLoading) {
@@ -27,7 +27,7 @@ export default function Onboarding() {
     );
   }
 
-  if (isDealer || isAdmin) {
+  if (isBroker || isAdmin) {
     return <Navigate to="/" replace />;
   }
 

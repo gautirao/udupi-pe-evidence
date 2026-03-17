@@ -36,7 +36,7 @@ import java.util.UUID;
  * - PUT  /api/bookings/:id/decline: any authenticated user; service enforces dealer_id == JWT.sub (M5)
  * - PUT  /api/bookings/:id/cancel:  any authenticated user; service enforces participation (M5)
  * - GET  /api/bookings/mine: any authenticated user; returns Page<BookingResponse>
- * - GET  /api/bookings/dealer: requires dealer or admin role; returns Page<BookingResponse>
+ * - GET  /api/bookings/broker: requires broker or admin role; returns Page<BookingResponse>
  */
 @RestController
 @RequestMapping("/api/bookings")
@@ -190,9 +190,9 @@ public class BookingController {
         return ResponseEntity.ok(bookingService.getBookingsForRequesterPaged(requesterId, pageable).map(this::toResponse));
     }
 
-    // ===== GET /api/bookings/dealer (alias: /api/bookings/broker) =====
+    // ===== GET /api/bookings/broker =====
 
-    @GetMapping({"/dealer", "/broker"})
+    @GetMapping({"/broker"})
     public ResponseEntity<?> dealer(
             CallerInfo caller,
             @RequestParam(required = false) UUID listingId,

@@ -184,6 +184,9 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   > 1. **Read every file you will modify before writing any changes.** Do not assume file contents.
   > 2. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
   > 3. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
+  > 4. **Output an AC coverage table** after implementing — one row per AC bullet from the enriched spec:
+  >    `| AC | COVERED? | file:line |`
+  >    Mark any AC deliberately excluded as `OUT OF SCOPE — reason`. This table is required; omitting it is a protocol violation.
 
 - When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
 
@@ -212,6 +215,7 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 - Always fill in: `pr_summary`, `change_intent`, `changed_files`
 - Include `known_repo_rules` when the change touches established patterns (see list below)
 - Include `risk_notes` when triage identified specific concerns
+- **When invoked from SPRINT_EXECUTOR**: include `ac_checklist` — paste the enriched spec AC bullets verbatim. Instruct the reviewer: "For each AC, state PRESENT or MISSING in the diff. A MISSING item that the engineer did not mark OUT OF SCOPE is a BLOCKING finding."
 
 **Known repo rules** (pass to reviewer when relevant — reviewer must not flag these):
 - CSS display-toggle for wizard panels (preserves image upload state)

@@ -9,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isAdmin: boolean;
-  isDealer: boolean;
+  isBroker: boolean;
   userRole: AppRole | null;
   insightsAccessUntil: string | null;
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
@@ -27,7 +27,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDealer, setIsDealer] = useState(false);
+  const [isBroker, setIsBroker] = useState(false);
   const [insightsAccessUntil, setInsightsAccessUntil] = useState<string | null>(null);
 
   const fetchUserRole = useCallback(async (userId: string) => {
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error('Error fetching user role:', error);
         setUserRole('user');
         setIsAdmin(false);
-        setIsDealer(false);
+        setIsBroker(false);
         return;
       }
 
@@ -51,12 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAdmin(role === 'admin');
       // OR logic required during expand phase: existing sessions carry 'dealer' JWT,
       // new sessions after V41 migration will carry 'broker'. Both must grant access.
-      setIsDealer(role === 'dealer' || role === 'broker');
+      setIsBroker(role === 'dealer' || role === 'broker');
     } catch (err) {
       console.error('Error in fetchUserRole:', err);
       setUserRole('user');
       setIsAdmin(false);
-      setIsDealer(false);
+      setIsBroker(false);
     }
   }, []);
 
@@ -106,14 +106,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUserRole(null);
           setIsAdmin(false);
-          setIsDealer(false);
+          setIsBroker(false);
           setInsightsAccessUntil(null);
         }
 
         if (event === 'SIGNED_OUT') {
           setUserRole(null);
           setIsAdmin(false);
-          setIsDealer(false);
+          setIsBroker(false);
           setInsightsAccessUntil(null);
         }
       }
@@ -171,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setUserRole(null);
     setIsAdmin(false);
-    setIsDealer(false);
+    setIsBroker(false);
     setInsightsAccessUntil(null);
   };
 
@@ -182,7 +182,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         isLoading,
         isAdmin,
-        isDealer,
+        isBroker,
         userRole,
         insightsAccessUntil,
         signUp,

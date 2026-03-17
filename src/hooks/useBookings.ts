@@ -95,15 +95,15 @@ export function useMyBookings() {
  * @param listingId  Optional UUID string. When provided, only bookings for that
  *                   listing are returned. Omit to fetch all dealer bookings.
  */
-export function useDealerBookings(listingId?: string) {
-  const { user, isDealer, isAdmin } = useAuth();
+export function useBrokerBookings(listingId?: string) {
+  const { user, isBroker, isAdmin } = useAuth();
 
   const query = useQuery({
-    queryKey: ['dealer-bookings', listingId ?? 'all'],
+    queryKey: ['broker-bookings', listingId ?? 'all'],
     queryFn: () => api.get<PageResponse<BookingResponse>>(
       listingId ? `/api/bookings/broker?listingId=${listingId}` : '/api/bookings/broker'
     ),
-    enabled: !!user && (isDealer || isAdmin),
+    enabled: !!user && (isBroker || isAdmin),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -127,7 +127,7 @@ export function useConfirmBooking() {
     mutationFn: (id: string) =>
       api.put<BookingResponse>(`/api/bookings/${id}/confirm`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dealer-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['broker-bookings'] });
       toast({ title: 'Booking confirmed' });
     },
     onError: (error: Error) => {
@@ -152,7 +152,7 @@ export function useDeclineBooking() {
     mutationFn: ({ id, declineReason }: { id: string; declineReason?: string }) =>
       api.put<BookingResponse>(`/api/bookings/${id}/decline`, { declineReason }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dealer-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['broker-bookings'] });
       toast({ title: 'Booking declined' });
     },
     onError: (error: Error) => {
@@ -177,7 +177,7 @@ export function useCancelBooking() {
     mutationFn: (id: string) =>
       api.put<BookingResponse>(`/api/bookings/${id}/cancel`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['dealer-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['broker-bookings'] });
       queryClient.invalidateQueries({ queryKey: ['my-bookings'] });
       toast({ title: 'Booking cancelled' });
     },

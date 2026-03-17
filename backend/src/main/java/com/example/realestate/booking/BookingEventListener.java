@@ -63,7 +63,7 @@ public class BookingEventListener {
             log.info("viewing_requested notification sent bookingId={} brokerId={}",
                     booking.getId(), booking.getBrokerId());
 
-            // Send email notification to dealer (failure must not propagate)
+            // Send email notification to broker (failure must not propagate)
             sendBookingEmail(booking);
         } catch (Exception e) {
             log.error("Failed to send viewing_requested notification bookingId={}",
@@ -140,9 +140,9 @@ public class BookingEventListener {
 
     private void sendBookingEmail(ViewingRequest booking) {
         try {
-            String dealerEmail = viewingRequestRepository.findEmailByUserId(booking.getBrokerId())
+            String brokerEmail = viewingRequestRepository.findEmailByUserId(booking.getBrokerId())
                     .orElse(null);
-            if (dealerEmail == null) {
+            if (brokerEmail == null) {
                 log.warn("No email found for brokerId={}, skipping booking email", booking.getBrokerId());
                 return;
             }
@@ -154,7 +154,7 @@ public class BookingEventListener {
                     .map(Listing::getTitle)
                     .orElse(null);
 
-            emailService.sendBookingNotification(dealerEmail, buyerName, listingTitle, booking.getListingId());
+            emailService.sendBookingNotification(brokerEmail, buyerName, listingTitle, booking.getListingId());
         } catch (Exception e) {
             log.error("Failed to send booking email bookingId={} brokerId={}",
                     booking.getId(), booking.getBrokerId(), e);

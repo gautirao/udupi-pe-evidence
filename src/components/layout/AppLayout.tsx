@@ -90,7 +90,7 @@ const loggedOutNavigation = [
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, isDealer, userRole, signOut } = useAuth();
+  const { user, isAdmin, isBroker, userRole, signOut } = useAuth();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -99,11 +99,11 @@ export function AppLayout({ children }: AppLayoutProps) {
     .slice(0, 2)
     .toUpperCase() || 'U';
 
-  const roleLabel = isAdmin ? 'Administrator' : isDealer ? 'Broker' : 'User';
+  const roleLabel = isAdmin ? 'Administrator' : isBroker ? 'Broker' : 'User';
 
   const primaryNav = isAdmin
     ? adminPrimaryNavigation
-    : isDealer
+    : isBroker
     ? brokerNavigation
     : user
     ? ownerNavigation

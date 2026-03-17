@@ -303,7 +303,7 @@ class BookingControllerTest {
         verify(bookingService).getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class));
     }
 
-    // ==================== Test 13: GET /dealer 200 with dealer role — updated to Page format ====================
+    // ==================== Test 13: GET /broker 200 with broker role — updated to Page format ====================
 
     @Test
     void dealer_withDealerRole_returns200WithPage() throws Exception {
@@ -314,7 +314,7 @@ class BookingControllerTest {
         when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
                 .thenReturn(page);
 
-        mockMvc.perform(get("/api/bookings/dealer")
+        mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
@@ -324,13 +324,13 @@ class BookingControllerTest {
         verify(bookingService).getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class));
     }
 
-    // ==================== Test 14: GET /dealer 403 without dealer role ====================
+    // ==================== Test 14: GET /broker 403 without broker role ====================
 
     @Test
     void dealer_withoutDealerRole_returns403() throws Exception {
         when(userRoleService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
 
-        mockMvc.perform(get("/api/bookings/dealer")
+        mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires broker, dealer, user, or admin role"));
@@ -402,7 +402,7 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.page.size").value(20));
     }
 
-    // ==================== Test 19: GET /dealer — 2 items, page metadata ====================
+    // ==================== Test 19: GET /broker — 2 items, page metadata ====================
 
     @Test
     void dealer_getBookings_returnsPage_withPaginationMetadata() throws Exception {
@@ -417,7 +417,7 @@ class BookingControllerTest {
         when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
                 .thenReturn(page);
 
-        mockMvc.perform(get("/api/bookings/dealer")
+        mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2))
@@ -498,7 +498,7 @@ class BookingControllerTest {
         verify(bookingService).cancelBookingNew(BOOKING_ID, REQUESTER_ID);
     }
 
-    // Test 24: dealer cancels a CONFIRMED booking → 200, cancelledBy='broker'
+    // Test 24: broker cancels a CONFIRMED booking → 200, cancelledBy='broker'
     @Test
     void cancel_confirmedBooking_asDealer_returns200() throws Exception {
         ViewingRequest booking = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
@@ -515,7 +515,7 @@ class BookingControllerTest {
         verify(bookingService).cancelBookingNew(BOOKING_ID, DEALER_ID);
     }
 
-    // Test 25: dealer tries to cancel a REQUESTED booking → 409 (dealer can only cancel CONFIRMED)
+    // Test 25: broker tries to cancel a REQUESTED booking → 409 (broker can only cancel CONFIRMED)
     @Test
     void cancel_requestedBooking_asDealer_returns409() throws Exception {
         when(bookingService.cancelBookingNew(BOOKING_ID, DEALER_ID))
@@ -527,7 +527,7 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
 
-    // Test 26: caller is neither requester nor dealer → 403
+    // Test 26: caller is neither requester nor broker → 403
     @Test
     void cancel_wrongCaller_returns403() throws Exception {
         UUID outsider = UUID.fromString("00000000-0000-0000-0000-0000000000ff");

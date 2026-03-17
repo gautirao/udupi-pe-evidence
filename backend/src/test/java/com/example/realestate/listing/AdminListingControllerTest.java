@@ -188,7 +188,7 @@ class AdminListingControllerTest {
         verify(listingService, never()).rejectListing(any(), any(), any());
     }
 
-    // ==================== Test 5: Non-admin (dealer) -> 403 ====================
+    // ==================== Test 5: Non-admin (broker) -> 403 ====================
 
     @Test
     void approve_withDealerRole_returns403() throws Exception {

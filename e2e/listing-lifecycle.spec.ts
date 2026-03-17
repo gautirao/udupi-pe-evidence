@@ -51,20 +51,20 @@ function readListingFixture(): ListingFixture | null {
 const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
 
-const dealerEmail    = process.env.BROKER_EMAIL    ?? process.env.DEALER_EMAIL    ?? '';
-const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
+const brokerEmail    = process.env.BROKER_EMAIL    ?? process.env.DEALER_EMAIL    ?? '';
+const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 
-const hasDealerCreds = hasRealCredentials(dealerEmail, dealerPassword);
+const hasBrokerCreds = hasRealCredentials(brokerEmail, brokerPassword);
 const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
-/** Log in as dealer via the UI and wait for redirect away from /auth. */
-async function loginAsDealer(page: import('@playwright/test').Page): Promise<void> {
+/** Log in as broker via the UI and wait for redirect away from /auth. */
+async function loginAsBroker(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/auth');
   await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').fill(dealerEmail);
-  await page.locator('#signin-password').fill(dealerPassword);
+  await page.locator('#signin-email').fill(brokerEmail);
+  await page.locator('#signin-password').fill(brokerPassword);
   await page
     .locator('button[type="submit"]')
     .filter({ hasText: /sign in/i })
@@ -92,7 +92,7 @@ async function loginAsUser(page: import('@playwright/test').Page): Promise<void>
 // ---------------------------------------------------------------------------
 test('L1 — created listing appears in broker /broker/listings', async ({ page }) => {
   test.skip(
-    !hasDealerCreds,
+    !hasBrokerCreds,
     'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — skipping L1',
   );
 
@@ -105,7 +105,7 @@ test('L1 — created listing appears in broker /broker/listings', async ({ page 
   // TypeScript narrowing: fixture is non-null after the skip above
   const { id } = fixture!;
 
-  await loginAsDealer(page);
+  await loginAsBroker(page);
   await page.goto('/dealer/listings');
   await page.waitForLoadState('domcontentloaded');
 
@@ -142,14 +142,14 @@ test('L2 — listing detail page loads without error', async ({ page }) => {
     'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
   );
   test.skip(
-    !hasDealerCreds,
+    !hasBrokerCreds,
     'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — /listing/:id requires auth; skipping L2',
   );
 
   const { id } = fixture!;
 
   // /listing/:id is a ProtectedRoute — must be logged in before navigating.
-  await loginAsDealer(page);
+  await loginAsBroker(page);
   await page.goto(`/listing/${id}`);
   await page.waitForLoadState('domcontentloaded');
 
@@ -189,7 +189,7 @@ test('L3 — Request Viewing button visible for a LIVE listing', async ({ page }
   const { id } = fixture!;
 
   // /listing/:id is a ProtectedRoute — must be logged in before navigating.
-  // Log in as user (not dealer — "Request Viewing" is for non-dealer users).
+  // Log in as user (not broker — "Request Viewing" is for non-broker users).
   await loginAsUser(page);
   await page.goto(`/listing/${id}`);
   await page.waitForLoadState('domcontentloaded');
@@ -220,7 +220,7 @@ test('L4 — duplicate booking request is rejected with 409', async ({ page }) =
 
   const { id: listingId } = fixture!;
 
-  // Log in as user (bookings are made by regular users, not dealers)
+  // Log in as user (bookings are made by regular users, not brokers)
   await loginAsUser(page);
 
   // Navigate to the listing so the browser context is on the same origin

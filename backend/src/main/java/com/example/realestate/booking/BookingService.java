@@ -24,12 +24,12 @@ import java.util.regex.Pattern;
  * Business logic for booking (viewing request) lifecycle.
  *
  * Security controls (M4–M10):
- *   M4:  requester_id = JWT.sub; dealer_id = listing.created_by — never from body.
+ *   M4:  requester_id = JWT.sub; broker_id = listing.created_by — never from body.
  *   M5:  Per-endpoint ownership check; BookingNotFoundException (→ 404) for non-owners.
  *   M7:  requestedTimeSlot validated against ^\d{2}:\d{2}-\d{2}:\d{2}$.
  *   M8:  requestedDate must be in the future, at most 90 days out.
  *   M9:  requesterMessage and declineReason max 500 characters.
- *   M10: Self-booking prevention — requesterId == dealerId → 400.
+ *   M10: Self-booking prevention — requesterId == brokerId → 400.
  */
 @Service
 public class BookingService {
@@ -74,11 +74,11 @@ public class BookingService {
      * Create a new viewing request.
      *
      * M4:  requesterId = JWT.sub (passed from controller, never from body).
-     *       dealerId = listing.created_by (looked up from DB, never from body).
+     *       brokerId = listing.created_by (looked up from DB, never from body).
      * M7:  requestedTimeSlot must match ^\d{2}:\d{2}-\d{2}:\d{2}$
      * M8:  requestedDate must be future, at most 90 days out.
      * M9:  requesterMessage max 500 characters.
-     * M10: requesterId != dealerId.
+     * M10: requesterId != brokerId.
      *
      * @throws BookingValidationException for input validation failures
      * @throws BookingConflictException   when a duplicate active booking already exists
@@ -110,7 +110,7 @@ public class BookingService {
                     "Message must be " + MAX_FREE_TEXT_LENGTH + " characters or fewer");
         }
 
-        // Look up listing — must exist and be LIVE (M4: dealerId from listing, never body)
+        // Look up listing — must exist and be LIVE (M4: brokerId from listing, never body)
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new BookingValidationException("listingId", "Listing not found"));
 
@@ -121,7 +121,7 @@ public class BookingService {
 
         UUID dealerId = listing.getCreatedBy();
 
-        // Guard: SCRAPED listings have no dealer (created_by = null) — cannot accept bookings
+        // Guard: SCRAPED listings have no broker (created_by = null) — cannot accept bookings
         if (dealerId == null) {
             throw new BookingValidationException("listingId",
                     "This listing cannot accept booking requests");
@@ -151,7 +151,7 @@ public class BookingService {
             // rather than deferring to transaction commit where DataIntegrityViolationException
             // would escape the catch block and become a 500.
             ViewingRequest saved = viewingRequestRepository.saveAndFlush(booking);
-            log.info("Created booking bookingId={} listingId={} requesterId={} dealerId={}",
+            log.info("Created booking bookingId={} listingId={} requesterId={} brokerId={}",
                     saved.getId(), listingId, requesterId, dealerId);
             eventPublisher.publishEvent(new ViewingRequestedEvent(saved));
             return saved;
@@ -165,8 +165,8 @@ public class BookingService {
     // ===== Confirm =====
 
     /**
-     * Dealer confirms a REQUESTED booking.
-     * M5: verify dealer_id == callerId; return 404 (BookingNotFoundException) if not.
+     * Broker confirms a REQUESTED booking.
+     * M5: verify broker_id == callerId; return 404 (BookingNotFoundException) if not.
      * Atomic: ownership check read → confirmAtomic → if 0 rows → BookingStateConflictException.
      */
     @Transactional
@@ -182,7 +182,7 @@ public class BookingService {
 
         ViewingRequest saved = viewingRequestRepository.findById(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
-        log.info("Confirmed booking bookingId={} dealerId={}", bookingId, callerId);
+        log.info("Confirmed booking bookingId={} brokerId={}", bookingId, callerId);
         eventPublisher.publishEvent(new ViewingConfirmedEvent(saved));
         return saved;
     }
@@ -190,8 +190,8 @@ public class BookingService {
     // ===== Decline =====
 
     /**
-     * Dealer declines a REQUESTED booking.
-     * M5: verify dealer_id == callerId; return 404 if not.
+     * Broker declines a REQUESTED booking.
+     * M5: verify broker_id == callerId; return 404 if not.
      * M9: declineReason max 500 chars.
      * Atomic: M9 check → ownership read → declineAtomic → if 0 rows → BookingStateConflictException.
      */
@@ -214,7 +214,7 @@ public class BookingService {
 
         ViewingRequest saved = viewingRequestRepository.findById(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
-        log.info("Declined booking bookingId={} dealerId={}", bookingId, callerId);
+        log.info("Declined booking bookingId={} brokerId={}", bookingId, callerId);
         eventPublisher.publishEvent(new ViewingDeclinedEvent(saved));
         return saved;
     }
@@ -222,10 +222,10 @@ public class BookingService {
     // ===== Cancel =====
 
     /**
-     * Cancel a booking. Either the requester or the dealer can cancel, with different rules:
+     * Cancel a booking. Either the requester or the broker can cancel, with different rules:
      * - Requester: can cancel from REQUESTED or CONFIRMED. Sets cancelledBy = 'user'.
-     * - Dealer: can cancel from CONFIRMED only. Sets cancelledBy = 'dealer'.
-     * M5: return 404 if callerId matches neither requester_id nor dealer_id.
+     * - Broker: can cancel from CONFIRMED only. Sets cancelledBy = 'dealer'.
+     * M5: return 404 if callerId matches neither requester_id nor broker_id.
      * Atomic: ownership read → determine role → cancelAtomic → if 0 rows → BookingStateConflictException.
      */
     @Transactional
@@ -276,7 +276,7 @@ public class BookingService {
      *
      * Allowed transitions:
      * - Requester: REQUESTED → CANCELLED or CONFIRMED → CANCELLED
-     * - Dealer:    CONFIRMED → CANCELLED
+     * - Broker:    CONFIRMED → CANCELLED
      */
     @Transactional
     public ViewingRequest cancelBookingNew(UUID bookingId, UUID callerId) {
@@ -343,8 +343,8 @@ public class BookingService {
     // ===== Private helpers =====
 
     /**
-     * Load a booking and verify the caller is the dealer.
-     * Returns BookingNotFoundException if booking not found or dealer_id != callerId (M5).
+     * Load a booking and verify the caller is the broker.
+     * Returns BookingNotFoundException if booking not found or broker_id != callerId (M5).
      */
     private ViewingRequest findBookingForDealer(UUID bookingId, UUID callerId) {
         ViewingRequest booking = viewingRequestRepository.findById(bookingId)

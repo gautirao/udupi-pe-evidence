@@ -13,7 +13,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * address has just been confirmed.
  *
  * <p>Fires asynchronously after the listing update commits so that the Overpass HTTP call
- * does not block the dealer's request. Settlement enrichment failures are logged but never
+ * does not block the broker's request. Settlement enrichment failures are logged but never
  * propagated to the caller — they are silently retried on the next suggestions fetch.
  */
 @Component

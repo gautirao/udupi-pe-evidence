@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * WebMvcTest for the dealer/admin management endpoints in {@link ListingPoiController}.
+ * WebMvcTest for the broker/admin management endpoints in {@link ListingPoiController}.
  * Covers: suggestions, approve, pin, manual add, delete — auth and business logic paths.
  */
 @WebMvcTest(
@@ -275,7 +275,7 @@ class ListingPoiManagementControllerTest {
 
     @Test
     void admin_canAccessAnyListing() throws Exception {
-        // Admin accesses a listing owned by a different dealer (OWNER_ID)
+        // Admin accesses a listing owned by a different broker (OWNER_ID)
         when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))

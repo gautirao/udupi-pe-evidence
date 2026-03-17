@@ -31,15 +31,15 @@ public class EmailService {
     }
 
     /**
-     * Sends a booking notification email to the dealer via Resend.
+     * Sends a booking notification email to the broker via Resend.
      * Fire-and-forget — callers must handle exceptions.
      *
-     * @param dealerEmail the dealer's email address (required — caller should skip if null)
+     * @param brokerEmail the broker's email address (required — caller should skip if null)
      * @param buyerName   buyer's display name, or null (falls back to "A potential buyer")
      * @param listingTitle listing title, or null (falls back to "your listing")
      * @param listingId   the listing UUID for the detail link
      */
-    public void sendBookingNotification(String dealerEmail, String buyerName,
+    public void sendBookingNotification(String brokerEmail, String buyerName,
                                          String listingTitle, UUID listingId) {
         String safeBuyerName = (buyerName != null && !buyerName.isBlank()) ? buyerName : "A potential buyer";
         String safeTitle = (listingTitle != null && !listingTitle.isBlank()) ? listingTitle : "your listing";
@@ -53,13 +53,13 @@ public class EmailService {
 
         Map<String, Object> body = Map.of(
                 "from", fromAddress,
-                "to", new String[]{dealerEmail},
+                "to", new String[]{brokerEmail},
                 "subject", subject,
                 "html", html
         );
 
         restTemplate.postForObject(RESEND_EMAILS_URL, new HttpEntity<>(body, headers), Map.class);
-        log.debug("Booking notification email sent to={} listingId={}", dealerEmail, listingId);
+        log.debug("Booking notification email sent to={} listingId={}", brokerEmail, listingId);
     }
 
     /**

@@ -142,10 +142,10 @@ export default async function globalTeardown(): Promise<void> {
     'Test listing may leak if listing is not REJECTED.',
   );
 
-  const dealerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
-  const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
+  const brokerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+  const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
-  if (!dealerEmail || !dealerPassword) {
+  if (!brokerEmail || !brokerPassword) {
     console.log(
       `[global-teardown] BROKER_EMAIL / DEALER_EMAIL not set — cannot delete listing ${listingId}. ` +
       'Remove it manually.',
@@ -155,10 +155,10 @@ export default async function globalTeardown(): Promise<void> {
     return;
   }
 
-  const token = await getToken(dealerEmail, dealerPassword);
+  const token = await getToken(brokerEmail, brokerPassword);
   if (!token) {
     console.log(
-      `[global-teardown] Could not obtain dealer token — cannot delete listing ${listingId}. ` +
+      `[global-teardown] Could not obtain broker token — cannot delete listing ${listingId}. ` +
       'Remove it manually.',
     );
     try { fs.unlinkSync(ID_FILE); } catch { /* best-effort */ }

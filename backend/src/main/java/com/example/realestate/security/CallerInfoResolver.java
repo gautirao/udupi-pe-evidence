@@ -24,7 +24,7 @@ import java.util.UUID;
  *   <li>Extract {@link JwtAuthenticationToken} from {@link SecurityContextHolder}.</li>
  *   <li>Parse {@code UUID} from JWT subject — throws {@code 403} on malformed subject.</li>
  *   <li>Look up role via {@link UserRoleService} — throws {@code 403} if role is absent
- *       or not in the allowed set {dealer, admin, user}.</li>
+ *       or not in the allowed set {broker, admin, user}.</li>
  * </ol>
  */
 @Component

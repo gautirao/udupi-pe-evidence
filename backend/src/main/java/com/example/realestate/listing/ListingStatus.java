@@ -6,11 +6,11 @@ package com.example.realestate.listing;
  *
  * <ul>
  *   <li>{@link #SCRAPED} — created by the ingestion pipeline</li>
- *   <li>{@link #DRAFT} — created by a dealer, not yet submitted</li>
- *   <li>{@link #PENDING_REVIEW} — submitted by dealer, awaiting admin approval</li>
+ *   <li>{@link #DRAFT} — created by a broker, not yet submitted</li>
+ *   <li>{@link #PENDING_REVIEW} — submitted by broker, awaiting admin approval</li>
  *   <li>{@link #LIVE} — approved by admin, visible to all users</li>
- *   <li>{@link #REJECTED} — rejected by admin, dealer can edit and resubmit</li>
- *   <li>{@link #ARCHIVED} — soft-deleted by dealer/admin; hidden from owner views but preserved for history</li>
+ *   <li>{@link #REJECTED} — rejected by admin, broker can edit and resubmit</li>
+ *   <li>{@link #ARCHIVED} — soft-deleted by broker/admin; hidden from owner views but preserved for history</li>
  * </ul>
  */
 public enum ListingStatus {

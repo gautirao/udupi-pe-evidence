@@ -381,7 +381,7 @@ public class ListingService {
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
 
     /**
-     * Create a new dealer-owned listing with status DRAFT.
+     * Create a new broker-owned listing with status DRAFT.
      */
     @Transactional
     public Listing createDraft(UUID createdBy, String propertyType, String title,
@@ -403,7 +403,7 @@ public class ListingService {
     }
 
     /**
-     * Create a new dealer-owned listing with status DRAFT (pre-commercial overload).
+     * Create a new broker-owned listing with status DRAFT (pre-commercial overload).
      */
     @Transactional
     public Listing createDraft(UUID createdBy, String propertyType, String title,
@@ -793,7 +793,7 @@ public class ListingService {
     /**
      * Find a listing that the user owns (or any listing if admin).
      * Throws ListingNotFoundException if the listing does not exist or has been archived.
-     * Archived listings are treated as not found to prevent dealers from accessing or
+     * Archived listings are treated as not found to prevent brokers from accessing or
      * modifying them via update, image upload, or any other owner-scoped endpoint.
      * Throws ListingOwnershipException if the listing exists but is owned by someone else.
      */
@@ -1185,7 +1185,7 @@ public class ListingService {
                                         String title, String propertyType, Long pricePaise) {}
 
     /**
-     * Fired after a dealer confirms the address on a listing that has coordinates and a
+     * Fired after a broker confirms the address on a listing that has coordinates and a
      * settlement-enrichment-eligible property type (land, house, commercial).
      * Consumed by {@code SettlementEnrichmentListener} to trigger Overpass settlement fetch.
      */

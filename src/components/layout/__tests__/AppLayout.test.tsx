@@ -28,7 +28,7 @@ type MockAuth = {
   session: null;
   isLoading: boolean;
   isAdmin: boolean;
-  isDealer: boolean;
+  isBroker: boolean;
   userRole: 'admin' | 'user' | 'dealer' | null;
   insightsAccessUntil: string | null;
   signOut: typeof mockSignOut;
@@ -51,7 +51,7 @@ function baseAuth(overrides: Partial<MockAuth> = {}): MockAuth {
     session: null,
     isLoading: false,
     isAdmin: false,
-    isDealer: false,
+    isBroker: false,
     userRole: null,
     insightsAccessUntil: null,
     signOut: mockSignOut,
@@ -118,7 +118,7 @@ describe('AppLayout — nav links by role', () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
-      isDealer: true,
+      isBroker: true,
     });
     renderLayout();
 
@@ -190,7 +190,7 @@ describe('AppLayout — admin badge', () => {
   });
 
   it('does not show Admin badge for dealers', () => {
-    mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isDealer: true });
+    mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isBroker: true });
     renderLayout();
 
     expect(screen.queryByText('Admin')).not.toBeInTheDocument();
@@ -209,7 +209,7 @@ describe('AppLayout — role label in dropdown', () => {
   });
 
   it('shows "Broker" label for dealer role', async () => {
-    mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isDealer: true });
+    mockAuth = baseAuth({ user: { email: 'dealer@test.com' }, userRole: 'dealer', isBroker: true });
     const user = userEvent.setup();
     renderLayout();
 
@@ -232,7 +232,7 @@ describe('AppLayout — broker nav link hrefs', () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
-      isDealer: true,
+      isBroker: true,
     });
     renderLayout();
 
@@ -246,7 +246,7 @@ describe('AppLayout — onboarding redirect for dealers', () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
-      isDealer: true,
+      isBroker: true,
     });
     render(
       <MemoryRouter initialEntries={['/onboarding']}>

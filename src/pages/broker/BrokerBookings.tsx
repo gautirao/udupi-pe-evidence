@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Loader2, Calendar, Clock } from 'lucide-react';
 import {
-  useDealerBookings,
+  useBrokerBookings,
   useConfirmBooking,
   useDeclineBooking,
   useCancelBooking,
@@ -36,10 +36,10 @@ import {
  *  - Confirmed Bookings (CONFIRMED): Cancel action.
  */
 export default function BrokerBookings() {
-  const { isDealer, isAdmin, isLoading: authLoading, userRole } = useAuth();
+  const { isBroker, isAdmin, isLoading: authLoading, userRole } = useAuth();
   const [searchParams] = useSearchParams();
   const listingId = searchParams.get('listingId') ?? undefined;
-  const { data: bookings, isLoading: bookingsLoading, isError } = useDealerBookings(listingId);
+  const { data: bookings, isLoading: bookingsLoading, isError } = useBrokerBookings(listingId);
   const confirmBooking = useConfirmBooking();
   const declineBooking = useDeclineBooking();
   const cancelBooking = useCancelBooking();
@@ -54,7 +54,7 @@ export default function BrokerBookings() {
     );
   }
 
-  if (!isDealer && !isAdmin && userRole !== 'user') {
+  if (!isBroker && !isAdmin && userRole !== 'user') {
     return <Navigate to="/" replace />;
   }
 

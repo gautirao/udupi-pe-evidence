@@ -31,14 +31,14 @@ import java.util.UUID;
  * <ul>
  *   <li><b>Amenity fetch</b> ({@link #fetchAndCacheAmenities}) — the standard 7-category
  *       amenity query, radius from {@link PoiQueryProfile}. Stores with
- *       {@code source='overpass'}, {@code approved=false} (requires dealer review).</li>
+ *       {@code source='overpass'}, {@code approved=false} (requires broker review).</li>
  *   <li><b>Settlement fetch</b> ({@link #enrichSettlement}) — place nodes (town/village)
  *       and road-access ways, parameterised per property type. Stores with
  *       {@code source='overpass_settlement'}, {@code approved=true} (auto-approved).</li>
  * </ul>
  *
  * <p>The two caches are independent: running settlement enrichment eagerly on location
- * confirmation does NOT prevent the subsequent lazy amenity fetch when the dealer opens
+ * confirmation does NOT prevent the subsequent lazy amenity fetch when the broker opens
  * PoiManager.
  */
 @Service
@@ -175,7 +175,7 @@ public class OverpassService {
      * is false (e.g. {@code apartment}).
      *
      * <p>All settlement POIs are stored with {@code source='overpass_settlement'} and
-     * {@code approved=true} (auto-approved — they are factual map data, not dealer content).
+     * {@code approved=true} (auto-approved — they are factual map data, not broker content).
      *
      * @param listingId    the listing to enrich
      * @param lat          listing latitude

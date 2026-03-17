@@ -208,7 +208,7 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$.error").exists());
     }
 
-    // ==================== Test 6: POST other dealer's listing -> 404 ====================
+    // ==================== Test 6: POST other broker's listing -> 404 ====================
 
     @Test
     void register_otherDealerListing_returns404() throws Exception {
@@ -391,7 +391,7 @@ class ListingImageControllerTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ==================== Test 16: GET images — different dealer -> 404 ====================
+    // ==================== Test 16: GET images — different broker -> 404 ====================
 
     @Test
     void getImages_differentDealer_returns403or404() throws Exception {
