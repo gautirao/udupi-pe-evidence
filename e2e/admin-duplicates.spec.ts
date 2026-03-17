@@ -37,8 +37,8 @@ const BACKEND = process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer
 
 const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
-const dealerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
-const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
+const brokerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
 // ---------------------------------------------------------------------------
 // Shared auth helpers
@@ -69,12 +69,12 @@ async function getToken(email: string, password: string): Promise<string | null>
 // ---------------------------------------------------------------------------
 
 /** Create a minimal DRAFT listing via the backend API and return its ID. */
-async function createDraftListing(dealerToken: string, title: string): Promise<string> {
+async function createDraftListing(brokerToken: string, title: string): Promise<string> {
   const res = await fetch(`${BACKEND}/api/listings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${dealerToken}`,
+      Authorization: `Bearer ${brokerToken}`,
     },
     body: JSON.stringify({
       propertyType: 'house',
@@ -203,8 +203,8 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
   const hasRequiredCreds = hasRealCredentials(
     adminEmail,
     adminPassword,
-    dealerEmail,
-    dealerPassword,
+    brokerEmail,
+    brokerPassword,
     SUPABASE_URL,
     SUPABASE_KEY,
   );
@@ -214,10 +214,10 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
   test.beforeAll(async () => {
     if (!hasRequiredCreds) return;
 
-    // 1. Obtain dealer token and create three DRAFT listings
-    const dealerToken = await getToken(dealerEmail, dealerPassword);
-    if (!dealerToken) {
-      console.log('[admin-duplicates] Could not obtain dealer token — beforeAll aborted.');
+    // 1. Obtain broker token and create three DRAFT listings
+    const brokerToken = await getToken(brokerEmail, brokerPassword);
+    if (!brokerToken) {
+      console.log('[admin-duplicates] Could not obtain broker token — beforeAll aborted.');
       return;
     }
 
@@ -225,9 +225,9 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     let listingIdB: string;
     let listingIdC: string;
     try {
-      listingIdA = await createDraftListing(dealerToken, '[E2E Dup Test] A');
-      listingIdB = await createDraftListing(dealerToken, '[E2E Dup Test] B');
-      listingIdC = await createDraftListing(dealerToken, '[E2E Dup Test] C');
+      listingIdA = await createDraftListing(brokerToken, '[E2E Dup Test] A');
+      listingIdB = await createDraftListing(brokerToken, '[E2E Dup Test] B');
+      listingIdC = await createDraftListing(brokerToken, '[E2E Dup Test] C');
       console.log(
         `[admin-duplicates] Created listings: ${listingIdA}, ${listingIdB}, ${listingIdC}`,
       );

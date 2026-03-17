@@ -12,7 +12,7 @@ import java.time.temporal.ChronoUnit;
  * <p>Two variants are provided:
  * <ul>
  *   <li>{@link #toResponse(Listing)} — full response, including rejectionReason. Use for
- *       authenticated dealer / admin endpoints.</li>
+ *       authenticated broker / admin endpoints.</li>
  *   <li>{@link #toPublicResponse(Listing)} — identical to toResponse but always returns
  *       {@code null} for rejectionReason. Use for unauthenticated public endpoints.</li>
  * </ul>
@@ -30,7 +30,7 @@ public class ListingResponseMapper {
     }
 
     /**
-     * Full response including rejectionReason. For dealer/admin-facing endpoints only.
+     * Full response including rejectionReason. For broker/admin-facing endpoints only.
      */
     public ListingController.ListingResponse toResponse(Listing l) {
         return build(l, l.getRejectionReason());

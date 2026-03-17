@@ -63,7 +63,7 @@ const STAT_CARDS = [
  *  - Not dealer/admin: redirect to / (access not permitted).
  */
 export default function BrokerDashboard() {
-  const { isDealer, isAdmin, isLoading } = useAuth();
+  const { isBroker, isAdmin, isLoading } = useAuth();
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useBrokerListingStats();
   const { data: recentData, isLoading: recentLoading, isError: recentError, refetch: refetchRecent } = useBrokerMyListings(0, 5);
 
@@ -77,7 +77,7 @@ export default function BrokerDashboard() {
     );
   }
 
-  if (!isDealer && !isAdmin) {
+  if (!isBroker && !isAdmin) {
     return <Navigate to="/" replace />;
   }
 

@@ -54,7 +54,7 @@ public class BrokerSetupController {
 
     // Note: @Transactional on a controller method is intentional here — mirrors DealerSetupController.
     // CGLIB proxy ensures atomicity (role insert + phone update). Refactor to a shared service is a
-    // tracked follow-up when dealer/ is fully removed.
+    // tracked follow-up when the deprecated dealer/ path is fully removed.
     @PostMapping("/setup")
     @Transactional
     public ResponseEntity<?> setup(JwtAuthenticationToken auth, @RequestBody SetupRequest req) {

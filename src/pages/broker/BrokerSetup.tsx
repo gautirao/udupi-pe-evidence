@@ -27,7 +27,7 @@ interface SetupErrorBody {
  * then navigates to / where broker nav links will appear.
  */
 export default function BrokerSetup() {
-  const { user, isDealer, isAdmin, isLoading, refreshRole } = useAuth();
+  const { user, isBroker, isAdmin, isLoading, refreshRole } = useAuth();
   const navigate = useNavigate();
 
   const [phone, setPhone] = useState('');
@@ -45,7 +45,7 @@ export default function BrokerSetup() {
     );
   }
 
-  if (isDealer || isAdmin) {
+  if (isBroker || isAdmin) {
     return <Navigate to="/" replace />;
   }
 
@@ -65,7 +65,7 @@ export default function BrokerSetup() {
       // acceptedTerms is always true here (form guard above); role is assigned server-side.
       await api.post('/api/broker/setup', { phone: phone.trim(), acceptedTerms: true });
 
-      // Refresh role in AuthContext so isDealer becomes true before navigation.
+      // Refresh role in AuthContext so isBroker becomes true before navigation.
       await refreshRole();
 
       navigate('/broker/dashboard');

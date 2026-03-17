@@ -219,7 +219,7 @@ public class Listing {
 
     /**
      * When non-null, the listing has been soft-deleted (archived).
-     * Archived listings are hidden from dealer/owner views but preserved for history.
+     * Archived listings are hidden from broker/owner views but preserved for history.
      * Set by {@code deleteListing()} and {@code bulkDeleteListings()}; cleared by admin restore.
      */
     @Column(name = "archived_at")

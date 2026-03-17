@@ -67,4 +67,5 @@ additional_context:
 - known_repo_rules: <optional — see code-review-orchestrator.md for established patterns>
 - areas_to_ignore: <optional>
 - risk_notes: <optional>
+- ac_checklist: <sprint executor only — paste enriched spec AC bullets; reviewer must mark each PRESENT or MISSING; MISSING without OUT OF SCOPE justification = BLOCKING>
 ```

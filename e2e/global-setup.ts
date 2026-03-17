@@ -2,7 +2,7 @@
  * Playwright global setup — runs once before the entire test suite.
  *
  * Responsibilities:
- *   1. Authenticate as a dealer via Supabase password grant.
+ *   1. Authenticate as a broker via Supabase password grant.
  *   2. Create a DRAFT listing via POST /api/listings.
  *   3. If admin creds are present, prepare the listing for approval:
  *        a. PATCH addressConfirmed=true
@@ -72,29 +72,29 @@ function getUserIdFromToken(token: string): string {
 }
 
 export default async function globalSetup(): Promise<void> {
-  const dealerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
-  const dealerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
+  const brokerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+  const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
   // ------------------------------------------------------------------
-  // Guard: dealer creds required to create the listing
+  // Guard: broker creds required to create the listing
   // ------------------------------------------------------------------
-  if (!dealerEmail || !dealerPassword) {
+  if (!brokerEmail || !brokerPassword) {
     console.log(
-      '[global-setup] DEALER_EMAIL / DEALER_PASSWORD not set — skipping listing creation. ' +
+      '[global-setup] BROKER_EMAIL / DEALER_EMAIL not set — skipping listing creation. ' +
       'Tests that depend on a live listing will skip themselves.',
     );
     return;
   }
 
   // ------------------------------------------------------------------
-  // Step 1: Authenticate as dealer
+  // Step 1: Authenticate as broker
   // ------------------------------------------------------------------
-  const dealerToken = await getToken(dealerEmail, dealerPassword);
-  if (!dealerToken) {
-    console.log('[global-setup] Could not obtain dealer token — skipping listing creation.');
+  const brokerToken = await getToken(brokerEmail, brokerPassword);
+  if (!brokerToken) {
+    console.log('[global-setup] Could not obtain broker token — skipping listing creation.');
     return;
   }
-  const dealerUserId = getUserIdFromToken(dealerToken);
+  const brokerUserId = getUserIdFromToken(brokerToken);
 
   // ------------------------------------------------------------------
   // Step 2: Create a DRAFT listing
@@ -105,7 +105,7 @@ export default async function globalSetup(): Promise<void> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${dealerToken}`,
+        Authorization: `Bearer ${brokerToken}`,
       },
       body: JSON.stringify({
         propertyType: 'house',
@@ -148,7 +148,7 @@ export default async function globalSetup(): Promise<void> {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${dealerToken}`,
+          Authorization: `Bearer ${brokerToken}`,
         },
         body: JSON.stringify({ addressConfirmed: true }),
       });
@@ -165,13 +165,13 @@ export default async function globalSetup(): Promise<void> {
     // 3b: Register 3 stub images (metadata only — no actual file upload needed)
     const stubImages = ['img-1.jpg', 'img-2.jpg', 'img-3.jpg'];
     for (const filename of stubImages) {
-      const storagePath = `listings/${dealerUserId}/${listingId}/${filename}`;
+      const storagePath = `listings/${brokerUserId}/${listingId}/${filename}`;
       try {
         const imgRes = await fetch(`${BACKEND}/api/listings/${listingId}/images`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${dealerToken}`,
+            Authorization: `Bearer ${brokerToken}`,
           },
           body: JSON.stringify({
             storagePath,
@@ -193,7 +193,7 @@ export default async function globalSetup(): Promise<void> {
     try {
       const submitRes = await fetch(`${BACKEND}/api/listings/${listingId}/submit`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${dealerToken}` },
+        headers: { Authorization: `Bearer ${brokerToken}` },
       });
       if (submitRes.ok) {
         submitted = true;

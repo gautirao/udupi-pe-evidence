@@ -51,7 +51,7 @@ function PageLoader() {
 }
 
 /** Redirect /dealer/listings/:id/edit?... → /broker/listings/:id/edit?... preserving query params */
-function DealerListingEditRedirect() {
+function BrokerListingEditRedirect() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const query = searchParams.toString();
@@ -59,14 +59,14 @@ function DealerListingEditRedirect() {
 }
 
 /** Redirect /dealer/listings?... → /broker/listings?... preserving query params */
-function DealerListingsRedirect() {
+function BrokerListingsRedirect() {
   const [searchParams] = useSearchParams();
   const query = searchParams.toString();
   return <Navigate to={`/broker/listings${query ? `?${query}` : ''}`} replace />;
 }
 
 /** Redirect /dealer/bookings?... → /broker/bookings?... preserving query params */
-function DealerBookingsRedirect() {
+function BrokerBookingsRedirect() {
   const [searchParams] = useSearchParams();
   const query = searchParams.toString();
   return <Navigate to={`/broker/bookings${query ? `?${query}` : ''}`} replace />;
@@ -168,9 +168,9 @@ const App = () => (
               <Route path="/dealer/setup" element={<Navigate to="/broker/setup" replace />} />
               <Route path="/dealer/dashboard" element={<Navigate to="/broker/dashboard" replace />} />
               <Route path="/dealer/listings/new" element={<Navigate to="/broker/listings/new" replace />} />
-              <Route path="/dealer/listings/:id/edit" element={<DealerListingEditRedirect />} />
-              <Route path="/dealer/listings" element={<DealerListingsRedirect />} />
-              <Route path="/dealer/bookings" element={<DealerBookingsRedirect />} />
+              <Route path="/dealer/listings/:id/edit" element={<BrokerListingEditRedirect />} />
+              <Route path="/dealer/listings" element={<BrokerListingsRedirect />} />
+              <Route path="/dealer/bookings" element={<BrokerBookingsRedirect />} />
               {/* User Routes */}
               <Route
                 path="/my-bookings"

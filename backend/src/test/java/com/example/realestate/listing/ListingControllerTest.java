@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.mockito.invocation.InvocationOnMock;
 
 /**
- * WebMvcTest for ListingController (dealer CRUD endpoints).
+ * WebMvcTest for ListingController (broker CRUD endpoints).
  * Uses jwt() post-processor to inject JwtAuthenticationToken; mocks ListingService.
  */
 @WebMvcTest(
@@ -241,7 +241,7 @@ class ListingControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ==================== Test 6: JWT with non-dealer role -> 403 ====================
+    // ==================== Test 6: JWT with non-broker role -> 403 ====================
 
     @Test
     void create_withViewerRole_returnsForbidden() throws Exception {
@@ -436,7 +436,7 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.errors[0].field").value("address_confirmed"));
     }
 
-    // ==================== Submit: other dealer's listing -> 404 ====================
+    // ==================== Submit: other broker's listing -> 404 ====================
 
     @Test
     void submit_otherDealerListing_returns404() throws Exception {
