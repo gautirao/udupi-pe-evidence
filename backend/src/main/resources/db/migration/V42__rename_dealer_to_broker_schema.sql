@@ -5,8 +5,8 @@
 --
 -- Changes (in order):
 --   1. Column rename: viewing_requests.dealer_id -> broker_id (+ index rename)
---   2. Data migration: seller_type 'dealer' -> 'broker' in property_listings
---   3. Extend chk_seller_type constraint to include 'broker'
+--   2. Extend chk_seller_type constraint to include 'broker' (MUST precede data migration)
+--   3. Data migration: seller_type 'dealer' -> 'broker' in property_listings
 --   4. Data migration: cancelled_by 'dealer' -> 'broker' in viewing_requests
 --   5. RLS policy updates: add 'broker' alongside 'dealer' in all relevant policies
 --
@@ -45,25 +45,25 @@ CREATE POLICY "Users can view own bookings"
     USING (requester_id = auth.uid() OR broker_id = auth.uid());
 
 -- ============================================================
--- 2. Data migration: seller_type 'dealer' -> 'broker'
+-- 2. Extend chk_seller_type to include 'broker' (MUST precede data migration)
 -- ============================================================
--- All existing rows were stamped 'dealer' by the V33 DEFAULT.
--- Rename them to 'broker' so the new terminology is consistent.
--- The constraint update in step 3 must follow this update.
-UPDATE public.property_listings
-    SET seller_type = 'broker'
-    WHERE seller_type = 'dealer';
-
--- ============================================================
--- 3. Extend chk_seller_type to include 'broker' (keep 'dealer' for expand phase)
--- ============================================================
--- Constraint name from V33: chk_seller_type
+-- The old constraint from V33 only allows ('owner', 'dealer', 'builder').
+-- Drop and recreate it first so the UPDATE in step 3 can set seller_type='broker'.
 ALTER TABLE public.property_listings
     DROP CONSTRAINT IF EXISTS chk_seller_type;
 
 ALTER TABLE public.property_listings
     ADD CONSTRAINT chk_seller_type
     CHECK (seller_type IN ('owner', 'dealer', 'broker', 'builder'));
+
+-- ============================================================
+-- 3. Data migration: seller_type 'dealer' -> 'broker'
+-- ============================================================
+-- All existing rows were stamped 'dealer' by the V33 DEFAULT.
+-- Rename them to 'broker' so the new terminology is consistent.
+UPDATE public.property_listings
+    SET seller_type = 'broker'
+    WHERE seller_type = 'dealer';
 
 -- ============================================================
 -- 4. Data migration: cancelled_by 'dealer' -> 'broker' in viewing_requests
