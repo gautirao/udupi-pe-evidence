@@ -1,12 +1,12 @@
 package com.example.realestate.listing.crud;
 
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingDeduplicationService;
-import com.example.realestate.listing.ListingOwnershipGuard;
-import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingStatus;
-import com.example.realestate.listing.PriceChangeLog;
-import com.example.realestate.listing.PriceChangeLogRepository;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingDeduplicationService;
+import com.example.realestate.listing.core.ListingOwnershipGuard;
+import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.pricing.PriceChangeLog;
+import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.api.BulkDeleteResult;
 import com.example.realestate.listing.api.ListingStatsResponse;
 import com.example.realestate.listing.event.SettlementEnrichmentRequestedEvent;

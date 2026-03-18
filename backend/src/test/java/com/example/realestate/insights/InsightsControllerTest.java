@@ -2,8 +2,8 @@ package com.example.realestate.insights;
 
 import com.example.realestate.dashboard.AreaInsightsDao;
 import com.example.realestate.dashboard.AreaPriceWeekly;
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository.OpportunityProjection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

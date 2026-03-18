@@ -1,10 +1,10 @@
 package com.example.realestate.listing.workflow;
 
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingOwnershipGuard;
-import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingStatus;
-import com.example.realestate.listing.ProximityDuplicateService;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingOwnershipGuard;
+import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
 import com.example.realestate.listing.event.NewListingInAreaEvent;
