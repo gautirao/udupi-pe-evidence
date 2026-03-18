@@ -49,12 +49,12 @@ Derive the change tier from the triage fields. This is mechanical — do not ove
 
 ### Minimum workflow per tier
 
-| Tier | qa-fast | Engineer | Code-reviewer | Security-reviewer | QA E2E gate | Pre-push hook |
-|------|---------|----------|---------------|-------------------|-------------|---------------|
-| Doc-only | skip | skip | skip | skip | skip | skips (doc pattern) |
-| Trivial | skip | see Trivial engineer-test rule below | skip | skip | skip | best-effort local backstop |
-| Normal | required | required | required (sonnet) | only if Gate F | **required** | best-effort local backstop |
-| High-risk | required | required | required (**opus**) | **required** | **required** | best-effort local backstop |
+| Tier | qa-fast | Engineer | Code-reviewer | Security-reviewer | E2E authoring | QA E2E gate | Pre-push hook |
+|------|---------|----------|---------------|-------------------|---------------|-------------|---------------|
+| Doc-only | skip | skip | skip | skip | skip | skip | skips (doc pattern) |
+| Trivial | skip | see Trivial engineer-test rule below | skip | skip | skip | skip | best-effort local backstop |
+| Normal | required | required | required (sonnet) | only if Gate F | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
+| High-risk | required | required | required (**opus**) | **required** | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
 
 ### Trivial classification evidence (required)
 
@@ -259,7 +259,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 | `security-reviewer` | `.claude/agents/security-reviewer.md` | Security audit | CRITICAL/HIGH/MEDIUM/LOW severity table |
 | `ui-designer` | `.claude/agents/ui-designer.md` | Screen audit, UX guidance | Read-only design output |
 | `team-lead` | `.claude/agents/team-lead.md` | Decompose + delegate heavy tasks | Subtask plan + agent delegation |
-| `qa` | `.claude/agents/qa.md` | **Test-writing mode**: write/update/run automated tests (when explicit authoring required). **Verification mode**: run E2E suite, report pass/fail, no code changes (pre-PR quality gate for Normal/High-risk). | Test files (test-writing) or pass/fail report (verification) |
+| `qa` | `.claude/agents/qa.md` | **Test-writing mode**: write/update/run automated tests (when explicit authoring required). **E2E authoring mode**: write E2E tests for new cross-layer flows (conditional, triggered by qa-fast). **Verification mode**: run E2E suite, report pass/fail, no code changes (pre-PR quality gate for Normal/High-risk). | Test files (test-writing or e2e-authoring) or pass/fail report (verification) |
 | `spec-enricher` | `.claude/agents/spec-enricher.md` | Sprint kickoff only — convert raw issue descriptions to structured specs | Enriched spec blocks (read-only) |
 
 ### Invocation Rules
@@ -284,7 +284,16 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop and surface to user.
-- `qa` in **verification mode** runs AFTER all reviewers APPROVE, BEFORE commit/push/PR, for Normal and High-risk changes only.
+- `qa` in **E2E authoring mode** runs AFTER code-reviewer (and security-reviewer if applicable) APPROVE, BEFORE `qa` verification mode, for Normal and High-risk changes only. Conditional — triggered only when qa-fast recommended `E2E authoring recommended: YES`.
+  When invoking E2E authoring mode, use this exact Task prompt:
+  > "Mode: e2e-authoring. Write E2E tests for the new/modified user flow introduced by this change. Follow TOOLING.md E2E test placement rules. qa-fast context: [paste qa-fast E2E justification]. Changed files: [list files]. Implementation summary: [1-2 line summary of what the engineer built]. Run the new/updated spec file(s) using a targeted Playwright command to confirm the authored tests pass. Only run the full suite (`npm run test:e2e:local`) if targeted validation is not feasible. Do NOT modify implementation code."
+
+  **Skip conditions** (orchestrator skips E2E authoring even when qa-fast says YES):
+  - Triage Type is `refactor` AND ALL of: no new UI route, no new API endpoint, no changed user-visible workflow step, AND qa-fast did not signal missing E2E coverage for this path
+  - An existing E2E spec file that explicitly covers this specific user flow is identified — either qa-fast cited it by name, or the orchestrator located it via Grep — AND qa-fast recommended NO
+
+  **Uncertainty tie-breaker:** If it is unclear whether the change introduces or modifies a cross-layer flow requiring E2E authoring, default to YES. The skip conditions above are the only valid escape hatches.
+- `qa` in **verification mode** runs AFTER all reviewers APPROVE (and after E2E authoring if applicable), BEFORE commit/push/PR, for Normal and High-risk changes only.
   When invoking verification mode, use this exact Task prompt:
   > "Mode: verification. Run the full E2E suite (`npm run test:e2e:local`) and report results. Do NOT write or modify any code. Do NOT fix failing tests. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
   If QA reports FAIL, apply the Failure Routing Protocol in Step 3. Do NOT proceed to commit/push/PR until QA reports PASS.
@@ -352,10 +361,11 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 
 After code-reviewer (and security-reviewer if applicable) APPROVE:
 
-1. Invoke `qa` agent in **verification mode** (see Invocation Rules above for exact prompt).
-2. QA reports structured result: pass count, fail count, exact failure details.
-3. **If PASS** — proceed to commit/push/PR.
-4. **If FAIL** — enter Failure Routing Protocol below.
+1. **E2E authoring check** — if qa-fast output includes `E2E authoring recommended: YES` AND skip conditions are not met, invoke `qa` in **E2E authoring mode**.
+2. Invoke `qa` agent in **verification mode** (see Invocation Rules above for exact prompt).
+3. QA reports structured result: pass count, fail count, exact failure details.
+4. **If PASS** — proceed to commit/push/PR.
+5. **If FAIL** — enter Failure Routing Protocol below.
 
 ### PR creation is a gated state transition
 
@@ -517,6 +527,7 @@ Classification evidence: [changed files + behavior impact for trivial; or N/A]
 Engineer tests: PASS | FAIL | SKIPPED(trivial, non-executable)
 Code-reviewer: APPROVE | N/A(trivial)
 Security-reviewer: APPROVE | N/A
+E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(refactor-single-service)
 QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only)
 Process-doc review: PASS | N/A
 All gates satisfied: YES

@@ -98,6 +98,44 @@ Unverified: [any tests that could not run and why, or NONE]
 
 ---
 
+## E2E Authoring Mode
+
+**Triggered when:** the orchestrator prompt starts with `Mode: e2e-authoring`.
+
+The implementation is complete and approved. Your job is to add E2E coverage for the new cross-layer flow.
+
+### Rules
+
+1. Read `.claude/TOOLING.md` — E2E test placement rules. Follow the spec file table. Add tests to existing spec files when the workflow matches.
+2. Read the changed implementation files to understand the new flow.
+3. Read existing E2E tests in `e2e/` to match patterns, fixtures, and conventions.
+4. Write the minimum E2E test(s) that exercise the new cross-layer flow end-to-end. Prefer one well-structured test over many thin ones.
+5. Do NOT modify implementation code — only create or update test files.
+6. Run your new/updated spec file(s) using a targeted Playwright command (e.g. `npx playwright test e2e/<spec-file>.spec.ts`) to confirm the authored tests pass. Only run the full suite (`npm run test:e2e:local`) if targeted validation is not feasible (e.g. multiple interdependent spec files or shared fixtures that require the full stack).
+7. If a new test fails due to an implementation bug, STOP and report — do not fix implementation code.
+
+### Output format
+
+```
+## E2E Authoring Report
+Mode: e2e-authoring
+Tests added/updated:
+- [file] — [what flow it covers]
+Command run: npm run test:e2e:local
+Results: [X passed / Y failed / Z skipped]
+Failures: [details or NONE]
+```
+
+### Self-verification checklist (E2E authoring mode)
+
+- [ ] Did I follow TOOLING.md E2E test placement rules?
+- [ ] Did I match existing E2E test patterns (fixtures, selectors, assertions)?
+- [ ] Did I avoid modifying implementation code?
+- [ ] Did I run the full E2E suite and confirm all tests pass?
+- [ ] Does the new test exercise a cross-layer flow (not something testable at unit/integration level)?
+
+---
+
 ## Scale to Change Size
 
 **Small** (1–3 files, isolated, no auth/data impact):

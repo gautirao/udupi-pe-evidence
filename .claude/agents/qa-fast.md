@@ -160,6 +160,22 @@ Specific risks grounded in this change. Highest-risk first. Include:
 
 One sentence on what limits confidence — for example: "Medium — the happy path is covered but the error-response paths have no tests and the migration has no rollback."
 
+### 6) E2E Authoring Recommendation
+`YES | NO` — [one-line justification]
+
+Recommend YES only when ALL hold:
+- Change introduces or modifies a user flow crossing frontend ↔ backend (new page with API calls, new form submission, new workflow step visible in UI that hits a backend endpoint)
+- The flow cannot be adequately exercised at unit/integration layer alone
+- No existing E2E test already covers this specific flow
+
+Recommend NO for:
+- Backend-only changes (service, refactor, config, migration with no UI)
+- Frontend-only changes (styling, component extraction, UI state not crossing to backend)
+- Changes modifying an existing flow already covered by E2E tests — cite the specific spec file and test name as evidence
+- Pure refactors that don't change observable behavior (no new UI route, no new API endpoint, no changed user-visible workflow step)
+
+**When uncertain:** If it is unclear whether the change introduces or modifies a cross-layer user flow, recommend YES. The skip conditions in ROUTE_AND_RUN.md provide escape hatches — a false positive here is safer than a silent gap.
+
 ---
 
 ## Operational Rules
@@ -199,3 +215,4 @@ Before finalising, confirm:
 - Does the confidence level honestly reflect remaining uncertainty?
 - Did I avoid acting like a code-reviewer — no style, no merge verdict, no architectural critique?
 - If I emitted a warning, is it genuinely a risk that should persist in the checkpoint (not just a minor suggestion)?
+- Did I assess E2E authoring need based on whether the change crosses frontend ↔ backend with a new/modified user flow?
