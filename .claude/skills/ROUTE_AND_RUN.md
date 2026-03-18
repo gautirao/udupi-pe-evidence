@@ -16,15 +16,81 @@ qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, 
 
 ## Step 1 — Quick Triage (ALWAYS)
 
-Output ≤ 7 lines:
+Output ≤ 8 lines:
 
 - Summary (1 line)
 - Type: {bugfix|small-change|feature|refactor|perf|security|incident|ui}
 - Scope: {single-service|multi-service|cross-cutting}
 - Risk: {low|med|high} + 1 reason
+- Classification: {trivial|normal|high-risk|doc-only} (derive using Step 1B below)
+-   If trivial → Changed files: [list] | Behavior impact: NONE — [justification]
 - Acceptance: max 3 bullets
 - Tests: max 3 bullets
 - Assumptions: max 2 bullets (only if needed)
+
+---
+
+## Step 1B — Change Classification (ALWAYS, immediately after triage)
+
+Derive the change tier from the triage fields. This is mechanical — do not override.
+
+### Tier definitions
+
+| Tier | Criteria |
+|------|----------|
+| **Doc-only** | Only `*.md`, `docs/`, non-behavioral config. No code changes. Two sub-tiers: **(a) Low-impact**: README, general docs, comments, typo fixes → commit directly. **(b) Process-doc**: agent prompt files (`.claude/agents/`), routing/skill files (`.claude/skills/`), review templates (`.claude/prompts/`), checkpoint/workflow policy files, `.github/workflows/`, CI/CD config → requires process-doc self-review (see below) before commit. Process-docs can alter system behavior indirectly. |
+| **Trivial** | Single-file AND purely non-behavioral AND risk=low. Allowed: copy/text/labels, comments, static styling (CSS-only with no conditional logic), non-executable config (display strings, placeholder text). **Never trivial** (always Normal or higher): logic, control flow, API contracts, persistence/queries, auth/permissions, validation, routing, state management, feature flags, test code, build tooling, CI config, migrations. |
+| **Normal** | Any code change with logic/behaviour change that does not meet High-risk criteria. Standard features, bugfixes, refactors, UI components, new endpoints, test-only. |
+| **High-risk** | Any change touching: auth/authz/JWT, payments, destructive or schema-altering DDL migrations (ALTER existing column, DROP, data backfill, column rename), RLS policies, PII handling, cross-cutting architecture — OR risk=high in triage. Additive-only migrations (new table, new nullable column, new index) are Normal unless they interact with auth/RLS/PII. Any migration that rewrites existing rows, changes constraints, performs backfill, or may cause significant table locking is High-risk regardless of whether the DDL statement appears "additive." |
+
+**Classification is non-overridable.** If any high-risk condition is present, it is High-risk regardless of LOC count or urgency. If any logic change is present, it cannot be Trivial.
+
+**Tie-breaker:** If classification is uncertain between two tiers, always classify to the stricter tier. Err toward more scrutiny, not less.
+
+### Minimum workflow per tier
+
+| Tier | qa-fast | Engineer | Code-reviewer | Security-reviewer | QA E2E gate | Pre-push hook |
+|------|---------|----------|---------------|-------------------|-------------|---------------|
+| Doc-only | skip | skip | skip | skip | skip | skips (doc pattern) |
+| Trivial | skip | see Trivial engineer-test rule below | skip | skip | skip | best-effort local backstop |
+| Normal | required | required | required (sonnet) | only if Gate F | **required** | best-effort local backstop |
+| High-risk | required | required | required (**opus**) | **required** | **required** | best-effort local backstop |
+
+### Trivial classification evidence (required)
+
+When classifying as Trivial, the orchestrator MUST include in the triage block:
+- `Changed files:` [exact file list]
+- `Behavior impact: NONE` — [one-line justification why no runtime behavior changes]
+
+If the orchestrator cannot confidently declare `Behavior impact: NONE`, classify as Normal. Trivial is an explicit opt-in with evidence, not a default.
+
+**Trivial engineer-test rule:** Trivial changes may skip engineer tests ONLY when `Behavior impact: NONE` is declared AND the changed file is purely non-executable (e.g., a display string, placeholder text, comment, or static label). If the changed file is executable code (`.java`, `.ts`, `.tsx`, `.kt`, `.sql`, etc.), engineer tests are still required even for Trivial classification.
+
+The pre-push hook runs as a best-effort local backstop for Trivial changes — it is not a guarantee and must not be relied upon as the quality gate.
+
+### Process-doc self-review (required structured evidence)
+
+Required when doc-only classification involves process-doc files: `.claude/agents/` (agent prompts), `.claude/skills/` (routing/checkpoint files), `.claude/prompts/` (review templates), `.github/workflows/` (CI/CD), or any file that defines workflow gates, classification criteria, or agent boundaries.
+
+Before committing, the orchestrator MUST output the following structured evidence block:
+
+```
+## Process-Doc Review Evidence
+Change summary: [1-2 sentences describing what changed]
+Affected invariants: [list which workflow gates, agent boundaries, classification rules, or skip conditions are touched — or NONE]
+Checklist:
+- [ ] No quality gates were weakened or removed
+- [ ] No agent boundaries were loosened
+- [ ] No classification criteria were made more permissive
+- [ ] No skip conditions were added without justification
+- [ ] Changes are consistent with existing workflow invariants
+Scenario walkthrough (required if routing/classification logic changed):
+- Trivial example: [task] → expected classification: [tier] — [correct? Y/N]
+- Normal example: [task] → expected classification: [tier] — [correct? Y/N]
+- High-risk example: [task] → expected classification: [tier] — [correct? Y/N]
+```
+
+If any checklist item fails or any scenario produces an unexpected classification, escalate to user before committing.
 
 ---
 
@@ -95,7 +161,7 @@ Note: RLS and storage policy routes already end with `security-reviewer` — sec
 ### F) Security Gate (Non-negotiable)
 
 If task touches:
-auth/authz/JWT, secrets, PII, payments, permission changes, CORS/CSP, destructive migrations
+auth/authz/JWT, secrets, PII, payments, permission changes, CORS/CSP, migrations that alter auth tables, RLS policies, or PII columns
 
 Append:
 → security-reviewer
@@ -106,13 +172,36 @@ Routing: qa-fast → architect → backend-engineer → code-reviewer → securi
 
 ---
 
+### F2) Migration / Schema Change Gate
+
+If the task includes Flyway migrations or significant schema changes:
+
+**Additive migrations** (new table, new nullable column, new index):
+- Architect review via routing section B (already routes DB migration → architect → engineer → code-reviewer)
+- code-reviewer on sonnet (Normal) or opus (if High-risk per other criteria)
+- Note: a column with a non-null DEFAULT on a large table may rewrite rows or acquire locks — treat as destructive if the table has significant data. When in doubt, classify as destructive.
+
+**Destructive or altering migrations** (ALTER existing column type/constraint, DROP, data backfill, column rename):
+- Architect review (routing section B) — for design/reversibility concerns
+- code-reviewer on **opus** — data integrity review
+- security-reviewer (if migration touches auth tables, RLS, or PII columns) — via Gate F
+
+**RLS policy changes:**
+- Handled by routing section E (already routes to supabase-engineer → security-reviewer)
+
+The distinction: architect reviews schema design and reversibility. security-reviewer reviews access control and data exposure. code-reviewer on opus reviews data integrity and migration safety. These are separate concerns — a migration can need architect + opus code-reviewer without needing security-reviewer (e.g., adding a denormalized column with backfill).
+
+---
+
 ### G) Doc-only / read-only changes
 
-If the task touches only documentation, comments, or non-code config (e.g. `*.md`, `docs/`, `*.toml` with no behavioral change):
+If the task touches only documentation, comments, or non-code config:
 
-Routing: (none — no agents needed)
+**Low-impact docs** (`README.md`, `docs/`, general comments, typo fixes):
+Routing: (none — commit directly)
 
-Skip qa-fast, engineer, code-reviewer, and E2E validation. Commit directly.
+**Process docs** (`.claude/agents/`, `.claude/skills/`, `.claude/prompts/`, `.github/workflows/`, CI/CD config, checkpoint/workflow/gate policy files):
+Routing: (none — but process-doc self-review with structured evidence required before commit, see Step 1B)
 
 ---
 
@@ -128,7 +217,7 @@ team-lead must:
 - Delegate to the appropriate specialist agents
 - Verify integration across subtasks before declaring complete (team-lead Mode 2 Step 6)
 
-**E2E for team-lead work:** run E2E only after team-lead has completed integration verification (Mode 2 Step 6), not after each individual subtask. The final E2E covers the fully assembled change.
+**E2E for team-lead work:** invoke `qa` in verification mode after team-lead has completed integration verification (Mode 2 Step 6), not after each individual subtask. The final E2E covers the fully assembled change.
 
 Note: sprint kickoff analysis (team-lead Mode 1) is handled by SPRINT_EXECUTOR, not here.
 
@@ -170,7 +259,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 | `security-reviewer` | `.claude/agents/security-reviewer.md` | Security audit | CRITICAL/HIGH/MEDIUM/LOW severity table |
 | `ui-designer` | `.claude/agents/ui-designer.md` | Screen audit, UX guidance | Read-only design output |
 | `team-lead` | `.claude/agents/team-lead.md` | Decompose + delegate heavy tasks | Subtask plan + agent delegation |
-| `qa` | `.claude/agents/qa.md` | Write tests (only when explicitly required) | Test files |
+| `qa` | `.claude/agents/qa.md` | **Test-writing mode**: write/update/run automated tests (when explicit authoring required). **Verification mode**: run E2E suite, report pass/fail, no code changes (pre-PR quality gate for Normal/High-risk). | Test files (test-writing) or pass/fail report (verification) |
 | `spec-enricher` | `.claude/agents/spec-enricher.md` | Sprint kickoff only — convert raw issue descriptions to structured specs | Enriched spec blocks (read-only) |
 
 ### Invocation Rules
@@ -195,6 +284,10 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
 - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop and surface to user.
+- `qa` in **verification mode** runs AFTER all reviewers APPROVE, BEFORE commit/push/PR, for Normal and High-risk changes only.
+  When invoking verification mode, use this exact Task prompt:
+  > "Mode: verification. Run the full E2E suite (`npm run test:e2e:local`) and report results. Do NOT write or modify any code. Do NOT fix failing tests. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
+  If QA reports FAIL, apply the Failure Routing Protocol in Step 3. Do NOT proceed to commit/push/PR until QA reports PASS.
 
 #### Code-Reviewer Invocation Protocol
 
@@ -244,16 +337,101 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 
 ---
 
-## Step 3 — E2E Validation Policy
+## Step 3 — QA E2E Gate
 
-E2E validation is handled by the **pre-push git hook** — not by an explicit in-workflow E2E step. This eliminates double E2E runs.
+### When it runs (per classification tier)
 
-Rules:
-- After code-reviewer (and security-reviewer if applicable) APPROVE, proceed directly to commit + push.
-- The pre-push hook runs the full E2E suite automatically during `git push`.
-- If the pre-push hook fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix and re-run.
-- **Default skip:** doc-only changes (`*.md`, `docs/`, non-behavioral config) are not gated by E2E.
-- Sprint-layer callers may declare additional skip overrides — see `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`.
+| Tier | QA E2E gate | Pre-push hook |
+|------|-------------|---------------|
+| Doc-only | skip | skips (doc pattern match) |
+| Trivial | skip | best-effort local backstop |
+| Normal | **required** | best-effort local backstop |
+| High-risk | **required** | best-effort local backstop |
+
+### Gate sequence (Normal and High-risk only)
+
+After code-reviewer (and security-reviewer if applicable) APPROVE:
+
+1. Invoke `qa` agent in **verification mode** (see Invocation Rules above for exact prompt).
+2. QA reports structured result: pass count, fail count, exact failure details.
+3. **If PASS** — proceed to commit/push/PR.
+4. **If FAIL** — enter Failure Routing Protocol below.
+
+### PR creation is a gated state transition
+
+PR creation (commit → push → `gh pr create`) is **not** a step that happens eventually after agents finish. It is a state transition that is **only permitted** when ALL of the following are satisfied:
+
+| Gate | Required for | Evidence |
+|------|-------------|----------|
+| Engineer tests pass | Normal, High-risk; Trivial per engineer-test rule (Step 1B) | Engineer's test results in output |
+| Code-reviewer APPROVE | Normal, High-risk | Reviewer verdict |
+| Security-reviewer APPROVE | High-risk + Gate F | Reviewer verdict |
+| QA E2E PASS | Normal, High-risk | QA verification report |
+| Trivial evidence | Trivial only | Changed files + behavior-impact: NONE declaration |
+| Process-doc review | Doc-only (process sub-tier) | Process-Doc Review Evidence block (see Step 1B) |
+
+If ANY required gate is not satisfied, the orchestrator MUST NOT proceed to commit/push/PR. There is no "commit now, fix later" path.
+
+### Failure Routing Protocol
+
+```
+QA reports FAIL
+  │
+  ▼
+Orchestrator reads QA report:
+  - Which test(s) failed?
+  - Which engineer(s) ran in this routing chain?
+  - Check early escalation triggers (see Rules below)
+  │
+  ▼
+Re-invoke RESPONSIBLE ENGINEER (see Responsibility Assignment below) with:
+  - Their changed file list
+  - Exact failure output from QA
+  - Instruction: fix the issue, run unit tests, report changes
+  │
+  ▼
+Re-invoke QA verification mode (cycle 2)
+  │
+  ├─ PASS → proceed to commit/push/PR
+  │
+  └─ FAIL → HARD STOP (cycle 2 exhausted)
+           Play afplay /System/Library/Sounds/Basso.aiff
+           Surface to user, emit BLOCKED checkpoint
+```
+
+**Rules:**
+- **Maximum 2 fix-verify cycles**: Engineer gets two attempts. Escalate to user after second failure.
+- **Early escalation triggers** (escalate after cycle 1 instead of allowing cycle 2):
+  - Ownership is ambiguous (failure doesn't clearly map to one engineer)
+  - Failure is cross-cutting (spans frontend + backend layers)
+  - Failure appears flaky or environmental (non-deterministic, stack health issue)
+  - Engineer's cycle-1 fix did not change any of the failing test's impacted files
+- **QA never fixes code**: QA reports pass/fail. The engineer diagnoses and fixes. QA re-verifies only.
+- **Orchestrator never fixes code**: route the failure, do not interpret test output and apply inline fixes.
+- **No dismissing failures**: all failures must be surfaced verbatim. The orchestrator cannot decide failures are "minor" or "known" without user approval.
+- **Flaky/environmental failures still block**: failures classified by QA as `likely-flaky` or `environmental` still block PR creation — they are not auto-dismissed. However, they should not be automatically treated as feature regressions owned by the implementing engineer unless QA's triage evidence links the failure to the changed files. When escalating flaky/environmental failures, include QA's failure character classification so the user can make an informed decision.
+
+### Responsibility assignment (for failure routing)
+
+1. **Primary rule**: route to the implementation agent whose changed files are in the failing test's execution path. If only one engineer ran → that engineer.
+2. **Ambiguity rule**: if multiple engineers ran and the failure doesn't clearly map to one layer, route to the **first implementation agent in the routed chain that made code changes for this ticket**.
+3. **Escalation rule**: if the responsible engineer's cycle-1 fix does not resolve the failure AND ownership remains ambiguous, escalate to user immediately — do not bounce between agents.
+
+Heuristics (inform, not override, the rules above):
+- E2E tests in `e2e/broker-*` or UI-interaction failures → likely frontend-engineer
+- API response errors, 4xx/5xx status codes in test output → likely backend-engineer
+- Database constraint violations, migration errors → likely backend-engineer
+
+### Pre-push hook: best-effort local backstop
+
+The `.githooks/pre-push` hook remains active. It catches:
+- Changes that bypassed the QA gate (trivial misclassification, manual commits outside the workflow)
+- Worktree pushes or non-standard flows
+- Changes committed outside of ROUTE_AND_RUN
+
+The pre-push hook is a best-effort local backstop. It is NOT a source of truth, NOT a quality gate, and NOT a substitute for the QA E2E gate. It can be misconfigured, bypassed (`--no-verify`), or skipped in worktrees. Do not rely on it as the primary safety mechanism for any tier.
+
+If the pre-push hook fails after QA passed: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
 
 ---
 
@@ -261,8 +439,87 @@ Rules:
 
 - Agents execute sequentially.
 - Do NOT merge agent outputs.
-- After final routed agent completes, run Step 3 (E2E Validation), then play `afplay /System/Library/Sounds/Hero.aiff` and STOP.
+- After final routed agent completes, run Step 3 (QA E2E Gate). If gate PASS (or skipped for Trivial/Doc-only), play `afplay /System/Library/Sounds/Hero.aiff` and STOP.
 - Do NOT suggest improvements beyond scope.
 - One pass only.
 - Only re-run if code-reviewer or security-reviewer marks BLOCKING.
 - Prefer qa-fast over qa unless explicit test-writing required.
+
+---
+
+## Orchestrator Boundary Rules (Mandatory)
+
+### MUST NOT
+
+1. **Write or edit code** — not source, not tests, not config, not SQL. Not even "trivial one-line fixes."
+2. **Run tests** — not `mvn test`, not `npm test`, not `npm run test:e2e:local`. Delegate to engineer (unit/integration) or QA (E2E verification).
+3. **Run build commands** — not `npm run build`, not `mvn compile`.
+4. **Interpret test failures as acceptable** — if a test fails, route to agent. Never skip.
+5. **Apply reviewer findings directly** — always re-invoke the responsible engineer.
+6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run. No exceptions.
+7. **Reclassify to dodge gates** — if triage says risk=med or the change has logic, it cannot be Trivial.
+
+### MUST
+
+1. Route decisions — select agents, construct prompts, sequence invocations.
+2. Parse agent outputs — extract verdicts, warnings, failure details.
+3. Manage git operations — commit, push, PR creation, merge.
+4. Emit checkpoints — under SPRINT_EXECUTOR.
+5. Escalate to user — when max fix cycles exhausted or conflict detected.
+6. Enforce stage gates — no skipping, no shortcuts.
+
+**Why this matters:** Orchestrator inline fixes lose specialist context, bloat the main conversation window, and have proven to introduce cross-file dependency bugs (RE-110: import fixes required multiple rounds because the orchestrator missed cross-file dependencies when applying fixes directly).
+
+---
+
+## Stage Evidence Contract (Mandatory)
+
+Each stage must produce minimum structured evidence. Missing evidence is a gate failure — the orchestrator must not proceed.
+
+### Engineer output (required)
+```
+## Engineer Evidence
+Changed files: [list with file paths]
+Tests run: [exact command]
+Test results: [X passed / Y failed / Z skipped]
+Failures: [details or NONE]
+AC coverage:
+| AC | COVERED? | file:line |
+```
+
+### Code-reviewer output (required for Normal/High-risk)
+```
+## Review Evidence
+Verdict: APPROVE | REQUEST CHANGES
+Review mode: backend | frontend | both
+Model: sonnet | opus
+Findings: [BLOCKING/ADVISORY/SUGGESTION with file:line]
+```
+
+### QA verification output (required for Normal/High-risk)
+```
+## E2E Verification Report
+[Full format as defined in qa.md Verification Mode section]
+```
+
+### Security-reviewer output (required when Gate F applies)
+```
+## Security Review Evidence
+Verdict: APPROVE | REQUEST CHANGES
+Findings: [CRITICAL/HIGH/MEDIUM/LOW with file:line and exploit path]
+```
+
+### Orchestrator gate log (required — output before commit)
+```
+## Gate Satisfaction Record
+Classification: [tier]
+Classification evidence: [changed files + behavior impact for trivial; or N/A]
+Engineer tests: PASS | FAIL | SKIPPED(trivial, non-executable)
+Code-reviewer: APPROVE | N/A(trivial)
+Security-reviewer: APPROVE | N/A
+QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only)
+Process-doc review: PASS | N/A
+All gates satisfied: YES
+```
+
+If the orchestrator cannot output `All gates satisfied: YES`, it MUST NOT proceed to commit/push/PR.

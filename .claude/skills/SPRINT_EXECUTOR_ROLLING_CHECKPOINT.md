@@ -78,11 +78,9 @@ For each Linear issue (PR N):
    - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
    - There are no exceptions to this rule — inline fixes by the orchestrator are always a violation.
 
-5. **E2E validation** — E2E is handled by the pre-push git hook (see `ROUTE_AND_RUN` Step 3). No explicit E2E step is needed here — it runs automatically during `git push` in step 6.
+5. **E2E gate** — Owned by `ROUTE_AND_RUN` Step 3. For Normal and High-risk changes, `qa` runs in verification mode after all reviewers APPROVE, before commit/push/PR. Change classification (trivial/normal/high-risk/doc-only) is determined by ROUTE_AND_RUN Step 1B — no sprint-layer override.
 
-   Sprint-layer skip override: skip E2E (and the pre-push hook check) when the PR touches only non-runtime reference artifacts (e.g., `*.md`, `docs/`, SQL reference copies in `supabase-rpcs/`).
-
-   If the pre-push hook fails: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
+   If QA E2E gate fails: ROUTE_AND_RUN Step 3 handles failure routing (back to engineer, max 2 fix-verify cycles — see ROUTE_AND_RUN Step 3 for early escalation triggers). If still failing after max cycles: play `afplay /System/Library/Sounds/Basso.aiff`, surface failure to user, emit BLOCKED checkpoint. Do NOT auto-fix.
 
 6. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
@@ -124,7 +122,7 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
-E2E passed: <YES|SKIPPED(doc-only)|BLOCKED — reason>
+E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|BLOCKED — reason>
 Touched files:
 - <file1>
 - <file2>
@@ -148,7 +146,7 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
-E2E passed: <YES|SKIPPED(doc-only)|BLOCKED — reason>
+E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|BLOCKED — reason>
 Touched files:
 - <file1>
 - <file2>
