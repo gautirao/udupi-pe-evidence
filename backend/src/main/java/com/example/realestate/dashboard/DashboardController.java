@@ -1,8 +1,8 @@
 package com.example.realestate.dashboard;
 
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingRepository;
-import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.core.ListingRepository.OpportunityProjection;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,7 +1,7 @@
 package com.example.realestate.poi;
 
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;

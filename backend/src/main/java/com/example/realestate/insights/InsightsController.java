@@ -2,8 +2,8 @@ package com.example.realestate.insights;
 
 import com.example.realestate.dashboard.AreaInsightsDao;
 import com.example.realestate.dashboard.AreaPriceWeekly;
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingRepository.OpportunityProjection;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository.OpportunityProjection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;

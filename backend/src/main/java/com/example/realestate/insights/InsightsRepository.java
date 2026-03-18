@@ -1,6 +1,6 @@
 package com.example.realestate.insights;
 
-import com.example.realestate.listing.Listing;
+import com.example.realestate.listing.core.Listing;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;

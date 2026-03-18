@@ -1,7 +1,7 @@
 package com.example.realestate.booking;
 
-import com.example.realestate.listing.Listing;
-import com.example.realestate.listing.ListingRepository;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.notification.EmailService;
 import com.example.realestate.notification.NotificationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;

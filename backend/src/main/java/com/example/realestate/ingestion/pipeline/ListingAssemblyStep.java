@@ -3,7 +3,7 @@ package com.example.realestate.ingestion.pipeline;
 import com.example.realestate.ai.ClassificationResult;
 import com.example.realestate.ai.ClassificationService;
 import com.example.realestate.ingestion.RawPost;
-import com.example.realestate.listing.Listing;
+import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.ingestion.ListingIngestionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
