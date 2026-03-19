@@ -1,0 +1,120 @@
+package com.example.realestate.profile;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
+/**
+ * JPA entity mapping to the existing {@code public.profiles} table.
+ *
+ * <p>The {@code updated_at} column is managed exclusively by the
+ * {@code update_profiles_updated_at} DB trigger (V0 migration).
+ * It is therefore marked {@code insertable=false, updatable=false} so that
+ * Hibernate never writes to it — the trigger keeps it consistent.
+ *
+ * <p>No {@code role} field: the profiles table has no role column.
+ * Roles are stored in {@code public.user_roles}.
+ */
+@Entity
+@Table(name = "profiles", schema = "public")
+public class Profile {
+
+    @Id
+    @Column(insertable = false, updatable = false)
+    private UUID id;
+
+    @Column(name = "user_id", nullable = false, unique = true)
+    private UUID userId;
+
+    @Column(name = "email")
+    private String email;
+
+    @Column(name = "full_name")
+    private String fullName;
+
+    @Column(name = "phone")
+    private String phone;
+
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private OffsetDateTime createdAt;
+
+    /**
+     * Managed by the {@code update_profiles_updated_at} DB trigger.
+     * Hibernate never writes this column — it is read-only from the JPA side.
+     */
+    @Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
+    private OffsetDateTime updatedAt;
+
+    // --- Getters and setters ---
+
+    public UUID getId() {
+        return id;
+    }
+
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(OffsetDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public OffsetDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(OffsetDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+}

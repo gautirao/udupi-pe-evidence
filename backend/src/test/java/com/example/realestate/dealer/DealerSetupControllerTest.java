@@ -1,5 +1,7 @@
 package com.example.realestate.dealer;
 
+import com.example.realestate.profile.ProfileService;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,20 +9,16 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
-import com.example.realestate.security.UserRoleService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * WebMvcTest for DealerSetupController.
- * Uses jwt() post-processor to inject JwtAuthenticationToken; mocks JdbcTemplate directly.
+ * Uses jwt() post-processor to inject JwtAuthenticationToken; mocks ProfileService and UserRoleService.
  */
 @WebMvcTest(
         controllers = DealerSetupController.class,
@@ -58,14 +56,14 @@ class DealerSetupControllerTest {
     private UserRoleService userRoleService;
 
     @MockitoBean
-    private JdbcTemplate jdbcTemplate;
+    private ProfileService profileService;
 
     @MockitoBean
     private PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void setUp() {
-        reset(jdbcTemplate, transactionManager);
+        reset(userRoleService, profileService, transactionManager);
     }
 
     // ==================== Test 1: No JWT -> 401/403 ====================
@@ -87,11 +85,9 @@ class DealerSetupControllerTest {
 
     @Test
     void setup_happyPath_returns200WithDealerRole() throws Exception {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
-                .thenReturn(List.of());
-        // JdbcTemplate.update(String, Object...) is varargs; use any(Object[].class) to match.
-        when(jdbcTemplate.update(anyString(), any(Object[].class)))
-                .thenReturn(1);
+        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
+        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
+        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(true);
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -107,8 +103,7 @@ class DealerSetupControllerTest {
 
     @Test
     void setup_alreadyDealerSequential_returns409() throws Exception {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
-                .thenReturn(List.of("dealer"));
+        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -124,11 +119,9 @@ class DealerSetupControllerTest {
 
     @Test
     void setup_concurrentDuplicate_returns409() throws Exception {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
-                .thenReturn(List.of());
-        // JdbcTemplate.update(String, Object...) is varargs; use any(Object[].class) to match.
-        when(jdbcTemplate.update(anyString(), any(Object[].class)))
-                .thenReturn(0);
+        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
+        // assignRole returns false: ON CONFLICT DO NOTHING suppressed the insert
+        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(false);
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -202,12 +195,10 @@ class DealerSetupControllerTest {
 
     @Test
     void setup_missingProfileRow_returns500() throws Exception {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
-                .thenReturn(List.of());
-        // First update call (INSERT user_roles): returns 1 — role granted.
-        // Second update call (UPDATE profiles SET phone): returns 0 — profile row missing.
-        when(jdbcTemplate.update(anyString(), any(Object[].class)))
-                .thenReturn(1, 0);
+        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
+        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
+        // updatePhone returns false: no profiles row found for this user
+        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(false);
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
