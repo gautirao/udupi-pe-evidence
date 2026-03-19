@@ -9,6 +9,8 @@ import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.exception.ListingErrorCode;
+import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -143,6 +145,171 @@ class ListingWorkflowServiceTest {
         // Detection was attempted on the LIVE listing
         verify(proximityDuplicateService).detectAndRecord(
                 argThat(l -> ListingStatus.LIVE.toDbValue().equals(l.getStatus())));
+    }
+
+    // ===== RE-125: approveListing — policy delegation, history, lifecycle fields =====
+
+    @Test
+    void approveListing_writesHistoryRow() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveListing(listingId, adminId);
+
+        ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(captor.capture());
+        ListingStatusHistory history = captor.getValue();
+
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(history.getActorId()).isEqualTo(adminId);
+    }
+
+    @Test
+    void approveListing_setsApprovedAtAndStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveListing(listingId, adminId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+
+        assertThat(saved.getApprovedAt()).isNotNull();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
+    }
+
+    // ===== RE-125: rejectListing — policy delegation, history, lifecycle fields =====
+
+    @Test
+    void rejectListing_writesHistoryRow() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.rejectListing(listingId, adminId, "Poor quality images");
+
+        ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(captor.capture());
+        ListingStatusHistory history = captor.getValue();
+
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(history.getActorId()).isEqualTo(adminId);
+        assertThat(history.getReasonCode()).isEqualTo("Poor quality images");
+        assertThat(history.getNote()).isEqualTo("Poor quality images");
+    }
+
+    @Test
+    void rejectListing_setsRejectedAtAndStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.rejectListing(listingId, adminId, "Incomplete info");
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+
+        assertThat(saved.getRejectedAt()).isNotNull();
+        assertThat(saved.getStatusReasonCode()).isEqualTo("Incomplete info");
+        assertThat(saved.getStatusReasonNote()).isEqualTo("Incomplete info");
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
+        // Backward compat: rejectionReason still set
+        assertThat(saved.getRejectionReason()).isEqualTo("Incomplete info");
+    }
+
+    @Test
+    void rejectListing_nullReason_throwsReasonCodeRequired() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.rejectListing(listingId, adminId, null))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.REASON_CODE_REQUIRED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void rejectListing_fromLive_writesHistory() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.rejectListing(listingId, adminId, "Policy violation");
+
+        verify(policy).validate(ListingStatus.LIVE, ListingStatus.REJECTED, ActorType.ADMIN);
+
+        ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(captor.capture());
+        ListingStatusHistory history = captor.getValue();
+
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(history.getActorId()).isEqualTo(adminId);
+        assertThat(history.getReasonCode()).isEqualTo("Policy violation");
     }
 
     // ===== RE-94: approveListing — transparency timestamps =====
