@@ -1,5 +1,6 @@
 package com.example.realestate.exception;
 
+import com.example.realestate.listing.exception.ListingLifecycleException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.mapping.PropertyReferenceException;
@@ -34,6 +35,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         String message = ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString();
         return ResponseEntity.status(ex.getStatusCode())
                 .body(Map.of("error", message));
+    }
+
+    // ===== ListingLifecycleException → status from error code, structured body =====
+
+    @ExceptionHandler(ListingLifecycleException.class)
+    public ResponseEntity<Map<String, String>> handleListingLifecycle(ListingLifecycleException ex) {
+        log.warn("Listing lifecycle error [{}]: {}", ex.getCode(), ex.getMessage());
+        return ResponseEntity.status(ex.getCode().getHttpStatus())
+                .body(Map.of("code", ex.getCode().name(), "message", ex.getMessage()));
     }
 
     // ===== PropertyReferenceException → 400 =====
