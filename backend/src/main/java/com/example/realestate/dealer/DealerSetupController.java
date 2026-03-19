@@ -1,10 +1,11 @@
 package com.example.realestate.dealer;
 
+import com.example.realestate.profile.ProfileService;
+import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,8 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -30,7 +31,7 @@ import java.util.regex.Pattern;
  *   M2: Rejects 409 if the user already has 'broker' or 'admin' role.
  *   M3: Phone number validated server-side (regex + max 15 chars).
  *
- * Uses JdbcTemplate with only parameterized queries (no string concatenation).
+ * Delegates persistence to {@link ProfileService} and {@link UserRoleService}.
  * Entire operation is @Transactional.
  */
 @Deprecated
@@ -48,10 +49,12 @@ public class DealerSetupController {
     private static final Pattern PHONE_PATTERN = Pattern.compile("^[+]?[0-9]{10,15}$");
     private static final int PHONE_MAX_LENGTH = 15;
 
-    private final JdbcTemplate jdbcTemplate;
+    private final ProfileService profileService;
+    private final UserRoleService userRoleService;
 
-    public DealerSetupController(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public DealerSetupController(ProfileService profileService, UserRoleService userRoleService) {
+        this.profileService = profileService;
+        this.userRoleService = userRoleService;
     }
 
     @PostMapping("/setup")
@@ -82,26 +85,18 @@ public class DealerSetupController {
         }
 
         // --- M2: Reject if user already has 'broker', 'dealer' (legacy), or 'admin' role ---
-        List<String> existingRoles = jdbcTemplate.query(
-                "SELECT role::text FROM public.user_roles WHERE user_id = ? AND role::text IN ('broker', 'dealer', 'admin') LIMIT 1",
-                (rs, rowNum) -> rs.getString(1),
-                userId);
-
-        if (!existingRoles.isEmpty()) {
+        // findSecurityRole filters to only those three values — a plain 'user' role returns empty.
+        Optional<String> existingRole = userRoleService.findSecurityRole(userId);
+        if (existingRole.isPresent()) {
             log.warn("POST /api/dealer/setup -> 409 (already broker/admin) userId={}", userId);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "You already have a broker or admin role."));
         }
 
         // --- Assign broker role (M1: BROKER_ROLE constant, never from body) ---
-        // ON CONFLICT DO NOTHING makes this idempotent; capture rows to detect concurrent duplicate (C-2).
-        int rows = jdbcTemplate.update(
-                "INSERT INTO public.user_roles (user_id, role) " +
-                "VALUES (?, CAST(? AS public.app_role)) " +
-                "ON CONFLICT (user_id, role) DO NOTHING",
-                userId, BROKER_ROLE);
-
-        if (rows == 0) {
+        // ON CONFLICT DO NOTHING is the final concurrent-duplicate guard (C-2).
+        boolean roleInserted = userRoleService.assignRole(userId, BROKER_ROLE);
+        if (!roleInserted) {
             log.warn("POST /api/dealer/setup -> 409 (concurrent duplicate) userId={}", userId);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "You already have a broker or admin role."));
@@ -109,10 +104,8 @@ public class DealerSetupController {
 
         // Persist phone to profiles (C-1 fix: phone was validated but never stored).
         // C-2 fix: if no profiles row exists, roll back role grant and return 500.
-        int profileRows = jdbcTemplate.update(
-                "UPDATE public.profiles SET phone = ? WHERE user_id = ?",
-                phone, userId);
-        if (profileRows == 0) {
+        boolean phoneUpdated = profileService.updatePhone(userId, phone);
+        if (!phoneUpdated) {
             log.error("POST /api/dealer/setup -> 500 no profile row userId={}", userId);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "User profile not found — cannot complete broker setup.");
