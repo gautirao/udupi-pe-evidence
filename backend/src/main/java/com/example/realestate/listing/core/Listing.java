@@ -246,6 +246,16 @@ public class Listing {
     @Column(name = "approvals_declared", columnDefinition = "jsonb")
     private String approvalsDeclared;
 
+    /**
+     * Snapshot of the listing's content at the moment it was last approved (LIVE).
+     * Used by Phase 2 fast-restore guard and Phase 5 trust badge invalidation.
+     * Null means the listing has never been approved under the snapshot scheme.
+     * Written only by the approval workflow; never accepted from broker PUT requests.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "last_approved_snapshot", columnDefinition = "jsonb")
+    private String lastApprovedSnapshot;
+
     @Column(name = "address_confirmed", nullable = false)
     private boolean addressConfirmed = false;
 
@@ -616,6 +626,18 @@ public class Listing {
 
     public void setApprovalsDeclared(String approvalsDeclared) {
         this.approvalsDeclared = approvalsDeclared;
+    }
+
+    public String getLastApprovedSnapshot() {
+        return lastApprovedSnapshot;
+    }
+
+    /**
+     * Sets the last-approved snapshot. Called only by the approval workflow service;
+     * must never be invoked from broker-facing PUT request mapping code.
+     */
+    public void setLastApprovedSnapshot(String lastApprovedSnapshot) {
+        this.lastApprovedSnapshot = lastApprovedSnapshot;
     }
 
     public String getRejectionReason() {
