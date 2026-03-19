@@ -10,6 +10,8 @@ import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
 import com.example.realestate.listing.event.NewListingInAreaEvent;
+import com.example.realestate.listing.exception.ListingErrorCode;
+import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingNotArchivedException;
 import com.example.realestate.listing.exception.ListingStatusException;
@@ -117,32 +119,44 @@ public class ListingWorkflowService {
      * Creates a notification for the listing owner.
      *
      * @throws ListingNotFoundException if listing not found
-     * @throws ListingStatusException   if status is not PENDING_REVIEW
+     * @throws ListingStatusException   if transition is not allowed by the policy
      */
     @Transactional
     public Listing approveListing(UUID listingId, UUID adminUserId) {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new ListingNotFoundException(listingId));
 
-        if (!ListingStatus.PENDING_REVIEW.toDbValue().equals(listing.getStatus())) {
-            throw new ListingStatusException(
-                    "Cannot approve listing with status " + listing.getStatus());
-        }
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(currentStatus, ListingStatus.LIVE, ActorType.ADMIN);
 
-        OffsetDateTime approvedAt = OffsetDateTime.now();
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
         listing.setStatus(ListingStatus.LIVE.toDbValue());
-        listing.setReviewedAt(approvedAt);
+        listing.setReviewedAt(nowOdt);
         listing.setReviewedBy(adminUserId);
-        listing.setUpdatedAt(approvedAt);
+        listing.setUpdatedAt(nowOdt);
+        listing.setApprovedAt(now);
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminUserId);
 
         // Transparency timestamps: firstPublishedAt set only on the first LIVE transition;
         // lastLiveAt is always refreshed.
         if (listing.getFirstPublishedAt() == null) {
-            listing.setFirstPublishedAt(approvedAt);
+            listing.setFirstPublishedAt(nowOdt);
         }
-        listing.setLastLiveAt(approvedAt);
+        listing.setLastLiveAt(nowOdt);
 
         Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.LIVE.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminUserId);
+        statusHistoryRepository.save(history);
 
         try {
             proximityDuplicateService.detectAndRecord(saved);
@@ -164,34 +178,59 @@ public class ListingWorkflowService {
                             listingTitle, saved.getPropertyType(), saved.getPricePaise()));
         }
 
-        log.info("Approved listing listingId={} by adminId={} status=LIVE", listingId, adminUserId);
+        log.info("Approved listing listingId={} by adminId={} status=LIVE fromStatus={}",
+                listingId, adminUserId, currentStatus);
         return saved;
     }
 
     /**
-     * Admin rejects a listing: PENDING_REVIEW -> REJECTED.
+     * Admin rejects a listing: PENDING_REVIEW -> REJECTED or LIVE -> REJECTED.
      * Creates a notification for the listing owner.
      *
-     * @throws ListingNotFoundException if listing not found
-     * @throws ListingStatusException   if status is not PENDING_REVIEW
+     * @throws ListingNotFoundException    if listing not found
+     * @throws ListingStatusException      if transition is not allowed by the policy
+     * @throws ListingLifecycleException   if rejectionReason is null or blank (REASON_CODE_REQUIRED, 422)
      */
     @Transactional
     public Listing rejectListing(UUID listingId, UUID adminUserId, String rejectionReason) {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new ListingNotFoundException(listingId));
 
-        if (!ListingStatus.PENDING_REVIEW.toDbValue().equals(listing.getStatus())) {
-            throw new ListingStatusException(
-                    "Cannot reject listing with status " + listing.getStatus());
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(currentStatus, ListingStatus.REJECTED, ActorType.ADMIN);
+
+        // Defense-in-depth: controller also checks, but service enforces independently
+        if (rejectionReason == null || rejectionReason.isBlank()) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.REASON_CODE_REQUIRED, "Rejection reason is required");
         }
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
 
         listing.setStatus(ListingStatus.REJECTED.toDbValue());
         listing.setRejectionReason(rejectionReason);
-        listing.setReviewedAt(OffsetDateTime.now());
+        listing.setReviewedAt(nowOdt);
         listing.setReviewedBy(adminUserId);
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(nowOdt);
+        listing.setRejectedAt(now);
+        listing.setStatusReasonCode(rejectionReason);
+        listing.setStatusReasonNote(rejectionReason);
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminUserId);
 
         Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.REJECTED.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminUserId);
+        history.setReasonCode(rejectionReason);
+        history.setNote(rejectionReason);
+        statusHistoryRepository.save(history);
 
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
@@ -199,8 +238,8 @@ public class ListingWorkflowService {
                     new ListingRejectedEvent(saved, listing.getCreatedBy(), title, rejectionReason));
         }
 
-        log.info("Rejected listing listingId={} by adminId={} reason='{}'",
-                listingId, adminUserId, rejectionReason);
+        log.info("Rejected listing listingId={} by adminId={} fromStatus={} reason='{}'",
+                listingId, adminUserId, currentStatus, rejectionReason);
         return saved;
     }
 
