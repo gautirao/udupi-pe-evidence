@@ -1,5 +1,7 @@
 package com.example.realestate.listing.workflow;
 
+import com.example.realestate.listing.audit.ListingStatusHistory;
+import com.example.realestate.listing.audit.ListingStatusHistoryRepository;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
@@ -7,6 +9,7 @@ import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.exception.ListingStatusException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,9 +18,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
@@ -40,12 +45,19 @@ class ListingWorkflowServiceTest {
     @Mock
     private ProximityDuplicateService proximityDuplicateService;
 
+    @Mock
+    private ListingTransitionPolicy policy;
+
+    @Mock
+    private ListingStatusHistoryRepository statusHistoryRepository;
+
     private ListingWorkflowService workflowService;
 
     @BeforeEach
     void setUp() {
         workflowService = new ListingWorkflowService(
-                listingRepository, applicationEventPublisher, listingOwnershipGuard, proximityDuplicateService);
+                listingRepository, applicationEventPublisher, listingOwnershipGuard,
+                proximityDuplicateService, policy, statusHistoryRepository);
     }
 
     // --- Notification decoupling tests ---
@@ -300,6 +312,186 @@ class ListingWorkflowServiceTest {
                 () -> workflowService.adminForceDelete(listingId, UUID.randomUUID()));
 
         verify(listingRepository, never()).save(any());
+    }
+
+    // ===== RE-124: submitListing — policy delegation, history writing, lifecycle fields =====
+
+    /**
+     * Creates a listing that passes validateForSubmission checks.
+     * Uses property type "house" which has no additional required fields.
+     */
+    private Listing createSubmittableListing(UUID listingId, UUID userId, String statusDbValue) {
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(userId);
+        listing.setStatus(statusDbValue);
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setAddressConfirmed(true);
+        listing.setPrice(BigDecimal.valueOf(1000000));
+        listing.setTitle("Test Property");
+        return listing;
+    }
+
+    private void stubForSubmit(UUID listingId, UUID userId, Listing listing) {
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(listing);
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Test
+    void submitListing_fromDraft_delegatesToPolicyAndSaves() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        Listing result = workflowService.submitListing(listingId, userId, false);
+
+        verify(policy).validate(ListingStatus.DRAFT, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+    }
+
+    @Test
+    void submitListing_policyRejects_throwsWithoutSaving() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.LIVE.toDbValue());
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(listing);
+
+        doThrow(new ListingStatusException("Transition not allowed: from=LIVE to=PENDING_REVIEW actor=BROKER"))
+                .when(policy).validate(ListingStatus.LIVE, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
+
+        assertThatThrownBy(() -> workflowService.submitListing(listingId, userId, false))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void submitListing_writesHistoryRow() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(captor.capture());
+        ListingStatusHistory history = captor.getValue();
+
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(history.getActorId()).isEqualTo(userId);
+        assertThat(history.getActionedSubmissionCount()).isEqualTo(1);
+    }
+
+    @Test
+    void submitListing_incrementsSubmissionCount() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        listing.setSubmissionCount(0);
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getSubmissionCount()).isEqualTo(1);
+    }
+
+    @Test
+    void submitListing_setsReviewSubmittedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getReviewSubmittedAt()).isNotNull();
+    }
+
+    @Test
+    void submitListing_setsStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(userId);
+    }
+
+    @Test
+    void submitListing_fromRejected_writesHistoryWithCorrectFromStatus() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.REJECTED.toDbValue());
+        listing.setSubmissionCount(1); // already submitted once before
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        verify(policy).validate(ListingStatus.REJECTED, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
+
+        ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(captor.capture());
+        ListingStatusHistory history = captor.getValue();
+
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getActionedSubmissionCount()).isEqualTo(2);
+    }
+
+    @Test
+    void submitListing_fromArchived_writesHistory() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.ARCHIVED.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        verify(policy).validate(ListingStatus.ARCHIVED, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
+
+        ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(captor.capture());
+        ListingStatusHistory history = captor.getValue();
+
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(history.getActorId()).isEqualTo(userId);
+    }
+
+    @Test
+    void submitListing_preservesSubmittedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        // submittedAt (OffsetDateTime) must still be set for backward compat
+        assertThat(captor.getValue().getSubmittedAt()).isNotNull();
     }
 
     // ===== RE-83: getDisplayId() — tested on Listing entity =====

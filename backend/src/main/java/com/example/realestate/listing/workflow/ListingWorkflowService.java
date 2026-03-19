@@ -1,5 +1,7 @@
 package com.example.realestate.listing.workflow;
 
+import com.example.realestate.listing.audit.ListingStatusHistory;
+import com.example.realestate.listing.audit.ListingStatusHistoryRepository;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
@@ -37,9 +39,6 @@ public class ListingWorkflowService {
 
     private static final Logger log = LoggerFactory.getLogger(ListingWorkflowService.class);
 
-    private static final Set<String> SUBMITTABLE_STATUSES = Set.of(
-            ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
-
     private static final Set<String> SUBMITTABLE_PROPERTY_TYPES = Set.of(
             "land", "house", "apartment",
             "commercial", "commercial_building", "warehouse", "commercial_land");
@@ -50,16 +49,22 @@ public class ListingWorkflowService {
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ListingOwnershipGuard listingOwnershipGuard;
     private final ProximityDuplicateService proximityDuplicateService;
+    private final ListingTransitionPolicy policy;
+    private final ListingStatusHistoryRepository statusHistoryRepository;
 
     public ListingWorkflowService(
             ListingRepository listingRepository,
             ApplicationEventPublisher applicationEventPublisher,
             ListingOwnershipGuard listingOwnershipGuard,
-            ProximityDuplicateService proximityDuplicateService) {
+            ProximityDuplicateService proximityDuplicateService,
+            ListingTransitionPolicy policy,
+            ListingStatusHistoryRepository statusHistoryRepository) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
         this.proximityDuplicateService = proximityDuplicateService;
+        this.policy = policy;
+        this.statusHistoryRepository = statusHistoryRepository;
     }
 
     /**
@@ -74,10 +79,8 @@ public class ListingWorkflowService {
     public Listing submitListing(UUID listingId, UUID userId, boolean isAdmin) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
-        if (!SUBMITTABLE_STATUSES.contains(listing.getStatus())) {
-            throw new ListingStatusException(
-                    "Cannot submit listing with status " + listing.getStatus());
-        }
+        ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(previousStatus, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
 
         List<Map<String, String>> errors = validateForSubmission(listing);
         if (!errors.isEmpty()) {
@@ -86,11 +89,26 @@ public class ListingWorkflowService {
 
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
         listing.setSubmittedAt(OffsetDateTime.now());
+        listing.setReviewSubmittedAt(Instant.now());
+        listing.setSubmissionCount(listing.getSubmissionCount() + 1);
+        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedByActorType(ActorType.BROKER);
+        listing.setStatusChangedByActorId(userId);
         listing.setUpdatedAt(OffsetDateTime.now());
 
         Listing saved = listingRepository.save(listing);
-        log.info("Submitted listing listingId={} by userId={} status=PENDING_REVIEW",
-                listingId, userId);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(previousStatus.toDbValue());
+        history.setToStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        history.setActorType(ActorType.BROKER);
+        history.setActorId(userId);
+        history.setActionedSubmissionCount(listing.getSubmissionCount());
+        statusHistoryRepository.save(history);
+
+        log.info("Submitted listing listingId={} by userId={} status=PENDING_REVIEW fromStatus={}",
+                listingId, userId, previousStatus);
         return saved;
     }
 
