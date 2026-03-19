@@ -26,7 +26,7 @@ class ListingTransitionPolicyTest {
     }
 
     // -----------------------------------------------------------------------
-    // Legal transitions — all 30 non-creation triples from the spec
+    // Legal transitions — all 31 non-creation triples from the spec
     // -----------------------------------------------------------------------
 
     @Nested
@@ -40,6 +40,7 @@ class ListingTransitionPolicyTest {
                     Arguments.of(ListingStatus.DRAFT,           ListingStatus.ARCHIVED,       ActorType.BROKER,  "T-03"),
                     Arguments.of(ListingStatus.PENDING_REVIEW,  ListingStatus.DRAFT,          ActorType.BROKER,  "T-04"),
                     Arguments.of(ListingStatus.LIVE,            ListingStatus.ARCHIVED,       ActorType.BROKER,  "T-05"),
+                    Arguments.of(ListingStatus.REJECTED,        ListingStatus.PENDING_REVIEW, ActorType.BROKER,  "T-XX resubmit"),
                     Arguments.of(ListingStatus.REJECTED,        ListingStatus.DRAFT,          ActorType.BROKER,  "T-06"),
                     Arguments.of(ListingStatus.REJECTED,        ListingStatus.ARCHIVED,       ActorType.BROKER,  "T-07"),
                     Arguments.of(ListingStatus.ARCHIVED,        ListingStatus.DRAFT,          ActorType.BROKER,  "T-08"),
@@ -81,10 +82,10 @@ class ListingTransitionPolicyTest {
         }
 
         @Test
-        @DisplayName("Legal transition count is exactly 30")
+        @DisplayName("Legal transition count is exactly 31")
         void legalTransitionCount() {
             long count = allLegalTransitions().count();
-            org.assertj.core.api.Assertions.assertThat(count).isEqualTo(30);
+            org.assertj.core.api.Assertions.assertThat(count).isEqualTo(31);
         }
     }
 

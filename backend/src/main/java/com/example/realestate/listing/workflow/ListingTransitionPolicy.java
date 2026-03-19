@@ -36,7 +36,7 @@ public class ListingTransitionPolicy {
      * The complete set of non-creation transitions from the spec (T-02 through T-32,
      * excluding T-01 and T-30 which are creation transitions with null {@code from}).
      * <p>
-     * 30 triples total. Each comment references the spec transition ID.
+     * 31 triples total. Each comment references the spec transition ID.
      */
     private static final Set<Transition> ALLOWED = Set.of(
             // --- BROKER (DEALER) transitions (T-02 through T-10) ---
@@ -44,6 +44,7 @@ public class ListingTransitionPolicy {
             new Transition(ListingStatus.DRAFT,           ListingStatus.ARCHIVED,       ActorType.BROKER),  // T-03
             new Transition(ListingStatus.PENDING_REVIEW,  ListingStatus.DRAFT,          ActorType.BROKER),  // T-04
             new Transition(ListingStatus.LIVE,            ListingStatus.ARCHIVED,       ActorType.BROKER),  // T-05
+            new Transition(ListingStatus.REJECTED,        ListingStatus.PENDING_REVIEW, ActorType.BROKER),  // T-XX (resubmit)
             new Transition(ListingStatus.REJECTED,        ListingStatus.DRAFT,          ActorType.BROKER),  // T-06
             new Transition(ListingStatus.REJECTED,        ListingStatus.ARCHIVED,       ActorType.BROKER),  // T-07
             new Transition(ListingStatus.ARCHIVED,        ListingStatus.DRAFT,          ActorType.BROKER),  // T-08
