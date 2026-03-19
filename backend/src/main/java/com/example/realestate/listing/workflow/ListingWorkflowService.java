@@ -14,6 +14,7 @@ import com.example.realestate.listing.exception.ListingErrorCode;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingNotArchivedException;
+import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
 import org.slf4j.Logger;
@@ -284,6 +285,94 @@ public class ListingWorkflowService {
         statusHistoryRepository.save(history);
 
         log.info("Archived listing listingId={} by actorId={} fromStatus={}", listingId, actorId, previousStatus);
+    }
+
+    /**
+     * Dealer reopens a rejected listing back to DRAFT for editing.
+     * Preserves {@code rejectedAt} — the rejection timestamp remains for audit.
+     *
+     * @param listingId the listing to reopen
+     * @param actorId   the broker/dealer performing the action (must own the listing)
+     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingStatusException   if transition is not allowed by the policy (e.g. listing is not REJECTED)
+     */
+    @Transactional
+    public void reopenRejectedListing(UUID listingId, UUID actorId) {
+        // REJECTED listings are NOT filtered by findOwned(), so this works
+        Listing listing = listingOwnershipGuard.findOwned(listingId, actorId, false);
+        ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
+
+        policy.validate(previousStatus, ListingStatus.DRAFT, ActorType.BROKER);
+
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        // Do NOT clear rejectedAt — preserve per AC
+        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedByActorType(ActorType.BROKER);
+        listing.setStatusChangedByActorId(actorId);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(previousStatus.toDbValue());
+        history.setToStatus(ListingStatus.DRAFT.toDbValue());
+        history.setActorType(ActorType.BROKER);
+        history.setActorId(actorId);
+        statusHistoryRepository.save(history);
+
+        log.info("Reopened rejected listing listingId={} by actorId={} fromStatus={} toStatus=DRAFT",
+                listingId, actorId, previousStatus);
+    }
+
+    /**
+     * Dealer reopens an archived listing back to DRAFT for editing.
+     * Clears {@code archivedAt} so the listing becomes visible to owner-scoped operations again.
+     *
+     * <p><b>CRITICAL:</b> Cannot use {@link ListingOwnershipGuard#findOwned(UUID, UUID, boolean)}
+     * because it rejects archived listings ({@code archivedAt != null} throws
+     * {@link ListingNotFoundException}). Uses {@code listingRepository.findById()} with a
+     * manual ownership check instead.
+     *
+     * @param listingId the listing to reopen
+     * @param actorId   the broker/dealer performing the action (must own the listing)
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if the listing is not owned by the actor
+     * @throws ListingStatusException    if transition is not allowed by the policy (e.g. listing is not ARCHIVED)
+     */
+    @Transactional
+    public void reopenArchivedListingAsDraft(UUID listingId, UUID actorId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        // Manual ownership check — findOwned() cannot be used for archived listings
+        if (!actorId.equals(listing.getCreatedBy())) {
+            throw new ListingOwnershipException(listingId);
+        }
+
+        ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
+
+        policy.validate(previousStatus, ListingStatus.DRAFT, ActorType.BROKER);
+
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setArchivedAt(null);  // Clear archivedAt per AC
+        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedByActorType(ActorType.BROKER);
+        listing.setStatusChangedByActorId(actorId);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(previousStatus.toDbValue());
+        history.setToStatus(ListingStatus.DRAFT.toDbValue());
+        history.setActorType(ActorType.BROKER);
+        history.setActorId(actorId);
+        statusHistoryRepository.save(history);
+
+        log.info("Reopened archived listing listingId={} by actorId={} fromStatus={} toStatus=DRAFT",
+                listingId, actorId, previousStatus);
     }
 
     /**

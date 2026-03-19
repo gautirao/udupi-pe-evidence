@@ -11,6 +11,7 @@ import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
 import com.example.realestate.listing.exception.ListingErrorCode;
 import com.example.realestate.listing.exception.ListingLifecycleException;
+import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -784,6 +785,164 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getStatusChangedAt()).isNotNull();
         assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
         assertThat(saved.getStatusChangedByActorId()).isEqualTo(actorId);
+    }
+
+    // ===== RE-129: reopenRejectedListing — dealer reopens rejected listing to DRAFT =====
+
+    @Test
+    void reopenRejectedListing_toDraft_preservesRejectedAtAndWritesHistory() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.REJECTED.toDbValue());
+        listing.setRejectedAt(java.time.Instant.now().minusSeconds(3600));
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.reopenRejectedListing(listingId, actorId);
+
+        verify(policy).validate(ListingStatus.REJECTED, ListingStatus.DRAFT, ActorType.BROKER);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(saved.getRejectedAt()).isNotNull(); // preserved, NOT cleared
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(history.getActorId()).isEqualTo(actorId);
+    }
+
+    @Test
+    void reopenRejectedListing_setsStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.REJECTED.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.reopenRejectedListing(listingId, actorId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(actorId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void reopenRejectedListing_wrongStatus_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+
+        doThrow(new ListingStatusException("Transition not allowed: from=LIVE to=DRAFT actor=BROKER"))
+                .when(policy).validate(ListingStatus.LIVE, ListingStatus.DRAFT, ActorType.BROKER);
+
+        assertThatThrownBy(() -> workflowService.reopenRejectedListing(listingId, actorId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    // ===== RE-129: reopenArchivedListingAsDraft — dealer reopens archived listing to DRAFT =====
+
+    @Test
+    void reopenArchivedListingAsDraft_clearsArchivedAtAndWritesHistory() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now().minusSeconds(3600));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.reopenArchivedListingAsDraft(listingId, actorId);
+
+        verify(policy).validate(ListingStatus.ARCHIVED, ListingStatus.DRAFT, ActorType.BROKER);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(saved.getArchivedAt()).isNull(); // cleared
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(history.getActorId()).isEqualTo(actorId);
+    }
+
+    @Test
+    void reopenArchivedListingAsDraft_setsStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.reopenArchivedListingAsDraft(listingId, actorId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(actorId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void reopenArchivedListingAsDraft_notOwner_throwsOwnershipException() {
+        UUID listingId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID differentActorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, ownerId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.reopenArchivedListingAsDraft(listingId, differentActorId))
+                .isInstanceOf(ListingOwnershipException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void reopenArchivedListingAsDraft_wrongStatus_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        doThrow(new ListingStatusException("Transition not allowed: from=DRAFT to=DRAFT actor=BROKER"))
+                .when(policy).validate(ListingStatus.DRAFT, ListingStatus.DRAFT, ActorType.BROKER);
+
+        assertThatThrownBy(() -> workflowService.reopenArchivedListingAsDraft(listingId, actorId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
     }
 
     // ===== RE-83: getDisplayId() — tested on Listing entity =====
