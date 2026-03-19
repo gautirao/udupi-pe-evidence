@@ -244,6 +244,49 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Dealer archives own listing: LIVE/DRAFT/REJECTED -> ARCHIVED.
+     * Uses the transition policy to validate the state change.
+     *
+     * @param listingId  the listing to archive
+     * @param actorId    the broker/dealer performing the action (must own the listing)
+     * @param reasonNote optional note explaining why the listing is being archived
+     * @throws ListingNotFoundException if listing not found or not owned
+     * @throws ListingStatusException   if transition is not allowed by the policy
+     */
+    @Transactional
+    public void archiveListing(UUID listingId, UUID actorId, String reasonNote) {
+        Listing listing = listingOwnershipGuard.findOwned(listingId, actorId, false);
+        ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
+
+        policy.validate(previousStatus, ListingStatus.ARCHIVED, ActorType.BROKER);
+
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(Instant.now());
+        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedByActorType(ActorType.BROKER);
+        listing.setStatusChangedByActorId(actorId);
+        if (reasonNote != null && !reasonNote.isBlank()) {
+            listing.setStatusReasonNote(reasonNote);
+        }
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(previousStatus.toDbValue());
+        history.setToStatus(ListingStatus.ARCHIVED.toDbValue());
+        history.setActorType(ActorType.BROKER);
+        history.setActorId(actorId);
+        if (reasonNote != null && !reasonNote.isBlank()) {
+            history.setNote(reasonNote);
+        }
+        statusHistoryRepository.save(history);
+
+        log.info("Archived listing listingId={} by actorId={} fromStatus={}", listingId, actorId, previousStatus);
+    }
+
+    /**
      * Admin-only force-archive: sets {@code status = ARCHIVED} and {@code archived_at = now()}
      * regardless of the listing's current status.  Idempotent — if the listing is already
      * ARCHIVED the method returns {@code false} without saving or re-auditing.
