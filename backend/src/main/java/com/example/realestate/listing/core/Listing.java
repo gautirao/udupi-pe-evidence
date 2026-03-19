@@ -2,12 +2,16 @@ package com.example.realestate.listing.core;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+
+import com.example.realestate.listing.workflow.ActorType;
 import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -255,6 +259,36 @@ public class Listing {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "last_approved_snapshot", columnDefinition = "jsonb")
     private String lastApprovedSnapshot;
+
+    // --- Lifecycle / status-tracking fields (V43) ---
+
+    @Column(name = "status_changed_at")
+    private Instant statusChangedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status_changed_by_actor_type", length = 20)
+    private ActorType statusChangedByActorType;
+
+    @Column(name = "status_changed_by_actor_id")
+    private UUID statusChangedByActorId;
+
+    @Column(name = "status_reason_code", length = 100)
+    private String statusReasonCode;
+
+    @Column(name = "status_reason_note", columnDefinition = "TEXT")
+    private String statusReasonNote;
+
+    @Column(name = "approved_at")
+    private Instant approvedAt;
+
+    @Column(name = "rejected_at")
+    private Instant rejectedAt;
+
+    @Column(name = "submission_count", nullable = false)
+    private int submissionCount = 0;
+
+    @Column(name = "review_submitted_at")
+    private Instant reviewSubmittedAt;
 
     @Column(name = "address_confirmed", nullable = false)
     private boolean addressConfirmed = false;
@@ -638,6 +672,80 @@ public class Listing {
      */
     public void setLastApprovedSnapshot(String lastApprovedSnapshot) {
         this.lastApprovedSnapshot = lastApprovedSnapshot;
+    }
+
+    // --- Lifecycle / status-tracking getters/setters (V43) ---
+
+    public Instant getStatusChangedAt() {
+        return statusChangedAt;
+    }
+
+    public void setStatusChangedAt(Instant statusChangedAt) {
+        this.statusChangedAt = statusChangedAt;
+    }
+
+    public ActorType getStatusChangedByActorType() {
+        return statusChangedByActorType;
+    }
+
+    public void setStatusChangedByActorType(ActorType statusChangedByActorType) {
+        this.statusChangedByActorType = statusChangedByActorType;
+    }
+
+    public UUID getStatusChangedByActorId() {
+        return statusChangedByActorId;
+    }
+
+    public void setStatusChangedByActorId(UUID statusChangedByActorId) {
+        this.statusChangedByActorId = statusChangedByActorId;
+    }
+
+    public String getStatusReasonCode() {
+        return statusReasonCode;
+    }
+
+    public void setStatusReasonCode(String statusReasonCode) {
+        this.statusReasonCode = statusReasonCode;
+    }
+
+    public String getStatusReasonNote() {
+        return statusReasonNote;
+    }
+
+    public void setStatusReasonNote(String statusReasonNote) {
+        this.statusReasonNote = statusReasonNote;
+    }
+
+    public Instant getApprovedAt() {
+        return approvedAt;
+    }
+
+    public void setApprovedAt(Instant approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public Instant getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(Instant rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public int getSubmissionCount() {
+        return submissionCount;
+    }
+
+    public void setSubmissionCount(int submissionCount) {
+        this.submissionCount = submissionCount;
+    }
+
+    public Instant getReviewSubmittedAt() {
+        return reviewSubmittedAt;
+    }
+
+    public void setReviewSubmittedAt(Instant reviewSubmittedAt) {
+        this.reviewSubmittedAt = reviewSubmittedAt;
     }
 
     public String getRejectionReason() {
