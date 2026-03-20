@@ -97,7 +97,8 @@ public class ListingController {
 
         Listing listing = listingRepository.findById(id).orElse(null);
         if (listing == null) return notFound();
-        if (!caller.isAdmin() && !listing.getCreatedBy().equals(caller.userId())) {
+        UUID createdBy = listing.getCreatedBy();
+        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         }
