@@ -72,11 +72,13 @@ For each Linear issue (PR N):
 
    **Reviewer feedback cycle (HARD RULE — orchestrator must not break this):**
    When `code-reviewer` or `security-reviewer` returns REQUEST CHANGES:
+   - The main agent summarises each finding (severity + what needs fixing).
    - The orchestrator MUST re-invoke the **engineer agent** (Task tool) with the reviewer's exact findings attached.
-   - The orchestrator MUST NOT apply the fix itself, even for "trivial" or "one-line" changes.
-   - After the engineer fixes, re-invoke `code-reviewer` or `security-reviewer` once for a second pass.
-   - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
-   - There are no exceptions to this rule — inline fixes by the orchestrator are always a violation.
+     - The orchestrator MUST NOT apply the fix itself, even for "trivial" or "one-line" changes.
+     - After the engineer fixes, re-invoke `code-reviewer` or `security-reviewer` once for a second pass.
+     - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
+     - If findings are CONCERN or SUGGESTION only (no BLOCKING): proceed to commit without a fix pass; log findings in checkpoint Risks.
+     - There are no exceptions to this rule — inline fixes by the orchestrator are always a violation.
 
 5. **E2E gate** — Owned by `ROUTE_AND_RUN` Step 3. For Normal and High-risk changes, `qa` runs in verification mode after all reviewers APPROVE, before commit/push/PR. Change classification (trivial/normal/high-risk/doc-only) is determined by ROUTE_AND_RUN Step 1B — no sprint-layer override.
 

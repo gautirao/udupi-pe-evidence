@@ -539,7 +539,8 @@ AC coverage:
 Verdict: APPROVE | REQUEST CHANGES
 Review mode: backend | frontend | both
 Model: sonnet | opus
-Findings: [BLOCKING/ADVISORY/SUGGESTION with file:line]
+Findings: [BLOCKING/ADVISORY-FIX/ADVISORY-DEFER/SUGGESTION with file:line]
+- Each ADVISORY must be tagged FIX or DEFER — if the reviewer omits the tag, the orchestrator classifies per the rules in the Invocation Rules section
 ```
 
 ### QA verification output (required for Normal/High-risk)
