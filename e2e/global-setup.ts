@@ -71,6 +71,73 @@ function getUserIdFromToken(token: string): string {
   return decoded.sub ?? '';
 }
 
+/**
+ * Attempts to register a single image against the backend, retrying on transient
+ * 5xx / 503 / 429 responses (RE-164: pessimistic lock timeout on Render Postgres).
+ *
+ * Retry schedule: 500ms → 1000ms → 2000ms (3 attempts total, 2 waits).
+ * Returns true if the image was registered (201 or 409 — idempotent duplicate is ok).
+ * Returns false if all attempts are exhausted — caller decides whether to hard-fail.
+ */
+async function registerImage(
+  listingId: string,
+  storagePath: string,
+  url: string,
+  token: string,
+  filename: string,
+  maxRetries = 3,
+): Promise<boolean> {
+  const delays = [500, 1000, 2000];
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(`${BACKEND}/api/listings/${listingId}/images`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ storagePath, url }),
+      });
+
+      // 201 Created or 409 Conflict (idempotent duplicate) — both mean the image
+      // record is present in the DB.
+      if (res.ok || res.status === 409) {
+        return true;
+      }
+
+      const isRetryable = res.status === 429 || res.status >= 500;
+      const text = await res.text().catch(() => '<unreadable>');
+
+      if (isRetryable && attempt < maxRetries) {
+        const delayMs = delays[attempt - 1] ?? 2000;
+        console.log(
+          `[global-setup] Register image ${filename} retry ${attempt}/${maxRetries} (${res.status}) — waiting ${delayMs}ms`,
+        );
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+
+      // Non-retryable or retries exhausted
+      console.warn(`[global-setup] Register image ${filename} failed (${res.status}): ${text}`);
+      return false;
+    } catch (err) {
+      if (attempt < maxRetries) {
+        const delayMs = delays[attempt - 1] ?? 2000;
+        console.log(
+          `[global-setup] Register image ${filename} retry ${attempt}/${maxRetries} (network error: ${String(err)}) — waiting ${delayMs}ms`,
+        );
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      console.warn(`[global-setup] Register image ${filename} threw on final attempt: ${String(err)}`);
+      return false;
+    }
+  }
+
+  return false;
+}
+
 export default async function globalSetup(): Promise<void> {
   const brokerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
   const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
@@ -162,31 +229,40 @@ export default async function globalSetup(): Promise<void> {
       console.log(`[global-setup] PUT addressConfirmed threw: ${String(err)}`);
     }
 
-    // 3b: Register 3 stub images (metadata only — no actual file upload needed)
+    // 3b: Register 3 stub images (metadata only — no actual file upload needed).
+    // registerImage uses SELECT ... FOR UPDATE which can time out on Render's shared
+    // Postgres under rapid sequential calls (RE-164). Retry up to 3 times on any
+    // 5xx / 503 / 429 with exponential backoff (500ms, 1000ms, 2000ms).
     const stubImages = ['img-1.jpg', 'img-2.jpg', 'img-3.jpg'];
+    let imagesRegistered = 0;
     for (const filename of stubImages) {
       const storagePath = `listings/${brokerUserId}/${listingId}/${filename}`;
-      try {
-        const imgRes = await fetch(`${BACKEND}/api/listings/${listingId}/images`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${brokerToken}`,
-          },
-          body: JSON.stringify({
-            storagePath,
-            url: `https://placeholder.invalid/${filename}`,
-          }),
-        });
-        if (!imgRes.ok) {
-          const text = await imgRes.text().catch(() => '<unreadable>');
-          console.log(`[global-setup] Register image ${filename} failed (${imgRes.status}): ${text}`);
-        }
-      } catch (err) {
-        console.log(`[global-setup] Register image ${filename} threw: ${String(err)}`);
-      }
+      const registered = await registerImage(
+        listingId,
+        storagePath,
+        `https://placeholder.invalid/${filename}`,
+        brokerToken,
+        filename,
+      );
+      if (registered) imagesRegistered++;
     }
-    console.log('[global-setup] Registered 3 stub images');
+    if (imagesRegistered === 0) {
+      // All 3 images failed — submission requires at least 1 image.
+      // Write the ID file first so teardown can clean up the DRAFT listing even
+      // when setup fails at this step. Then throw to surface the problem.
+      try {
+        fs.writeFileSync(ID_FILE, `${listingId}\nDRAFT\n`, 'utf-8');
+        console.log(`[global-setup] Wrote ${ID_FILE} (${listingId}, DRAFT) before throwing`);
+      } catch (writeErr) {
+        console.log(`[global-setup] Could not write ${ID_FILE} before throw: ${String(writeErr)}`);
+      }
+      throw new Error(
+        '[global-setup] All 3 image registrations failed after retries. ' +
+        'The listing cannot be submitted without images. ' +
+        'Check backend logs for PessimisticLockingFailureException / 503 responses.',
+      );
+    }
+    console.log(`[global-setup] Registered ${imagesRegistered}/3 stub images`);
 
     // 3c: Submit for review (DRAFT → PENDING_REVIEW)
     let submitted = false;

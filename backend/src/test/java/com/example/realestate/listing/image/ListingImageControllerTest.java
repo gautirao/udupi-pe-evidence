@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -536,7 +537,32 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
     }
 
-    // ==================== Test 22: POST register — SCRAPED listing + non-admin dealer caller -> 403 from findOwnedListing ====================
+    // ==================== Test 22: POST register — lock timeout bubbles from registrar -> 503 ====================
+
+    /**
+     * RE-164: if PessimisticLockingFailureException escapes the registrar bean
+     * (e.g. thrown during transaction commit), the controller's defensive catch
+     * must return 503 with Retry-After: 1 rather than let Spring's default
+     * exception handler return 500.
+     */
+    @Test
+    void register_lockTimeoutBubblesFromRegistrar_returns503() throws Exception {
+        stubDealerWithDraftListing();
+        doThrow(new PessimisticLockingFailureException("lock timeout"))
+                .when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"storagePath":"%s","url":"%s"}
+                                """.formatted(validPath(), validUrl())))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "1"))
+                .andExpect(jsonPath("$.error").value("Upload temporarily busy, please retry"));
+    }
+
+    // ==================== Test 23: POST register — SCRAPED listing + non-admin dealer caller -> 403 from findOwnedListing ====================
 
     /**
      * RE-166 ADVISORY-FIX: registerImage must return 403 (via findOwnedListing → FindResult.forbidden)

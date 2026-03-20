@@ -4,6 +4,8 @@ import com.example.realestate.listing.core.ListingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,13 @@ import java.util.UUID;
  * (listing_id, storage_path) for a genuinely duplicate path must not mark the
  * transaction rollback-only, because we want to return 409 cleanly rather than
  * propagate an UnexpectedRollbackException as a 500.
+ *
+ * noRollbackFor = PessimisticLockingFailureException.class: when the DB
+ * statement_timeout or lock_timeout fires before the FOR UPDATE lock is granted
+ * (common under rapid sequential calls on Render's shared Postgres), we want to
+ * return 503 with Retry-After: 1 rather than let the exception bubble as a 500.
+ * The lock is not held — there is no dirty state to roll back — but Spring will
+ * mark the tx rollback-only if we do not suppress it here.
  */
 @Service
 class ListingImageRegistrar {
@@ -36,6 +45,7 @@ class ListingImageRegistrar {
     private static final Logger log = LoggerFactory.getLogger(ListingImageRegistrar.class);
 
     private static final int MAX_IMAGES = 10;
+    private static final String RETRY_AFTER_SECONDS = "1";
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
@@ -46,12 +56,33 @@ class ListingImageRegistrar {
         this.imageRepository = imageRepository;
     }
 
-    @Transactional(noRollbackFor = DataIntegrityViolationException.class)
+    @Transactional(noRollbackFor = {
+            DataIntegrityViolationException.class,
+            PessimisticLockingFailureException.class
+    })
     ResponseEntity<?> register(UUID listingId,
                                ListingImageController.RegisterImageRequest req,
                                UUID callerId) {
-        // Acquire exclusive row lock on the listing — serializes concurrent uploads
-        listingRepository.findByIdWithLock(listingId);
+        // Acquire exclusive row lock on the listing — serializes concurrent uploads.
+        // PessimisticLockingFailureException is caught below if the DB timeout fires
+        // before the lock is granted.
+        //
+        // Gap: if the listing was deleted between the ownership check in the controller
+        // and this lock step, findByIdWithLock returns Optional.empty() and we proceed
+        // to countByListingId and saveAndFlush. Either the FK constraint on listing_image
+        // (listing_id → property_listings.id) prevents a phantom image row (preferred),
+        // or — if no FK exists — a phantom row is inserted for a non-existent listing.
+        // No 404 guard is added here without first confirming FK existence.
+        try {
+            listingRepository.findByIdWithLock(listingId);
+        } catch (PessimisticLockingFailureException e) {
+            log.warn("POST /api/listings/{}/images -> 503 lock timeout userId={}", listingId, callerId);
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Retry-After", RETRY_AFTER_SECONDS);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .headers(headers)
+                    .body(Map.of("error", "Upload temporarily busy, please retry"));
+        }
 
         long currentCount = imageRepository.countByListingId(listingId);
         if (currentCount >= MAX_IMAGES) {
