@@ -288,6 +288,62 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Dealer withdraws a listing from review: PENDING_REVIEW -> DRAFT.
+     * Clears {@code reviewSubmittedAt} so the listing can be resubmitted later.
+     *
+     * <p><b>Race-condition guard (SUBMISSION_ALREADY_ACTIONED):</b> If an admin has
+     * already approved or rejected this submission (a history row exists with
+     * from_status=PENDING_REVIEW and to_status in {LIVE, REJECTED} after
+     * {@code reviewSubmittedAt}), the withdrawal is rejected with HTTP 409.
+     *
+     * @param listingId the listing to withdraw from review
+     * @param actorId   the broker/dealer performing the action (must own the listing)
+     * @throws ListingNotFoundException  if listing not found or not owned
+     * @throws ListingOwnershipException if the listing is not owned by the actor (via findOwned)
+     * @throws ListingStatusException    if transition is not allowed by the policy (e.g. listing is not PENDING_REVIEW)
+     * @throws ListingLifecycleException if admin has already acted on this submission (SUBMISSION_ALREADY_ACTIONED, 409)
+     */
+    @Transactional
+    public void withdrawListingFromReview(UUID listingId, UUID actorId) {
+        Listing listing = listingOwnershipGuard.findOwned(listingId, actorId, false);
+        ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
+
+        policy.validate(previousStatus, ListingStatus.DRAFT, ActorType.BROKER);
+
+        // Guard: admin must not have already approved or rejected this submission
+        Instant reviewSubmittedAt = listing.getReviewSubmittedAt();
+        if (reviewSubmittedAt != null
+                && statusHistoryRepository.existsAdminActionAfter(listingId, reviewSubmittedAt)) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.SUBMISSION_ALREADY_ACTIONED,
+                    "Admin has already acted on this submission — withdrawal not allowed");
+        }
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setReviewSubmittedAt(null);
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.BROKER);
+        listing.setStatusChangedByActorId(actorId);
+        listing.setUpdatedAt(nowOdt);
+
+        listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(previousStatus.toDbValue());
+        history.setToStatus(ListingStatus.DRAFT.toDbValue());
+        history.setActorType(ActorType.BROKER);
+        history.setActorId(actorId);
+        statusHistoryRepository.save(history);
+
+        log.info("Withdrew listing from review listingId={} by actorId={} fromStatus={} toStatus=DRAFT",
+                listingId, actorId, previousStatus);
+    }
+
+    /**
      * Dealer reopens a rejected listing back to DRAFT for editing.
      * Preserves {@code rejectedAt} — the rejection timestamp remains for audit.
      *

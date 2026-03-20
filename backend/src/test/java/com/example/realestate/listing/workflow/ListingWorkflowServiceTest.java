@@ -1084,6 +1084,166 @@ class ListingWorkflowServiceTest {
                 () -> workflowService.restoreArchivedListing(listingId, UUID.randomUUID()));
     }
 
+    // ===== RE-128: withdrawListingFromReview — dealer withdraws PENDING_REVIEW listing to DRAFT =====
+
+    @Test
+    void withdrawListingFromReview_happyPath_setsDraftAndClearsReviewSubmittedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now().minusSeconds(60));
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(statusHistoryRepository.existsAdminActionAfter(any(UUID.class), any(java.time.Instant.class)))
+                .thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.withdrawListingFromReview(listingId, actorId);
+
+        verify(policy).validate(ListingStatus.PENDING_REVIEW, ListingStatus.DRAFT, ActorType.BROKER);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(saved.getReviewSubmittedAt()).isNull();
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(history.getActorId()).isEqualTo(actorId);
+    }
+
+    @Test
+    void withdrawListingFromReview_adminAlreadyApproved_throwsSubmissionAlreadyActioned() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now().minusSeconds(60));
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(statusHistoryRepository.existsAdminActionAfter(any(UUID.class), any(java.time.Instant.class)))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> workflowService.withdrawListingFromReview(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.SUBMISSION_ALREADY_ACTIONED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any(ListingStatusHistory.class));
+    }
+
+    @Test
+    void withdrawListingFromReview_adminAlreadyRejected_throwsSubmissionAlreadyActioned() {
+        // Same guard covers both approve and reject — the repository query checks
+        // for any terminal action (LIVE or REJECTED) after reviewSubmittedAt
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now().minusSeconds(60));
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(statusHistoryRepository.existsAdminActionAfter(any(UUID.class), any(java.time.Instant.class)))
+                .thenReturn(true); // admin already rejected
+
+        assertThatThrownBy(() -> workflowService.withdrawListingFromReview(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.SUBMISSION_ALREADY_ACTIONED));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void withdrawListingFromReview_notOwner_throwsOwnershipException() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false))
+                .thenThrow(new ListingOwnershipException(listingId));
+
+        assertThatThrownBy(() -> workflowService.withdrawListingFromReview(listingId, actorId))
+                .isInstanceOf(ListingOwnershipException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any(ListingStatusHistory.class));
+    }
+
+    @Test
+    void withdrawListingFromReview_wrongStatus_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+
+        doThrow(new ListingStatusException("Transition not allowed: from=LIVE to=DRAFT actor=BROKER"))
+                .when(policy).validate(ListingStatus.LIVE, ListingStatus.DRAFT, ActorType.BROKER);
+
+        assertThatThrownBy(() -> workflowService.withdrawListingFromReview(listingId, actorId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any(ListingStatusHistory.class));
+    }
+
+    @Test
+    void withdrawListingFromReview_notFound_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false))
+                .thenThrow(new com.example.realestate.listing.exception.ListingNotFoundException(listingId));
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
+                () -> workflowService.withdrawListingFromReview(listingId, actorId));
+    }
+
+    @Test
+    void withdrawListingFromReview_setsStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now().minusSeconds(60));
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(statusHistoryRepository.existsAdminActionAfter(any(UUID.class), any(java.time.Instant.class)))
+                .thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.withdrawListingFromReview(listingId, actorId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(actorId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void withdrawListingFromReview_nullReviewSubmittedAt_skipsGuardAndSucceeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(null);
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.withdrawListingFromReview(listingId, actorId);
+
+        verify(statusHistoryRepository, never()).existsAdminActionAfter(any(), any());
+        verify(listingRepository).save(any());
+    }
+
     // ===== RE-83: getDisplayId() — tested on Listing entity =====
 
     @Test

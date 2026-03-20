@@ -205,6 +205,24 @@ public class ListingController {
         }
     }
 
+    @PutMapping("/{id}/withdraw")
+    public ResponseEntity<?> withdraw(CallerInfo caller, @PathVariable UUID id) {
+
+        try {
+            listingWorkflowService.withdrawListingFromReview(id, caller.userId());
+            log.info("PUT /api/listings/{}/withdraw -> 204 status=DRAFT", id);
+            return ResponseEntity.noContent().build();
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different broker"));
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+        // ListingLifecycleException (SUBMISSION_ALREADY_ACTIONED) handled by GlobalExceptionHandler → 409
+    }
+
     @PutMapping("/{id}/restore")
     public ResponseEntity<?> restore(CallerInfo caller, @PathVariable UUID id) {
 
