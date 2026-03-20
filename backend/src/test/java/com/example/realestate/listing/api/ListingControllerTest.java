@@ -5,6 +5,8 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.crud.ListingCrudService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.listing.exception.ListingErrorCode;
+import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
@@ -55,7 +57,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import({ListingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
+@Import({ListingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class,
+        com.example.realestate.exception.GlobalExceptionHandler.class})
 class ListingControllerTest {
 
     private static final UUID DEALER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -988,6 +991,259 @@ class ListingControllerTest {
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
                 "broker");
+    }
+
+    // ==================== RE-135: Archive endpoint tests ====================
+
+    @Test
+    void archive_happyPath_returns200WithArchivedStatus() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing archived = buildListing(LISTING_ID, "ARCHIVED", "land", "Plot",
+                "Manipal", new BigDecimal("5000000"), "Nice plot");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(archived));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        verify(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
+    }
+
+    @Test
+    void archive_notOwner_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingOwnershipException(LISTING_ID))
+                .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void archive_wrongStatus_returns400() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingStatusException("Cannot archive listing with status PENDING_REVIEW"))
+                .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Cannot archive listing with status PENDING_REVIEW"));
+    }
+
+    @Test
+    void archive_notFound_returns404() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingNotFoundException(LISTING_ID))
+                .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== RE-135: Reopen (REJECTED→DRAFT) endpoint tests ====================
+
+    @Test
+    void reopen_happyPath_returns200WithDraftStatus() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing reopened = buildListing(LISTING_ID, "DRAFT", "house", "House",
+                "Udupi", new BigDecimal("8000000"), "Reopened");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(reopened));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+
+        verify(listingWorkflowService).reopenRejectedListing(LISTING_ID, DEALER_ID);
+    }
+
+    @Test
+    void reopen_notOwner_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingOwnershipException(LISTING_ID))
+                .when(listingWorkflowService).reopenRejectedListing(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void reopen_wrongStatus_returns400() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingStatusException("Cannot reopen listing with status LIVE"))
+                .when(listingWorkflowService).reopenRejectedListing(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Cannot reopen listing with status LIVE"));
+    }
+
+    // ==================== RE-135: Reopen-as-draft (ARCHIVED→DRAFT) endpoint tests ====================
+
+    @Test
+    void reopenAsDraft_happyPath_returns200WithDraftStatus() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing reopened = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
+                "Manipal", new BigDecimal("5000000"), "Reopened from archive");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(reopened));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+
+        verify(listingWorkflowService).reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID);
+    }
+
+    @Test
+    void reopenAsDraft_notOwner_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingOwnershipException(LISTING_ID))
+                .when(listingWorkflowService).reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void reopenAsDraft_wrongStatus_returns400() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingStatusException("Cannot reopen listing with status LIVE"))
+                .when(listingWorkflowService).reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Cannot reopen listing with status LIVE"));
+    }
+
+    // ==================== RE-135: Withdraw (existing PUT, missing tests) ====================
+
+    @Test
+    void withdraw_happyPath_returns204() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isNoContent());
+
+        verify(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
+    }
+
+    @Test
+    void withdraw_notOwner_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingOwnershipException(LISTING_ID))
+                .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void withdraw_wrongStatus_returns400() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingStatusException("Cannot withdraw listing with status DRAFT"))
+                .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Cannot withdraw listing with status DRAFT"));
+    }
+
+    @Test
+    void withdraw_submissionAlreadyActioned_returns409() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        doThrow(new ListingLifecycleException(
+                ListingErrorCode.SUBMISSION_ALREADY_ACTIONED,
+                "Admin has already acted on this submission — withdrawal not allowed"))
+                .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SUBMISSION_ALREADY_ACTIONED"))
+                .andExpect(jsonPath("$.message").value(
+                        "Admin has already acted on this submission — withdrawal not allowed"));
+    }
+
+    // ==================== RE-135: Restore (existing PUT, missing tests) ====================
+
+    @Test
+    void restore_happyPath_returns200WithLiveStatus() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House",
+                "Udupi", new BigDecimal("8000000"), "Restored");
+        when(listingWorkflowService.restoreArchivedListing(LISTING_ID, DEALER_ID)).thenReturn(restored);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("LIVE"));
+
+        verify(listingWorkflowService).restoreArchivedListing(LISTING_ID, DEALER_ID);
+    }
+
+    @Test
+    void restore_notEligible_returns422() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingWorkflowService.restoreArchivedListing(LISTING_ID, DEALER_ID))
+                .thenThrow(new ListingLifecycleException(
+                        ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                        "Listing was never published — use reopen-to-draft instead"));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("FAST_RESTORE_NOT_ELIGIBLE"))
+                .andExpect(jsonPath("$.message").value(
+                        "Listing was never published — use reopen-to-draft instead"));
+    }
+
+    @Test
+    void restore_notOwner_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingWorkflowService.restoreArchivedListing(LISTING_ID, DEALER_ID))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void restore_notFound_returns404() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingWorkflowService.restoreArchivedListing(LISTING_ID, DEALER_ID))
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
     // ==================== Helper ====================

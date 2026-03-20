@@ -205,6 +205,63 @@ public class ListingController {
         }
     }
 
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<?> archive(CallerInfo caller, @PathVariable UUID id) {
+
+        try {
+            listingWorkflowService.archiveListing(id, caller.userId(), null);
+            Listing archived = listingRepository.findById(id)
+                    .orElseThrow(() -> new ListingNotFoundException(id));
+            log.info("POST /api/listings/{}/archive -> 200 status=ARCHIVED", id);
+            return ResponseEntity.ok(listingResponseMapper.toResponse(archived));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different broker"));
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/reopen")
+    public ResponseEntity<?> reopen(CallerInfo caller, @PathVariable UUID id) {
+
+        try {
+            listingWorkflowService.reopenRejectedListing(id, caller.userId());
+            Listing reopened = listingRepository.findById(id)
+                    .orElseThrow(() -> new ListingNotFoundException(id));
+            log.info("POST /api/listings/{}/reopen -> 200 status=DRAFT", id);
+            return ResponseEntity.ok(listingResponseMapper.toResponse(reopened));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different broker"));
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/reopen-as-draft")
+    public ResponseEntity<?> reopenAsDraft(CallerInfo caller, @PathVariable UUID id) {
+
+        try {
+            listingWorkflowService.reopenArchivedListingAsDraft(id, caller.userId());
+            Listing reopened = listingRepository.findById(id)
+                    .orElseThrow(() -> new ListingNotFoundException(id));
+            log.info("POST /api/listings/{}/reopen-as-draft -> 200 status=DRAFT", id);
+            return ResponseEntity.ok(listingResponseMapper.toResponse(reopened));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different broker"));
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @PutMapping("/{id}/withdraw")
     public ResponseEntity<?> withdraw(CallerInfo caller, @PathVariable UUID id) {
 
