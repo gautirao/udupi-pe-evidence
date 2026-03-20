@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
-# Git pre-push hook — runs e2e only when code files have changed.
-# Doc-only changes (*.md, docs/) skip the e2e gate entirely.
+# Git pre-push hook — smart E2E gate with marker-based deduplication.
+#
+# How it works:
+#   1. If only doc files changed → skip E2E entirely.
+#   2. If .e2e-passed marker exists and matches HEAD SHA → skip (already verified).
+#   3. Otherwise → run the full E2E suite.
+#
+# The marker file (.e2e-passed) is written by:
+#   - The ROUTE_AND_RUN workflow after QA E2E gate passes
+#   - The orchestrator after a manual `npm run test:e2e:local` pass
+#   - This hook itself after a successful E2E run
+#
+# See .claude/E2E_GATE.md for the full design rationale.
 set -e
 
-# Patterns that count as code (anything NOT matching the doc exclusion below)
+MARKER_FILE=".e2e-passed"
 DOC_PATTERN='^(docs/|README|CLAUDE|\.githooks/|\.claude/|e2e/|\.github/|scripts/|.*\.md$)'
 
 while read -r local_ref local_sha remote_ref remote_sha; do
@@ -35,11 +46,37 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   echo "[pre-push] Code changes detected:"
   echo "$code_changes" | sed 's/^/  /'
   echo ""
+
+  # Check for E2E marker — skip if HEAD already verified
+  head_sha=$(git rev-parse HEAD)
+  if [ -f "$MARKER_FILE" ]; then
+    marker_sha=$(head -1 "$MARKER_FILE" 2>/dev/null || echo "")
+    if [ "$marker_sha" = "$head_sha" ]; then
+      marker_ts=$(sed -n '2p' "$MARKER_FILE" 2>/dev/null || echo "unknown")
+      echo "[pre-push] E2E already verified for this commit (marker: $marker_ts)"
+      echo "[pre-push] Skipping redundant E2E run."
+      echo ""
+      echo "━━━ e2e verified (cached) — push proceeding ━━━"
+      echo ""
+      exit 0
+    else
+      echo "[pre-push] E2E marker exists but SHA mismatch (marker=$marker_sha, HEAD=$head_sha)"
+      echo "[pre-push] Running E2E..."
+    fi
+  else
+    echo "[pre-push] No E2E marker found — running E2E..."
+  fi
+
+  echo ""
   echo "━━━ pre-push: running e2e tests ━━━"
   echo "Ensure backend (port 8085) and frontend (port 8080) are running."
   echo ""
 
   npm run test:e2e:local
+
+  # Write marker on success so subsequent pushes (amend, retry) skip
+  echo "$head_sha" > "$MARKER_FILE"
+  echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$MARKER_FILE"
 
   echo ""
   echo "━━━ e2e passed — push proceeding ━━━"

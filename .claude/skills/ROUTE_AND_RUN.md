@@ -264,6 +264,8 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 
 ### Invocation Rules
 
+- **Agent permission mode**: ALL agents MUST be launched with `mode: "dontAsk"`. Do NOT use `mode: "bypassPermissions"` — it skips PreToolUse hooks (e.g. the combined-commands blocker). `dontAsk` auto-approves tool calls while still enforcing hooks.
+
 - `qa-fast` runs BEFORE the engineer writes any code.
   When invoking pre-implementation, use this Task prompt pattern:
   > "Review the codebase and identify risks for this planned change: [paste issue/PR description].
@@ -353,19 +355,45 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 | Tier | QA E2E gate | Pre-push hook |
 |------|-------------|---------------|
 | Doc-only | skip | skips (doc pattern match) |
-| Trivial | skip | best-effort local backstop |
-| Normal | **required** | best-effort local backstop |
-| High-risk | **required** | best-effort local backstop |
+| Trivial | skip | skips (marker or runs if no marker) |
+| Normal | **required** (see applicability rules below) | skips if marker exists |
+| High-risk | **required** (see applicability rules below) | skips if marker exists |
+
+### E2E applicability rules (Normal and High-risk)
+
+| PR type | E2E required? | Rationale |
+|---------|--------------|-----------|
+| Frontend — new page/route | YES — full suite | New routes could break existing navigation |
+| Frontend — existing page change | YES — full suite | Could break rendering |
+| Backend — API consumed by existing FE page | YES — full suite | API contract change could break FE |
+| Backend — no FE consumer yet (new endpoint, no FE page wired) | SKIP — `SKIPPED(no FE consumer)` | No frontend route to test against |
+| Doc-only / Trivial | SKIP | No runtime change |
+
+When skipping, the Gate Satisfaction Record must state the specific skip reason (e.g., `SKIPPED(no FE consumer)` or `SKIPPED(backend-only, no API contract change)`).
 
 ### Gate sequence (Normal and High-risk only)
 
 After code-reviewer (and security-reviewer if applicable) APPROVE:
 
 1. **E2E authoring check** — if qa-fast output includes `E2E authoring recommended: YES` AND skip conditions are not met, invoke `qa` in **E2E authoring mode**.
-2. Invoke `qa` agent in **verification mode** (see Invocation Rules above for exact prompt).
-3. QA reports structured result: pass count, fail count, exact failure details.
-4. **If PASS** — proceed to commit/push/PR.
-5. **If FAIL** — enter Failure Routing Protocol below.
+2. **E2E applicability check** — if the PR matches a SKIP row in the applicability table above, record the skip reason and proceed to commit/push/PR. Do NOT invoke QA verification mode.
+3. Invoke `qa` agent in **verification mode** (see Invocation Rules above for exact prompt).
+4. QA reports structured result: pass count, fail count, exact failure details.
+5. **If PASS** — write the E2E marker, then proceed to commit/push/PR.
+6. **If FAIL** — enter Failure Routing Protocol below.
+
+### E2E marker (deduplication with pre-push hook)
+
+After E2E passes (either via QA verification mode or manual `npm run test:e2e:local`), the orchestrator MUST write the marker file:
+
+```bash
+echo "$(git rev-parse HEAD)" > .e2e-passed
+echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> .e2e-passed
+```
+
+The pre-push hook checks this marker: if the SHA matches HEAD, it skips the redundant E2E run. This prevents double-running E2E (once in QA gate, once on push) and avoids flaky failures from auth rate limiting.
+
+The marker is gitignored and ephemeral — it exists only in the local working tree. See `.claude/E2E_GATE.md` for the full design.
 
 ### PR creation is a gated state transition
 
@@ -432,16 +460,19 @@ Heuristics (inform, not override, the rules above):
 - API response errors, 4xx/5xx status codes in test output → likely backend-engineer
 - Database constraint violations, migration errors → likely backend-engineer
 
-### Pre-push hook: best-effort local backstop
+### Pre-push hook: smart backstop with marker deduplication
 
-The `.githooks/pre-push` hook remains active. It catches:
-- Changes that bypassed the QA gate (trivial misclassification, manual commits outside the workflow)
-- Worktree pushes or non-standard flows
-- Changes committed outside of ROUTE_AND_RUN
+The `.githooks/pre-push` hook uses a marker-based approach:
 
-The pre-push hook is a best-effort local backstop. It is NOT a source of truth, NOT a quality gate, and NOT a substitute for the QA E2E gate. It can be misconfigured, bypassed (`--no-verify`), or skipped in worktrees. Do not rely on it as the primary safety mechanism for any tier.
+1. **Doc-only changes** → skips E2E (same as before)
+2. **`.e2e-passed` marker exists and SHA matches HEAD** → skips E2E (already verified by QA gate or prior run)
+3. **No marker or stale marker** → runs full E2E suite (catches manual pushes outside the workflow)
 
-If the pre-push hook fails after QA passed: play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
+The hook also writes the marker on success, so retries and subsequent pushes of the same commit skip.
+
+This eliminates redundant E2E runs for workflow-driven pushes while preserving safety for manual pushes. See `.claude/E2E_GATE.md` for the full design.
+
+If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `afplay /System/Library/Sounds/Basso.aiff`, surface the failure to the user and stop. Do NOT auto-fix.
 
 ---
 
@@ -527,8 +558,8 @@ Classification evidence: [changed files + behavior impact for trivial; or N/A]
 Engineer tests: PASS | FAIL | SKIPPED(trivial, non-executable)
 Code-reviewer: APPROVE | N/A(trivial)
 Security-reviewer: APPROVE | N/A
-E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(refactor-single-service)
-QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only)
+E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(refactor-single-service) | SKIPPED(no FE consumer)
+QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(no FE consumer) | SKIPPED(backend-only, no API contract change)
 Process-doc review: PASS | N/A
 All gates satisfied: YES
 ```
