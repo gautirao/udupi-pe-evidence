@@ -338,10 +338,10 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
-    // ==================== Test 10: DELETE -> wrong status -> 400 ====================
+    // ==================== Test 10: DELETE -> wrong status -> 409 ====================
 
     @Test
-    void delete_wrongStatus_returns400() throws Exception {
+    void delete_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingStatusException(
                 "Cannot delete listing with status LIVE"))
@@ -349,7 +349,7 @@ class ListingControllerTest {
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot delete listing with status LIVE"));
     }
 
@@ -485,10 +485,10 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.errors[0].message").value("Commercial submission not supported yet"));
     }
 
-    // ==================== Submit: wrong status -> 400 ====================
+    // ==================== Submit: wrong status -> 409 ====================
 
     @Test
-    void submit_wrongStatus_returns400() throws Exception {
+    void submit_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingStatusException(
@@ -496,7 +496,7 @@ class ListingControllerTest {
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot submit listing with status LIVE"));
     }
 
@@ -1025,14 +1025,14 @@ class ListingControllerTest {
     }
 
     @Test
-    void archive_wrongStatus_returns400() throws Exception {
+    void archive_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingStatusException("Cannot archive listing with status PENDING_REVIEW"))
                 .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot archive listing with status PENDING_REVIEW"));
     }
 
@@ -1080,14 +1080,14 @@ class ListingControllerTest {
     }
 
     @Test
-    void reopen_wrongStatus_returns400() throws Exception {
+    void reopen_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingStatusException("Cannot reopen listing with status LIVE"))
                 .when(listingWorkflowService).reopenRejectedListing(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot reopen listing with status LIVE"));
     }
 
@@ -1123,14 +1123,14 @@ class ListingControllerTest {
     }
 
     @Test
-    void reopenAsDraft_wrongStatus_returns400() throws Exception {
+    void reopenAsDraft_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingStatusException("Cannot reopen listing with status LIVE"))
                 .when(listingWorkflowService).reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot reopen listing with status LIVE"));
     }
 
@@ -1160,14 +1160,14 @@ class ListingControllerTest {
     }
 
     @Test
-    void withdraw_wrongStatus_returns400() throws Exception {
+    void withdraw_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         doThrow(new ListingStatusException("Cannot withdraw listing with status DRAFT"))
                 .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot withdraw listing with status DRAFT"));
     }
 

@@ -169,7 +169,7 @@ public class ListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -199,7 +199,7 @@ public class ListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         } catch (ListingValidationException e) {
             return ResponseEntity.unprocessableEntity().body(Map.of("errors", e.getErrors()));
         }
@@ -220,7 +220,7 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -239,7 +239,7 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -258,7 +258,7 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -275,7 +275,7 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
         // ListingLifecycleException (SUBMISSION_ALREADY_ACTIONED) handled by GlobalExceptionHandler → 409
     }
@@ -293,7 +293,7 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
         // ListingLifecycleException (FAST_RESTORE_NOT_ELIGIBLE) handled by GlobalExceptionHandler → 422
     }

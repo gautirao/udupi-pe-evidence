@@ -57,7 +57,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -99,7 +99,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -124,7 +124,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -147,7 +147,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -164,7 +164,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -189,7 +189,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -209,7 +209,7 @@ public class AdminListingController {
         } catch (ListingNotFoundException e) {
             return notFound();
         } catch (ListingStatusException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
     }
 
