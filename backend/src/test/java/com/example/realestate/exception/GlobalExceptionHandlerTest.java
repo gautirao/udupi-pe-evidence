@@ -2,6 +2,7 @@ package com.example.realestate.exception;
 
 import com.example.realestate.booking.BookingController;
 import com.example.realestate.booking.BookingService;
+import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
@@ -51,6 +52,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *   2. PropertyReferenceException from service → 400 INVALID_SORT_FIELD
  *   3. Unexpected RuntimeException from service → 500 INTERNAL_ERROR (message not leaked)
  *   4. Valid happy-path request → 200, no error field
+ *   5. ListingStatusException from service → 409 Conflict with message in body
  */
 @WebMvcTest(
         controllers = BookingController.class,
@@ -156,4 +158,18 @@ class GlobalExceptionHandlerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.error").doesNotExist());
     }
+
+    // ===== Test 5: ListingStatusException → 409 Conflict with message in body =====
+
+    @Test
+    void listingStatusException_returns409WithMessageInBody() throws Exception {
+        when(bookingService.getBookingsForRequesterPaged(any(), any(Pageable.class)))
+                .thenThrow(new ListingStatusException("Transition not allowed for current status"));
+
+        mockMvc.perform(get("/api/bookings/mine")
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("Transition not allowed for current status"));
+    }
+
 }

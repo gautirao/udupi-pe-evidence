@@ -1,10 +1,12 @@
 package com.example.realestate.exception;
 
 import com.example.realestate.listing.exception.ListingLifecycleException;
+import com.example.realestate.listing.exception.ListingStatusException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -44,6 +46,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Listing lifecycle error [{}]: {}", ex.getCode(), ex.getMessage());
         return ResponseEntity.status(ex.getCode().getHttpStatus())
                 .body(Map.of("code", ex.getCode().name(), "message", ex.getMessage()));
+    }
+
+    // ===== ListingStatusException → 409 Conflict =====
+
+    @ExceptionHandler(ListingStatusException.class)
+    public ResponseEntity<Map<String, String>> handleListingStatus(ListingStatusException ex) {
+        log.warn("Listing status transition rejected: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", ex.getMessage()));
     }
 
     // ===== PropertyReferenceException → 400 =====

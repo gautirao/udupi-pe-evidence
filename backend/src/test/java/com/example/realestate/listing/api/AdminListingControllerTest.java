@@ -219,10 +219,10 @@ class AdminListingControllerTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ==================== Test 7: Approve wrong status -> 400 ====================
+    // ==================== Test 7: Approve wrong status -> 409 ====================
 
     @Test
-    void approve_wrongStatus_returns400() throws Exception {
+    void approve_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID))
                 .thenThrow(new ListingStatusException(
@@ -230,7 +230,7 @@ class AdminListingControllerTest {
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot approve listing with status DRAFT"));
     }
 
@@ -266,10 +266,10 @@ class AdminListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
-    // ==================== Test 10: Reject wrong status -> 400 ====================
+    // ==================== Test 10: Reject wrong status -> 409 ====================
 
     @Test
-    void reject_wrongStatus_returns400() throws Exception {
+    void reject_wrongStatus_returns409() throws Exception {
         when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Reason"))
                 .thenThrow(new ListingStatusException(
@@ -281,7 +281,7 @@ class AdminListingControllerTest {
                         .content("""
                                 {"rejectionReason":"Reason"}
                                 """))
-                .andExpect(status().isBadRequest())
+                .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot reject listing with status DRAFT"));
     }
 
