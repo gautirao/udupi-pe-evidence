@@ -1420,4 +1420,271 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getStatusReasonNote()).isEqualTo("Need better description");
         assertThat(saved.getReviewSubmittedAt()).isNull();
     }
+
+    // ===== RE-132: claimScrapedListing — admin claims scraped listing with owner assignment =====
+
+    @Test
+    void claimScrapedListing_happyPath_setsDraftAndAssignsOwner() {
+        UUID listingId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        // createdBy is null — SCRAPED listing has no owner
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.claimScrapedListing(listingId, ownerId, adminId);
+
+        verify(policy).validate(ListingStatus.SCRAPED, ListingStatus.DRAFT, ActorType.ADMIN);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(saved.getCreatedBy()).isEqualTo(ownerId);
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void claimScrapedListing_alreadyClaimed_throwsAlreadyClaimed() {
+        UUID listingId = UUID.randomUUID();
+        UUID existingOwnerId = UUID.randomUUID();
+        UUID newOwnerId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        listing.setCreatedBy(existingOwnerId); // already has an owner
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.claimScrapedListing(listingId, newOwnerId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.ALREADY_CLAIMED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void claimScrapedListing_wrongStatus_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        doThrow(new ListingStatusException("Transition not allowed: from=DRAFT to=DRAFT actor=ADMIN"))
+                .when(policy).validate(ListingStatus.DRAFT, ListingStatus.DRAFT, ActorType.ADMIN);
+
+        assertThatThrownBy(() -> workflowService.claimScrapedListing(listingId, ownerId, adminId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void claimScrapedListing_notFound_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
+                () -> workflowService.claimScrapedListing(listingId, UUID.randomUUID(), UUID.randomUUID()));
+    }
+
+    @Test
+    void claimScrapedListing_nullOwnerId_throws() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> workflowService.claimScrapedListing(listingId, null, adminId))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessageContaining("ownerId must not be null");
+
+        verify(listingRepository, never()).findById(any());
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void claimScrapedListing_writesHistoryRow() {
+        UUID listingId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        // createdBy is null
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.claimScrapedListing(listingId, ownerId, adminId);
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.SCRAPED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(history.getActorId()).isEqualTo(adminId);
+    }
+
+    // ===== RE-132: approveScrapedListing — admin approves scraped listing directly to LIVE =====
+
+    private Listing createCompleteListing(UUID listingId, UUID ownerId) {
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        listing.setCreatedBy(ownerId);
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setAddressConfirmed(true);
+        listing.setPrice(BigDecimal.valueOf(1000000));
+        listing.setTitle("Test Property");
+        return listing;
+    }
+
+    @Test
+    void approveScrapedListing_happyPath_setsLiveWithAllTimestamps() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        verify(policy).validate(ListingStatus.SCRAPED, ListingStatus.LIVE, ActorType.ADMIN);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(saved.getReviewedAt()).isNotNull();
+        assertThat(saved.getReviewedBy()).isEqualTo(adminId);
+        assertThat(saved.getApprovedAt()).isNotNull();
+        assertThat(saved.getFirstPublishedAt()).isNotNull();
+        assertThat(saved.getLastLiveAt()).isNotNull();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void approveScrapedListing_notClaimed_throwsListingNotClaimed() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        // createdBy is null — not claimed
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.approveScrapedListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_NOT_CLAIMED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void approveScrapedListing_incompleteListing_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        listing.setCreatedBy(ownerId);
+        // Missing required fields: property_type is "other" (not submittable), no locality, etc.
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.approveScrapedListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void approveScrapedListing_wrongStatus_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        doThrow(new ListingStatusException("Transition not allowed: from=DRAFT to=LIVE actor=ADMIN"))
+                .when(policy).validate(ListingStatus.DRAFT, ListingStatus.LIVE, ActorType.ADMIN);
+
+        assertThatThrownBy(() -> workflowService.approveScrapedListing(listingId, adminId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void approveScrapedListing_preservesFirstPublishedAtIfAlreadySet() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        java.time.OffsetDateTime originalFirstPublished = java.time.OffsetDateTime.now().minusDays(30);
+        listing.setFirstPublishedAt(originalFirstPublished);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveScrapedListing(listingId, adminId);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+
+        // firstPublishedAt must NOT be overwritten
+        assertThat(saved.getFirstPublishedAt()).isEqualTo(originalFirstPublished);
+        // lastLiveAt must be updated
+        assertThat(saved.getLastLiveAt()).isNotNull();
+        assertThat(saved.getLastLiveAt()).isAfter(originalFirstPublished);
+    }
 }

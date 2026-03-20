@@ -603,6 +603,131 @@ public class ListingWorkflowService {
         return saved;
     }
 
+    /**
+     * Admin claims a scraped listing by assigning an owner and transitioning to DRAFT.
+     * SCRAPED listings have no owner ({@code createdBy} is null); this method assigns one.
+     *
+     * <p><b>CRITICAL:</b> Uses {@code listingRepository.findById()} (not findOwned) because
+     * SCRAPED listings have no owner and would fail the ownership guard.
+     *
+     * @param listingId the scraped listing to claim
+     * @param ownerId   the broker/dealer to assign as owner
+     * @param adminId   the admin performing the action
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingStatusException    if transition is not allowed by the policy (e.g. not SCRAPED)
+     * @throws ListingLifecycleException if listing already has an owner (ALREADY_CLAIMED, 422)
+     */
+    @Transactional
+    public Listing claimScrapedListing(UUID listingId, UUID ownerId, UUID adminId) {
+        Objects.requireNonNull(ownerId, "ownerId must not be null");
+
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(currentStatus, ListingStatus.DRAFT, ActorType.ADMIN);
+
+        // Guard: prevent silent owner reassignment
+        if (listing.getCreatedBy() != null) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.ALREADY_CLAIMED,
+                    "Listing already has an owner — cannot reassign");
+        }
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setCreatedBy(ownerId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminId);
+        listing.setUpdatedAt(nowOdt);
+
+        Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.DRAFT.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminId);
+        statusHistoryRepository.save(history);
+
+        log.info("Claimed scraped listing listingId={} ownerId={} by adminId={} fromStatus={} toStatus=DRAFT",
+                listingId, ownerId, adminId, currentStatus);
+        return saved;
+    }
+
+    /**
+     * Admin approves a scraped listing directly to LIVE (exceptional path).
+     * Requires the listing to be claimed (have an owner) and to pass completeness validation.
+     *
+     * <p>No event publishing for now — SCRAPED to LIVE is an admin-only exceptional path.
+     *
+     * @param listingId the scraped listing to approve
+     * @param adminId   the admin performing the action
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingStatusException    if transition is not allowed by the policy (e.g. not SCRAPED)
+     * @throws ListingLifecycleException if listing has no owner (LISTING_NOT_CLAIMED, 422)
+     * @throws ListingLifecycleException if listing fails completeness validation (LISTING_INCOMPLETE, 422)
+     */
+    @Transactional
+    public Listing approveScrapedListing(UUID listingId, UUID adminId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(currentStatus, ListingStatus.LIVE, ActorType.ADMIN);
+
+        // Guard: listing must be claimed before direct approval
+        if (listing.getCreatedBy() == null) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.LISTING_NOT_CLAIMED,
+                    "Listing must be claimed before direct approval");
+        }
+
+        // Completeness guard: reuse the same validation as submitListing
+        List<Map<String, String>> errors = validateForSubmission(listing);
+        if (!errors.isEmpty()) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.LISTING_INCOMPLETE,
+                    "Listing is incomplete: " + errors.get(0).get("message"));
+        }
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setReviewedAt(nowOdt);
+        listing.setReviewedBy(adminId);
+        listing.setApprovedAt(now);
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminId);
+        listing.setUpdatedAt(nowOdt);
+
+        // Transparency timestamps
+        if (listing.getFirstPublishedAt() == null) {
+            listing.setFirstPublishedAt(nowOdt);
+        }
+        listing.setLastLiveAt(nowOdt);
+
+        Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.LIVE.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminId);
+        statusHistoryRepository.save(history);
+
+        log.info("Approved scraped listing listingId={} by adminId={} fromStatus={} toStatus=LIVE",
+                listingId, adminId, currentStatus);
+        return saved;
+    }
+
     private List<Map<String, String>> validateForSubmission(Listing listing) {
         List<Map<String, String>> errors = new ArrayList<>();
 

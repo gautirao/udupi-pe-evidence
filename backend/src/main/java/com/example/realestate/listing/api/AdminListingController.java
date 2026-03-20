@@ -128,6 +128,46 @@ public class AdminListingController {
         }
     }
 
+    @PostMapping("/{id}/claim-scraped")
+    public ResponseEntity<?> claimScraped(CallerInfo caller,
+                                          @PathVariable UUID id,
+                                          @RequestBody ClaimScrapedRequest req) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
+
+        if (req.ownerId() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "ownerId is required"));
+        }
+
+        try {
+            Listing claimed = listingWorkflowService.claimScrapedListing(id, req.ownerId(), caller.userId());
+            log.info("POST /api/admin/listings/{}/claim-scraped -> 200 status=DRAFT ownerId={}", id, req.ownerId());
+            adminAuditService.record(caller.userId(), "listing_claimed_scraped", "listing", id, null,
+                    "{\"status\":\"DRAFT\",\"ownerId\":\"" + req.ownerId() + "\"}");
+            return ResponseEntity.ok(listingResponseMapper.toResponse(claimed));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/approve-scraped")
+    public ResponseEntity<?> approveScraped(CallerInfo caller, @PathVariable UUID id) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
+
+        try {
+            Listing approved = listingWorkflowService.approveScrapedListing(id, caller.userId());
+            log.info("POST /api/admin/listings/{}/approve-scraped -> 200 status=LIVE", id);
+            adminAuditService.record(caller.userId(), "listing_approved_scraped", "listing", id, null,
+                    "{\"status\":\"LIVE\"}");
+            return ResponseEntity.ok(listingResponseMapper.toResponse(approved));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> forceDelete(CallerInfo caller, @PathVariable UUID id) {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
@@ -157,4 +197,6 @@ public class AdminListingController {
     public record RejectRequest(String rejectionReason) {}
 
     public record ReturnForEditsRequest(String note) {}
+
+    public record ClaimScrapedRequest(UUID ownerId) {}
 }
