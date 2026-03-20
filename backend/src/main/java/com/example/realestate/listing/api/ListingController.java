@@ -205,6 +205,24 @@ public class ListingController {
         }
     }
 
+    @PutMapping("/{id}/restore")
+    public ResponseEntity<?> restore(CallerInfo caller, @PathVariable UUID id) {
+
+        try {
+            Listing restored = listingWorkflowService.restoreArchivedListing(id, caller.userId());
+            log.info("PUT /api/listings/{}/restore -> 200 status=LIVE", id);
+            return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Listing belongs to a different broker"));
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+        // ListingLifecycleException (FAST_RESTORE_NOT_ELIGIBLE) handled by GlobalExceptionHandler → 422
+    }
+
     // ===== Response helpers =====
 
     private static ResponseEntity<Map<String, String>> notFound() {

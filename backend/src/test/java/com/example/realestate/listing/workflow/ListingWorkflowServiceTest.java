@@ -945,6 +945,145 @@ class ListingWorkflowServiceTest {
         verify(statusHistoryRepository, never()).save(any());
     }
 
+    // ===== RE-130: restoreArchivedListing — dealer fast-restores archived listing to LIVE =====
+
+    @Test
+    void restoreArchivedListing_eligible_setsLiveAndClearsArchivedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now().minusSeconds(3600));
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+        java.time.OffsetDateTime originalFirstPublished = listing.getFirstPublishedAt();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.restoreArchivedListing(listingId, actorId);
+
+        verify(policy).validate(ListingStatus.ARCHIVED, ListingStatus.LIVE, ActorType.BROKER);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(saved.getArchivedAt()).isNull(); // cleared
+        assertThat(saved.getLastLiveAt()).isNotNull(); // refreshed
+        assertThat(saved.getFirstPublishedAt()).isEqualTo(originalFirstPublished); // preserved (write-once)
+    }
+
+    @Test
+    void restoreArchivedListing_neverPublished_throws422() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+        // firstPublishedAt is null — never published
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_nonArchived_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(10)); // was published
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        doThrow(new ListingStatusException("Transition not allowed: from=DRAFT to=LIVE actor=BROKER"))
+                .when(policy).validate(ListingStatus.DRAFT, ListingStatus.LIVE, ActorType.BROKER);
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_notOwner_throwsOwnershipException() {
+        UUID listingId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID differentActorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, ownerId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(10));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, differentActorId))
+                .isInstanceOf(ListingOwnershipException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_writesHistoryRow() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreArchivedListing(listingId, actorId);
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(history.getActorId()).isEqualTo(actorId);
+    }
+
+    @Test
+    void restoreArchivedListing_setsStatusChangedFields() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(java.time.Instant.now());
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreArchivedListing(listingId, actorId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(actorId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void restoreArchivedListing_notFound_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
+                () -> workflowService.restoreArchivedListing(listingId, UUID.randomUUID()));
+    }
+
     // ===== RE-83: getDisplayId() — tested on Listing entity =====
 
     @Test

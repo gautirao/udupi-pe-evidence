@@ -376,6 +376,69 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Dealer fast-restores an archived listing directly to LIVE.
+     * Only eligible if the listing was previously published ({@code firstPublishedAt != null}).
+     *
+     * <p><b>CRITICAL:</b> Cannot use {@link ListingOwnershipGuard#findOwned(UUID, UUID, boolean)}
+     * because it rejects archived listings ({@code archivedAt != null} throws
+     * {@link ListingNotFoundException}). Uses {@code listingRepository.findById()} with a
+     * manual ownership check instead.
+     *
+     * @param listingId the listing to restore
+     * @param actorId   the broker/dealer performing the action (must own the listing)
+     * @throws ListingNotFoundException   if listing not found
+     * @throws ListingOwnershipException  if the listing is not owned by the actor
+     * @throws ListingLifecycleException  if listing was never published (FAST_RESTORE_NOT_ELIGIBLE, 422)
+     * @throws ListingStatusException     if transition is not allowed by the policy (e.g. listing is not ARCHIVED)
+     */
+    @Transactional
+    public Listing restoreArchivedListing(UUID listingId, UUID actorId) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        // Manual ownership check — findOwned() cannot be used for archived listings
+        if (!actorId.equals(listing.getCreatedBy())) {
+            throw new ListingOwnershipException(listingId);
+        }
+
+        // Fast-restore eligibility: listing must have been published at least once
+        if (listing.getFirstPublishedAt() == null) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                    "Listing was never published — use reopen-to-draft instead");
+        }
+
+        ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(previousStatus, ListingStatus.LIVE, ActorType.BROKER);
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setArchivedAt(null);
+        listing.setLastLiveAt(nowOdt);
+        // firstPublishedAt is write-once — preserved (never overwritten)
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.BROKER);
+        listing.setStatusChangedByActorId(actorId);
+        listing.setUpdatedAt(nowOdt);
+
+        Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(previousStatus.toDbValue());
+        history.setToStatus(ListingStatus.LIVE.toDbValue());
+        history.setActorType(ActorType.BROKER);
+        history.setActorId(actorId);
+        statusHistoryRepository.save(history);
+
+        log.info("Fast-restored archived listing listingId={} by actorId={} fromStatus={} toStatus=LIVE",
+                listingId, actorId, previousStatus);
+        return saved;
+    }
+
+    /**
      * Admin-only force-archive: sets {@code status = ARCHIVED} and {@code archived_at = now()}
      * regardless of the listing's current status.  Idempotent — if the listing is already
      * ARCHIVED the method returns {@code false} without saving or re-auditing.
