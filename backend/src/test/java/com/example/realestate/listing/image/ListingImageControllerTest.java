@@ -433,6 +433,139 @@ class ListingImageControllerTest {
                 .andExpect(jsonPath("$[0].id").value(id1.toString()));
     }
 
+    // ==================== Test 18: POST register — SCRAPED listing (null createdBy) -> 403 ====================
+
+    /**
+     * RE-166: when a listing has no owner (SCRAPED), storage-path validation must return 403,
+     * not produce a "listings/null/..." path and return a misleading 400.
+     * Admins can pass findOwnedListing (isAdmin bypasses ownership check), so the null-owner
+     * guard in registerImage is the only protection for this path.
+     */
+    @Test
+    void register_scrapedListing_nullCreatedBy_returns403() throws Exception {
+        UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000099");
+        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
+
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null); // SCRAPED — no owner
+        scraped.setStatus(ListingStatus.DRAFT.toDbValue());
+        scraped.setPropertyType("house");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(adminId.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"storagePath":"listings/some-path/photo.jpg","url":"https://x.com/photo.jpg"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Cannot upload images to a listing with no owner"));
+    }
+
+    // ==================== Test 19: GET images — SCRAPED listing + dealer caller -> 403 ====================
+
+    /**
+     * RE-166 BLOCKING: getImages must return 403 (not 404) when the listing is SCRAPED
+     * (createdBy == null) and the caller is a non-admin dealer.
+     */
+    @Test
+    void getImages_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null); // SCRAPED — no owner
+        scraped.setStatus(ListingStatus.LIVE.toDbValue());
+        scraped.setPropertyType("house");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
+    }
+
+    // ==================== Test 20: DELETE image — SCRAPED listing + dealer caller -> 403 ====================
+
+    /**
+     * RE-166 BLOCKING: deleteImage must return 403 (not 404) when the listing is SCRAPED
+     * (createdBy == null) and the caller is a non-admin dealer.
+     */
+    @Test
+    void deleteImage_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null); // SCRAPED — no owner
+        scraped.setStatus(ListingStatus.DRAFT.toDbValue());
+        scraped.setPropertyType("house");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
+    }
+
+    // ==================== Test 21: PUT reorder — SCRAPED listing + dealer caller -> 403 ====================
+
+    /**
+     * RE-166 BLOCKING: reorderImages must return 403 (not 404) when the listing is SCRAPED
+     * (createdBy == null) and the caller is a non-admin dealer.
+     */
+    @Test
+    void reorderImages_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null); // SCRAPED — no owner
+        scraped.setStatus(ListingStatus.DRAFT.toDbValue());
+        scraped.setPropertyType("house");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"imageIds":["%s"]}
+                                """.formatted(IMAGE_ID)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
+    }
+
+    // ==================== Test 22: POST register — SCRAPED listing + non-admin dealer caller -> 403 from findOwnedListing ====================
+
+    /**
+     * RE-166 ADVISORY-FIX: registerImage must return 403 (via findOwnedListing → FindResult.forbidden)
+     * when the listing is SCRAPED (createdBy == null) and the caller is a non-admin dealer.
+     * This is distinct from Test 18 which uses an admin caller: the admin bypasses the ownership
+     * check in findOwnedListing and instead hits the later null-owner guard inside registerImage itself,
+     * returning a different message. Here the 403 originates in findOwnedListing.
+     */
+    @Test
+    void registerImage_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null); // SCRAPED — no owner
+        scraped.setStatus(ListingStatus.DRAFT.toDbValue());
+        scraped.setPropertyType("house");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"storagePath":"listings/some-path/photo.jpg","url":"https://x.com/photo.jpg"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
+    }
+
     // ==================== Helper ====================
 
     private ListingImage buildImage(UUID id, UUID listingId, String path, String url, int position) {

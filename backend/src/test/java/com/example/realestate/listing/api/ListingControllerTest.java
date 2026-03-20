@@ -1246,6 +1246,78 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
+    // ==================== getById tests (RE-166) ====================
+
+    @Test
+    void getById_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing scraped = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
+                "Udupi", new BigDecimal("8000000"), "Scraped listing");
+        scraped.setCreatedBy(null); // SCRAPED: no owner
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void getById_scrapedListing_adminCaller_returns200() throws Exception {
+        UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
+        Listing scraped = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
+                "Udupi", new BigDecimal("8000000"), "Scraped listing");
+        scraped.setCreatedBy(null); // SCRAPED: no owner
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(adminId.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()));
+    }
+
+    @Test
+    void getById_brokerOwnsListing_returns200() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing ownedListing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
+                "Udupi", new BigDecimal("5000000"), "Mine");
+        ownedListing.setCreatedBy(DEALER_ID);
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownedListing));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()));
+    }
+
+    @Test
+    void getById_differentBroker_returns403() throws Exception {
+        UUID otherDealerId = UUID.fromString("00000000-0000-0000-0000-000000000003");
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        Listing otherListing = buildListing(LISTING_ID, "DRAFT", "house", "Other House",
+                "Manipal", new BigDecimal("4000000"), "Not mine");
+        otherListing.setCreatedBy(otherDealerId);
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(otherListing));
+
+        mockMvc.perform(get("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
+    }
+
+    @Test
+    void getById_notFound_returns404() throws Exception {
+        UUID unknownId = UUID.fromString("00000000-0000-0000-0000-000000000099");
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(unknownId)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/listings/" + unknownId)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(UUID id, String status, String propertyType, String title,

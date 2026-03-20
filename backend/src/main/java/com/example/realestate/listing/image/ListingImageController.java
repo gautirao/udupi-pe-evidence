@@ -67,8 +67,8 @@ public class ListingImageController {
     public ResponseEntity<?> getImages(CallerInfo caller,
                                        @PathVariable UUID listingId) {
 
-        Listing listing = findOwnedListing(listingId, caller);
-        if (listing == null) return notFound("Listing not found");
+        FindResult result = findOwnedListing(listingId, caller);
+        if (result.error() != null) return result.error();
 
         List<ListingImage> images = imageRepository.findByListingIdOrderByPositionAsc(listingId);
         log.info("GET /api/listings/{}/images -> 200 count={} userId={}",
@@ -83,14 +83,21 @@ public class ListingImageController {
                                             @PathVariable UUID listingId,
                                             @RequestBody RegisterImageRequest req) {
 
-        Listing listing = findOwnedListing(listingId, caller);
-        if (listing == null) return notFound("Listing not found");
+        FindResult result = findOwnedListing(listingId, caller);
+        if (result.error() != null) return result.error();
+        Listing listing = result.listing();
 
         if (!MUTABLE_STATUSES.contains(listing.getStatus())) {
             return badRequest("Cannot modify images for listing with status " + listing.getStatus());
         }
 
-        // Validate storage path prefix
+        // Validate storage path prefix — SCRAPED listings have no owner (createdBy == null),
+        // so no valid storage path can be constructed; treat as forbidden.
+        if (listing.getCreatedBy() == null) {
+            log.warn("POST /api/listings/{}/images -> 403 storagePath validation: listing has no owner (scraped)", listingId);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Cannot upload images to a listing with no owner"));
+        }
         String expectedPrefix = "listings/" + listing.getCreatedBy() + "/" + listingId + "/";
         if (req.storagePath() == null || !req.storagePath().startsWith(expectedPrefix)) {
             return badRequest("Storage path must start with " + expectedPrefix);
@@ -121,8 +128,9 @@ public class ListingImageController {
                                           @PathVariable UUID listingId,
                                           @PathVariable UUID imageId) {
 
-        Listing listing = findOwnedListing(listingId, caller);
-        if (listing == null) return notFound("Listing not found");
+        FindResult result = findOwnedListing(listingId, caller);
+        if (result.error() != null) return result.error();
+        Listing listing = result.listing();
 
         if (!MUTABLE_STATUSES.contains(listing.getStatus())) {
             return badRequest("Cannot modify images for listing with status " + listing.getStatus());
@@ -153,8 +161,9 @@ public class ListingImageController {
                                             @PathVariable UUID listingId,
                                             @RequestBody ReorderRequest req) {
 
-        Listing listing = findOwnedListing(listingId, caller);
-        if (listing == null) return notFound("Listing not found");
+        FindResult result = findOwnedListing(listingId, caller);
+        if (result.error() != null) return result.error();
+        Listing listing = result.listing();
 
         if (!MUTABLE_STATUSES.contains(listing.getStatus())) {
             return badRequest("Cannot modify images for listing with status " + listing.getStatus());
@@ -202,13 +211,46 @@ public class ListingImageController {
         return ResponseEntity.ok(reordered.stream().map(ListingImageController::toResponse).toList());
     }
 
-    private Listing findOwnedListing(UUID listingId, CallerInfo caller) {
+    /**
+     * Resolves the listing and enforces ownership.
+     *
+     * <p>Returns a {@link FindResult} whose {@code error()} is non-null when the request must be
+     * rejected immediately:
+     * <ul>
+     *   <li>404 — listing does not exist</li>
+     *   <li>403 — SCRAPED listing (createdBy == null) and caller is not an admin; the listing has
+     *       no owner so no non-admin can own it</li>
+     *   <li>404 — listing exists but belongs to a different user and caller is not an admin</li>
+     * </ul>
+     *
+     * <p>When {@code error()} is null, {@code listing()} is always non-null and the caller is
+     * authorised to proceed.
+     */
+    private FindResult findOwnedListing(UUID listingId, CallerInfo caller) {
         Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) return null;
-        if (!caller.isAdmin() && !caller.userId().equals(listing.getCreatedBy())) {
-            return null;
+        if (listing == null) {
+            return FindResult.notFound(notFound("Listing not found"));
         }
-        return listing;
+        if (!caller.isAdmin()) {
+            if (listing.getCreatedBy() == null) {
+                // SCRAPED listing — no owner; non-admin callers are forbidden, not "not found".
+                log.warn("findOwnedListing listingId={} caller={} reason=scraped_no_owner -> 403",
+                        listingId, caller.userId());
+                return FindResult.forbidden(ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "Access denied: listing has no owner")));
+            }
+            if (!caller.userId().equals(listing.getCreatedBy())) {
+                return FindResult.notFound(notFound("Listing not found"));
+            }
+        }
+        return FindResult.ok(listing);
+    }
+
+    /** Discriminated result from {@link #findOwnedListing}. */
+    private record FindResult(Listing listing, ResponseEntity<?> error) {
+        static FindResult ok(Listing listing)               { return new FindResult(listing, null); }
+        static FindResult notFound(ResponseEntity<?> error) { return new FindResult(null, error); }
+        static FindResult forbidden(ResponseEntity<?> error){ return new FindResult(null, error); }
     }
 
     // ===== Helpers =====

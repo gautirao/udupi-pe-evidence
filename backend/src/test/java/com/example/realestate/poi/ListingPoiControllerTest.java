@@ -1,5 +1,6 @@
 package com.example.realestate.poi;
 
+import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
@@ -9,6 +10,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -16,11 +18,15 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -118,5 +124,110 @@ class ListingPoiControllerTest {
         // Deliberately omit Authorization header — endpoint requires authentication.
         mockMvc.perform(get("/api/listings/{listingId}/pois", LISTING_ID))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ==================== RE-166: SCRAPED listing null-owner guard (5 management endpoints) ====================
+
+    private static final UUID DEALER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID POI_ID    = UUID.fromString("00000000-0000-0000-0000-000000000042");
+
+    /** Returns a SCRAPED listing whose createdBy is null. */
+    private Listing scrapedListing() {
+        Listing l = new Listing();
+        l.setId(LISTING_ID);
+        l.setCreatedBy(null); // SCRAPED — no owner
+        l.setStatus("LIVE");
+        l.setPropertyType("house");
+        return l;
+    }
+
+    @Test
+    void getSuggestions_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+
+        mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+    }
+
+    @Test
+    void approvePoi_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+
+        mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/approve", LISTING_ID, POI_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+    }
+
+    @Test
+    void pinPoi_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+
+        mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/pin", LISTING_ID, POI_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+    }
+
+    @Test
+    void addManual_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+
+        mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Test POI","category":"HOSPITAL","latitude":13.34,"longitude":74.74}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+    }
+
+    @Test
+    void deletePoi_scrapedListing_dealerCaller_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+
+        mockMvc.perform(delete("/api/listings/{listingId}/pois/{poiId}", LISTING_ID, POI_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
+    }
+
+    // ==================== RE-166: admin can access SCRAPED listing POI suggestions ====================
+
+    private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
+
+    /**
+     * RE-166 ADVISORY: admin callers bypass the owner check and must receive 200 for SCRAPED
+     * listings (createdBy == null). This confirms the admin bypass path is not broken by the
+     * null-owner guard added for non-admin callers.
+     */
+    @Test
+    void getSuggestions_scrapedListing_adminCaller_returns200() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        // Listing has no coordinates — this bypasses overpassService calls so no additional stubs needed.
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null); // SCRAPED — no owner
+        scraped.setStatus("LIVE");
+        scraped.setPropertyType("house");
+        scraped.setLatitude(null);
+        scraped.setLongitude(null);
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        when(service.getAll(LISTING_ID)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 }
