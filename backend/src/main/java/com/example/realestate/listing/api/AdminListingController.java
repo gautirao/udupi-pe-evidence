@@ -103,6 +103,31 @@ public class AdminListingController {
         }
     }
 
+    @PostMapping("/{id}/return-for-edits")
+    public ResponseEntity<?> returnForEdits(CallerInfo caller,
+                                            @PathVariable UUID id,
+                                            @RequestBody ReturnForEditsRequest req) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
+
+        if (req.note() == null || req.note().isBlank()) {
+            return ResponseEntity.unprocessableEntity()
+                    .body(Map.of("error", "Return-for-edits note is required",
+                                 "code", "RETURN_NOTE_REQUIRED"));
+        }
+
+        try {
+            Listing returned = listingWorkflowService.returnForEdits(id, caller.userId(), req.note());
+            log.info("POST /api/admin/listings/{}/return-for-edits -> 200 status=DRAFT", id);
+            adminAuditService.record(caller.userId(), "listing_returned_for_edits", "listing", id, null,
+                    "{\"status\":\"DRAFT\",\"note\":\"" + req.note().replace("\"", "\\\"") + "\"}");
+            return ResponseEntity.ok(listingResponseMapper.toResponse(returned));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> forceDelete(CallerInfo caller, @PathVariable UUID id) {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
@@ -130,4 +155,6 @@ public class AdminListingController {
     // ===== DTOs =====
 
     public record RejectRequest(String rejectionReason) {}
+
+    public record ReturnForEditsRequest(String note) {}
 }

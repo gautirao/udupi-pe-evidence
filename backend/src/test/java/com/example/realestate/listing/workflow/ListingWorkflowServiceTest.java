@@ -1272,4 +1272,152 @@ class ListingWorkflowServiceTest {
         Listing listing = new Listing();
         assertThat(listing.getDisplayId()).isNull();
     }
+
+    // ===== RE-131: returnForEdits — admin returns PENDING_REVIEW listing to DRAFT with note =====
+
+    @Test
+    void returnForEdits_happyPath_setsDraftWithNoteAndClearsReviewSubmittedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now().minusSeconds(60));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.returnForEdits(listingId, adminId, "Please add more photos");
+
+        verify(policy).validate(ListingStatus.PENDING_REVIEW, ListingStatus.DRAFT, ActorType.ADMIN);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(saved.getStatusReasonNote()).isEqualTo("Please add more photos");
+        assertThat(saved.getReviewSubmittedAt()).isNull();
+        // rejectedAt must NOT be set — this is not a rejection
+        assertThat(saved.getRejectedAt()).isNull();
+    }
+
+    @Test
+    void returnForEdits_blankNote_throwsReturnNoteRequired() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.returnForEdits(listingId, adminId, "   "))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.RETURN_NOTE_REQUIRED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void returnForEdits_nullNote_throwsReturnNoteRequired() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.returnForEdits(listingId, adminId, null))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.RETURN_NOTE_REQUIRED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void returnForEdits_notPendingReview_throwsPolicyException() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        doThrow(new ListingStatusException("Transition not allowed: from=LIVE to=DRAFT actor=ADMIN"))
+                .when(policy).validate(ListingStatus.LIVE, ListingStatus.DRAFT, ActorType.ADMIN);
+
+        assertThatThrownBy(() -> workflowService.returnForEdits(listingId, adminId, "Fix photos"))
+                .isInstanceOf(ListingStatusException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void returnForEdits_notFound_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
+                () -> workflowService.returnForEdits(listingId, UUID.randomUUID(), "Fix photos"));
+    }
+
+    @Test
+    void returnForEdits_writesHistoryRowWithNote() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.returnForEdits(listingId, adminId, "Address is unclear");
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.PENDING_REVIEW.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.DRAFT.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(history.getActorId()).isEqualTo(adminId);
+        assertThat(history.getNote()).isEqualTo("Address is unclear");
+    }
+
+    @Test
+    void returnForEdits_setsStatusChangedFieldsAndClearsReviewSubmittedAt() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setReviewSubmittedAt(java.time.Instant.now().minusSeconds(120));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.returnForEdits(listingId, adminId, "Need better description");
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+        assertThat(saved.getStatusReasonNote()).isEqualTo("Need better description");
+        assertThat(saved.getReviewSubmittedAt()).isNull();
+    }
 }

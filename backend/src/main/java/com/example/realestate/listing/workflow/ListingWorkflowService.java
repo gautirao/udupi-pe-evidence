@@ -245,6 +245,62 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Admin returns a PENDING_REVIEW listing to DRAFT with a required note.
+     * This is NOT a rejection — {@code rejectedAt} is not set. The broker can
+     * address the note and resubmit.
+     *
+     * @param listingId  the listing to return for edits
+     * @param adminId    the admin performing the action
+     * @param reasonNote mandatory note explaining what needs to change (422 if blank/null)
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingStatusException    if transition is not allowed by the policy
+     * @throws ListingLifecycleException if reasonNote is null or blank (RETURN_NOTE_REQUIRED, 422)
+     */
+    @Transactional
+    public Listing returnForEdits(UUID listingId, UUID adminId, String reasonNote) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(currentStatus, ListingStatus.DRAFT, ActorType.ADMIN);
+
+        // Defense-in-depth: controller also checks, but service enforces independently
+        if (reasonNote == null || reasonNote.isBlank()) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.RETURN_NOTE_REQUIRED, "Return-for-edits note is required");
+        }
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+        listing.setStatusReasonNote(reasonNote);
+        listing.setReviewSubmittedAt(null);
+        // Do NOT set rejectedAt — this is not a rejection
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminId);
+        listing.setUpdatedAt(nowOdt);
+
+        Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.DRAFT.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminId);
+        history.setNote(reasonNote);
+        statusHistoryRepository.save(history);
+
+        // TODO: publish ReturnForEditsEvent for broker notification (RE-??? deferred)
+
+        log.info("Returned listing for edits listingId={} by adminId={} fromStatus={} toStatus=DRAFT note='{}'",
+                listingId, adminId, currentStatus, reasonNote);
+        return saved;
+    }
+
+    /**
      * Dealer archives own listing: LIVE/DRAFT/REJECTED -> ARCHIVED.
      * Uses the transition policy to validate the state change.
      *
