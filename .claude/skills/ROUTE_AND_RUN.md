@@ -289,7 +289,7 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - **ADVISORY sub-classification (code-reviewer MUST tag each advisory):**
   - **ADVISORY-FIX** — Low-effort, high-value fix that the engineer should address before merge. Criteria: can be fixed in < 15 min AND reduces real risk. Examples: missing test cases for covered logic, extract-method for duplicated code, constants extraction for magic values, off-by-one in boundary checks.
   - **ADVISORY-DEFER** — Tracked for follow-up but does not block the current PR. Examples: architecture concerns requiring design decisions, integration test infra that doesn't exist yet, cross-cutting refactors spanning multiple modules.
-  - After code-reviewer completes, the orchestrator MUST re-invoke the engineer for ALL **ADVISORY-FIX** items (same cycle as BLOCKING, just lower priority). ADVISORY-DEFER items are logged in the checkpoint Risks section only.
+  - After code-reviewer completes, the orchestrator MUST re-invoke the engineer for ALL **ADVISORY-FIX** items (same cycle as BLOCKING, just lower priority). ADVISORY-DEFER items are logged in the checkpoint Risks section AND appended to `.claude/TECH_DEBT.md` (grouped by backend/frontend/database/infra). The tech debt log is reviewed at sprint end.
   - If the code-reviewer does not tag advisories, the orchestrator classifies them: if effort < 15 min and reduces test coverage gaps or code duplication → FIX; otherwise → DEFER.
 - `qa` in **E2E authoring mode** runs AFTER code-reviewer (and security-reviewer if applicable) APPROVE, BEFORE `qa` verification mode, for Normal and High-risk changes only. Conditional — triggered only when qa-fast recommended `E2E authoring recommended: YES`.
   When invoking E2E authoring mode, use this exact Task prompt:
