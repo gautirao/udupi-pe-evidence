@@ -551,6 +551,78 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Admin-only: restores a REJECTED listing directly to LIVE with a required moderation note.
+     * This is an exceptional admin override — no event publishing, no duplicate detection.
+     *
+     * <p><b>CRITICAL:</b> An explicit REJECTED-only guard runs BEFORE {@code policy.validate()}
+     * because the policy allows ADMIN→LIVE from multiple statuses. This method must only
+     * operate on REJECTED listings.
+     *
+     * @param listingId      the listing to restore
+     * @param adminId        the admin performing the action
+     * @param moderationNote mandatory note explaining the restoration (422 if blank/null)
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingStatusException    if listing is not currently REJECTED (explicit guard)
+     * @throws ListingLifecycleException if moderationNote is null or blank (MODERATION_NOTE_REQUIRED, 422)
+     */
+    @Transactional
+    public Listing restoreRejectedListing(UUID listingId, UUID adminId, String moderationNote) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+
+        // Explicit REJECTED-only guard — policy allows ADMIN→LIVE from 5 statuses,
+        // but this method must only operate on REJECTED listings
+        if (currentStatus != ListingStatus.REJECTED) {
+            throw new ListingStatusException(
+                    "restoreRejectedListing requires REJECTED status, found " + currentStatus);
+        }
+
+        policy.validate(currentStatus, ListingStatus.LIVE, ActorType.ADMIN);
+
+        // Defense-in-depth: controller also checks, but service enforces independently
+        if (moderationNote == null || moderationNote.isBlank()) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.MODERATION_NOTE_REQUIRED, "Moderation note is required");
+        }
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+        listing.setApprovedAt(now);
+        listing.setLastLiveAt(nowOdt);
+        if (listing.getFirstPublishedAt() == null) {
+            listing.setFirstPublishedAt(nowOdt);
+        }
+        listing.setStatusReasonNote(moderationNote);
+        listing.setReviewedAt(nowOdt);
+        listing.setReviewedBy(adminId);
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminId);
+        listing.setUpdatedAt(nowOdt);
+
+        Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.LIVE.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminId);
+        history.setNote(moderationNote);
+        statusHistoryRepository.save(history);
+
+        // No event publishing — exceptional admin override path
+
+        log.info("Restored rejected listing listingId={} by adminId={} fromStatus={} toStatus=LIVE note='{}'",
+                listingId, adminId, currentStatus, moderationNote);
+        return saved;
+    }
+
+    /**
      * Admin-only force-archive: sets {@code status = ARCHIVED} and {@code archived_at = now()}
      * regardless of the listing's current status.  Idempotent — if the listing is already
      * ARCHIVED the method returns {@code false} without saving or re-auditing.

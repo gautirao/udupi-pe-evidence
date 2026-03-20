@@ -14,7 +14,8 @@ public enum ListingErrorCode {
     SUBMISSION_ALREADY_ACTIONED(409),
     RETURN_NOTE_REQUIRED(422),
     ALREADY_CLAIMED(409),
-    LISTING_NOT_CLAIMED(422);
+    LISTING_NOT_CLAIMED(422),
+    MODERATION_NOTE_REQUIRED(422);
 
     private final int httpStatus;
 

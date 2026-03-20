@@ -168,6 +168,31 @@ public class AdminListingController {
         }
     }
 
+    @PostMapping("/{id}/restore-rejected")
+    public ResponseEntity<?> restoreRejected(CallerInfo caller,
+                                             @PathVariable UUID id,
+                                             @RequestBody RestoreRejectedRequest req) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
+
+        if (req.moderationNote() == null || req.moderationNote().isBlank()) {
+            return ResponseEntity.unprocessableEntity()
+                    .body(Map.of("error", "Moderation note is required",
+                                 "code", "MODERATION_NOTE_REQUIRED"));
+        }
+
+        try {
+            Listing restored = listingWorkflowService.restoreRejectedListing(id, caller.userId(), req.moderationNote());
+            log.info("POST /api/admin/listings/{}/restore-rejected -> 200 status=LIVE", id);
+            adminAuditService.record(caller.userId(), "listing_restored_rejected", "listing", id, null,
+                    "{\"status\":\"LIVE\",\"note\":\"" + req.moderationNote().replace("\"", "\\\"") + "\"}");
+            return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> forceDelete(CallerInfo caller, @PathVariable UUID id) {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
@@ -199,4 +224,6 @@ public class AdminListingController {
     public record ReturnForEditsRequest(String note) {}
 
     public record ClaimScrapedRequest(UUID ownerId) {}
+
+    public record RestoreRejectedRequest(String moderationNote) {}
 }

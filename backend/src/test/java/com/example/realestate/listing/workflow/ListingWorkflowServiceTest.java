@@ -1687,4 +1687,214 @@ class ListingWorkflowServiceTest {
         assertThat(saved.getLastLiveAt()).isNotNull();
         assertThat(saved.getLastLiveAt()).isAfter(originalFirstPublished);
     }
+
+    // ===== RE-133: restoreRejectedListing — admin restores REJECTED→LIVE with moderation note =====
+
+    @Test
+    void restoreRejectedListing_happyPath_setsLiveWithAllTimestamps() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.restoreRejectedListing(listingId, adminId, "Admin override: listing is valid");
+
+        verify(policy).validate(ListingStatus.REJECTED, ListingStatus.LIVE, ActorType.ADMIN);
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(saved.getApprovedAt()).isNotNull();
+        assertThat(saved.getLastLiveAt()).isNotNull();
+        assertThat(saved.getFirstPublishedAt()).isNotNull();
+        assertThat(saved.getStatusReasonNote()).isEqualTo("Admin override: listing is valid");
+        assertThat(saved.getReviewedAt()).isNotNull();
+        assertThat(saved.getReviewedBy()).isEqualTo(adminId);
+        assertThat(saved.getStatusChangedAt()).isNotNull();
+        assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(saved.getStatusChangedByActorId()).isEqualTo(adminId);
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void restoreRejectedListing_blankNote_throwsModerationNoteRequired() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreRejectedListing(listingId, adminId, "   "))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.MODERATION_NOTE_REQUIRED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreRejectedListing_nullNote_throwsModerationNoteRequired() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreRejectedListing(listingId, adminId, null))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.MODERATION_NOTE_REQUIRED));
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreRejectedListing_wrongStatus_throwsListingStatusException_policyNeverCalled() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.DRAFT.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreRejectedListing(listingId, adminId, "Some note"))
+                .isInstanceOf(ListingStatusException.class)
+                .hasMessageContaining("restoreRejectedListing requires REJECTED status, found DRAFT");
+
+        // The key assertion: policy.validate must NEVER be called because
+        // DRAFT→LIVE is allowed by policy for ADMIN, but the explicit guard catches it
+        verify(policy, never()).validate(any(), any(), any());
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreRejectedListing_notFound_throwsListingNotFoundException() {
+        UUID listingId = UUID.randomUUID();
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.empty());
+
+        org.junit.jupiter.api.Assertions.assertThrows(
+                com.example.realestate.listing.exception.ListingNotFoundException.class,
+                () -> workflowService.restoreRejectedListing(listingId, UUID.randomUUID(), "Some note"));
+    }
+
+    @Test
+    void restoreRejectedListing_writesHistoryRowWithNote() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreRejectedListing(listingId, adminId, "Restored after appeal");
+
+        ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
+        verify(statusHistoryRepository).save(historyCaptor.capture());
+        ListingStatusHistory history = historyCaptor.getValue();
+
+        assertThat(history.getListingId()).isEqualTo(listingId);
+        assertThat(history.getFromStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
+        assertThat(history.getToStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        assertThat(history.getActorType()).isEqualTo(ActorType.ADMIN);
+        assertThat(history.getActorId()).isEqualTo(adminId);
+        assertThat(history.getNote()).isEqualTo("Restored after appeal");
+    }
+
+    @Test
+    void restoreRejectedListing_preservesFirstPublishedAtIfAlreadySet() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+        java.time.OffsetDateTime originalFirstPublished = java.time.OffsetDateTime.now().minusDays(30);
+        listing.setFirstPublishedAt(originalFirstPublished);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreRejectedListing(listingId, adminId, "Restored after review");
+
+        ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(listingCaptor.capture());
+        Listing saved = listingCaptor.getValue();
+
+        // firstPublishedAt must NOT be overwritten (write-once)
+        assertThat(saved.getFirstPublishedAt()).isEqualTo(originalFirstPublished);
+        // lastLiveAt must be updated
+        assertThat(saved.getLastLiveAt()).isNotNull();
+        assertThat(saved.getLastLiveAt()).isAfter(originalFirstPublished);
+    }
+
+    @Test
+    void restoreRejectedListing_setsReviewedAtAndReviewedBy() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreRejectedListing(listingId, adminId, "Admin override");
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        Listing saved = captor.getValue();
+
+        assertThat(saved.getReviewedAt()).isNotNull();
+        assertThat(saved.getReviewedBy()).isEqualTo(adminId);
+    }
+
+    @Test
+    void restoreRejectedListing_noEventsPublished() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreRejectedListing(listingId, adminId, "Admin override");
+
+        // No events must be published — this is an exceptional admin override
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
 }
