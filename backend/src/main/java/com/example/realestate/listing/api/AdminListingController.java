@@ -193,6 +193,26 @@ public class AdminListingController {
         }
     }
 
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<?> archive(CallerInfo caller,
+                                     @PathVariable UUID id,
+                                     @RequestBody(required = false) ArchiveRequest req) {
+        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
+
+        String reasonNote = req != null ? req.reasonNote() : null;
+        try {
+            Listing archived = listingWorkflowService.adminArchiveListing(id, caller.userId(), reasonNote);
+            log.info("POST /api/admin/listings/{}/archive -> 200 status=ARCHIVED", id);
+            adminAuditService.record(caller.userId(), "listing_archived", "listing", id, null,
+                    "{\"status\":\"ARCHIVED\"}");
+            return ResponseEntity.ok(listingResponseMapper.toResponse(archived));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingStatusException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> forceDelete(CallerInfo caller, @PathVariable UUID id) {
         if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
@@ -226,4 +246,6 @@ public class AdminListingController {
     public record ClaimScrapedRequest(UUID ownerId) {}
 
     public record RestoreRejectedRequest(String moderationNote) {}
+
+    public record ArchiveRequest(String reasonNote) {}
 }

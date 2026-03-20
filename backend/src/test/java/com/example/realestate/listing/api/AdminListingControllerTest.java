@@ -2,10 +2,13 @@ package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.audit.AdminAuditService;
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.exception.ListingErrorCode;
+import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingNotArchivedException;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
+import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
@@ -45,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import({AdminListingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
+@Import({AdminListingControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class, GlobalExceptionHandler.class})
 class AdminListingControllerTest {
 
     private static final UUID ADMIN_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
@@ -393,6 +396,367 @@ class AdminListingControllerTest {
 
         verify(listingWorkflowService, never()).adminForceDelete(any(), any());
         verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    // ==================== RE-134: Return-for-edits endpoint ====================
+
+    @Test
+    void returnForEdits_withAdminRole_returns200WithDraftStatus() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        Listing returned = buildListing(LISTING_ID, "DRAFT", "house", "House in Udupi",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, "Please add better photos"))
+                .thenReturn(returned);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"note":"Please add better photos"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+
+        verify(listingWorkflowService).returnForEdits(LISTING_ID, ADMIN_ID, "Please add better photos");
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_returned_for_edits"), eq("listing"),
+                eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void returnForEdits_blankNote_returns422() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"note":"  "}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("RETURN_NOTE_REQUIRED"));
+
+        verify(listingWorkflowService, never()).returnForEdits(any(), any(), any());
+    }
+
+    @Test
+    void returnForEdits_withDealerRole_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"note":"Fix photos"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingWorkflowService, never()).returnForEdits(any(), any(), any());
+    }
+
+    @Test
+    void returnForEdits_listingNotFound_returns404() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, "Fix photos"))
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"note":"Fix photos"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== RE-134: Claim-scraped endpoint ====================
+
+    @Test
+    void claimScraped_withAdminRole_returns200WithDraftStatus() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
+        Listing claimed = buildListing(LISTING_ID, "DRAFT", "house", "Scraped House",
+                "Manipal", new BigDecimal("4000000"), "A scraped house");
+        claimed.setCreatedBy(ownerId);
+        when(listingWorkflowService.claimScrapedListing(LISTING_ID, ownerId, ADMIN_ID))
+                .thenReturn(claimed);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"ownerId":"%s"}
+                                """.formatted(ownerId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("DRAFT"));
+
+        verify(listingWorkflowService).claimScrapedListing(LISTING_ID, ownerId, ADMIN_ID);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_claimed_scraped"), eq("listing"),
+                eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void claimScraped_nullOwnerId_returns400() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("ownerId is required"));
+
+        verify(listingWorkflowService, never()).claimScrapedListing(any(), any(), any());
+    }
+
+    @Test
+    void claimScraped_alreadyClaimed_returns409() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
+        when(listingWorkflowService.claimScrapedListing(LISTING_ID, ownerId, ADMIN_ID))
+                .thenThrow(new ListingLifecycleException(
+                        ListingErrorCode.ALREADY_CLAIMED,
+                        "Listing already has an owner — cannot reassign"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"ownerId":"%s"}
+                                """.formatted(ownerId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ALREADY_CLAIMED"));
+
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void claimScraped_withDealerRole_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"ownerId":"00000000-0000-0000-0000-000000000020"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingWorkflowService, never()).claimScrapedListing(any(), any(), any());
+    }
+
+    // ==================== RE-134: Approve-scraped endpoint ====================
+
+    @Test
+    void approveScraped_withAdminRole_returns200WithLiveStatus() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        Listing approved = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
+                "Manipal", new BigDecimal("4000000"), "A scraped house");
+        approved.setReviewedAt(OffsetDateTime.now());
+        approved.setReviewedBy(ADMIN_ID);
+        when(listingWorkflowService.approveScrapedListing(LISTING_ID, ADMIN_ID))
+                .thenReturn(approved);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("LIVE"));
+
+        verify(listingWorkflowService).approveScrapedListing(LISTING_ID, ADMIN_ID);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_approved_scraped"), eq("listing"),
+                eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void approveScraped_incompleteListing_returns422() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        when(listingWorkflowService.approveScrapedListing(LISTING_ID, ADMIN_ID))
+                .thenThrow(new ListingLifecycleException(
+                        ListingErrorCode.LISTING_INCOMPLETE,
+                        "Listing is incomplete: Price must be greater than 0"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("LISTING_INCOMPLETE"));
+
+        verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void approveScraped_withDealerRole_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingWorkflowService, never()).approveScrapedListing(any(), any());
+    }
+
+    // ==================== RE-134: Restore-rejected endpoint ====================
+
+    @Test
+    void restoreRejected_withAdminRole_returns200WithLiveStatus() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House in Udupi",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        restored.setReviewedAt(OffsetDateTime.now());
+        restored.setReviewedBy(ADMIN_ID);
+        when(listingWorkflowService.restoreRejectedListing(LISTING_ID, ADMIN_ID, "Reviewed again — looks fine"))
+                .thenReturn(restored);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"moderationNote":"Reviewed again — looks fine"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("LIVE"));
+
+        verify(listingWorkflowService).restoreRejectedListing(LISTING_ID, ADMIN_ID, "Reviewed again — looks fine");
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_restored_rejected"), eq("listing"),
+                eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void restoreRejected_blankNote_returns422() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"moderationNote":""}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("MODERATION_NOTE_REQUIRED"));
+
+        verify(listingWorkflowService, never()).restoreRejectedListing(any(), any(), any());
+    }
+
+    @Test
+    void restoreRejected_withDealerRole_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"moderationNote":"Override reason"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingWorkflowService, never()).restoreRejectedListing(any(), any(), any());
+    }
+
+    @Test
+    void restoreRejected_listingNotFound_returns404() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingWorkflowService.restoreRejectedListing(LISTING_ID, ADMIN_ID, "Override reason"))
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"moderationNote":"Override reason"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== RE-134: Admin archive endpoint ====================
+
+    @Test
+    void archive_withAdminRole_returns200WithArchivedStatus() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        Listing archived = buildListing(LISTING_ID, "ARCHIVED", "house", "House in Udupi",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        when(listingWorkflowService.adminArchiveListing(LISTING_ID, ADMIN_ID, "Duplicate listing"))
+                .thenReturn(archived);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reasonNote":"Duplicate listing"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        verify(listingWorkflowService).adminArchiveListing(LISTING_ID, ADMIN_ID, "Duplicate listing");
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_archived"), eq("listing"),
+                eq(LISTING_ID), isNull(), anyString());
+    }
+
+    @Test
+    void archive_withoutBody_returns200() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        Listing archived = buildListing(LISTING_ID, "ARCHIVED", "land", "Plot in Manipal",
+                "Manipal", new BigDecimal("5000000"), "Nice plot");
+        when(listingWorkflowService.adminArchiveListing(eq(LISTING_ID), eq(ADMIN_ID), isNull()))
+                .thenReturn(archived);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("ARCHIVED"));
+
+        verify(listingWorkflowService).adminArchiveListing(eq(LISTING_ID), eq(ADMIN_ID), isNull());
+    }
+
+    @Test
+    void archive_withDealerRole_returns403() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reasonNote":"Remove this"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
+
+        verify(listingWorkflowService, never()).adminArchiveListing(any(), any(), any());
+    }
+
+    @Test
+    void archive_listingNotFound_returns404() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+        when(listingWorkflowService.adminArchiveListing(LISTING_ID, ADMIN_ID, "Remove this"))
+                .thenThrow(new ListingNotFoundException(LISTING_ID));
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reasonNote":"Remove this"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
     // ==================== Helper ====================

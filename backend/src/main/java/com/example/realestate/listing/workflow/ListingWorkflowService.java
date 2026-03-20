@@ -623,6 +623,58 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Admin-only policy-based archive: transitions any non-ARCHIVED listing to ARCHIVED.
+     * Uses the transition policy to validate the state change and writes a history row.
+     *
+     * <p>Unlike {@link #adminForceDelete(UUID, UUID)} which skips the policy, this method
+     * validates the transition through the standard policy matrix (T-14, T-17, T-21, T-22, T-26).
+     *
+     * @param listingId  the listing to archive
+     * @param adminId    the admin performing the action
+     * @param reasonNote optional note explaining why the listing is being archived
+     * @throws ListingNotFoundException if listing not found
+     * @throws ListingStatusException   if transition is not allowed by the policy
+     */
+    @Transactional
+    public Listing adminArchiveListing(UUID listingId, UUID adminId, String reasonNote) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+
+        ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
+        policy.validate(currentStatus, ListingStatus.ARCHIVED, ActorType.ADMIN);
+
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = OffsetDateTime.now();
+
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setArchivedAt(now);
+        listing.setStatusChangedAt(now);
+        listing.setStatusChangedByActorType(ActorType.ADMIN);
+        listing.setStatusChangedByActorId(adminId);
+        if (reasonNote != null && !reasonNote.isBlank()) {
+            listing.setStatusReasonNote(reasonNote);
+        }
+        listing.setUpdatedAt(nowOdt);
+
+        Listing saved = listingRepository.save(listing);
+
+        ListingStatusHistory history = new ListingStatusHistory();
+        history.setListingId(listing.getId());
+        history.setFromStatus(currentStatus.toDbValue());
+        history.setToStatus(ListingStatus.ARCHIVED.toDbValue());
+        history.setActorType(ActorType.ADMIN);
+        history.setActorId(adminId);
+        if (reasonNote != null && !reasonNote.isBlank()) {
+            history.setNote(reasonNote);
+        }
+        statusHistoryRepository.save(history);
+
+        log.info("Admin archived listing listingId={} by adminId={} fromStatus={} reasonNote='{}'",
+                listingId, adminId, currentStatus, reasonNote);
+        return saved;
+    }
+
+    /**
      * Admin-only force-archive: sets {@code status = ARCHIVED} and {@code archived_at = now()}
      * regardless of the listing's current status.  Idempotent — if the listing is already
      * ARCHIVED the method returns {@code false} without saving or re-auditing.
