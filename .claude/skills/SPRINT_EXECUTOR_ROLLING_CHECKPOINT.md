@@ -9,6 +9,26 @@ Checkpoint is the single source of truth.
 
 ---
 
+## GitHub Project Config (RE Trends)
+
+Issue tracking source: **GitHub Issues** (work items)
+Sprint/status layer: **GitHub Projects v2** ("RE Trends", project number 1)
+
+| Constant | Value |
+|----------|-------|
+| Project number | `1` |
+| Project node ID | `PVT_kwHOAAVnaM4BSWI7` |
+| Status field ID | `PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc` |
+| Sprint iteration field ID | `PVTIF_lAHOAAVnaM4BSWI7zg_6HeY` |
+| Status option — Todo | `bfa63ded` |
+| Status option — In Progress | `1a1777ea` |
+| Status option — In Review | `701d63ab` |
+| Status option — Done | `25c24fa1` |
+
+These IDs are stable project constants. Sprint iteration IDs change per sprint — fetch the current sprint's iteration ID at sprint start (see Sprint Start step 0 below).
+
+---
+
 ## Operating Mode
 
 - Exactly 1 PR per run
@@ -27,8 +47,20 @@ If the orchestrator catches itself about to write or edit code, STOP and invoke 
 ## Sprint Start (Once per sprint, not per PR)
 
 Before the first PR:
-1. Fetch all sprint issue IDs + titles in one Linear call — store in checkpoint preamble as `Sprint issues:` list.
-2. Fetch full descriptions for all issues (one `get_issue` call each) — needed for spec enrichment and team-lead pre-flight.
+0. **Resolve current sprint iteration ID** — fetch the Sprint field's iteration list and identify the active iteration:
+   ```bash
+   gh api graphql -f query='{ node(id: "PVTIF_lAHOAAVnaM4BSWI7zg_6HeY") { ... on ProjectV2IterationField { configuration { iterations { id title startDate } } } } }' --jq '.data.node.configuration.iterations'
+   ```
+   Store the active iteration's `id` in the checkpoint preamble as `Current sprint iteration ID:`. All project item status updates and sprint assignment use this ID.
+
+   Also build the **issue → project item ID map** — needed for status updates via `gh project item-edit`:
+   ```bash
+   gh api graphql -f query='{ node(id: "PVT_kwHOAAVnaM4BSWI7") { ... on ProjectV2 { items(first: 50) { nodes { id content { ... on Issue { number title } } } } } } }' --jq '.data.node.items.nodes | map(select(.content != null)) | map({number: .content.number, title: .content.title, itemId: .id})'
+   ```
+   Store this map in the checkpoint preamble as `Project item IDs:` (format: `#NNN → <item-id>`).
+
+1. Fetch all sprint issue numbers + titles from the current GitHub Project iteration — store in checkpoint preamble as `Sprint issues:` list. Filter the project item list (from step 0) to only items assigned to the current sprint iteration. Issues not yet in the project can be added via `gh project item-add 1 --owner gautirao --url <issue-url>`.
+2. Fetch full descriptions for all issues (one `gh issue view <number> --json title,body` call each) — needed for spec enrichment and team-lead pre-flight.
 3. **Spec enrichment (all issues, once)** — invoke the `spec-enricher` agent (Task tool) with all issue IDs, titles, and descriptions:
    > "Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
 
@@ -42,25 +74,29 @@ Before the first PR:
    > "Sprint issues: [paste all issue IDs + titles + descriptions + enriched specs]. Run Mode 1: Sprint Kickoff Analysis."
    - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
    - Store the recommended execution order in the checkpoint preamble as `Execution order:`.
-   - **Store all dependency findings** in checkpoint preamble as `Dependencies:` (format: `- RE-XX depends on RE-YY [confirmed|likely|speculative]`)
+   - **Store all dependency findings** in checkpoint preamble as `Dependencies:` (format: `- #NNN depends on #MMM [confirmed|likely|speculative]`)
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
    - If team-lead flags spec gaps, OR if enrichment produced `Key unknowns` for any issue: play `afplay /System/Library/Sounds/Ping.aiff`, surface all gaps/unknowns to the user and **pause for confirmation** before starting execution. Do not proceed until each gap is resolved or explicitly waived by the user.
-5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original Linear order.
+5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original GitHub Project iteration order.
 6. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2 and enriched specs from step 3. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
    - The cached issue description is missing or truncated to fewer than 50 characters
-   - The issue title in the checkpoint does not match the issue title in Linear
-   - The execution order in the checkpoint does not match the current approved execution order for this sprint (team-lead-derived order if pre-flight ran, or original Linear order if no reorder was applied)
+   - The issue title in the checkpoint does not match the issue title in GitHub (`gh issue view <number> --json title`)
+   - The execution order in the checkpoint does not match the current approved execution order for this sprint (team-lead-derived order if pre-flight ran, or original GitHub issue order if no reorder was applied)
    - The repo is not on the expected branch or has unexpected uncommitted changes on main
 
 ---
 
 ## Execution Loop (Mandatory)
 
-For each Linear issue (PR N):
+For each GitHub issue (PR N):
 
-1. **Use cached spec** — use the description cached during Sprint Start step 2 and the enriched spec from step 3. Only call `get_issue` again if the checkpoint is stale (see Sprint Start step 6). State issue id + title (1 line); copy AC from enriched spec into the checkpoint `Acceptance criteria` field for this PR.
-2. **Mark In Progress** — `save_issue state=In Progress`
-3. **Bug fix gate** — if issue type is bugfix (Linear issue type = Bug, or title starts with `fix:`/`bug:`, or description explicitly says "bug" or "defect"):
+1. **Use cached spec** — use the description cached during Sprint Start step 2 and the enriched spec from step 3. Only call `gh issue view <number> --json title,body` again if the checkpoint is stale (see Sprint Start step 6). State issue number + title (1 line); copy AC from enriched spec into the checkpoint `Acceptance criteria` field for this PR.
+2. **Mark In Progress** — set GitHub Project item status to "In Progress":
+   ```bash
+   gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 1a1777ea
+   ```
+   `ITEM_ID` comes from the `Project item IDs:` map in the checkpoint preamble.
+3. **Bug fix gate** — if issue type is bugfix (GitHub issue has label `bug`, or title starts with `fix:`/`bug:`, or description explicitly says "bug" or "defect"):
    - Reproduce the defect with a targeted test or manual step. Confirm it fails. Document in checkpoint.
    - Do NOT proceed to engineer until failure is confirmed.
 4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`. Routing logic, agent invocation rules, code-reviewer skip conditions, and Security Gate triggers are all defined in `ROUTE_AND_RUN.md` — do not re-derive them here.
@@ -96,7 +132,11 @@ For each Linear issue (PR N):
    - If CI fails: play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint.
    - If CI green: merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
-7. **Close issue** — `save_issue state=Done`
+7. **Close issue** — set GitHub Project item status to "Done" and close the issue:
+   ```bash
+   gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1
+   gh issue close <number>
+   ```
 8. **Play chime** — `afplay /System/Library/Sounds/Hero.aiff`
 
 **9. Inter-PR Plan Check (NEW — after PR N completes, before PR N+1 starts)**
@@ -117,8 +157,11 @@ For each Linear issue (PR N):
 
 === ROLLING CHECKPOINT START ===
 Sprint: <name/id>
-Sprint issues: <RE-XX Title | RE-XX Title | ...> (all issues, one line)
-Execution order: <RE-XX | RE-XX | ...> (team-lead recommended order, or ORIGINAL if no reorder)
+GitHub Project: RE Trends (project 1, PVT_kwHOAAVnaM4BSWI7)
+Current sprint iteration ID: <iteration-id from Sprint Start step 0>
+Project item IDs: #NNN → <item-id> | #NNN → <item-id> | ... (all sprint issues)
+Sprint issues: <#NNN Title | #NNN Title | ...> (all issues, one line, GitHub issue numbers)
+Execution order: <#NNN | #NNN | ...> (team-lead recommended order, or ORIGINAL if no reorder)
 Dependencies: <RE-XX depends on RE-YY [confirmed|likely|speculative] | NONE>
 Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
@@ -175,7 +218,7 @@ User instruction:
 
 When a new issue is added to the sprint after kickoff (user says "add RE-XX to sprint", or pulls an issue in from backlog):
 
-1. **Fetch the issue** — `get_issue RE-XX` to obtain title and full description.
+1. **Fetch the issue** — `gh issue view <number> --json title,body` to obtain title and full description. Also fetch its project item ID (if not already in the checkpoint preamble map): query the project items GraphQL endpoint and add the mapping to `Project item IDs:`.
 2. **Run spec-enricher** — invoke `spec-enricher` (Task tool) for this issue alone:
    > "Enrich spec for one issue: [RE-XX title + description]."
    - `spec-enricher` prints its full output to the conversation. Do not suppress it — the user reviews the enriched spec before team-lead runs.
@@ -196,7 +239,7 @@ When user pastes checkpoint + says resume:
 - Treat checkpoint as authoritative state (it overrides conversational memory).
 - Do NOT infer prior context outside checkpoint.
 - Do NOT re-triage completed PRs.
-- Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from Linear.
+- Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from GitHub Project unless the checkpoint is stale.
 - Use `Enriched specs:` from the checkpoint preamble as the authoritative AC for remaining issues — do NOT re-derive them.
 - Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
 - Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.
