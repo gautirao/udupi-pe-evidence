@@ -45,7 +45,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | ID | Source | Description | Risk | Added |
 |----|--------|-------------|------|-------|
 | F-1 | Audit | **Broken notification navigation** — `NotificationBell.tsx:50` navigates to `/listings/${id}` but route is `/listing/${id}` (no `s`). 2-line fix. | **High** | 2026-03-20 |
-| F-2 | Audit | **`priceReduced` filter is a visible no-op** — button activates in MapFilters but `usePropertyListings` explicitly skips it. Users think they filtered but nothing changes. Remove or disable until data exists. | **High** | 2026-03-20 |
+| ~~F-2~~ | ~~Audit~~ | ~~**`priceReduced` filter is a visible no-op**~~ — resolved in RE-169. | ~~**High**~~ | ~~2026-03-20~~ |
 | F-3 | Audit | **Shared query key collision** — `useListingById` and `useGetListing` both use `['listing', id]` but fetch different endpoints with different return types. Can serve stale wrong-shaped data. Differentiate keys. | Medium | 2026-03-20 |
 | F-4 | Audit | **Leaflet `divIcon` injects unescaped `propertyType`** — `PropertyMap.tsx:64`. `escapeHtml` exists in `security.ts` but is never applied. Apply it. | Medium | 2026-03-20 |
 | F-5 | Audit | **`ARCHIVED` status missing from all frontend status maps** — `BrokerListings`, `BrokerDashboard` have no entry. Badge renders raw string. Add label + styling. | Medium | 2026-03-20 |
@@ -88,7 +88,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 - B-14: NPE on `getById` for SCRAPED listings (500 error)
 - B-15: `ListingStatusException` → 500 instead of 4xx
 - F-1: Broken notification navigation URL
-- F-2: `priceReduced` filter is a visible no-op
+- ~~F-2: `priceReduced` filter is a visible no-op~~ (resolved RE-169)
 
 **P1 — Fix soon (correctness / perf / security):**
 - B-21: N+1 queries in `ListingResponseMapper` (21 queries per page load)
@@ -115,3 +115,4 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 |----|-----------|------|
 | B-14 | Fixed in PR #498 — null-guard createdBy in getById, POI, and image controllers (RE-166) | 2026-03-20 |
 | B-15 | Fixed in PR #495 — ListingStatusException mapped to 409/422 in GlobalExceptionHandler (RE-167) | 2026-03-20 |
+| F-2 | Fixed in RE-169 — removed "Price Reduced" button from MapFilters; added @deprecated on priceReduced field | 2026-03-21 |
