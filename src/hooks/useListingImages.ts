@@ -73,6 +73,7 @@ export function useListingImages(listingId: string | undefined) {
     data: images = [],
     isLoading,
     error: fetchError,
+    refetch,
   } = useQuery({
     queryKey,
     queryFn: () => api.get<ListingImage[]>(`/api/listings/${listingId}/images`),
@@ -357,6 +358,7 @@ export function useListingImages(listingId: string | undefined) {
     images,
     isLoading,
     fetchError,
+    refetch,
     uploads,
     isUploading,
     imageCount,

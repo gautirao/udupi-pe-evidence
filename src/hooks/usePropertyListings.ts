@@ -107,6 +107,7 @@ export interface PropertyListingWithImages extends PropertyListing {
 export function usePropertyListings(filters?: PropertyFilters) {
   return useQuery({
     queryKey: ['property-listings', filters],
+    staleTime: 60_000,
     queryFn: async () => {
       let query = supabase
         .from('property_listings')

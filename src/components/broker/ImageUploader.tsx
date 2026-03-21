@@ -3,7 +3,7 @@ import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Upload, X, GripVertical, ImageOff, Loader2, RotateCw } from 'lucide-react';
+import { Upload, X, GripVertical, ImageOff, Loader2, RotateCw, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ImageUploaderProps {
@@ -16,6 +16,7 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
   const {
     images,
     isLoading,
+    fetchError,
     uploads,
     isUploading,
     imageCount,
@@ -30,6 +31,7 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
     isDeleting,
     reorderImages,
     isReordering,
+    refetch,
   } = useListingImages(listingId);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -170,6 +172,19 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
         {[1, 2, 3, 4].map((i) => (
           <Skeleton key={i} className="aspect-square rounded-lg" />
         ))}
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <p className="text-sm text-destructive">Failed to load images.</p>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RotateCw className="mr-2 h-4 w-4" />
+          Retry
+        </Button>
       </div>
     );
   }
