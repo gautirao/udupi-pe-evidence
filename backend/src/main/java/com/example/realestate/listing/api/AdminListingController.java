@@ -7,6 +7,8 @@ import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -35,13 +37,16 @@ public class AdminListingController {
     private final ListingWorkflowService listingWorkflowService;
     private final ListingResponseMapper listingResponseMapper;
     private final AdminAuditService adminAuditService;
+    private final ObjectMapper objectMapper;
 
     public AdminListingController(ListingWorkflowService listingWorkflowService,
                                   ListingResponseMapper listingResponseMapper,
-                                  AdminAuditService adminAuditService) {
+                                  AdminAuditService adminAuditService,
+                                  ObjectMapper objectMapper) {
         this.listingWorkflowService = listingWorkflowService;
         this.listingResponseMapper = listingResponseMapper;
         this.adminAuditService = adminAuditService;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping("/{id}/approve")
@@ -52,7 +57,7 @@ public class AdminListingController {
             Listing approved = listingWorkflowService.approveListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/approve -> 200 status=LIVE", id);
             adminAuditService.record(caller.userId(), "listing_approved", "listing", id, null,
-                    "{\"status\":\"LIVE\"}");
+                    toJson(Map.of("status", "LIVE")));
             return ResponseEntity.ok(listingResponseMapper.toResponse(approved));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -69,7 +74,7 @@ public class AdminListingController {
             Listing restored = listingWorkflowService.restoreListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/restore -> 200 status=DRAFT adminId={}", id, caller.userId());
             adminAuditService.record(caller.userId(), "listing_restored", "listing", id, null,
-                    "{\"status\":\"DRAFT\"}");
+                    toJson(Map.of("status", "DRAFT")));
             return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -94,7 +99,7 @@ public class AdminListingController {
             Listing rejected = listingWorkflowService.rejectListing(id, caller.userId(), req.rejectionReason());
             log.info("POST /api/admin/listings/{}/reject -> 200 status=REJECTED", id);
             adminAuditService.record(caller.userId(), "listing_rejected", "listing", id, null,
-                    "{\"status\":\"REJECTED\",\"reason\":\"" + req.rejectionReason().replace("\"", "\\\"") + "\"}");
+                    toJson(Map.of("status", "REJECTED", "reason", req.rejectionReason())));
             return ResponseEntity.ok(listingResponseMapper.toResponse(rejected));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -119,7 +124,7 @@ public class AdminListingController {
             Listing returned = listingWorkflowService.returnForEdits(id, caller.userId(), req.note());
             log.info("POST /api/admin/listings/{}/return-for-edits -> 200 status=DRAFT", id);
             adminAuditService.record(caller.userId(), "listing_returned_for_edits", "listing", id, null,
-                    "{\"status\":\"DRAFT\",\"note\":\"" + req.note().replace("\"", "\\\"") + "\"}");
+                    toJson(Map.of("status", "DRAFT", "note", req.note())));
             return ResponseEntity.ok(listingResponseMapper.toResponse(returned));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -142,7 +147,7 @@ public class AdminListingController {
             Listing claimed = listingWorkflowService.claimScrapedListing(id, req.ownerId(), caller.userId());
             log.info("POST /api/admin/listings/{}/claim-scraped -> 200 status=DRAFT ownerId={}", id, req.ownerId());
             adminAuditService.record(caller.userId(), "listing_claimed_scraped", "listing", id, null,
-                    "{\"status\":\"DRAFT\",\"ownerId\":\"" + req.ownerId() + "\"}");
+                    toJson(Map.of("status", "DRAFT", "ownerId", req.ownerId().toString())));
             return ResponseEntity.ok(listingResponseMapper.toResponse(claimed));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -159,7 +164,7 @@ public class AdminListingController {
             Listing approved = listingWorkflowService.approveScrapedListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/approve-scraped -> 200 status=LIVE", id);
             adminAuditService.record(caller.userId(), "listing_approved_scraped", "listing", id, null,
-                    "{\"status\":\"LIVE\"}");
+                    toJson(Map.of("status", "LIVE")));
             return ResponseEntity.ok(listingResponseMapper.toResponse(approved));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -184,7 +189,7 @@ public class AdminListingController {
             Listing restored = listingWorkflowService.restoreRejectedListing(id, caller.userId(), req.moderationNote());
             log.info("POST /api/admin/listings/{}/restore-rejected -> 200 status=LIVE", id);
             adminAuditService.record(caller.userId(), "listing_restored_rejected", "listing", id, null,
-                    "{\"status\":\"LIVE\",\"note\":\"" + req.moderationNote().replace("\"", "\\\"") + "\"}");
+                    toJson(Map.of("status", "LIVE", "note", req.moderationNote())));
             return ResponseEntity.ok(listingResponseMapper.toResponse(restored));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -204,7 +209,7 @@ public class AdminListingController {
             Listing archived = listingWorkflowService.adminArchiveListing(id, caller.userId(), reasonNote);
             log.info("POST /api/admin/listings/{}/archive -> 200 status=ARCHIVED", id);
             adminAuditService.record(caller.userId(), "listing_archived", "listing", id, null,
-                    "{\"status\":\"ARCHIVED\"}");
+                    toJson(Map.of("status", "ARCHIVED")));
             return ResponseEntity.ok(listingResponseMapper.toResponse(archived));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -222,7 +227,7 @@ public class AdminListingController {
             log.info("DELETE /api/admin/listings/{} -> 204 adminId={} archived={}", id, caller.userId(), archived);
             if (archived) {
                 adminAuditService.record(caller.userId(), "listing_force_deleted", "listing", id, null,
-                        "{\"status\":\"ARCHIVED\"}");
+                        toJson(Map.of("status", "ARCHIVED")));
             }
             return ResponseEntity.noContent().build();
         } catch (ListingNotFoundException e) {
@@ -231,6 +236,15 @@ public class AdminListingController {
     }
 
     // ===== Response helpers =====
+
+    private String toJson(Map<String, String> data) {
+        try {
+            return objectMapper.writeValueAsString(data);
+        } catch (JsonProcessingException e) {
+            // Map<String, String> serialization cannot fail in practice; rethrow to surface bugs early.
+            throw new RuntimeException("Failed to serialize audit JSON", e);
+        }
+    }
 
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
