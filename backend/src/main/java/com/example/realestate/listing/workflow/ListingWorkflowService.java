@@ -26,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -90,14 +91,17 @@ public class ListingWorkflowService {
             throw new ListingValidationException(errors);
         }
 
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
+
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
-        listing.setSubmittedAt(OffsetDateTime.now());
-        listing.setReviewSubmittedAt(Instant.now());
+        listing.setSubmittedAt(nowOdt);
+        listing.setReviewSubmittedAt(now);
         listing.setSubmissionCount(listing.getSubmissionCount() + 1);
-        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedAt(now);
         listing.setStatusChangedByActorType(ActorType.BROKER);
         listing.setStatusChangedByActorId(userId);
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(nowOdt);
 
         Listing saved = listingRepository.save(listing);
 
@@ -131,7 +135,7 @@ public class ListingWorkflowService {
         policy.validate(currentStatus, ListingStatus.LIVE, ActorType.ADMIN);
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.LIVE.toDbValue());
         listing.setReviewedAt(nowOdt);
@@ -207,7 +211,7 @@ public class ListingWorkflowService {
         }
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.REJECTED.toDbValue());
         listing.setRejectionReason(rejectionReason);
@@ -271,7 +275,7 @@ public class ListingWorkflowService {
         }
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
         listing.setStatusReasonNote(reasonNote);
@@ -317,15 +321,18 @@ public class ListingWorkflowService {
 
         policy.validate(previousStatus, ListingStatus.ARCHIVED, ActorType.BROKER);
 
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
+
         listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
-        listing.setArchivedAt(Instant.now());
-        listing.setStatusChangedAt(Instant.now());
+        listing.setArchivedAt(now);
+        listing.setStatusChangedAt(now);
         listing.setStatusChangedByActorType(ActorType.BROKER);
         listing.setStatusChangedByActorId(actorId);
         if (reasonNote != null && !reasonNote.isBlank()) {
             listing.setStatusReasonNote(reasonNote);
         }
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(nowOdt);
 
         listingRepository.save(listing);
 
@@ -376,7 +383,7 @@ public class ListingWorkflowService {
         }
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
         listing.setReviewSubmittedAt(null);
@@ -416,12 +423,15 @@ public class ListingWorkflowService {
 
         policy.validate(previousStatus, ListingStatus.DRAFT, ActorType.BROKER);
 
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
+
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
         // Do NOT clear rejectedAt — preserve per AC
-        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedAt(now);
         listing.setStatusChangedByActorType(ActorType.BROKER);
         listing.setStatusChangedByActorId(actorId);
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(nowOdt);
 
         listingRepository.save(listing);
 
@@ -466,12 +476,15 @@ public class ListingWorkflowService {
 
         policy.validate(previousStatus, ListingStatus.DRAFT, ActorType.BROKER);
 
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
+
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
         listing.setArchivedAt(null);  // Clear archivedAt per AC
-        listing.setStatusChangedAt(Instant.now());
+        listing.setStatusChangedAt(now);
         listing.setStatusChangedByActorType(ActorType.BROKER);
         listing.setStatusChangedByActorId(actorId);
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setUpdatedAt(nowOdt);
 
         listingRepository.save(listing);
 
@@ -524,7 +537,7 @@ public class ListingWorkflowService {
         policy.validate(previousStatus, ListingStatus.LIVE, ActorType.BROKER);
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.LIVE.toDbValue());
         listing.setArchivedAt(null);
@@ -588,7 +601,7 @@ public class ListingWorkflowService {
         }
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.LIVE.toDbValue());
         listing.setApprovedAt(now);
@@ -644,7 +657,7 @@ public class ListingWorkflowService {
         policy.validate(currentStatus, ListingStatus.ARCHIVED, ActorType.ADMIN);
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
         listing.setArchivedAt(now);
@@ -693,9 +706,10 @@ public class ListingWorkflowService {
             return false;
         }
 
+        Instant now = Instant.now();
         listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
-        listing.setArchivedAt(Instant.now());
-        listing.setUpdatedAt(OffsetDateTime.now());
+        listing.setArchivedAt(now);
+        listing.setUpdatedAt(now.atOffset(ZoneOffset.UTC));
         listingRepository.save(listing);
         log.info("adminForceDelete: archived listingId={} by adminId={}", listingId, adminId);
         return true;
@@ -720,7 +734,9 @@ public class ListingWorkflowService {
 
         listing.setArchivedAt(null);
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
-        listing.setUpdatedAt(OffsetDateTime.now());
+        Instant now = Instant.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
+        listing.setUpdatedAt(nowOdt);
 
         Listing saved = listingRepository.save(listing);
         log.info("Restored listing listingId={} to status=DRAFT by adminId={}", listingId, adminId);
@@ -759,7 +775,7 @@ public class ListingWorkflowService {
         }
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setCreatedBy(ownerId);
         listing.setStatus(ListingStatus.DRAFT.toDbValue());
@@ -820,7 +836,7 @@ public class ListingWorkflowService {
         }
 
         Instant now = Instant.now();
-        OffsetDateTime nowOdt = OffsetDateTime.now();
+        OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
 
         listing.setStatus(ListingStatus.LIVE.toDbValue());
         listing.setReviewedAt(nowOdt);
