@@ -17,6 +17,10 @@ import com.example.realestate.listing.exception.ListingNotArchivedException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.listing.image.ListingImage;
+import com.example.realestate.listing.image.ListingImageRepository;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,11 +32,13 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Listing lifecycle workflow operations (submit, approve, reject, restore, admin force-delete).
@@ -55,6 +61,14 @@ public class ListingWorkflowService {
     private final ProximityDuplicateService proximityDuplicateService;
     private final ListingTransitionPolicy policy;
     private final ListingStatusHistoryRepository statusHistoryRepository;
+    private final ListingImageRepository imageRepository;
+    /**
+     * Snapshot serializer: configured with ALWAYS inclusion so null-valued keys are
+     * written as JSON null rather than being silently omitted. This ensures snapshot
+     * field presence is stable across approval events regardless of which fields the
+     * listing has populated.
+     */
+    private final ObjectMapper snapshotMapper;
 
     public ListingWorkflowService(
             ListingRepository listingRepository,
@@ -62,13 +76,19 @@ public class ListingWorkflowService {
             ListingOwnershipGuard listingOwnershipGuard,
             ProximityDuplicateService proximityDuplicateService,
             ListingTransitionPolicy policy,
-            ListingStatusHistoryRepository statusHistoryRepository) {
+            ListingStatusHistoryRepository statusHistoryRepository,
+            ListingImageRepository imageRepository,
+            ObjectMapper objectMapper) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
         this.proximityDuplicateService = proximityDuplicateService;
         this.policy = policy;
         this.statusHistoryRepository = statusHistoryRepository;
+        this.imageRepository = imageRepository;
+        // Copy so we don't mutate the shared application mapper
+        this.snapshotMapper = objectMapper.copy()
+                .setSerializationInclusion(JsonInclude.Include.ALWAYS);
     }
 
     /**
@@ -147,6 +167,9 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorId(adminUserId);
 
         applyLiveTransitionTimestamps(listing, nowOdt);
+        // Snapshot captured from the in-memory entity before save. JPA save() returns the same
+        // object reference (saved == listing), so the caller also sees the snapshot populated.
+        listing.setLastApprovedSnapshot(buildSnapshot(listing));
 
         Listing saved = listingRepository.save(listing);
 
@@ -636,6 +659,9 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorType(ActorType.ADMIN);
         listing.setStatusChangedByActorId(adminId);
         listing.setUpdatedAt(nowOdt);
+        // Snapshot captured from the in-memory entity before save. JPA save() returns the same
+        // object reference (saved == listing), so the caller also sees the snapshot populated.
+        listing.setLastApprovedSnapshot(buildSnapshot(listing));
 
         Listing saved = listingRepository.save(listing);
 
@@ -870,6 +896,9 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorId(adminId);
         listing.setUpdatedAt(nowOdt);
         applyLiveTransitionTimestamps(listing, nowOdt);
+        // Snapshot captured from the in-memory entity before save. JPA save() returns the same
+        // object reference (saved == listing), so the caller also sees the snapshot populated.
+        listing.setLastApprovedSnapshot(buildSnapshot(listing));
 
         Listing saved = listingRepository.save(listing);
 
@@ -1033,6 +1062,46 @@ public class ListingWorkflowService {
         }
 
         return errors;
+    }
+
+    /**
+     * Builds a point-in-time snapshot of the listing's key fields at the moment of approval.
+     * All 16 fields are written including those that are {@code null} — nulls serialize as
+     * JSON {@code null} so snapshot structure is stable across approval events.
+     * Image IDs are ordered by position ascending, matching display order.
+     *
+     * @throws IllegalStateException if JSON serialization fails (should never happen in production)
+     */
+    private String buildSnapshot(Listing listing) {
+        List<UUID> imageIds = imageRepository.findByListingIdOrderByPositionAsc(listing.getId())
+                .stream()
+                .map(ListingImage::getId)
+                .collect(Collectors.toList());
+
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("title", listing.getTitle());
+        snapshot.put("description", listing.getDescription());
+        snapshot.put("pricePaise", listing.getPricePaise());
+        snapshot.put("sellerType", listing.getSellerType());
+        snapshot.put("locality", listing.getLocality());
+        snapshot.put("latitude", listing.getLatitude());
+        snapshot.put("longitude", listing.getLongitude());
+        snapshot.put("areaKey", listing.getAreaKey());
+        snapshot.put("areaLabel", listing.getAreaLabel());
+        snapshot.put("areaSqft", listing.getAreaSqft());
+        snapshot.put("bedrooms", listing.getBedrooms());
+        snapshot.put("bathrooms", listing.getBathrooms());
+        snapshot.put("landArea", listing.getLandArea());
+        snapshot.put("propertyType", listing.getPropertyType());
+        snapshot.put("videoUrl", listing.getVideoUrl());
+        snapshot.put("imageIds", imageIds);
+
+        try {
+            return snapshotMapper.writeValueAsString(snapshot);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(
+                    "Failed to serialize listing snapshot for listing " + listing.getId(), e);
+        }
     }
 
     /**

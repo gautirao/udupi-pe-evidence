@@ -15,6 +15,9 @@ import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.listing.image.ListingImage;
+import com.example.realestate.listing.image.ListingImageRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,6 +27,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,13 +61,20 @@ class ListingWorkflowServiceTest {
     @Mock
     private ListingStatusHistoryRepository statusHistoryRepository;
 
+    @Mock
+    private ListingImageRepository imageRepository;
+
+    // Real ObjectMapper — buildSnapshot exercises actual JSON serialisation
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private ListingWorkflowService workflowService;
 
     @BeforeEach
     void setUp() {
         workflowService = new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
-                proximityDuplicateService, policy, statusHistoryRepository);
+                proximityDuplicateService, policy, statusHistoryRepository,
+                imageRepository, objectMapper);
     }
 
     // --- Notification decoupling tests ---
@@ -2014,5 +2026,215 @@ class ListingWorkflowServiceTest {
         // Events must still have been published despite the detection failure
         verify(applicationEventPublisher, org.mockito.Mockito.atLeastOnce())
                 .publishEvent(any(ListingApprovedEvent.class));
+    }
+
+    // ===== RE-140: buildSnapshot — last_approved_snapshot captured on approval =====
+
+    @Test
+    void buildSnapshot_allSixteenFieldsPresent() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        UUID imageId1 = UUID.randomUUID();
+        UUID imageId2 = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(ownerId);
+        listing.setTitle("Beachside Villa");
+        listing.setDescription("A beautiful villa");
+        listing.setPricePaise(50_000_00L);
+        listing.setSellerType("broker");
+        listing.setLocality("Udupi Beach");
+        listing.setLatitude(13.3409);
+        listing.setLongitude(74.7421);
+        listing.setAreaKey("udupi-beach");
+        listing.setAreaLabel("Udupi Beach");
+        listing.setAreaSqft(BigDecimal.valueOf(1200));
+        listing.setBedrooms(3);
+        listing.setBathrooms(2);
+        listing.setLandArea(BigDecimal.valueOf(500));
+        listing.setPropertyType("house");
+        listing.setVideoUrl("https://example.com/video.mp4");
+
+        ListingImage img1 = new ListingImage();
+        img1.setId(imageId1);
+        img1.setPosition(0);
+        ListingImage img2 = new ListingImage();
+        img2.setId(imageId2);
+        img2.setPosition(1);
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of(img1, img2));
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveListing(listingId, UUID.randomUUID());
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        String snapshotJson = captor.getValue().getLastApprovedSnapshot();
+        assertThat(snapshotJson).isNotNull();
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsed = objectMapper.readValue(snapshotJson, Map.class);
+        assertThat(parsed).containsKeys(
+                "title", "description", "pricePaise", "sellerType", "locality",
+                "latitude", "longitude", "areaKey", "areaLabel", "areaSqft",
+                "bedrooms", "bathrooms", "landArea", "propertyType", "videoUrl", "imageIds");
+        assertThat(parsed.get("title")).isEqualTo("Beachside Villa");
+        assertThat(parsed.get("imageIds")).isInstanceOf(List.class);
+        @SuppressWarnings("unchecked")
+        List<String> ids = (List<String>) parsed.get("imageIds");
+        assertThat(ids).containsExactly(imageId1.toString(), imageId2.toString());
+    }
+
+    @Test
+    void buildSnapshot_nullFieldsSerializeAsJsonNull_notMissingKey() throws Exception {
+        UUID listingId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle(null);
+        listing.setDescription(null);
+        listing.setPricePaise(null);
+        listing.setVideoUrl(null);
+        listing.setAreaKey(null);
+        listing.setPropertyType("house");
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveListing(listingId, UUID.randomUUID());
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        String snapshotJson = captor.getValue().getLastApprovedSnapshot();
+
+        // All 16 keys must be present — null fields become JSON null, not absent
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsed = objectMapper.readValue(snapshotJson, Map.class);
+        assertThat(parsed).containsKeys(
+                "title", "description", "pricePaise", "sellerType", "locality",
+                "latitude", "longitude", "areaKey", "areaLabel", "areaSqft",
+                "bedrooms", "bathrooms", "landArea", "propertyType", "videoUrl", "imageIds");
+        // Null fields serialize as JSON null (key present, value null)
+        assertThat(parsed.get("title")).isNull();
+        assertThat(parsed.get("description")).isNull();
+        assertThat(parsed.get("pricePaise")).isNull();
+        assertThat(parsed.get("videoUrl")).isNull();
+        assertThat(parsed.get("areaKey")).isNull();
+    }
+
+    @Test
+    void buildSnapshot_emptyImageList_serializesAsEmptyArray() throws Exception {
+        UUID listingId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveListing(listingId, UUID.randomUUID());
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        String snapshotJson = captor.getValue().getLastApprovedSnapshot();
+        assertThat(snapshotJson).contains("\"imageIds\":[]");
+    }
+
+    @Test
+    void approveListing_snapshotWrittenBeforeSave() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+        listing.setTitle("Some Property");
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveListing(listingId, adminId);
+
+        // Snapshot must be populated on the entity passed to save
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        assertThat(captor.getValue().getLastApprovedSnapshot()).isNotNull();
+        // The returned listing must also carry the snapshot
+        assertThat(result.getLastApprovedSnapshot()).isNotNull();
+    }
+
+    @Test
+    void restoreRejectedListing_snapshotWrittenBeforeSave() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setPropertyType("house");
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.restoreRejectedListing(listingId, adminId, "Valid listing");
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        String snapshotJson = captor.getValue().getLastApprovedSnapshot();
+        assertThat(snapshotJson).isNotNull();
+        assertThat(result.getLastApprovedSnapshot()).isNotNull();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsed = objectMapper.readValue(snapshotJson, Map.class);
+        assertThat(parsed).containsKeys(
+                "title", "description", "pricePaise", "sellerType", "locality",
+                "latitude", "longitude", "areaKey", "areaLabel", "areaSqft",
+                "bedrooms", "bathrooms", "landArea", "propertyType", "videoUrl", "imageIds");
+    }
+
+    @Test
+    void approveScrapedListing_snapshotWrittenBeforeSave() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        verify(listingRepository).save(captor.capture());
+        String snapshotJson = captor.getValue().getLastApprovedSnapshot();
+        assertThat(snapshotJson).isNotNull();
+        assertThat(result.getLastApprovedSnapshot()).isNotNull();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsed = objectMapper.readValue(snapshotJson, Map.class);
+        assertThat(parsed).containsKeys(
+                "title", "description", "pricePaise", "sellerType", "locality",
+                "latitude", "longitude", "areaKey", "areaLabel", "areaSqft",
+                "bedrooms", "bathrooms", "landArea", "propertyType", "videoUrl", "imageIds");
     }
 }
