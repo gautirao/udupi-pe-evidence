@@ -25,12 +25,17 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -67,6 +72,9 @@ class AdminListingControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @MockitoBean
     private ListingWorkflowService listingWorkflowService;
@@ -757,6 +765,87 @@ class AdminListingControllerTest {
                                 """))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
+    }
+
+    // ==================== RE-183: Audit JSON special-character escaping ====================
+
+    @Test
+    void reject_auditJsonContainsProperlyEscapedRejectionReason() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        String specialReason = "Bad \"quality\" photos\nand a backslash\\here";
+        Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        rejected.setRejectionReason(specialReason);
+        when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, specialReason))
+                .thenReturn(rejected);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("rejectionReason", specialReason))))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<String> auditJsonCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_rejected"), eq("listing"),
+                eq(LISTING_ID), isNull(), auditJsonCaptor.capture());
+
+        Map<String, String> parsed = objectMapper.readValue(auditJsonCaptor.getValue(),
+                new TypeReference<>() {});
+        assertThat(parsed).containsEntry("status", "REJECTED");
+        assertThat(parsed).containsEntry("reason", specialReason);
+    }
+
+    @Test
+    void returnForEdits_auditJsonContainsProperlyEscapedNote() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        String specialNote = "Please fix: use \"proper\" images\nno newlines";
+        Listing returned = buildListing(LISTING_ID, "DRAFT", "house", "House",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, specialNote))
+                .thenReturn(returned);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("note", specialNote))))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<String> auditJsonCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_returned_for_edits"), eq("listing"),
+                eq(LISTING_ID), isNull(), auditJsonCaptor.capture());
+
+        Map<String, String> parsed = objectMapper.readValue(auditJsonCaptor.getValue(),
+                new TypeReference<>() {});
+        assertThat(parsed).containsEntry("status", "DRAFT");
+        assertThat(parsed).containsEntry("note", specialNote);
+    }
+
+    @Test
+    void restoreRejected_auditJsonContainsProperlyEscapedModerationNote() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        String specialNote = "Override: \"admin\" approved\ttab and backslash\\done";
+        Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House",
+                "Udupi", new BigDecimal("8000000"), "A house");
+        when(listingWorkflowService.restoreRejectedListing(LISTING_ID, ADMIN_ID, specialNote))
+                .thenReturn(restored);
+
+        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("moderationNote", specialNote))))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<String> auditJsonCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(adminAuditService).record(eq(ADMIN_ID), eq("listing_restored_rejected"), eq("listing"),
+                eq(LISTING_ID), isNull(), auditJsonCaptor.capture());
+
+        Map<String, String> parsed = objectMapper.readValue(auditJsonCaptor.getValue(),
+                new TypeReference<>() {});
+        assertThat(parsed).containsEntry("status", "LIVE");
+        assertThat(parsed).containsEntry("note", specialNote);
     }
 
     // ==================== Helper ====================
