@@ -15,6 +15,7 @@ import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -64,6 +65,9 @@ class ListingWorkflowServiceTest {
     @Mock
     private ListingImageRepository imageRepository;
 
+    @Mock
+    private BookingCascadeService bookingCascadeService;
+
     // Real ObjectMapper — buildSnapshot exercises actual JSON serialisation
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -74,7 +78,14 @@ class ListingWorkflowServiceTest {
         workflowService = new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
-                imageRepository, objectMapper);
+                imageRepository, objectMapper, bookingCascadeService, false);
+    }
+
+    private ListingWorkflowService workflowServiceCascadeEnabled() {
+        return new ListingWorkflowService(
+                listingRepository, applicationEventPublisher, listingOwnershipGuard,
+                proximityDuplicateService, policy, statusHistoryRepository,
+                imageRepository, objectMapper, bookingCascadeService, true);
     }
 
     // --- Notification decoupling tests ---
@@ -2236,5 +2247,156 @@ class ListingWorkflowServiceTest {
                 "title", "description", "pricePaise", "sellerType", "locality",
                 "latitude", "longitude", "areaKey", "areaLabel", "areaSqft",
                 "bedrooms", "bathrooms", "landArea", "propertyType", "videoUrl", "imageIds");
+    }
+
+    // ===== RE-139: BookingCascadeService wired into workflow transitions =====
+
+    @Test
+    void archiveListing_cascadeEnabled_cancelsPendingAndFreezesConfirmed() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowServiceCascadeEnabled().archiveListing(listingId, actorId, null);
+
+        verify(bookingCascadeService).cancelPendingBookings(listingId, "LISTING_ARCHIVED");
+        verify(bookingCascadeService).freezeConfirmedBookings(listingId, "LISTING_ARCHIVED");
+    }
+
+    @Test
+    void archiveListing_cascadeDisabled_noCascade() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowService.archiveListing(listingId, actorId, null);
+
+        verify(bookingCascadeService, never()).cancelPendingBookings(any(), any());
+        verify(bookingCascadeService, never()).freezeConfirmedBookings(any(), any());
+    }
+
+    @Test
+    void rejectListing_cascadeEnabled_fromLive_cascadesBookings() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+        listing.setStatus(ListingStatus.LIVE.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowServiceCascadeEnabled().rejectListing(listingId, adminId, "Reason");
+
+        verify(bookingCascadeService).cancelPendingBookings(listingId, "LISTING_REJECTED");
+        verify(bookingCascadeService).freezeConfirmedBookings(listingId, "LISTING_REJECTED");
+    }
+
+    @Test
+    void rejectListing_cascadeEnabled_fromPendingReview_noCascade() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+        listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowServiceCascadeEnabled().rejectListing(listingId, adminId, "Reason");
+
+        verify(bookingCascadeService, never()).cancelPendingBookings(any(), any());
+        verify(bookingCascadeService, never()).freezeConfirmedBookings(any(), any());
+    }
+
+    @Test
+    void restoreArchivedListing_cascadeEnabled_unfreezesBookings() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowServiceCascadeEnabled().restoreArchivedListing(listingId, actorId);
+
+        verify(bookingCascadeService).unfreezeBookings(listingId);
+    }
+
+    @Test
+    void restoreRejectedListing_cascadeEnabled_unfreezesBookings() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowServiceCascadeEnabled().restoreRejectedListing(listingId, adminId, "Admin override");
+
+        verify(bookingCascadeService).unfreezeBookings(listingId);
+    }
+
+    @Test
+    void restoreArchivedListing_cascadeDisabled_noUnfreeze() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
+        listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowService.restoreArchivedListing(listingId, actorId);
+
+        verify(bookingCascadeService, never()).unfreezeBookings(any());
+    }
+
+    @Test
+    void restoreRejectedListing_cascadeDisabled_noUnfreeze() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.REJECTED.toDbValue());
+        listing.setCreatedBy(UUID.randomUUID());
+        listing.setTitle("Test");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowService.restoreRejectedListing(listingId, adminId, "Admin override");
+
+        verify(bookingCascadeService, never()).unfreezeBookings(any());
+    }
+
+    @Test
+    void archiveListing_cascadeEnabled_fromDraft_cancelsPendingAndFreezesConfirmed() {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
+        when(listingRepository.save(any())).thenReturn(listing);
+
+        workflowServiceCascadeEnabled().archiveListing(listingId, actorId, null);
+
+        verify(bookingCascadeService).cancelPendingBookings(listingId, "LISTING_ARCHIVED");
+        verify(bookingCascadeService).freezeConfirmedBookings(listingId, "LISTING_ARCHIVED");
     }
 }

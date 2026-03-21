@@ -3,7 +3,6 @@ package com.example.realestate.booking;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -45,7 +44,6 @@ public class BookingCascadeService {
      * @return number of rows updated
      * @throws IllegalArgumentException if cancellationReason is null, blank, or exceeds 100 chars
      */
-    @Transactional
     public int cancelPendingBookings(UUID listingId, String cancellationReason) {
         validateCancellationReason(cancellationReason);
         int rows = viewingRequestRepository.bulkCancelRequested(listingId, cancellationReason, OffsetDateTime.now());
@@ -64,7 +62,6 @@ public class BookingCascadeService {
      * @return number of rows updated
      * @throws IllegalArgumentException if cancellationReason is null, blank, or exceeds 100 chars
      */
-    @Transactional
     public int freezeConfirmedBookings(UUID listingId, String cancellationReason) {
         validateCancellationReason(cancellationReason);
         int rows = viewingRequestRepository.bulkFreezeConfirmed(listingId, cancellationReason, OffsetDateTime.now());
@@ -80,7 +77,6 @@ public class BookingCascadeService {
      * @param listingId listing whose NEEDS_RESOLUTION bookings should be restored
      * @return number of rows updated
      */
-    @Transactional
     public int unfreezeBookings(UUID listingId) {
         int rows = viewingRequestRepository.bulkUnfreeze(listingId, OffsetDateTime.now());
         log.info("unfreezeBookings listingId={} rows={}", listingId, rows);

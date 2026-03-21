@@ -17,12 +17,14 @@ import com.example.realestate.listing.exception.ListingNotArchivedException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +57,9 @@ public class ListingWorkflowService {
 
     private static final int MIN_IMAGES = 3;
 
+    private static final String CANCELLATION_REASON_LISTING_ARCHIVED = "LISTING_ARCHIVED";
+    private static final String CANCELLATION_REASON_LISTING_REJECTED = "LISTING_REJECTED";
+
     private final ListingRepository listingRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ListingOwnershipGuard listingOwnershipGuard;
@@ -69,6 +74,8 @@ public class ListingWorkflowService {
      * listing has populated.
      */
     private final ObjectMapper snapshotMapper;
+    private final BookingCascadeService bookingCascadeService;
+    private final boolean bookingCascadeEnabled;
 
     public ListingWorkflowService(
             ListingRepository listingRepository,
@@ -78,7 +85,9 @@ public class ListingWorkflowService {
             ListingTransitionPolicy policy,
             ListingStatusHistoryRepository statusHistoryRepository,
             ListingImageRepository imageRepository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            BookingCascadeService bookingCascadeService,
+            @Value("${listing.lifecycle.booking-cascade.enabled:false}") boolean bookingCascadeEnabled) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -89,6 +98,8 @@ public class ListingWorkflowService {
         // Copy so we don't mutate the shared application mapper
         this.snapshotMapper = objectMapper.copy()
                 .setSerializationInclusion(JsonInclude.Include.ALWAYS);
+        this.bookingCascadeService = bookingCascadeService;
+        this.bookingCascadeEnabled = bookingCascadeEnabled;
     }
 
     /**
@@ -255,6 +266,11 @@ public class ListingWorkflowService {
         history.setNote(rejectionReason);
         statusHistoryRepository.save(history);
 
+        if (bookingCascadeEnabled && currentStatus == ListingStatus.LIVE) {
+            bookingCascadeService.cancelPendingBookings(listingId, CANCELLATION_REASON_LISTING_REJECTED);
+            bookingCascadeService.freezeConfirmedBookings(listingId, CANCELLATION_REASON_LISTING_REJECTED);
+        }
+
         if (listing.getCreatedBy() != null) {
             String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
             applicationEventPublisher.publishEvent(
@@ -389,6 +405,11 @@ public class ListingWorkflowService {
             history.setNote(reasonNote);
         }
         statusHistoryRepository.save(history);
+
+        if (bookingCascadeEnabled) {
+            bookingCascadeService.cancelPendingBookings(listingId, CANCELLATION_REASON_LISTING_ARCHIVED);
+            bookingCascadeService.freezeConfirmedBookings(listingId, CANCELLATION_REASON_LISTING_ARCHIVED);
+        }
 
         log.info("Archived listing listingId={} by actorId={} fromStatus={}", listingId, actorId, previousStatus);
         return saved;
@@ -604,6 +625,10 @@ public class ListingWorkflowService {
         history.setActorId(actorId);
         statusHistoryRepository.save(history);
 
+        if (bookingCascadeEnabled) {
+            bookingCascadeService.unfreezeBookings(listingId);
+        }
+
         log.info("Fast-restored archived listing listingId={} by actorId={} fromStatus={} toStatus=LIVE",
                 listingId, actorId, previousStatus);
         return saved;
@@ -673,6 +698,10 @@ public class ListingWorkflowService {
         history.setActorId(adminId);
         history.setNote(moderationNote);
         statusHistoryRepository.save(history);
+
+        if (bookingCascadeEnabled) {
+            bookingCascadeService.unfreezeBookings(listingId);
+        }
 
         // No event publishing — exceptional admin override path
 
