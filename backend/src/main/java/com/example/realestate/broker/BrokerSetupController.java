@@ -1,6 +1,5 @@
 package com.example.realestate.broker;
 
-import com.example.realestate.profile.ProfileService;
 import com.example.realestate.security.PhoneValidator;
 import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
@@ -8,12 +7,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.Optional;
@@ -30,8 +27,8 @@ import java.util.UUID;
  *   M2: Rejects 409 if the user already has 'broker', 'dealer' (legacy), or 'admin' role.
  *   M3: Phone number validated server-side (regex + max 15 chars).
  *
- * Delegates persistence to {@link ProfileService} and {@link UserRoleService}.
- * Entire operation is @Transactional.
+ * The atomic DB mutations (role insert + phone update) are delegated to
+ * {@link BrokerOnboardingService}, which owns the @Transactional boundary.
  */
 @RestController
 @RequestMapping("/api/broker")
@@ -43,19 +40,16 @@ public class BrokerSetupController {
     // DB value is 'broker' following the V41 app_role enum rename.
     private static final String BROKER_ROLE = "broker";
 
-    private final ProfileService profileService;
     private final UserRoleService userRoleService;
+    private final BrokerOnboardingService onboardingService;
 
-    public BrokerSetupController(ProfileService profileService, UserRoleService userRoleService) {
-        this.profileService = profileService;
+    public BrokerSetupController(UserRoleService userRoleService,
+                                  BrokerOnboardingService onboardingService) {
         this.userRoleService = userRoleService;
+        this.onboardingService = onboardingService;
     }
 
-    // Note: @Transactional on a controller method is intentional here — mirrors DealerSetupController.
-    // CGLIB proxy ensures atomicity (role insert + phone update). Refactor to a shared service is a
-    // tracked follow-up when the deprecated dealer/ path is fully removed.
     @PostMapping("/setup")
-    @Transactional
     public ResponseEntity<?> setup(JwtAuthenticationToken auth, @RequestBody SetupRequest req) {
         UUID userId = UUID.fromString(auth.getToken().getSubject());
 
@@ -90,22 +84,16 @@ public class BrokerSetupController {
                     .body(Map.of("error", "You already have a broker or admin role."));
         }
 
-        // --- Assign broker role (M1: BROKER_ROLE constant, never from body) ---
-        // ON CONFLICT DO NOTHING is the final concurrent-duplicate guard (C-2).
-        boolean roleInserted = userRoleService.assignRole(userId, BROKER_ROLE);
+        // --- Atomic: assign broker role + persist phone (C-1 + C-2 guard) ---
+        // BrokerOnboardingService owns the @Transactional boundary so that if updatePhone
+        // fails (no profiles row), the role insert is rolled back.
+        // Returns false if assignRole returned false (concurrent-duplicate C-2).
+        // Throws ResponseStatusException(500) if no profiles row exists.
+        boolean roleInserted = onboardingService.assignRoleAndPhone(userId, BROKER_ROLE, phone);
         if (!roleInserted) {
             log.warn("POST /api/broker/setup -> 409 (concurrent duplicate) userId={}", userId);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", "You already have a broker or admin role."));
-        }
-
-        // Persist phone to profiles (C-1 fix: phone was validated but never stored).
-        // C-2 fix: if no profiles row exists, roll back role grant and return 500.
-        boolean phoneUpdated = profileService.updatePhone(userId, phone);
-        if (!phoneUpdated) {
-            log.error("POST /api/broker/setup -> 500 no profile row userId={}", userId);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                    "User profile not found — cannot complete broker setup.");
         }
 
         log.info("POST /api/broker/setup -> 200 userId={} role={}", userId, BROKER_ROLE);

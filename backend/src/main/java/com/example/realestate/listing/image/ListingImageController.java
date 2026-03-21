@@ -3,7 +3,6 @@ package com.example.realestate.listing.image;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
-import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +10,6 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,8 +19,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.OffsetDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,30 +46,29 @@ public class ListingImageController {
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
-    private final SupabaseStorageService storageService;
     private final ListingImageRegistrar imageRegistrar;
+    private final ListingImageService imageService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
-                                   SupabaseStorageService storageService,
-                                   ListingImageRegistrar imageRegistrar) {
+                                   ListingImageRegistrar imageRegistrar,
+                                   ListingImageService imageService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
-        this.storageService = storageService;
         this.imageRegistrar = imageRegistrar;
+        this.imageService = imageService;
     }
 
     // ==================== GET — list images ====================
 
     @GetMapping
-    @Transactional(readOnly = true)
     public ResponseEntity<?> getImages(CallerInfo caller,
                                        @PathVariable UUID listingId) {
 
         FindResult result = findOwnedListing(listingId, caller);
         if (result.error() != null) return result.error();
 
-        List<ListingImage> images = imageRepository.findByListingIdOrderByPositionAsc(listingId);
+        List<ListingImage> images = imageService.getImages(listingId);
         log.info("GET /api/listings/{}/images -> 200 count={} userId={}",
                 listingId, images.size(), caller.userId());
         return ResponseEntity.ok(images.stream().map(ListingImageController::toResponse).toList());
@@ -139,7 +134,6 @@ public class ListingImageController {
     // ==================== DELETE — remove image metadata ====================
 
     @DeleteMapping("/{imageId}")
-    @Transactional
     public ResponseEntity<?> deleteImage(CallerInfo caller,
                                           @PathVariable UUID listingId,
                                           @PathVariable UUID imageId) {
@@ -158,11 +152,7 @@ public class ListingImageController {
         }
 
         ListingImage image = imageOpt.get();
-        imageRepository.delete(image);
-
-        // Best-effort Storage delete — non-fatal per IMAGE_UPLOAD_FAILURE_MODES.md §3.
-        // DB row is deleted first; orphan cleanup (§5) covers any missed objects.
-        storageService.deleteObjectBestEffort(image.getStoragePath());
+        imageService.deleteImage(image);
 
         log.info("DELETE /api/listings/{}/images/{} -> 204 storagePath={} userId={}",
                 listingId, imageId, image.getStoragePath(), caller.userId());
@@ -172,7 +162,6 @@ public class ListingImageController {
     // ==================== PUT — reorder images ====================
 
     @PutMapping("/reorder")
-    @Transactional
     public ResponseEntity<?> reorderImages(CallerInfo caller,
                                             @PathVariable UUID listingId,
                                             @RequestBody ReorderRequest req) {
@@ -189,42 +178,14 @@ public class ListingImageController {
             return badRequest("imageIds must not be empty");
         }
 
-        // Load all images for this listing
-        List<ListingImage> existingImages = imageRepository.findByListingIdOrderByPositionAsc(listingId);
-        Set<UUID> existingIds = new HashSet<>();
-        for (ListingImage img : existingImages) {
-            existingIds.add(img.getId());
+        try {
+            List<ListingImage> reordered = imageService.reorderImages(listingId, req.imageIds());
+            log.info("PUT /api/listings/{}/images/reorder -> 200 count={} userId={}",
+                    listingId, reordered.size(), caller.userId());
+            return ResponseEntity.ok(reordered.stream().map(ListingImageController::toResponse).toList());
+        } catch (IllegalArgumentException e) {
+            return badRequest(e.getMessage());
         }
-
-        // Validate: no duplicates in request
-        Set<UUID> requestIds = new HashSet<>(req.imageIds());
-        if (requestIds.size() != req.imageIds().size()) {
-            return badRequest("Duplicate image IDs in reorder request");
-        }
-
-        // Validate: exact match between request IDs and existing IDs
-        if (!requestIds.equals(existingIds)) {
-            return badRequest("imageIds must contain exactly all images for this listing");
-        }
-
-        // Apply new positions
-        Map<UUID, ListingImage> imageMap = new java.util.HashMap<>();
-        for (ListingImage img : existingImages) {
-            imageMap.put(img.getId(), img);
-        }
-
-        for (int i = 0; i < req.imageIds().size(); i++) {
-            ListingImage img = imageMap.get(req.imageIds().get(i));
-            img.setPosition(i);
-        }
-        imageRepository.saveAll(existingImages);
-
-        // Return in new order
-        List<ListingImage> reordered = imageRepository.findByListingIdOrderByPositionAsc(listingId);
-
-        log.info("PUT /api/listings/{}/images/reorder -> 200 count={} userId={}",
-                listingId, reordered.size(), caller.userId());
-        return ResponseEntity.ok(reordered.stream().map(ListingImageController::toResponse).toList());
     }
 
     /**

@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -84,13 +85,16 @@ class ListingImageControllerTest {
     private ListingImageRegistrar imageRegistrar;
 
     @MockitoBean
+    private ListingImageService imageService;
+
+    @MockitoBean
     private UserRoleService userRoleService;
 
     private Listing draftListing;
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, imageRepository, userRoleService);
+        reset(listingRepository, imageRepository, userRoleService, imageService);
 
         draftListing = new Listing();
         draftListing.setId(LISTING_ID);
@@ -267,12 +271,13 @@ class ListingImageControllerTest {
         ListingImage image = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
         when(imageRepository.findByIdAndListingId(IMAGE_ID, LISTING_ID))
                 .thenReturn(Optional.of(image));
+        doNothing().when(imageService).deleteImage(image);
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
                 .andExpect(status().isNoContent());
 
-        verify(imageRepository).delete(image);
+        verify(imageService).deleteImage(image);
     }
 
     // ==================== Test 10: DELETE image not found -> 404 ====================
@@ -299,13 +304,12 @@ class ListingImageControllerTest {
         UUID id2 = UUID.fromString("00000000-0000-0000-0000-000000000052");
         UUID id3 = UUID.fromString("00000000-0000-0000-0000-000000000053");
 
-        ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "u1", 0);
-        ListingImage img2 = buildImage(id2, LISTING_ID, "p2.jpg", "u2", 1);
-        ListingImage img3 = buildImage(id3, LISTING_ID, "p3.jpg", "u3", 2);
+        ListingImage img3 = buildImage(id3, LISTING_ID, "p3.jpg", "u3", 0);
+        ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "u1", 1);
+        ListingImage img2 = buildImage(id2, LISTING_ID, "p2.jpg", "u2", 2);
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
-                .thenReturn(List.of(img1, img2, img3))   // first call: load existing
-                .thenReturn(List.of(img3, img1, img2));   // second call: return reordered
+        when(imageService.reorderImages(eq(LISTING_ID), anyList()))
+                .thenReturn(List.of(img3, img1, img2));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -316,7 +320,7 @@ class ListingImageControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3));
 
-        verify(imageRepository).saveAll(anyList());
+        verify(imageService).reorderImages(eq(LISTING_ID), anyList());
     }
 
     // ==================== Test 12: PUT reorder with missing IDs -> 400 ====================
@@ -326,13 +330,9 @@ class ListingImageControllerTest {
         stubDealerWithDraftListing();
 
         UUID id1 = UUID.fromString("00000000-0000-0000-0000-000000000051");
-        UUID id2 = UUID.fromString("00000000-0000-0000-0000-000000000052");
 
-        ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "u1", 0);
-        ListingImage img2 = buildImage(id2, LISTING_ID, "p2.jpg", "u2", 1);
-
-        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
-                .thenReturn(List.of(img1, img2));
+        when(imageService.reorderImages(eq(LISTING_ID), anyList()))
+                .thenThrow(new IllegalArgumentException("imageIds must contain exactly all images for this listing"));
 
         // Only send id1, missing id2
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
@@ -372,7 +372,7 @@ class ListingImageControllerTest {
         ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "https://x.com/1.jpg", 0);
         ListingImage img2 = buildImage(id2, LISTING_ID, "p2.jpg", "https://x.com/2.jpg", 1);
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
+        when(imageService.getImages(LISTING_ID))
                 .thenReturn(List.of(img1, img2));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
@@ -424,7 +424,7 @@ class ListingImageControllerTest {
 
         UUID id1 = UUID.fromString("00000000-0000-0000-0000-000000000071");
         ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "https://x.com/1.jpg", 0);
-        when(imageRepository.findByListingIdOrderByPositionAsc(LISTING_ID))
+        when(imageService.getImages(LISTING_ID))
                 .thenReturn(List.of(img1));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")

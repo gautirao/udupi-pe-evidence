@@ -1,6 +1,6 @@
 package com.example.realestate.dealer;
 
-import com.example.realestate.profile.ProfileService;
+import com.example.realestate.broker.BrokerOnboardingService;
 import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,13 +8,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -26,7 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * WebMvcTest for DealerSetupController.
- * Uses jwt() post-processor to inject JwtAuthenticationToken; mocks ProfileService and UserRoleService.
+ * Uses jwt() post-processor to inject JwtAuthenticationToken; mocks UserRoleService and BrokerOnboardingService.
  */
 @WebMvcTest(
         controllers = DealerSetupController.class,
@@ -56,20 +57,16 @@ class DealerSetupControllerTest {
     private UserRoleService userRoleService;
 
     @MockitoBean
-    private ProfileService profileService;
-
-    @MockitoBean
-    private PlatformTransactionManager transactionManager;
+    private BrokerOnboardingService onboardingService;
 
     @BeforeEach
     void setUp() {
-        reset(userRoleService, profileService, transactionManager);
+        reset(userRoleService, onboardingService);
     }
 
     // ==================== Test 1: No JWT -> 401/403 ====================
     // Spring Security returns 403 (not 401) for unauthenticated requests when
     // no explicit AuthenticationEntryPoint is configured in the TestConfig SecurityFilterChain.
-    // This is consistent with AdminListingControllerTest (test 6 expects 403 for no JWT).
 
     @Test
     void setup_withoutJwt_returns401() throws Exception {
@@ -85,9 +82,8 @@ class DealerSetupControllerTest {
 
     @Test
     void setup_happyPath_returns200WithDealerRole() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
-        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
-        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(true);
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
+        when(onboardingService.assignRoleAndPhone(USER_ID, "broker", "+919876543210")).thenReturn(true);
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -103,7 +99,7 @@ class DealerSetupControllerTest {
 
     @Test
     void setup_alreadyDealerSequential_returns409() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("dealer"));
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -113,15 +109,17 @@ class DealerSetupControllerTest {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("You already have a broker or admin role."));
+
+        verify(onboardingService, never()).assignRoleAndPhone(any(), any(), any());
     }
 
     // ==================== Test 4: C-2 TOCTOU concurrent duplicate -> 409 ====================
 
     @Test
     void setup_concurrentDuplicate_returns409() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
-        // assignRole returns false: ON CONFLICT DO NOTHING suppressed the insert
-        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(false);
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
+        // assignRoleAndPhone returns false: ON CONFLICT DO NOTHING suppressed the role insert
+        when(onboardingService.assignRoleAndPhone(USER_ID, "broker", "+919876543210")).thenReturn(false);
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -190,15 +188,15 @@ class DealerSetupControllerTest {
     }
 
     // ==================== Test 9: missing profiles row -> 500 ====================
-    // Reproduces the bug: phone UPDATE returns 0 (no profiles row) but role INSERT succeeds.
-    // Before fix: code ignores return value and returns 200. After fix: returns 500.
+    // Reproduces the bug: phone UPDATE returns false (no profiles row) but role INSERT succeeded.
+    // BrokerOnboardingService throws 500 and rolls back the role insert transactionally.
 
     @Test
     void setup_missingProfileRow_returns500() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
-        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
-        // updatePhone returns false: no profiles row found for this user
-        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(false);
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
+        when(onboardingService.assignRoleAndPhone(USER_ID, "broker", "+919876543210"))
+                .thenThrow(new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "User profile not found — cannot complete broker setup."));
 
         mockMvc.perform(post("/api/dealer/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
