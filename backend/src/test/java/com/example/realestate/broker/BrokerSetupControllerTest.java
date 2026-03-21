@@ -1,5 +1,7 @@
 package com.example.realestate.broker;
 
+import com.example.realestate.profile.ProfileService;
+import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,27 +9,23 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
-import com.example.realestate.security.UserRoleService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 
-import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
- * WebMvcTest for BrokerSetupController (/api/broker/setup alias).
+ * WebMvcTest for BrokerSetupController (/api/broker/setup).
  * Mirrors DealerSetupControllerTest to ensure the broker path is fully covered.
  */
 @WebMvcTest(
@@ -58,15 +56,19 @@ class BrokerSetupControllerTest {
     private UserRoleService userRoleService;
 
     @MockitoBean
-    private JdbcTemplate jdbcTemplate;
+    private ProfileService profileService;
 
     @MockitoBean
     private PlatformTransactionManager transactionManager;
 
     @BeforeEach
     void setUp() {
-        reset(jdbcTemplate, transactionManager);
+        reset(userRoleService, profileService, transactionManager);
     }
+
+    // ==================== Test 1: No JWT -> 403 ====================
+    // Spring Security returns 403 (not 401) for unauthenticated requests when
+    // no explicit AuthenticationEntryPoint is configured in the TestConfig SecurityFilterChain.
 
     @Test
     void setup_withoutJwt_returns403() throws Exception {
@@ -78,12 +80,13 @@ class BrokerSetupControllerTest {
                 .andExpect(status().isForbidden());
     }
 
+    // ==================== Test 2: Happy path -> 200 ====================
+
     @Test
-    void setup_happyPath_returns200WithDealerRole() throws Exception {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
-                .thenReturn(List.of());
-        when(jdbcTemplate.update(anyString(), any(Object[].class)))
-                .thenReturn(1);
+    void setup_happyPath_returns200WithBrokerRole() throws Exception {
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
+        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
+        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(true);
 
         mockMvc.perform(post("/api/broker/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -95,10 +98,11 @@ class BrokerSetupControllerTest {
                 .andExpect(jsonPath("$.role").value("broker"));
     }
 
+    // ==================== Test 3: M2 pre-check — already broker/admin -> 409 ====================
+
     @Test
     void setup_alreadyBroker_returns409WithBrokerMessage() throws Exception {
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
-                .thenReturn(List.of("dealer"));
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(post("/api/broker/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -110,6 +114,8 @@ class BrokerSetupControllerTest {
                 .andExpect(jsonPath("$.error").value("You already have a broker or admin role."));
     }
 
+    // ==================== Test 4: acceptedTerms=false -> 400 ====================
+
     @Test
     void setup_termsNotAccepted_returns400() throws Exception {
         mockMvc.perform(post("/api/broker/setup")
@@ -120,5 +126,85 @@ class BrokerSetupControllerTest {
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.field").value("acceptedTerms"));
+    }
+
+    // ==================== Test 5: phone="" -> 400 ====================
+
+    @Test
+    void setup_phoneEmpty_returns400() throws Exception {
+        mockMvc.perform(post("/api/broker/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"","acceptedTerms":true}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("phone"));
+    }
+
+    // ==================== Test 6: phone too long (16 chars) -> 400 ====================
+
+    @Test
+    void setup_phoneTooLong_returns400() throws Exception {
+        mockMvc.perform(post("/api/broker/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"1234567890123456","acceptedTerms":true}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("phone"));
+    }
+
+    // ==================== Test 7: phone bad format -> 400 ====================
+
+    @Test
+    void setup_phoneBadFormat_returns400() throws Exception {
+        mockMvc.perform(post("/api/broker/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"abc-bad","acceptedTerms":true}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("phone"));
+    }
+
+    // ==================== Test 8: C-2 TOCTOU concurrent duplicate -> 409 ====================
+
+    @Test
+    void setup_assignRoleReturnsFalse_returns409() throws Exception {
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
+        // assignRole returns false: ON CONFLICT DO NOTHING suppressed the insert
+        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(false);
+
+        mockMvc.perform(post("/api/broker/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"+919876543210","acceptedTerms":true}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("You already have a broker or admin role."));
+    }
+
+    // ==================== Test 9: missing profiles row -> 500 ====================
+    // Reproduces the bug: phone UPDATE returns false (no profiles row) but role INSERT succeeded.
+    // Before fix: code ignores return value and returns 200. After fix: returns 500.
+
+    @Test
+    void setup_updatePhoneReturnsFalse_returns500() throws Exception {
+        when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
+        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
+        // updatePhone returns false: no profiles row found for this user
+        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(false);
+
+        mockMvc.perform(post("/api/broker/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"+919876543210","acceptedTerms":true}
+                                """))
+                .andExpect(status().isInternalServerError());
     }
 }

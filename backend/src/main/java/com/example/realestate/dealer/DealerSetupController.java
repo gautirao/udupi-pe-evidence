@@ -1,6 +1,7 @@
 package com.example.realestate.dealer;
 
 import com.example.realestate.profile.ProfileService;
+import com.example.realestate.security.PhoneValidator;
 import com.example.realestate.security.UserRoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * POST /api/dealer/setup — assigns the 'broker' role to the authenticated user.
@@ -45,10 +45,6 @@ public class DealerSetupController {
     // Write 'broker' so both /api/dealer/setup and /api/broker/setup produce the same role value.
     private static final String BROKER_ROLE = "broker";
 
-    // M3: Valid Indian phone: optional + prefix followed by 10–15 digits.
-    private static final Pattern PHONE_PATTERN = Pattern.compile("^[+]?[0-9]{10,15}$");
-    private static final int PHONE_MAX_LENGTH = 15;
-
     private final ProfileService profileService;
     private final UserRoleService userRoleService;
 
@@ -74,11 +70,11 @@ public class DealerSetupController {
             return ResponseEntity.badRequest()
                     .body(Map.of("field", "phone", "error", "Phone number is required."));
         }
-        if (phone.length() > PHONE_MAX_LENGTH) {
+        if (phone.length() > PhoneValidator.PHONE_MAX_LENGTH) {
             return ResponseEntity.badRequest()
                     .body(Map.of("field", "phone", "error", "Phone number must be 15 characters or fewer."));
         }
-        if (!PHONE_PATTERN.matcher(phone).matches()) {
+        if (!PhoneValidator.PHONE_PATTERN.matcher(phone).matches()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("field", "phone", "error",
                             "Invalid phone number. Use a valid Indian mobile number (e.g. +919876543210 or 9876543210)."));
