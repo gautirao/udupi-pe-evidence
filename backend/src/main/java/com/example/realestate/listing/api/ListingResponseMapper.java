@@ -8,6 +8,10 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Maps a {@link Listing} entity to {@link ListingResponse}.
@@ -47,8 +51,42 @@ public class ListingResponseMapper {
         return build(l, null);
     }
 
+    /**
+     * Batch variant for broker/admin list endpoints. Fires a single image query for all listings.
+     */
+    public List<ListingResponse> toResponseList(List<Listing> listings) {
+        return toBatchResponseList(listings, true);
+    }
+
+    /**
+     * Batch variant for public list endpoints. Fires a single image query; always omits rejectionReason.
+     */
+    public List<ListingResponse> toPublicResponseList(List<Listing> listings) {
+        return toBatchResponseList(listings, false);
+    }
+
+    private List<ListingResponse> toBatchResponseList(List<Listing> listings, boolean includeRejectionReason) {
+        if (listings.isEmpty()) return List.of();
+
+        List<UUID> ids = listings.stream().map(Listing::getId).toList();
+        Map<UUID, List<ListingImage>> imagesByListing = listingImageRepository
+                .findByListingIdInOrderByListingIdAscPositionAsc(ids)
+                .stream()
+                .collect(Collectors.groupingBy(ListingImage::getListingId));
+
+        return listings.stream()
+                .map(l -> build(l,
+                        includeRejectionReason ? l.getRejectionReason() : null,
+                        imagesByListing.getOrDefault(l.getId(), List.of())))
+                .toList();
+    }
+
     private ListingResponse build(Listing l, String rejectionReason) {
         var images = listingImageRepository.findByListingIdOrderByPositionAsc(l.getId());
+        return build(l, rejectionReason, images);
+    }
+
+    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)

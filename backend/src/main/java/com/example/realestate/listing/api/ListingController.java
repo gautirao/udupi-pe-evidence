@@ -13,6 +13,7 @@ import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -120,7 +121,8 @@ public class ListingController {
 
         Page<Listing> listings = listingCrudService.getListingsByOwner(caller.userId(), status, pageable);
 
-        Page<ListingResponse> response = listings.map(listingResponseMapper::toResponse);
+        List<ListingResponse> content = listingResponseMapper.toResponseList(listings.getContent());
+        Page<ListingResponse> response = new PageImpl<>(content, listings.getPageable(), listings.getTotalElements());
         return ResponseEntity.ok(response);
     }
 
