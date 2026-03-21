@@ -34,6 +34,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -569,7 +570,7 @@ public class ListingWorkflowService {
 
     /**
      * Dealer fast-restores an archived listing directly to LIVE.
-     * Only eligible if the listing was previously published ({@code firstPublishedAt != null}).
+     * Only eligible if the listing has a prior approved snapshot that matches its current state.
      *
      * <p><b>CRITICAL:</b> Cannot use {@link ListingOwnershipGuard#findOwned(UUID, UUID, boolean)}
      * because it rejects archived listings ({@code archivedAt != null} throws
@@ -580,7 +581,8 @@ public class ListingWorkflowService {
      * @param actorId   the broker/dealer performing the action (must own the listing)
      * @throws ListingNotFoundException   if listing not found
      * @throws ListingOwnershipException  if the listing is not owned by the actor
-     * @throws ListingLifecycleException  if listing was never published (FAST_RESTORE_NOT_ELIGIBLE, 422)
+     * @throws ListingLifecycleException  if no snapshot exists or listing has material changes since last approval
+     *                                    (FAST_RESTORE_NOT_ELIGIBLE, 422)
      * @throws ListingStatusException     if transition is not allowed by the policy (e.g. listing is not ARCHIVED)
      */
     @Transactional
@@ -593,12 +595,8 @@ public class ListingWorkflowService {
             throw new ListingOwnershipException(listingId);
         }
 
-        // Fast-restore eligibility: listing must have been published at least once
-        if (listing.getFirstPublishedAt() == null) {
-            throw new ListingLifecycleException(
-                    ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
-                    "Listing was never published — use reopen-to-draft instead");
-        }
+        // Fast-restore eligibility: snapshot must exist and match current state
+        checkSnapshotEligibility(listing);
 
         ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
         policy.validate(previousStatus, ListingStatus.LIVE, ActorType.BROKER);
@@ -1093,20 +1091,16 @@ public class ListingWorkflowService {
         return errors;
     }
 
-    /**
-     * Builds a point-in-time snapshot of the listing's key fields at the moment of approval.
-     * All 16 fields are written including those that are {@code null} — nulls serialize as
-     * JSON {@code null} so snapshot structure is stable across approval events.
-     * Image IDs are ordered by position ascending, matching display order.
-     *
-     * @throws IllegalStateException if JSON serialization fails (should never happen in production)
-     */
-    private String buildSnapshot(Listing listing) {
-        List<UUID> imageIds = imageRepository.findByListingIdOrderByPositionAsc(listing.getId())
-                .stream()
-                .map(ListingImage::getId)
-                .collect(Collectors.toList());
+    private static final List<String> SNAPSHOT_SCALAR_FIELDS = List.of(
+            "title", "description", "pricePaise", "sellerType", "locality",
+            "latitude", "longitude", "areaKey", "areaLabel", "areaSqft",
+            "bedrooms", "bathrooms", "landArea", "propertyType", "videoUrl");
 
+    /**
+     * Builds the snapshot map from the listing's current field values and the given image ID list.
+     * All 16 material fields are included (nulls written as JSON null so structure is stable).
+     */
+    private Map<String, Object> buildSnapshotMap(Listing listing, List<UUID> imageIds) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("title", listing.getTitle());
         snapshot.put("description", listing.getDescription());
@@ -1124,12 +1118,86 @@ public class ListingWorkflowService {
         snapshot.put("propertyType", listing.getPropertyType());
         snapshot.put("videoUrl", listing.getVideoUrl());
         snapshot.put("imageIds", imageIds);
+        return snapshot;
+    }
+
+    /**
+     * Builds a point-in-time snapshot of the listing's key fields at the moment of approval.
+     * All 16 fields are written including those that are {@code null} — nulls serialize as
+     * JSON {@code null} so snapshot structure is stable across approval events.
+     * Image IDs are ordered by position ascending, matching display order.
+     *
+     * @throws IllegalStateException if JSON serialization fails (should never happen in production)
+     */
+    private String buildSnapshot(Listing listing) {
+        List<UUID> imageIds = imageRepository.findByListingIdOrderByPositionAsc(listing.getId())
+                .stream()
+                .map(ListingImage::getId)
+                .collect(Collectors.toList());
+
+        Map<String, Object> snapshot = buildSnapshotMap(listing, imageIds);
 
         try {
             return snapshotMapper.writeValueAsString(snapshot);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(
                     "Failed to serialize listing snapshot for listing " + listing.getId(), e);
+        }
+    }
+
+    /**
+     * Validates that the current listing state matches the last approved snapshot.
+     * Called before fast-restore to ensure the listing has not been materially modified.
+     *
+     * <p>Image reordering (same UUIDs, different order) does NOT constitute a material change.
+     *
+     * @throws ListingLifecycleException FAST_RESTORE_NOT_ELIGIBLE with field-level diff if any
+     *         material field has changed, or if lastApprovedSnapshot is null.
+     */
+    private void checkSnapshotEligibility(Listing listing) {
+        String storedSnapshotJson = listing.getLastApprovedSnapshot();
+        if (storedSnapshotJson == null) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                    "No approved snapshot on record — fast restore requires a prior approved snapshot");
+        }
+
+        List<UUID> currentImageIds = imageRepository.findByListingIdOrderByPositionAsc(listing.getId())
+                .stream().map(ListingImage::getId).collect(Collectors.toList());
+        Map<String, Object> currentMap = buildSnapshotMap(listing, currentImageIds);
+
+        com.fasterxml.jackson.databind.JsonNode storedNode;
+        com.fasterxml.jackson.databind.JsonNode currentNode;
+        try {
+            storedNode = snapshotMapper.readTree(storedSnapshotJson);
+            currentNode = snapshotMapper.readTree(snapshotMapper.writeValueAsString(currentMap));
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("Failed to compare snapshot for listing " + listing.getId(), e);
+        }
+
+        List<String> changedFields = new ArrayList<>();
+
+        // Scalar fields: exact JsonNode equality (same serializer, so types match)
+        for (String field : SNAPSHOT_SCALAR_FIELDS) {
+            if (!storedNode.path(field).equals(currentNode.path(field))) {
+                changedFields.add(field);
+            }
+        }
+
+        // imageIds: order-insensitive set comparison
+        Set<String> storedImageSet = new HashSet<>();
+        storedNode.path("imageIds").forEach(n -> storedImageSet.add(n.asText()));
+        Set<String> currentImageSet = new HashSet<>();
+        currentNode.path("imageIds").forEach(n -> currentImageSet.add(n.asText()));
+        if (!storedImageSet.equals(currentImageSet)) {
+            changedFields.add("imageIds");
+        }
+
+        if (!changedFields.isEmpty()) {
+            throw new ListingLifecycleException(
+                    ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                    "Listing has material changes since last approval — use submit-for-review instead",
+                    changedFields);
         }
     }
 

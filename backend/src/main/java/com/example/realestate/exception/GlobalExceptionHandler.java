@@ -42,10 +42,15 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // ===== ListingLifecycleException → status from error code, structured body =====
 
     @ExceptionHandler(ListingLifecycleException.class)
-    public ResponseEntity<Map<String, String>> handleListingLifecycle(ListingLifecycleException ex) {
+    public ResponseEntity<Map<String, Object>> handleListingLifecycle(ListingLifecycleException ex) {
         log.warn("Listing lifecycle error [{}]: {}", ex.getCode(), ex.getMessage());
-        return ResponseEntity.status(ex.getCode().getHttpStatus())
-                .body(Map.of("code", ex.getCode().name(), "message", ex.getMessage()));
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("code", ex.getCode().name());
+        body.put("message", ex.getMessage());
+        if (ex.getChangedFields() != null && !ex.getChangedFields().isEmpty()) {
+            body.put("changedFields", ex.getChangedFields());
+        }
+        return ResponseEntity.status(ex.getCode().getHttpStatus()).body(body);
     }
 
     // ===== ListingStatusException → 409 Conflict =====

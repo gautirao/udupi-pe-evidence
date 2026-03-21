@@ -28,7 +28,7 @@ class ListingLifecycleExceptionTest {
     void handler_returnsCorrectHttpStatus_forEachErrorCode(ListingErrorCode code) {
         ListingLifecycleException ex = new ListingLifecycleException(code, "test message");
 
-        ResponseEntity<Map<String, String>> response = handler.handleListingLifecycle(ex);
+        ResponseEntity<Map<String, Object>> response = handler.handleListingLifecycle(ex);
 
         assertThat(response.getStatusCode().value()).isEqualTo(code.getHttpStatus());
     }
@@ -41,7 +41,7 @@ class ListingLifecycleExceptionTest {
         String message = "Error for " + code.name();
         ListingLifecycleException ex = new ListingLifecycleException(code, message);
 
-        ResponseEntity<Map<String, String>> response = handler.handleListingLifecycle(ex);
+        ResponseEntity<Map<String, Object>> response = handler.handleListingLifecycle(ex);
 
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().get("code")).isEqualTo(code.name());
@@ -98,7 +98,7 @@ class ListingLifecycleExceptionTest {
         ListingLifecycleException ex = new ListingLifecycleException(
                 ListingErrorCode.STATUS_CONFLICT, "conflict");
 
-        ResponseEntity<Map<String, String>> response = handler.handleListingLifecycle(ex);
+        ResponseEntity<Map<String, Object>> response = handler.handleListingLifecycle(ex);
 
         assertThat(response.getBody()).doesNotContainKey("error");
     }
