@@ -13,6 +13,7 @@ import com.example.realestate.listing.exception.ListingErrorCode;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.listing.exception.ListingValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -1573,7 +1574,6 @@ class ListingWorkflowServiceTest {
         Listing listing = createCompleteListing(listingId, ownerId);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         Listing result = workflowService.approveScrapedListing(listingId, adminId);
@@ -1672,7 +1672,6 @@ class ListingWorkflowServiceTest {
         listing.setFirstPublishedAt(originalFirstPublished);
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.approveScrapedListing(listingId, adminId);
@@ -1686,6 +1685,61 @@ class ListingWorkflowServiceTest {
         // lastLiveAt must be updated
         assertThat(saved.getLastLiveAt()).isNotNull();
         assertThat(saved.getLastLiveAt()).isAfter(originalFirstPublished);
+    }
+
+    // ===== RE-186: approveScrapedListing bypasses image minimum =====
+
+    @Test
+    void approveScrapedListing_oneImage_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // countImagesByListingId deliberately NOT stubbed — must never be called on the scraped path.
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        verify(listingRepository, never()).countImagesByListingId(any());
+    }
+
+    @Test
+    void approveScrapedListing_zeroImages_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        // countImagesByListingId deliberately NOT stubbed — must never be called.
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+        verify(listingRepository, never()).countImagesByListingId(any());
+    }
+
+    @Test
+    void submitListing_fewerThanThreeImages_throwsValidationException() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(listing);
+        // 2 images — below the required minimum of 3.
+        when(listingRepository.countImagesByListingId(listingId)).thenReturn(2L);
+
+        assertThatThrownBy(() -> workflowService.submitListing(listingId, userId, false))
+                .isInstanceOf(ListingValidationException.class);
+
+        verify(listingRepository, never()).save(any());
+        verify(statusHistoryRepository, never()).save(any());
     }
 
     // ===== RE-133: restoreRejectedListing — admin restores REJECTED→LIVE with moderation note =====
