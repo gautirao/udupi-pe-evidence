@@ -47,7 +47,7 @@ export function NotificationBell() {
     }
     const listingId = parseListingId(notification.metadata);
     if (listingId) {
-      navigate(`/listings/${listingId}`);
+      navigate(`/listing/${listingId}`);
     }
     setOpen(false);
   }
