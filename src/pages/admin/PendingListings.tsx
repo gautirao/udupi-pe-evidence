@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,8 +29,6 @@ import { Label } from '@/components/ui/label';
 import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8085';
-
 interface PendingListing {
   id: string;
   title: string | null;
@@ -41,34 +40,6 @@ interface PendingListing {
   created_at: string;
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-}
-
-async function adminAction(path: string, body?: unknown): Promise<void> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!response.ok) {
-    let errorMsg = `Request failed (${response.status})`;
-    try {
-      const data = await response.json();
-      if (data.error) errorMsg = data.error;
-    } catch {
-      // use default message
-    }
-    throw new Error(errorMsg);
-  }
-}
 
 export default function PendingListings() {
   const { isAdmin } = useAuth();
@@ -94,7 +65,7 @@ export default function PendingListings() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => adminAction(`/api/admin/listings/${id}/approve`),
+    mutationFn: (id: string) => api.post(`/api/admin/listings/${id}/approve`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-listings'] });
       toast({ title: 'Listing Approved', description: 'The listing is now live.' });
@@ -106,7 +77,7 @@ export default function PendingListings() {
 
   const rejectMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      adminAction(`/api/admin/listings/${id}/reject`, { rejectionReason: reason }),
+      api.post(`/api/admin/listings/${id}/reject`, { rejectionReason: reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-listings'] });
       setRejectTarget(null);
