@@ -50,11 +50,14 @@ public class BookingService {
     static final String STATUS_CONFIRMED = "CONFIRMED";
     static final String STATUS_DECLINED = "DECLINED";
     static final String STATUS_CANCELLED = "CANCELLED";
+    static final String STATUS_NEEDS_RESOLUTION = "NEEDS_RESOLUTION";
 
     private static final Set<String> CANCELLABLE_BY_USER = Set.of(STATUS_REQUESTED, STATUS_CONFIRMED);
     private static final Set<String> CANCELLABLE_BY_DEALER = Set.of(STATUS_CONFIRMED);
 
-    private static final List<String> DEALER_ACTIVE_STATUSES = List.of(STATUS_REQUESTED, STATUS_CONFIRMED);
+    // NEEDS_RESOLUTION included so frozen bookings remain visible in broker's active booking list
+    private static final List<String> DEALER_ACTIVE_STATUSES = List.of(
+            STATUS_REQUESTED, STATUS_CONFIRMED, STATUS_NEEDS_RESOLUTION);
 
     private final ViewingRequestRepository viewingRequestRepository;
     private final ListingRepository listingRepository;

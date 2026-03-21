@@ -230,6 +230,7 @@ public class BookingController {
                 b.getId(), b.getListingId(), b.getRequesterId(), b.getBrokerId(),
                 b.getRequestedDate(), b.getRequestedTimeSlot(), b.getStatus(),
                 b.getRequesterMessage(), b.getDeclineReason(), b.getCancelledBy(),
+                b.getCancellationReason(),
                 b.getCreatedAt(), b.getUpdatedAt());
     }
 
@@ -255,6 +256,7 @@ public class BookingController {
             String requesterMessage,
             String declineReason,
             String cancelledBy,
+            String cancellationReason,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt
     ) {}
