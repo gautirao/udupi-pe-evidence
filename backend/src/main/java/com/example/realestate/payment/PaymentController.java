@@ -6,16 +6,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -30,7 +26,7 @@ import java.util.UUID;
  *   M14: Grant duration (GRANT_DAYS) is a server-side constant — never from request body.
  *   M15: Audit log on every call: userId, timestamp, newExpiry.
  *
- * Uses JdbcTemplate with parameterized queries only. Entire operation is @Transactional.
+ * Transactional boundary is owned by {@link PaymentService}.
  */
 @RestController
 @RequestMapping("/api/payments")
@@ -38,22 +34,18 @@ public class PaymentController {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentController.class);
 
-    // M14: Grant duration is a server-side constant — never from request body.
-    private static final int GRANT_DAYS = 30;
-
     @Value("${payments.stub.enabled:false}")
     private boolean stubEnabled;
 
-    private final JdbcTemplate jdbcTemplate;
+    private final PaymentService paymentService;
     private final RateLimiterService rateLimiterService;
 
-    public PaymentController(JdbcTemplate jdbcTemplate, RateLimiterService rateLimiterService) {
-        this.jdbcTemplate = jdbcTemplate;
+    public PaymentController(PaymentService paymentService, RateLimiterService rateLimiterService) {
+        this.paymentService = paymentService;
         this.rateLimiterService = rateLimiterService;
     }
 
     @PostMapping("/insights-pass")
-    @Transactional
     public ResponseEntity<?> grantInsightsPass(JwtAuthenticationToken auth) {
         // M13: Feature flag — must be explicitly enabled; default false in production.
         // Return 404 (not 503) so the endpoint appears non-existent when disabled.
@@ -67,46 +59,27 @@ public class PaymentController {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED");
         }
 
-        // Grant 30-day access (M14: GRANT_DAYS constant, never sourced from request body)
-        OffsetDateTime newExpiry = OffsetDateTime.now().plusDays(GRANT_DAYS);
+        PaymentService.InsightsGrantResult result = paymentService.grantInsightsPass(userId);
 
-        // M12: Atomic conditional UPDATE — only updates if access is not currently active.
-        // Fixes TOCTOU: concurrent requests both see null/expired, but only one succeeds.
-        int rows = jdbcTemplate.update(
-                "UPDATE public.profiles SET insights_access_until = ? " +
-                "WHERE user_id = ? AND (insights_access_until IS NULL OR insights_access_until <= NOW())",
-                newExpiry, userId);
-
-        if (rows >= 1) {
-            // M15: Audit log on every successful grant.
-            log.info("POST /api/payments/insights-pass -> 200 userId={} newExpiry={}", userId, newExpiry);
-            return ResponseEntity.ok(Map.of("insightsAccessUntil", newExpiry.toString()));
+        switch (result.status()) {
+            case GRANTED -> {
+                log.info("POST /api/payments/insights-pass -> 200 userId={} newExpiry={}",
+                        userId, result.until());
+                return ResponseEntity.ok(Map.of("insightsAccessUntil", result.until().toString()));
+            }
+            case ALREADY_ACTIVE -> {
+                log.warn("POST /api/payments/insights-pass -> 409 (still active) userId={} expiresAt={}",
+                        userId, result.until());
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", "Insights access is still active.",
+                                     "insightsAccessUntil", result.until().toString()));
+            }
+            case NO_PROFILE_ROW -> {
+                log.error("POST /api/payments/insights-pass -> 500 no profile row userId={}", userId);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(Map.of("error", "User profile not found."));
+            }
+            default -> throw new IllegalStateException("Unhandled InsightsGrantResult.Status: " + result.status());
         }
-
-        // rows == 0: follow-up SELECT to distinguish no-profile-row vs still-active.
-        List<OffsetDateTime> results = jdbcTemplate.query(
-                "SELECT insights_access_until FROM public.profiles WHERE user_id = ?",
-                (rs, rowNum) -> rs.getObject("insights_access_until", OffsetDateTime.class),
-                userId);
-
-        if (results.isEmpty()) {
-            // Data inconsistency: profile must exist for every authenticated user.
-            log.error("POST /api/payments/insights-pass -> 500 no profile row userId={}", userId);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "User profile not found."));
-        }
-
-        OffsetDateTime activeExpiry = results.get(0);
-        if (activeExpiry == null) {
-            // Null expiry means the atomic UPDATE should have matched — data inconsistency.
-            log.error("POST /api/payments/insights-pass -> 500 unexpected null expiry userId={}", userId);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "User profile not found."));
-        }
-        log.warn("POST /api/payments/insights-pass -> 409 (still active) userId={} expiresAt={}",
-                userId, activeExpiry);
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(Map.of("error", "Insights access is still active.",
-                             "insightsAccessUntil", activeExpiry.toString()));
     }
 }

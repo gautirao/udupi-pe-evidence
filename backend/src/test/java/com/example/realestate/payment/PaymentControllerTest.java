@@ -1,6 +1,7 @@
 package com.example.realestate.payment;
 
 import com.example.realestate.exception.RateLimiterService;
+import com.example.realestate.payment.PaymentService.InsightsGrantResult;
 import com.example.realestate.security.UserRoleService;
 import io.github.bucket4j.Bucket;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,8 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -22,10 +21,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -35,7 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * WebMvcTest for PaymentController.
  * Covers: 200 success (atomic UPDATE succeeds), 404 stub-disabled, 409 still-active,
  * 500 no-profile-row, 403 unauthenticated.
- * Uses jwt() post-processor; mocks JdbcTemplate directly (no test DB needed).
+ * Uses jwt() post-processor; mocks PaymentService directly (no test DB needed).
  *
  * Note: unauthenticated → 403 (not 401). TestConfig uses anyRequest().authenticated()
  * without an explicit AuthenticationEntryPoint, which defaults to Http403ForbiddenEntryPoint.
@@ -70,7 +70,7 @@ class PaymentControllerTest {
     private PaymentController paymentController;
 
     @MockitoBean
-    private JdbcTemplate jdbcTemplate;
+    private PaymentService paymentService;
 
     @MockitoBean
     private PlatformTransactionManager transactionManager;
@@ -83,7 +83,7 @@ class PaymentControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(jdbcTemplate, transactionManager, rateLimiterService);
+        reset(paymentService, transactionManager, rateLimiterService);
         // Restore stubEnabled=true before each test (stub-disabled test overrides inline)
         ReflectionTestUtils.setField(paymentController, "stubEnabled", true);
         // Default: bucket allows all requests (tryConsume returns true)
@@ -96,7 +96,9 @@ class PaymentControllerTest {
 
     @Test
     void grantInsightsPass_stubEnabled_returns200() throws Exception {
-        when(jdbcTemplate.update(anyString(), any(OffsetDateTime.class), any(UUID.class))).thenReturn(1);
+        OffsetDateTime expiry = OffsetDateTime.now().plusDays(30);
+        when(paymentService.grantInsightsPass(USER_ID))
+                .thenReturn(new InsightsGrantResult(InsightsGrantResult.Status.GRANTED, expiry));
 
         mockMvc.perform(post("/api/payments/insights-pass")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -110,7 +112,9 @@ class PaymentControllerTest {
     void grantInsightsPass_accessExpiresAtExactNow_returns200() throws Exception {
         // insights_access_until == NOW() means the condition 'insights_access_until <= NOW()' is TRUE at boundary → renewal allowed
         // The atomic UPDATE succeeds (returns 1 row), so the endpoint grants access and returns 200.
-        when(jdbcTemplate.update(anyString(), any(OffsetDateTime.class), any(UUID.class))).thenReturn(1);
+        OffsetDateTime expiry = OffsetDateTime.now().plusDays(30);
+        when(paymentService.grantInsightsPass(USER_ID))
+                .thenReturn(new InsightsGrantResult(InsightsGrantResult.Status.GRANTED, expiry));
 
         mockMvc.perform(post("/api/payments/insights-pass")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -131,15 +135,11 @@ class PaymentControllerTest {
 
     // ==================== Test 3: access still active → 409 ====================
 
-    @SuppressWarnings("unchecked")
     @Test
     void grantInsightsPass_alreadyActive_returns409() throws Exception {
-        // Atomic UPDATE returns 0 rows: WHERE clause blocked update because access is still active
-        when(jdbcTemplate.update(anyString(), any(OffsetDateTime.class), any(UUID.class))).thenReturn(0);
-        // Follow-up SELECT returns active expiry
         OffsetDateTime activeExpiry = OffsetDateTime.now().plusDays(15);
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(UUID.class)))
-                .thenReturn(List.of(activeExpiry));
+        when(paymentService.grantInsightsPass(USER_ID))
+                .thenReturn(new InsightsGrantResult(InsightsGrantResult.Status.ALREADY_ACTIVE, activeExpiry));
 
         mockMvc.perform(post("/api/payments/insights-pass")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -150,13 +150,10 @@ class PaymentControllerTest {
 
     // ==================== Test 4: no profile row → 500 ====================
 
-    @SuppressWarnings("unchecked")
     @Test
     void grantInsightsPass_noProfileRow_returns500() throws Exception {
-        when(jdbcTemplate.update(anyString(), any(OffsetDateTime.class), any(UUID.class))).thenReturn(0);
-        // Follow-up SELECT returns empty: no profile row exists for this user
-        when(jdbcTemplate.query(anyString(), any(RowMapper.class), any(UUID.class)))
-                .thenReturn(List.of());
+        when(paymentService.grantInsightsPass(USER_ID))
+                .thenReturn(new InsightsGrantResult(InsightsGrantResult.Status.NO_PROFILE_ROW, null));
 
         mockMvc.perform(post("/api/payments/insights-pass")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString()))))
@@ -169,13 +166,15 @@ class PaymentControllerTest {
     @Test
     void grantInsightsPass_usesJwtSubjectAsUserId() throws Exception {
         UUID jwtUser = UUID.fromString("00000000-0000-0000-0000-000000000099");
-        when(jdbcTemplate.update(anyString(), any(OffsetDateTime.class), eq(jwtUser))).thenReturn(1);
+        OffsetDateTime expiry = OffsetDateTime.now().plusDays(30);
+        when(paymentService.grantInsightsPass(eq(jwtUser)))
+                .thenReturn(new InsightsGrantResult(InsightsGrantResult.Status.GRANTED, expiry));
 
         mockMvc.perform(post("/api/payments/insights-pass")
                         .with(jwt().jwt(j -> j.subject(jwtUser.toString()))))
                 .andExpect(status().isOk());
 
-        verify(jdbcTemplate).update(anyString(), any(OffsetDateTime.class), eq(jwtUser));
+        verify(paymentService).grantInsightsPass(eq(jwtUser));
     }
 
     // ==================== Test 5: unauthenticated → 403 ====================

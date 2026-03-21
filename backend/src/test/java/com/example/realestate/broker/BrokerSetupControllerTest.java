@@ -1,6 +1,5 @@
 package com.example.realestate.broker;
 
-import com.example.realestate.profile.ProfileService;
 import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -8,13 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -56,14 +56,11 @@ class BrokerSetupControllerTest {
     private UserRoleService userRoleService;
 
     @MockitoBean
-    private ProfileService profileService;
-
-    @MockitoBean
-    private PlatformTransactionManager transactionManager;
+    private BrokerOnboardingService onboardingService;
 
     @BeforeEach
     void setUp() {
-        reset(userRoleService, profileService, transactionManager);
+        reset(userRoleService, onboardingService);
     }
 
     // ==================== Test 1: No JWT -> 403 ====================
@@ -85,8 +82,7 @@ class BrokerSetupControllerTest {
     @Test
     void setup_happyPath_returns200WithBrokerRole() throws Exception {
         when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
-        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
-        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(true);
+        when(onboardingService.assignRoleAndPhone(USER_ID, "broker", "+919876543210")).thenReturn(true);
 
         mockMvc.perform(post("/api/broker/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -112,6 +108,8 @@ class BrokerSetupControllerTest {
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("You already have a broker or admin role."));
+
+        verify(onboardingService, never()).assignRoleAndPhone(any(), any(), any());
     }
 
     // ==================== Test 4: acceptedTerms=false -> 400 ====================
@@ -175,8 +173,8 @@ class BrokerSetupControllerTest {
     @Test
     void setup_assignRoleReturnsFalse_returns409() throws Exception {
         when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
-        // assignRole returns false: ON CONFLICT DO NOTHING suppressed the insert
-        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(false);
+        // assignRoleAndPhone returns false: ON CONFLICT DO NOTHING suppressed the role insert
+        when(onboardingService.assignRoleAndPhone(USER_ID, "broker", "+919876543210")).thenReturn(false);
 
         mockMvc.perform(post("/api/broker/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
@@ -190,14 +188,14 @@ class BrokerSetupControllerTest {
 
     // ==================== Test 9: missing profiles row -> 500 ====================
     // Reproduces the bug: phone UPDATE returns false (no profiles row) but role INSERT succeeded.
-    // Before fix: code ignores return value and returns 200. After fix: returns 500.
+    // BrokerOnboardingService throws 500 and rolls back the role insert transactionally.
 
     @Test
     void setup_updatePhoneReturnsFalse_returns500() throws Exception {
         when(userRoleService.findSecurityRole(USER_ID)).thenReturn(Optional.empty());
-        when(userRoleService.assignRole(USER_ID, "broker")).thenReturn(true);
-        // updatePhone returns false: no profiles row found for this user
-        when(profileService.updatePhone(USER_ID, "+919876543210")).thenReturn(false);
+        when(onboardingService.assignRoleAndPhone(USER_ID, "broker", "+919876543210"))
+                .thenThrow(new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "User profile not found — cannot complete broker setup."));
 
         mockMvc.perform(post("/api/broker/setup")
                         .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
