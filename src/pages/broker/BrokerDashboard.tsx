@@ -24,6 +24,7 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_REVIEW: 'Under Review',
   LIVE: 'Live',
   REJECTED: 'Rejected',
+  ARCHIVED: 'Archived',
 };
 
 function statusBadgeClassName(status: string): string {
@@ -34,6 +35,8 @@ function statusBadgeClassName(status: string): string {
       return 'bg-amber-100 text-amber-800 border-0';
     case 'REJECTED':
       return 'bg-red-100 text-red-800 border-0';
+    case 'ARCHIVED':
+      return 'bg-slate-100 text-slate-700 border-0';
     case 'DRAFT':
     default:
       return 'bg-gray-100 text-gray-600 border-0';

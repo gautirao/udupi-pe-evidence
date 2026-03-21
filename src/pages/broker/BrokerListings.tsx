@@ -42,6 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_REVIEW: 'Under Review',
   LIVE: 'Live',
   REJECTED: 'Rejected',
+  ARCHIVED: 'Archived',
 };
 
 const FILTER_CHIPS: Array<{ value: string; label: string }> = [
@@ -50,6 +51,7 @@ const FILTER_CHIPS: Array<{ value: string; label: string }> = [
   { value: 'PENDING_REVIEW', label: 'Under Review' },
   { value: 'LIVE', label: 'Live' },
   { value: 'REJECTED', label: 'Rejected' },
+  { value: 'ARCHIVED', label: 'Archived' },
 ];
 
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
@@ -68,6 +70,8 @@ function statusClassName(status: string): string {
       return 'bg-red-100 text-red-800 border-0';
     case 'DRAFT':
       return 'bg-gray-100 text-gray-600 border-0';
+    case 'ARCHIVED':
+      return 'bg-slate-100 text-slate-700 border-0';
     default:
       return 'bg-gray-100 text-gray-600 border-0';
   }
