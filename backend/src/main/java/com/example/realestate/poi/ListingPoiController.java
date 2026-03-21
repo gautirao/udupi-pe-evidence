@@ -1,7 +1,9 @@
 package com.example.realestate.poi;
 
 import com.example.realestate.listing.core.Listing;
-import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.exception.ListingNotFoundException;
+import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,14 +59,14 @@ public class ListingPoiController {
 
     private final ListingPoiService service;
     private final OverpassService overpassService;
-    private final ListingRepository listingRepository;
+    private final ListingWorkflowService listingWorkflowService;
 
     public ListingPoiController(ListingPoiService service,
                                 OverpassService overpassService,
-                                ListingRepository listingRepository) {
+                                ListingWorkflowService listingWorkflowService) {
         this.service = service;
         this.overpassService = overpassService;
-        this.listingRepository = listingRepository;
+        this.listingWorkflowService = listingWorkflowService;
     }
 
     // ===== Public endpoint =====
@@ -89,10 +91,12 @@ public class ListingPoiController {
     public ResponseEntity<?> getSuggestions(CallerInfo caller,
                                             @PathVariable UUID listingId) {
 
-        Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) return notFound();
-        UUID createdBy = listing.getCreatedBy();
-        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
+        Listing listing;
+        try {
+            listing = listingWorkflowService.findListingForCaller(listingId, caller.userId(), caller.isAdmin());
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
             log.warn("AUTH DENIED listingId={} caller={} reason=not_owner", listingId, caller.userId());
             return forbidden();
         }
@@ -122,10 +126,11 @@ public class ListingPoiController {
                                         @PathVariable UUID listingId,
                                         @PathVariable UUID poiId) {
 
-        Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) return notFound();
-        UUID createdBy = listing.getCreatedBy();
-        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
+        try {
+            listingWorkflowService.findListingForCaller(listingId, caller.userId(), caller.isAdmin());
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
             log.warn("AUTH DENIED listingId={} caller={} reason=not_owner", listingId, caller.userId());
             return forbidden();
         }
@@ -155,10 +160,11 @@ public class ListingPoiController {
                                     @PathVariable UUID listingId,
                                     @PathVariable UUID poiId) {
 
-        Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) return notFound();
-        UUID createdBy = listing.getCreatedBy();
-        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
+        try {
+            listingWorkflowService.findListingForCaller(listingId, caller.userId(), caller.isAdmin());
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
             log.warn("AUTH DENIED listingId={} caller={} reason=not_owner", listingId, caller.userId());
             return forbidden();
         }
@@ -183,10 +189,11 @@ public class ListingPoiController {
                                        @PathVariable UUID listingId,
                                        @RequestBody ManualPoiRequest request) {
 
-        Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) return notFound();
-        UUID createdBy = listing.getCreatedBy();
-        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
+        try {
+            listingWorkflowService.findListingForCaller(listingId, caller.userId(), caller.isAdmin());
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
             log.warn("AUTH DENIED listingId={} caller={} reason=not_owner", listingId, caller.userId());
             return forbidden();
         }
@@ -235,10 +242,11 @@ public class ListingPoiController {
                                        @PathVariable UUID listingId,
                                        @PathVariable UUID poiId) {
 
-        Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) return notFound();
-        UUID createdBy = listing.getCreatedBy();
-        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
+        try {
+            listingWorkflowService.findListingForCaller(listingId, caller.userId(), caller.isAdmin());
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
             log.warn("AUTH DENIED listingId={} caller={} reason=not_owner", listingId, caller.userId());
             return forbidden();
         }

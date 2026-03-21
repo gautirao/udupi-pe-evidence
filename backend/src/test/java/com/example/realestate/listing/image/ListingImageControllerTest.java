@@ -3,7 +3,9 @@ package com.example.realestate.listing.image;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.storage.SupabaseStorageService;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
@@ -90,11 +92,14 @@ class ListingImageControllerTest {
     @MockitoBean
     private UserRoleService userRoleService;
 
+    @MockitoBean
+    private ListingWorkflowService listingWorkflowService;
+
     private Listing draftListing;
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, imageRepository, userRoleService, imageService);
+        reset(listingRepository, imageRepository, userRoleService, imageService, listingWorkflowService);
 
         draftListing = new Listing();
         draftListing.setId(LISTING_ID);
@@ -115,7 +120,8 @@ class ListingImageControllerTest {
 
     private void stubDealerWithDraftListing() {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(draftListing);
     }
 
     // ==================== Test 1: POST register image -> 201 ====================
@@ -168,7 +174,8 @@ class ListingImageControllerTest {
     void register_liveStatus_returns400() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         draftListing.setStatus(ListingStatus.LIVE.toDbValue());
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(draftListing);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -219,8 +226,10 @@ class ListingImageControllerTest {
     @Test
     void register_otherDealerListing_returns404() throws Exception {
         when(userRoleService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_DEALER, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // draftListing.createdBy = DEALER_ID (non-null), so secondary re-read → 404
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
-        // draftListing.createdBy = DEALER_ID, but caller is OTHER_DEALER
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString())))
@@ -398,8 +407,10 @@ class ListingImageControllerTest {
     @Test
     void getImages_differentDealer_returns403or404() throws Exception {
         when(userRoleService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_DEALER, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // draftListing.createdBy = DEALER_ID (non-null), so secondary re-read → 404
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
-        // draftListing.createdBy = DEALER_ID, but caller is OTHER_DEALER
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString()))))
@@ -420,7 +431,8 @@ class ListingImageControllerTest {
         liveListing.setPropertyType("land");
         liveListing.setCreatedAt(OffsetDateTime.now());
         liveListing.setUpdatedAt(OffsetDateTime.now());
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(liveListing));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(liveListing);
 
         UUID id1 = UUID.fromString("00000000-0000-0000-0000-000000000071");
         ListingImage img1 = buildImage(id1, LISTING_ID, "p1.jpg", "https://x.com/1.jpg", 0);
@@ -452,7 +464,10 @@ class ListingImageControllerTest {
         scraped.setCreatedBy(null); // SCRAPED — no owner
         scraped.setStatus(ListingStatus.DRAFT.toDbValue());
         scraped.setPropertyType("house");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+        // Admin bypasses ownership check — findListingForCaller returns the listing.
+        // The null-owner guard fires later inside registerImage itself.
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, adminId, true))
+                .thenReturn(scraped);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
                         .with(jwt().jwt(j -> j.subject(adminId.toString())))
@@ -479,6 +494,9 @@ class ListingImageControllerTest {
         scraped.setCreatedBy(null); // SCRAPED — no owner
         scraped.setStatus(ListingStatus.LIVE.toDbValue());
         scraped.setPropertyType("house");
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // Secondary re-read: null createdBy → 403
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
@@ -502,6 +520,9 @@ class ListingImageControllerTest {
         scraped.setCreatedBy(null); // SCRAPED — no owner
         scraped.setStatus(ListingStatus.DRAFT.toDbValue());
         scraped.setPropertyType("house");
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // Secondary re-read: null createdBy → 403
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
@@ -525,6 +546,9 @@ class ListingImageControllerTest {
         scraped.setCreatedBy(null); // SCRAPED — no owner
         scraped.setStatus(ListingStatus.DRAFT.toDbValue());
         scraped.setPropertyType("house");
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // Secondary re-read: null createdBy → 403
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
@@ -580,6 +604,9 @@ class ListingImageControllerTest {
         scraped.setCreatedBy(null); // SCRAPED — no owner
         scraped.setStatus(ListingStatus.DRAFT.toDbValue());
         scraped.setPropertyType("house");
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // Secondary re-read: null createdBy → 403
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")

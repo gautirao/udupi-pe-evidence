@@ -1,7 +1,8 @@
 package com.example.realestate.poi;
 
 import com.example.realestate.listing.core.Listing;
-import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
@@ -72,12 +73,12 @@ class ListingPoiManagementControllerTest {
 
     @MockitoBean private ListingPoiService service;
     @MockitoBean private OverpassService overpassService;
-    @MockitoBean private ListingRepository listingRepository;
+    @MockitoBean private ListingWorkflowService listingWorkflowService;
     @MockitoBean private UserRoleService userRoleService;
 
     @BeforeEach
     void setUp() {
-        reset(service, overpassService, listingRepository, userRoleService);
+        reset(service, overpassService, listingWorkflowService, userRoleService);
     }
 
     // ===== Helpers =====
@@ -111,7 +112,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void suggestions_ownerCanAccess_returns200() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
                 .thenReturn(List.of());
 
@@ -130,7 +132,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void suggestions_nonOwner_returns403() throws Exception {
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
@@ -144,7 +147,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void approve_ownerApprovesOwnPoi_returns200() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
 
         ListingPoi unapproved = buildPoi(false, false);
         when(service.findById(POI_ID)).thenReturn(Optional.of(unapproved));
@@ -168,7 +172,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void manualAdd_validCategory_returns201() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
 
         when(service.save(any(ListingPoi.class))).thenAnswer(inv -> {
             ListingPoi p = inv.getArgument(0);
@@ -191,7 +196,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void manualAdd_invalidCategory_returns400() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
 
         mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())))
@@ -209,7 +215,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void delete_ownerDeletes_returns204() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
 
         ListingPoi poi = buildPoi(true, false);
         when(service.findById(POI_ID)).thenReturn(Optional.of(poi));
@@ -226,7 +233,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void delete_nonOwner_returns403() throws Exception {
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(delete("/api/listings/{listingId}/pois/{poiId}", LISTING_ID, POI_ID)
                         .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
@@ -242,7 +250,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void approve_settlementCategory_returns400() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
 
         ListingPoi townCenterPoi = buildPoi(false, false);
         townCenterPoi.setCategory("TOWN_CENTER");
@@ -260,7 +269,8 @@ class ListingPoiManagementControllerTest {
     @Test
     void delete_settlementCategory_returns400() throws Exception {
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OWNER_ID, false))
+                .thenReturn(ownerListing(OWNER_ID));
 
         ListingPoi highwayPoi = buildPoi(true, false);
         highwayPoi.setCategory("HIGHWAY");
@@ -277,7 +287,8 @@ class ListingPoiManagementControllerTest {
     void admin_canAccessAnyListing() throws Exception {
         // Admin accesses a listing owned by a different broker (OWNER_ID)
         when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing(OWNER_ID)));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, ADMIN_ID, true))
+                .thenReturn(ownerListing(OWNER_ID));
         when(overpassService.fetchAndCacheAmenities(eq(LISTING_ID), any(Double.class), any(Double.class), anyString()))
                 .thenReturn(List.of());
 
