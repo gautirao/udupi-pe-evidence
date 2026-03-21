@@ -1318,6 +1318,104 @@ class ListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
+    // ==================== RE-172: @Pattern validation on reraNumber ====================
+
+    @Test
+    void updateListing_invalidReraNumber_returns422() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reraNumber":"INVALID"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields[0].field").value("reraNumber"))
+                .andExpect(jsonPath("$.fields[0].message").value("must match RERA format: ABC/DE/YYYY/NNNN"));
+
+        verify(listingCrudService, never()).updateListing(any(), any(), anyBoolean(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
+    }
+
+    @Test
+    void updateListing_validReraNumber_returns200() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "House",
+                "Udupi", new BigDecimal("5000000"), "Desc");
+        updated.setReraNumber("PRM/KA/2023/0042");
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reraNumber":"PRM/KA/2023/0042"}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void updateListing_nullReraNumber_returns200() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "House",
+                "Udupi", new BigDecimal("5000000"), "Desc");
+        when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
+                .thenReturn(updated);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reraNumber":null}
+                                """))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void updateListing_nearMissReraNumber_returns422() throws Exception {
+        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
+        // 3 digits in last segment instead of 4 — structurally close but invalid
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reraNumber":"PRM/KA/2023/004"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields[0].field").value("reraNumber"));
+
+        // lowercase letters — must also fail (character-class guard)
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reraNumber":"prm/ka/2023/0042"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.fields[0].field").value("reraNumber"));
+
+        verify(listingCrudService, never()).updateListing(any(), any(), anyBoolean(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(UUID id, String status, String propertyType, String title,

@@ -59,7 +59,8 @@ public record ListingResponse(
         /** true when reraNumber matches Karnataka RERA format; computed at read time, not stored. */
         boolean reraValid
 ) {
-    /** Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
-    public static final Pattern RERA_PATTERN =
-            Pattern.compile("^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$");
+    /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
+    public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";
+    /** Compiled form of {@link #RERA_REGEXP} — use for read-side matching. */
+    public static final Pattern RERA_PATTERN = Pattern.compile(RERA_REGEXP);
 }

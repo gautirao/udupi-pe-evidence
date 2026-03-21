@@ -29,6 +29,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Pattern;
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -66,7 +69,7 @@ public class ListingController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(CallerInfo caller, @RequestBody CreateRequest req) {
+    public ResponseEntity<?> create(CallerInfo caller, @Valid @RequestBody CreateRequest req) {
 
         String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
@@ -129,7 +132,7 @@ public class ListingController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(CallerInfo caller,
                                     @PathVariable UUID id,
-                                    @RequestBody UpdateRequest req) {
+                                    @Valid @RequestBody UpdateRequest req) {
 
         try {
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
@@ -355,6 +358,8 @@ public class ListingController {
             String builtAreaUnit,
             String videoUrl,
             Boolean applyVideoUrl,  // true = apply the videoUrl field (null clears, non-null sets)
+            @Pattern(regexp = ListingResponse.RERA_REGEXP,
+                     message = "must match RERA format: ABC/DE/YYYY/NNNN")
             String reraNumber,
             // Commercial & rent fields
             String listingPurpose,
@@ -372,8 +377,6 @@ public class ListingController {
             Integer securityDepositMonths,
             Integer lockInMonths,
             // RERA & possession fields (RE-99)
-            // TODO(RE-99): add @Pattern validation for reraNumber once test coverage exists.
-            //   Regex: ^[A-Z]{3}/[A-Z]{2}/\d{4}/\d{4}$ — Karnataka RERA format.
             String possessionStatus,
             java.time.LocalDate expectedPossessionDate,
             String approvalsDeclared

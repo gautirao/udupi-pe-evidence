@@ -66,6 +66,12 @@
 
         <!-- Jackson for JSON processing (included via spring-boot-starter-web) -->
 
+        <!-- Bean Validation (Hibernate Validator) — required for @Valid/@Pattern on request bodies -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
         <!-- Bucket4j: in-memory rate limiting for ingestion API key filter -->
         <dependency>
             <groupId>com.bucket4j</groupId>
