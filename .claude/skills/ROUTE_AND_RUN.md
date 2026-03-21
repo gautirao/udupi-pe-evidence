@@ -235,8 +235,15 @@ Never pause to ask for confirmation before executing any of these:
 - `gh pr create ...` — open pull request
 - `gh pr merge <number> --merge --delete-branch` — merge pull request
 - `git checkout main && git pull origin main` — sync main after merge
+- `gh issue close <number>` — close the associated GitHub issue after PR merge (always, if a GitHub issue number is known)
 
-These pre-approvals apply to git operations performed within `ROUTE_AND_RUN`'s execution scope. The full sprint PR lifecycle — branch creation, commit, push, PR creation, CI monitoring, merge, and post-merge checkout — is owned by `SPRINT_EXECUTOR_ROLLING_CHECKPOINT`, not by this skill.
+**Post-merge close rule:** After every successful PR merge, if the task has an associated GitHub issue number, close it immediately:
+```bash
+gh issue close <number>
+```
+This applies to both sprint and standalone ROUTE_AND_RUN usage. Do not skip this step — open issues after a merged PR are a tracking gap.
+
+These pre-approvals apply to git operations performed within `ROUTE_AND_RUN`'s execution scope. The full sprint PR lifecycle — branch creation, commit, push, PR creation, CI monitoring, merge, post-merge checkout, and issue close — is owned by `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` when invoked from a sprint context. In standalone use, ROUTE_AND_RUN is responsible for the issue close step.
 
 ---
 
