@@ -28,9 +28,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -973,14 +976,16 @@ class ListingWorkflowServiceTest {
     // ===== RE-130: restoreArchivedListing — dealer fast-restores archived listing to LIVE =====
 
     @Test
-    void restoreArchivedListing_eligible_setsLiveAndClearsArchivedAt() {
+    void restoreArchivedListing_eligible_setsLiveAndClearsArchivedAt() throws Exception {
         UUID listingId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setArchivedAt(java.time.Instant.now().minusSeconds(3600));
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
         java.time.OffsetDateTime originalFirstPublished = listing.getFirstPublishedAt();
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
 
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1017,12 +1022,15 @@ class ListingWorkflowServiceTest {
     }
 
     @Test
-    void restoreArchivedListing_nonArchived_throwsPolicyException() {
+    void restoreArchivedListing_nonArchived_throwsPolicyException() throws Exception {
         UUID listingId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(10)); // was published
+        // Provide a matching snapshot so checkSnapshotEligibility passes — we want to test the policy check
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
 
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
 
         doThrow(new ListingStatusException("Transition not allowed: from=DRAFT to=LIVE actor=BROKER"))
@@ -1054,13 +1062,15 @@ class ListingWorkflowServiceTest {
     }
 
     @Test
-    void restoreArchivedListing_writesHistoryRow() {
+    void restoreArchivedListing_writesHistoryRow() throws Exception {
         UUID listingId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setArchivedAt(java.time.Instant.now());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
 
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1077,13 +1087,15 @@ class ListingWorkflowServiceTest {
     }
 
     @Test
-    void restoreArchivedListing_setsStatusChangedFields() {
+    void restoreArchivedListing_setsStatusChangedFields() throws Exception {
         UUID listingId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setArchivedAt(java.time.Instant.now());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
 
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -2320,12 +2332,14 @@ class ListingWorkflowServiceTest {
     }
 
     @Test
-    void restoreArchivedListing_cascadeEnabled_unfreezesBookings() {
+    void restoreArchivedListing_cascadeEnabled_unfreezesBookings() throws Exception {
         UUID listingId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
 
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
 
@@ -2353,12 +2367,14 @@ class ListingWorkflowServiceTest {
     }
 
     @Test
-    void restoreArchivedListing_cascadeDisabled_noUnfreeze() {
+    void restoreArchivedListing_cascadeDisabled_noUnfreeze() throws Exception {
         UUID listingId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
 
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
 
@@ -2398,5 +2414,235 @@ class ListingWorkflowServiceTest {
 
         verify(bookingCascadeService).cancelPendingBookings(listingId, "LISTING_ARCHIVED");
         verify(bookingCascadeService).freezeConfirmedBookings(listingId, "LISTING_ARCHIVED");
+    }
+
+    // ===== RE-141: snapshot eligibility guard for restoreArchivedListing =====
+
+    @Test
+    void restoreArchivedListing_snapshotMatches_proceedsToLive() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID imageId1 = UUID.randomUUID();
+        UUID imageId2 = UUID.randomUUID();
+        List<UUID> imageIds = List.of(imageId1, imageId2);
+
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, imageIds);
+
+        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
+        ListingImage img2 = new ListingImage(); img2.setId(imageId2);
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of(img1, img2));
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.restoreArchivedListing(listingId, actorId);
+
+        verify(listingRepository).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_snapshotNull_throws422() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, List.of());
+        listing.setLastApprovedSnapshot(null); // override to null
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_titleChanged_throws422WithFieldDiff() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, List.of());
+        // Mutate title after snapshot was built
+        listing.setTitle("Changed Title");
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> {
+                    ListingLifecycleException life = (ListingLifecycleException) ex;
+                    assertThat(life.getCode()).isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE);
+                    assertThat(life.getChangedFields()).contains("title");
+                });
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_priceChanged_throws422WithFieldDiff() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, List.of());
+        // Mutate price after snapshot was built
+        listing.setPricePaise(99_999_00L);
+
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> {
+                    ListingLifecycleException life = (ListingLifecycleException) ex;
+                    assertThat(life.getCode()).isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE);
+                    assertThat(life.getChangedFields()).contains("pricePaise");
+                });
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_imageAdded_throws422WithFieldDiff() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID imageId1 = UUID.randomUUID();
+        UUID imageId2 = UUID.randomUUID();
+        UUID imageId3 = UUID.randomUUID();
+
+        // Snapshot has 2 images; listing now has 3
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId,
+                List.of(imageId1, imageId2));
+
+        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
+        ListingImage img2 = new ListingImage(); img2.setId(imageId2);
+        ListingImage img3 = new ListingImage(); img3.setId(imageId3);
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of(img1, img2, img3));
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> {
+                    ListingLifecycleException life = (ListingLifecycleException) ex;
+                    assertThat(life.getCode()).isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE);
+                    assertThat(life.getChangedFields()).contains("imageIds");
+                });
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_imageRemoved_throws422WithFieldDiff() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID imageId1 = UUID.randomUUID();
+        UUID imageId2 = UUID.randomUUID();
+
+        // Snapshot has 2 images; listing now has only 1
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId,
+                List.of(imageId1, imageId2));
+
+        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of(img1));
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> {
+                    ListingLifecycleException life = (ListingLifecycleException) ex;
+                    assertThat(life.getCode()).isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE);
+                    assertThat(life.getChangedFields()).contains("imageIds");
+                });
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void restoreArchivedListing_imageReordered_doesNotBlock() throws Exception {
+        UUID listingId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+        UUID imageId1 = UUID.randomUUID();
+        UUID imageId2 = UUID.randomUUID();
+
+        // Snapshot has [imageId1, imageId2]; current order is [imageId2, imageId1]
+        Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId,
+                List.of(imageId1, imageId2));
+
+        ListingImage img2 = new ListingImage(); img2.setId(imageId2);
+        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
+        // Reversed order returned from repository
+        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                .thenReturn(List.of(img2, img1));
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Must not throw — reordering is not a material change
+        workflowService.restoreArchivedListing(listingId, actorId);
+
+        verify(listingRepository).save(any());
+    }
+
+    // ===== RE-141: test helpers =====
+
+    /**
+     * Builds the snapshot JSON string that matches the given listing and image IDs.
+     * Mirrors the structure of {@code ListingWorkflowService.buildSnapshotMap}.
+     */
+    private String buildSnapshotJson(Listing listing, List<UUID> imageIds) throws Exception {
+        Map<String, Object> snap = new LinkedHashMap<>();
+        snap.put("title", listing.getTitle());
+        snap.put("description", listing.getDescription());
+        snap.put("pricePaise", listing.getPricePaise());
+        snap.put("sellerType", listing.getSellerType());
+        snap.put("locality", listing.getLocality());
+        snap.put("latitude", listing.getLatitude());
+        snap.put("longitude", listing.getLongitude());
+        snap.put("areaKey", listing.getAreaKey());
+        snap.put("areaLabel", listing.getAreaLabel());
+        snap.put("areaSqft", listing.getAreaSqft());
+        snap.put("bedrooms", listing.getBedrooms());
+        snap.put("bathrooms", listing.getBathrooms());
+        snap.put("landArea", listing.getLandArea());
+        snap.put("propertyType", listing.getPropertyType());
+        snap.put("videoUrl", listing.getVideoUrl());
+        snap.put("imageIds", imageIds.stream().map(UUID::toString).collect(Collectors.toList()));
+        return objectMapper.copy()
+                .setSerializationInclusion(com.fasterxml.jackson.annotation.JsonInclude.Include.ALWAYS)
+                .writeValueAsString(snap);
+    }
+
+    /**
+     * Creates a fully-populated ARCHIVED listing whose lastApprovedSnapshot matches its
+     * current field state for the given image IDs. Use this as the baseline for
+     * RE-141 snapshot eligibility tests.
+     */
+    private Listing archivedListingWithMatchingSnapshot(UUID listingId, UUID actorId,
+            List<UUID> imageIds) throws Exception {
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setStatus(ListingStatus.ARCHIVED.toDbValue());
+        listing.setCreatedBy(actorId);
+        listing.setTitle("Test Property");
+        listing.setDescription("A test property");
+        listing.setPricePaise(50_000_00L);
+        listing.setSellerType("broker");
+        listing.setLocality("Udupi Beach");
+        listing.setLatitude(13.34);
+        listing.setLongitude(74.74);
+        listing.setAreaKey("udupi-beach");
+        listing.setAreaLabel("Udupi Beach");
+        listing.setAreaSqft(BigDecimal.valueOf(1200));
+        listing.setBedrooms(3);
+        listing.setBathrooms(2);
+        listing.setLandArea(BigDecimal.valueOf(500));
+        listing.setPropertyType("house");
+        listing.setVideoUrl("https://example.com/v.mp4");
+        listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(30));
+        listing.setLastApprovedSnapshot(buildSnapshotJson(listing, imageIds));
+        return listing;
     }
 }
