@@ -1,7 +1,6 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.core.Listing;
-import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.crud.ListingCrudService;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
@@ -55,16 +54,13 @@ public class ListingController {
 
     private final ListingCrudService listingCrudService;
     private final ListingWorkflowService listingWorkflowService;
-    private final ListingRepository listingRepository;
     private final ListingResponseMapper listingResponseMapper;
 
     public ListingController(ListingCrudService listingCrudService,
                              ListingWorkflowService listingWorkflowService,
-                             ListingRepository listingRepository,
                              ListingResponseMapper listingResponseMapper) {
         this.listingCrudService = listingCrudService;
         this.listingWorkflowService = listingWorkflowService;
-        this.listingRepository = listingRepository;
         this.listingResponseMapper = listingResponseMapper;
     }
 
@@ -98,15 +94,15 @@ public class ListingController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(CallerInfo caller, @PathVariable UUID id) {
-
-        Listing listing = listingRepository.findById(id).orElse(null);
-        if (listing == null) return notFound();
-        UUID createdBy = listing.getCreatedBy();
-        if (!caller.isAdmin() && (createdBy == null || !createdBy.equals(caller.userId()))) {
+        try {
+            Listing listing = listingWorkflowService.findListingForCaller(id, caller.userId(), caller.isAdmin());
+            return ResponseEntity.ok(listingResponseMapper.toResponse(listing));
+        } catch (ListingNotFoundException e) {
+            return notFound();
+        } catch (ListingOwnershipException e) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "Listing belongs to a different broker"));
         }
-        return ResponseEntity.ok(listingResponseMapper.toResponse(listing));
     }
 
     @GetMapping("/mine/stats")
@@ -215,9 +211,7 @@ public class ListingController {
     public ResponseEntity<?> archive(CallerInfo caller, @PathVariable UUID id) {
 
         try {
-            listingWorkflowService.archiveListing(id, caller.userId(), null);
-            Listing archived = listingRepository.findById(id)
-                    .orElseThrow(() -> new ListingNotFoundException(id));
+            Listing archived = listingWorkflowService.archiveListing(id, caller.userId(), null);
             log.info("POST /api/listings/{}/archive -> 200 status=ARCHIVED", id);
             return ResponseEntity.ok(listingResponseMapper.toResponse(archived));
         } catch (ListingNotFoundException e) {
@@ -234,9 +228,7 @@ public class ListingController {
     public ResponseEntity<?> reopen(CallerInfo caller, @PathVariable UUID id) {
 
         try {
-            listingWorkflowService.reopenRejectedListing(id, caller.userId());
-            Listing reopened = listingRepository.findById(id)
-                    .orElseThrow(() -> new ListingNotFoundException(id));
+            Listing reopened = listingWorkflowService.reopenRejectedListing(id, caller.userId());
             log.info("POST /api/listings/{}/reopen -> 200 status=DRAFT", id);
             return ResponseEntity.ok(listingResponseMapper.toResponse(reopened));
         } catch (ListingNotFoundException e) {
@@ -253,9 +245,7 @@ public class ListingController {
     public ResponseEntity<?> reopenAsDraft(CallerInfo caller, @PathVariable UUID id) {
 
         try {
-            listingWorkflowService.reopenArchivedListingAsDraft(id, caller.userId());
-            Listing reopened = listingRepository.findById(id)
-                    .orElseThrow(() -> new ListingNotFoundException(id));
+            Listing reopened = listingWorkflowService.reopenArchivedListingAsDraft(id, caller.userId());
             log.info("POST /api/listings/{}/reopen-as-draft -> 200 status=DRAFT", id);
             return ResponseEntity.ok(listingResponseMapper.toResponse(reopened));
         } catch (ListingNotFoundException e) {
