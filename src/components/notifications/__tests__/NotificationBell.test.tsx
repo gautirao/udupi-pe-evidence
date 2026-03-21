@@ -231,7 +231,7 @@ describe('NotificationBell', () => {
     await user.click(screen.getByRole('button'));
     await user.click(screen.getByText('Nav test'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('/listings/abc-123');
+    expect(mockNavigate).toHaveBeenCalledWith('/listing/abc-123');
   });
 
   it('does not navigate when metadata has no listing_id', async () => {

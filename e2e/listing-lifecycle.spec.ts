@@ -12,6 +12,7 @@
  *   L2 — listing detail page loads without error
  *   L3 — "Request Viewing" button visible when listing is LIVE
  *   L4 — duplicate booking is rejected with 409
+ *   L5 — notification bell click navigates to /listing/:id (regression: RE-168 URL fix)
  */
 
 import { test, expect } from '@playwright/test';
@@ -316,4 +317,69 @@ test('L4 — duplicate booking request is rejected with 409', async ({ page }) =
     secondResult.status,
     `L4: Expected 409 (duplicate active booking) from second request, got ${secondResult.status}`,
   ).toBe(409);
+});
+
+// ---------------------------------------------------------------------------
+// L5 — Notification bell click navigates to /listing/:id (RE-168 regression guard)
+//
+// Preconditions:
+//   - Listing fixture must be LIVE (admin approved it in global-setup).
+//   - Admin approval fires NotificationEventListener.onListingApproved (@Async,
+//     AFTER_COMMIT), which inserts a "listing_approved" notification for the broker.
+//   - Broker creds required to log in and see the notification bell.
+//
+// This test guards against the URL typo fixed in RE-168:
+//   /listings/${listingId}  →  /listing/${listingId}
+// ---------------------------------------------------------------------------
+test('L5 — notification bell click navigates to /listing/:id', async ({ page }) => {
+  const fixture = readListingFixture();
+  test.skip(
+    fixture === null,
+    'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
+  );
+  test.skip(
+    !fixture!.isLive,
+    'Listing is not LIVE — listing_approved notification requires admin approval; skipping L5',
+  );
+  test.skip(
+    !hasBrokerCreds,
+    'BROKER_EMAIL / BROKER_PASSWORD not set — cannot log in to see notification bell; skipping L5',
+  );
+
+  const { id: listingId } = fixture!;
+
+  await loginAsBroker(page);
+
+  // Navigate to broker dashboard so the AppLayout (and NotificationBell) renders.
+  await page.goto('/broker/dashboard');
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+  // Open the notification bell popover.
+  // lucide-react 0.462 renders SVG with class "lucide-bell" (no data-lucide attr).
+  const bellButton = page.locator('button').filter({ has: page.locator('svg.lucide-bell') });
+  await expect(bellButton).toBeVisible({ timeout: 8_000 });
+  await bellButton.click();
+
+  // The "listing_approved" notification for this listing must appear in the popover.
+  // The async event listener (@Async + AFTER_COMMIT) may still be landing — poll
+  // by waiting for the notification item to become visible within 15 s.
+  const notificationItem = page.locator(
+    `button:has-text("Listing approved")`,
+  ).first();
+
+  await expect(notificationItem).toBeVisible({ timeout: 15_000 });
+
+  // Click the notification — this calls handleClick → navigate(`/listing/${listingId}`)
+  await notificationItem.click();
+
+  // Assert we landed on the correct listing detail route.
+  // Prior to RE-168 fix this navigated to /listings/:id (404). Now it must be /listing/:id.
+  await expect(page).toHaveURL(new RegExp(`/listing/${listingId}`), { timeout: 10_000 });
+
+  // Confirm the listing title is rendered (not an error page).
+  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+  await expect(
+    page.locator('text=[E2E Test Listing]').first(),
+  ).toBeVisible({ timeout: 10_000 });
 });
