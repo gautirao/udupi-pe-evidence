@@ -86,7 +86,7 @@ public class ListingWorkflowService {
         ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
         policy.validate(previousStatus, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
 
-        List<Map<String, String>> errors = validateForSubmission(listing);
+        List<Map<String, String>> errors = validateForSubmission(listing, true);
         if (!errors.isEmpty()) {
             throw new ListingValidationException(errors);
         }
@@ -819,8 +819,9 @@ public class ListingWorkflowService {
                     "Listing must be claimed before direct approval");
         }
 
-        // Completeness guard: reuse the same validation as submitListing
-        List<Map<String, String>> errors = validateForSubmission(listing);
+        // Completeness guard: reuse the same validation as submitListing, but skip the
+        // image-minimum check — scraped listings may have fewer than MIN_IMAGES images.
+        List<Map<String, String>> errors = validateForSubmission(listing, false);
         if (!errors.isEmpty()) {
             throw new ListingLifecycleException(
                     ListingErrorCode.LISTING_INCOMPLETE,
@@ -855,7 +856,15 @@ public class ListingWorkflowService {
         return saved;
     }
 
-    private List<Map<String, String>> validateForSubmission(Listing listing) {
+    /**
+     * Validates that a listing is complete enough to be made LIVE or sent for review.
+     *
+     * @param enforceImageMinimum when {@code true} the listing must have at least
+     *                            {@value #MIN_IMAGES} images (broker submit path);
+     *                            when {@code false} the image count is not checked
+     *                            (scraped-listing approval path — images may be sparse).
+     */
+    private List<Map<String, String>> validateForSubmission(Listing listing, boolean enforceImageMinimum) {
         List<Map<String, String>> errors = new ArrayList<>();
 
         String purpose = listing.getListingPurpose();
@@ -893,11 +902,13 @@ public class ListingWorkflowService {
                     "message", "Address must be confirmed before submission"));
         }
 
-        // Always-required: >= 3 images
-        long imageCount = listingRepository.countImagesByListingId(listing.getId());
-        if (imageCount < MIN_IMAGES) {
-            errors.add(Map.of("field", "images",
-                    "message", "At least " + MIN_IMAGES + " images required (found " + imageCount + ")"));
+        // Broker submissions require >= MIN_IMAGES images; scraped-listing approval bypasses this.
+        if (enforceImageMinimum) {
+            long imageCount = listingRepository.countImagesByListingId(listing.getId());
+            if (imageCount < MIN_IMAGES) {
+                errors.add(Map.of("field", "images",
+                        "message", "At least " + MIN_IMAGES + " images required (found " + imageCount + ")"));
+            }
         }
 
         // Property-type-specific validation (only if type is valid)
