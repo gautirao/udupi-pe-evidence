@@ -9,6 +9,7 @@ import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.event.NewListingInAreaEvent;
 import com.example.realestate.listing.exception.ListingErrorCode;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
@@ -1950,5 +1951,68 @@ class ListingWorkflowServiceTest {
 
         // No events must be published — this is an exceptional admin override
         verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    // ===== RE-185: approveScrapedListing — event publishing and duplicate detection =====
+
+    @Test
+    void approveScrapedListing_publishesBothEvents() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId   = UUID.randomUUID();
+        UUID ownerId   = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setAreaKey("udupi-city");
+        listing.setAreaLabel("Udupi City");
+        listing.setPricePaise(100_000_00L);
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        workflowService.approveScrapedListing(listingId, adminId);
+
+        // Proximity duplicate detection must have been attempted on the saved (LIVE) listing
+        verify(proximityDuplicateService).detectAndRecord(
+                argThat(l -> ListingStatus.LIVE.toDbValue().equals(l.getStatus())));
+
+        // ListingApprovedEvent must be published for the owner
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(applicationEventPublisher, org.mockito.Mockito.times(2)).publishEvent(eventCaptor.capture());
+
+        java.util.List<Object> events = eventCaptor.getAllValues();
+        assertThat(events).anyMatch(e -> e instanceof ListingApprovedEvent lae
+                && lae.ownerId().equals(ownerId));
+        assertThat(events).anyMatch(e -> e instanceof NewListingInAreaEvent nae
+                && "udupi-city".equals(nae.areaKey()));
+    }
+
+    @Test
+    void approveScrapedListing_detectionFailure_doesNotRollback() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId   = UUID.randomUUID();
+        UUID ownerId   = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setAreaKey("udupi-city");
+        listing.setAreaLabel("Udupi City");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Simulate detection throwing — must not propagate
+        doThrow(new RuntimeException("Detection DB error"))
+                .when(proximityDuplicateService).detectAndRecord(any(Listing.class));
+
+        // approveScrapedListing must still succeed
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+
+        // Listing must have been persisted
+        verify(listingRepository).save(any(Listing.class));
+
+        // Events must still have been published despite the detection failure
+        verify(applicationEventPublisher, org.mockito.Mockito.atLeastOnce())
+                .publishEvent(any(ListingApprovedEvent.class));
     }
 }
