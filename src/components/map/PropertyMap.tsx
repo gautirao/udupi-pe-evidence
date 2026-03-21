@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
@@ -61,7 +62,7 @@ const createMarkerIcon = (propertyType: PropertyType) => {
           color: white;
           font-size: 12px;
           font-weight: bold;
-        ">${propertyType[0].toUpperCase()}</div>
+        ">${escapeHtml(propertyType[0].toUpperCase())}</div>
       </div>
     `,
     iconSize: [32, 32],
