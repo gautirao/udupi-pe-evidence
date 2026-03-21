@@ -13,6 +13,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -211,6 +212,77 @@ class ListingResponseMapperTest {
         ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.backOnMarket()).isFalse();
+    }
+
+    // ==================== toResponseList batch: two listings get correct image data ====================
+
+    @Test
+    void toResponseList_twoListings_correctImageCountAndFirstUrl() {
+        Listing l1 = buildListing("LIVE");
+        Listing l2 = buildListing("DRAFT");
+
+        ListingImage img1a = new ListingImage();
+        img1a.setListingId(l1.getId());
+        img1a.setUrl("https://example.com/l1-first.jpg");
+        img1a.setPosition(0);
+
+        ListingImage img1b = new ListingImage();
+        img1b.setListingId(l1.getId());
+        img1b.setUrl("https://example.com/l1-second.jpg");
+        img1b.setPosition(1);
+
+        ListingImage img2a = new ListingImage();
+        img2a.setListingId(l2.getId());
+        img2a.setUrl("https://example.com/l2-only.jpg");
+        img2a.setPosition(0);
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyCollection()))
+                .thenReturn(List.of(img1a, img1b, img2a));
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(l1, l2));
+
+        assertThat(responses).hasSize(2);
+
+        ListingResponse r1 = responses.stream().filter(r -> r.id().equals(l1.getId())).findFirst().orElseThrow();
+        assertThat(r1.imageCount()).isEqualTo(2);
+        assertThat(r1.firstImageUrl()).isEqualTo("https://example.com/l1-first.jpg");
+
+        ListingResponse r2 = responses.stream().filter(r -> r.id().equals(l2.getId())).findFirst().orElseThrow();
+        assertThat(r2.imageCount()).isEqualTo(1);
+        assertThat(r2.firstImageUrl()).isEqualTo("https://example.com/l2-only.jpg");
+    }
+
+    // ==================== toResponseList batch: listing with no images ====================
+
+    @Test
+    void toResponseList_listingWithNoImages_imageCountZeroAndFirstUrlNull() {
+        Listing l = buildListing("DRAFT");
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyCollection()))
+                .thenReturn(List.of());
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(l));
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).imageCount()).isZero();
+        assertThat(responses.get(0).firstImageUrl()).isNull();
+    }
+
+    // ==================== single-listing path still uses findByListingIdOrderByPositionAsc ====================
+
+    @Test
+    void toResponse_singleListing_stillUsesPerListingQuery() {
+        Listing l = buildListing("DRAFT");
+
+        ListingImage img = new ListingImage();
+        img.setUrl("https://example.com/single.jpg");
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId()))
+                .thenReturn(List.of(img));
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.imageCount()).isEqualTo(1);
+        assertThat(response.firstImageUrl()).isEqualTo("https://example.com/single.jpg");
     }
 
     // ==================== Helper ====================
