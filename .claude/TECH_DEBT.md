@@ -32,7 +32,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | B-18 | Audit | **`MIN_IMAGES = 3` not configurable** in `ListingWorkflowService`. Move to `@Value("${listing.submission.min-images}")`. | Low | 2026-03-20 |
 | B-19 | Audit | **Ownership-check pattern duplicated** across `ListingPoiController` (5x), `ListingImageController`, `ListingController.getById`. Extract to shared guard or reuse `ListingOwnershipGuard`. | Low | 2026-03-20 |
 | B-20 | Audit | **`reraNumber` accepted without validation** — `TODO(RE-99)` still open. `RERA_PATTERN` exists in `ListingResponse` but not enforced on write. Add `@Pattern` to `UpdateRequest.reraNumber`. | Medium | 2026-03-20 |
-| B-21 | Audit | **N+1 in `ListingResponseMapper.build`** — `listingImageRepository.findByListingIdOrderByPositionAsc()` called per listing. 20 listings = 21 queries. Batch-load or add computed projections. | **High** | 2026-03-20 |
+| ~~B-21~~ | ~~Audit~~ | ~~**N+1 in `ListingResponseMapper.build`**~~ — resolved in RE-170. | ~~**High**~~ | ~~2026-03-20~~ |
 | B-22 | Audit | **No test for `getById` NPE path** on SCRAPED listing (null `createdBy`, non-admin caller). | Medium | 2026-03-20 |
 | B-23 | Audit | **No test for `getSuggestions` Overpass side-effect path** — no test when coords are null or Overpass fails. | Medium | 2026-03-20 |
 | B-24 | Audit | **4 guard stubs in `ListingTransitionPolicy`** with `RE-???` placeholders — `guardCompleteness`, `guardFastRestore`, `guardSubmissionCount`, `guardReasonCodeRequired`. File Linear tickets. | Low | 2026-03-20 |
@@ -47,7 +47,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | F-1 | Audit | **Broken notification navigation** — `NotificationBell.tsx:50` navigates to `/listings/${id}` but route is `/listing/${id}` (no `s`). 2-line fix. | **High** | 2026-03-20 |
 | ~~F-2~~ | ~~Audit~~ | ~~**`priceReduced` filter is a visible no-op**~~ — resolved in RE-169. | ~~**High**~~ | ~~2026-03-20~~ |
 | F-3 | Audit | **Shared query key collision** — `useListingById` and `useGetListing` both use `['listing', id]` but fetch different endpoints with different return types. Can serve stale wrong-shaped data. Differentiate keys. | Medium | 2026-03-20 |
-| F-4 | Audit | **Leaflet `divIcon` injects unescaped `propertyType`** — `PropertyMap.tsx:64`. `escapeHtml` exists in `security.ts` but is never applied. Apply it. | Medium | 2026-03-20 |
+| ~~F-4~~ | ~~Audit~~ | ~~**Leaflet `divIcon` injects unescaped `propertyType`**~~ — resolved in RE-174. | ~~Medium~~ | ~~2026-03-20~~ |
 | F-5 | Audit | **`ARCHIVED` status missing from all frontend status maps** — `BrokerListings`, `BrokerDashboard` have no entry. Badge renders raw string. Add label + styling. | Medium | 2026-03-20 |
 | F-6 | Audit | **Form constants duplicated** — `PROPERTY_TYPES`, `COMMERCIAL_TYPES`, `FURNISHING_OPTIONS`, `intOrUndef`, `floatOrUndef` identical in `NewListing.tsx` and `EditListing.tsx` (~200 lines each). Extract to shared module. | Medium | 2026-03-20 |
 | F-7 | Audit | **`STATUS_LABELS` and `statusBadgeClassName` duplicated** in `BrokerListings` and `BrokerDashboard`. Extract to `listing-status.ts`. | Low | 2026-03-20 |
@@ -91,11 +91,11 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 - ~~F-2: `priceReduced` filter is a visible no-op~~ (resolved RE-169)
 
 **P1 — Fix soon (correctness / perf / security):**
-- B-21: N+1 queries in `ListingResponseMapper` (21 queries per page load)
+- ~~B-21: N+1 queries in `ListingResponseMapper` (21 queries per page load)~~ (resolved RE-170)
 - B-12: `price` / `pricePaise` dual-write inconsistency
 - B-20: `reraNumber` not validated on write
 - F-3: Query key collision between public and broker listing fetches
-- F-4: Leaflet HTML injection (escapeHtml exists but unused)
+- ~~F-4: Leaflet HTML injection (escapeHtml exists but unused)~~ (resolved RE-174)
 - F-5: ARCHIVED status missing from frontend maps
 
 **P2 — Clean up (code quality / duplication):**
@@ -116,3 +116,5 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | B-14 | Fixed in PR #498 — null-guard createdBy in getById, POI, and image controllers (RE-166) | 2026-03-20 |
 | B-15 | Fixed in PR #495 — ListingStatusException mapped to 409/422 in GlobalExceptionHandler (RE-167) | 2026-03-20 |
 | F-2 | Fixed in RE-169 — removed "Price Reduced" button from MapFilters; added @deprecated on priceReduced field | 2026-03-21 |
+| F-4 | Fixed in RE-174 — applied escapeHtml() to propertyType[0].toUpperCase() in PropertyMap divIcon template | 2026-03-21 |
+| B-21 | Fixed in RE-170 — batch-load images via findByListingIdInOrderByListingIdAscPositionAsc in ListingResponseMapper | 2026-03-21 |
