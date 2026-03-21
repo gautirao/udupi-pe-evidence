@@ -147,7 +147,15 @@ For each GitHub issue (PR N):
    - If conflict detected: play `afplay /System/Library/Sounds/Ping.aiff`, surface the conflict to the user with affected issue IDs and specs, and pause.
    - If no conflict: proceed silently to step 10.
 
-10. **Emit checkpoint**, then auto-advance to next issue
+10. **Emit checkpoint + persist to file**
+   - Output the checkpoint to the conversation (slim format for subsequent PRs is fine)
+   - Write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — always use the preamble format (with Sprint issues, Execution order, Dependencies, and ALL enriched specs for remaining issues). This file is the authoritative resume source after compaction.
+   - The file version must be self-contained: a fresh conversation reading only this file must have enough context to resume without any prior conversation history.
+
+**10a. Compact before next PR**
+   - After writing the checkpoint file, compact the conversation by invoking `/compact`.
+   - After compaction, read `.claude/SPRINT_CHECKPOINT.md` to restore full sprint context before starting the next PR.
+   - If `/compact` is unavailable or fails, proceed anyway — the checkpoint file still serves as the fallback on automatic context compression.
 
 ---
 
@@ -210,7 +218,7 @@ Next routing guess:
 Note: Subsequent checkpoints omit `Sprint issues`, `Execution order`, `Dependencies` (already in preamble). On resume, use the preamble checkpoint for full sprint context.
 
 User instruction:
-"To resume, paste the checkpoint and say: Resume sprint execution."
+"To resume, say: Resume sprint execution. The checkpoint file at .claude/SPRINT_CHECKPOINT.md will be read automatically."
 
 ---
 
@@ -234,17 +242,23 @@ When a new issue is added to the sprint after kickoff (user says "add RE-XX to s
 
 ## Resume Protocol
 
-When user pastes checkpoint + says resume:
+Resume is triggered by any of:
+- User says "resume sprint execution" (with or without pasting a checkpoint)
+- Automatic context compression mid-session
+- Starting a new conversation after a previous session ended mid-sprint
 
-- Treat checkpoint as authoritative state (it overrides conversational memory).
-- Do NOT infer prior context outside checkpoint.
-- Do NOT re-triage completed PRs.
-- Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from GitHub Project unless the checkpoint is stale.
-- Use `Enriched specs:` from the checkpoint preamble as the authoritative AC for remaining issues — do NOT re-derive them.
-- Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
-- Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.
-- Immediately start on "Next PR".
-- Re-run ROUTE_AND_RUN only for that PR.
+On resume:
+
+1. **Read `.claude/SPRINT_CHECKPOINT.md`** — this is the authoritative sprint state. If the user also pastes a checkpoint in conversation, prefer the file version (it uses full preamble format with enriched specs).
+2. Treat checkpoint as authoritative state (it overrides conversational memory).
+3. Do NOT infer prior context outside checkpoint.
+4. Do NOT re-triage completed PRs.
+5. Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from GitHub Project unless the checkpoint is stale.
+6. Use `Enriched specs:` from the checkpoint as the authoritative AC for remaining issues — do NOT re-derive them.
+7. Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
+8. Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.
+9. Immediately start on "Next PR".
+10. Re-run ROUTE_AND_RUN only for that PR.
 
 ---
 
