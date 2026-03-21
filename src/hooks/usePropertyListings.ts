@@ -82,7 +82,11 @@ export interface PropertyFilters {
   bedrooms?: number[];
   /** Filter by seller type: 'owner', 'broker', 'builder' */
   sellerTypes?: string[];
-  /** Client-side: show only listings with a price reduction in their price history */
+  /**
+   * @deprecated No-op. The list endpoint does not include price history data, so this filter
+   * cannot be evaluated client-side. Do not expose in the UI until price history is added to
+   * the list response. The no-op branch in usePropertyListings is intentional.
+   */
   priceReduced?: boolean;
   /** Client-side: show only listings where backOnMarket === true */
   backOnMarket?: boolean;
@@ -172,8 +176,6 @@ export function usePropertyListings(filters?: PropertyFilters) {
       if (filters?.newToMarket) {
         results = results.filter((l) => typeof l.daysOnMarket === 'number' && l.daysOnMarket > 0 && l.daysOnMarket <= 7);
       }
-      // priceReduced: filter where price history data indicates a reduction
-      // (requires daysOnMarket > 0 as a proxy until price history is on the list endpoint)
       if (filters?.priceReduced) {
         // No price history data on the list response; skip silently (filter is a no-op here)
         // The ListingDetail page shows actual price history per-listing.

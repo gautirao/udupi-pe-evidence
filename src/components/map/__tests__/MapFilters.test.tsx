@@ -94,6 +94,21 @@ describe('MapFilters — BHK buttons (PR-11/12 regression)', () => {
   });
 });
 
+describe('MapFilters — Listing Status buttons (RE-169)', () => {
+  it('renders the 4 working status filter buttons', () => {
+    renderFilters();
+    expect(screen.getByRole('button', { name: 'New to Market' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Back on Market' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'RERA Registered' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ready to Move' })).toBeInTheDocument();
+  });
+
+  it('does NOT render a "Price Reduced" button', () => {
+    renderFilters();
+    expect(screen.queryByRole('button', { name: 'Price Reduced' })).not.toBeInTheDocument();
+  });
+});
+
 describe('MapFilters — clear button visibility', () => {
   it('does not show Clear button when no active filters', () => {
     renderFilters();

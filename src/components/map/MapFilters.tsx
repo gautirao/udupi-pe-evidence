@@ -83,7 +83,7 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     onFiltersChange({ ...filters, sellerTypes: next.length > 0 ? next : undefined });
   };
 
-  const handleListingStatusToggle = (key: 'priceReduced' | 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove') => {
+  const handleListingStatusToggle = (key: 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove') => {
     onFiltersChange({ ...filters, [key]: filters[key] ? undefined : true });
   };
 
@@ -97,7 +97,6 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     filters.priceMax !== undefined ||
     filters.dateFrom !== undefined ||
     filters.dateTo !== undefined ||
-    !!filters.priceReduced ||
     !!filters.backOnMarket ||
     !!filters.newToMarket ||
     !!filters.reraRegistered ||
@@ -300,7 +299,6 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
           <div className="flex gap-2 flex-wrap">
             {([
               { key: 'newToMarket' as const, label: 'New to Market' },
-              { key: 'priceReduced' as const, label: 'Price Reduced' },
               { key: 'backOnMarket' as const, label: 'Back on Market' },
               { key: 'reraRegistered' as const, label: 'RERA Registered' },
               { key: 'readyToMove' as const, label: 'Ready to Move' },
