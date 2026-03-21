@@ -36,6 +36,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | B-22 | Audit | **No test for `getById` NPE path** on SCRAPED listing (null `createdBy`, non-admin caller). | Medium | 2026-03-20 |
 | B-23 | Audit | **No test for `getSuggestions` Overpass side-effect path** — no test when coords are null or Overpass fails. | Medium | 2026-03-20 |
 | B-24 | Audit | **4 guard stubs in `ListingTransitionPolicy`** with `RE-???` placeholders — `guardCompleteness`, `guardFastRestore`, `guardSubmissionCount`, `guardReasonCodeRequired`. File Linear tickets. | Low | 2026-03-20 |
+| B-28 | RE-142 | **`trustTier` typed as String (primitive obsession)** — four-value domain (A/B/C/D) should use a `TrustTier` enum. Fix before RE-148 writes to the field; eliminates magic-string comparisons in TrustTierCalculator. | Low | 2026-03-21 |
 | B-25 | RE-164 | **`ListingImageRegistrar` returns `ResponseEntity` directly** — leaky abstraction: service bean owns HTTP response construction. Should throw typed domain exceptions; controller/GlobalExceptionHandler maps to ResponseEntity. | Low | 2026-03-20 |
 | B-26 | RE-164 | **`ListingImageRegistrar` calls `ListingImageController.toResponse()`** — inverted dependency (service → controller). Move `toResponse` / `ImageResponse` to a mapper class or to the registrar itself. | Low | 2026-03-20 |
 | B-27 | RE-164 | **`MAX_IMAGES` and `RETRY_AFTER_SECONDS` constants duplicated** between `ListingImageController` and `ListingImageRegistrar`. Extract to a shared `ListingImageConstants` class. | Low | 2026-03-20 |

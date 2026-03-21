@@ -220,6 +220,24 @@ public class Listing {
     @Column(name = "lock_in_months")
     private Integer lockInMonths;
 
+    // --- Trust tier and ranking (RE-142 / Phase 3.1) ---
+
+    /**
+     * Computed trust tier for this listing (A/B/C/D).
+     * Default 'D' — lowest tier — until TrustTierCalculator (RE-148) upgrades it.
+     * Read-only from broker/client perspective; written only by the trust pipeline.
+     */
+    @Column(name = "trust_tier", nullable = false, length = 1)
+    private String trustTier = "D";
+
+    /**
+     * Integer ranking score used for search result ordering.
+     * Default 0. Computation deferred to RE-148 / TrustTierCalculator.
+     * Read-only from broker/client perspective; written only by the trust pipeline.
+     */
+    @Column(name = "ranking_score", nullable = false)
+    private int rankingScore = 0;
+
     // --- Soft delete ---
 
     /**
@@ -986,6 +1004,24 @@ public class Listing {
 
     public void setArchivedAt(Instant archivedAt) {
         this.archivedAt = archivedAt;
+    }
+
+    // --- Trust tier and ranking getters/setters (RE-142) ---
+
+    public String getTrustTier() {
+        return trustTier;
+    }
+
+    public void setTrustTier(String trustTier) {
+        this.trustTier = trustTier;
+    }
+
+    public int getRankingScore() {
+        return rankingScore;
+    }
+
+    public void setRankingScore(int rankingScore) {
+        this.rankingScore = rankingScore;
     }
 
     // --- Seller type getter/setter ---
