@@ -11,6 +11,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
+import com.example.realestate.listing.pricing.PriceParser;
 import com.example.realestate.listing.workflow.ActorType;
 import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -1002,10 +1003,16 @@ public class Listing {
         OffsetDateTime now = OffsetDateTime.now();
         if (createdAt == null) createdAt = now;
         if (updatedAt == null) updatedAt = now;
+        if (price != null && pricePaise == null) {
+            this.pricePaise = PriceParser.rupeesToPaise(price);
+        }
     }
 
     @PreUpdate
     void preUpdate() {
         updatedAt = OffsetDateTime.now();
+        if (price != null) {
+            this.pricePaise = PriceParser.rupeesToPaise(price);
+        }
     }
 }

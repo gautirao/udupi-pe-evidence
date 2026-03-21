@@ -84,6 +84,17 @@ class ListingCrudServiceTest {
     }
 
     @Test
+    void createDraft_populatesPricePaise() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(userId, "house", "Test House", "Udupi",
+                new BigDecimal("5000000"), "A nice house");
+
+        assertThat(draft.getPricePaise()).isEqualTo(500_000_000L); // 5,000,000 * 100
+    }
+
+    @Test
     void createDraft_duplicateInputs_secondDraftFlaggedAsDuplicate() {
         UUID userId = UUID.randomUUID();
 
@@ -739,5 +750,31 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, false, null);
 
         verify(priceChangeLogRepository, never()).save(any());
+    }
+
+    // ===== RE-171: updateListing keeps pricePaise consistent with price =====
+
+    @Test
+    void updateListing_priceUpdated_pricePaiseReflectsNewPrice() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPrice(new BigDecimal("5000000"));
+        existing.setPricePaise(500_000_000L);
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, new BigDecimal("6000000"), null,
+                null, null, null, null,
+                null, null, null, null, null, false, null);
+
+        assertThat(result.getPricePaise()).isEqualTo(600_000_000L); // 6,000,000 * 100
     }
 }

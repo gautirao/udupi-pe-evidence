@@ -141,6 +141,7 @@ public class ListingCrudService {
         listing.setTitle(title);
         listing.setLocality(locality);
         listing.setPrice(price);
+        listing.setPricePaise(PriceParser.rupeesToPaise(price));
         listing.setDescription(description);
         if (landArea != null) listing.setLandArea(landArea);
         if (bedrooms != null) listing.setBedrooms(bedrooms);
@@ -393,8 +394,8 @@ public class ListingCrudService {
 
         // Insert a price-change record when the price actually changed for non-DRAFT listings.
         // DRAFT price edits are internal and do not belong in the market transparency log.
-        // Convert the new price (rupees BigDecimal) to paise for storage; setPrice() does not
-        // auto-populate pricePaise, so we compute it explicitly here.
+        // newPricePaise is computed from the caller-supplied price (same conversion already applied
+        // by setPricePaise above) so the log entry is consistent with the stored pricePaise value.
         if (price != null
                 && !ListingStatus.DRAFT.toDbValue().equals(listing.getStatus())) {
             Long newPricePaise = PriceParser.rupeesToPaise(price);

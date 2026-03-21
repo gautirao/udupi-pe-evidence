@@ -11,6 +11,7 @@ import com.example.realestate.listing.area.AreaNormalizer;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.pricing.PriceParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -91,6 +92,7 @@ public class ListingIngestionService {
         listing.setRawPostId(post.getId());
         listing.setPropertyType(mapPropertyType(result.propertyType()));
         listing.setPrice(result.price());
+        listing.setPricePaise(PriceParser.rupeesToPaise(result.price()));
         listing.setLocality(result.locality());
         listing.setBedrooms(result.bedrooms());
         listing.setLandArea(result.landArea());

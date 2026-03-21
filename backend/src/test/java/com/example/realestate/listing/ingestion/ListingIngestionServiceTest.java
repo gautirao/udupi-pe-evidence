@@ -807,12 +807,12 @@ class ListingIngestionServiceTest {
         assertThat(listing.getAreaCent()).isNull();
     }
 
-    // --- KNOWN ISSUE: pricePaise not populated from AI result ---
+    // --- RE-171: pricePaise populated from AI result (fix for previously-known bug) ---
 
     @Test
-    void createFrom_priceInRupees_pricePaiseNotPopulated_KNOWN_ISSUE() {
+    void createFrom_priceInRupees_pricePaisePopulated() {
         RawPost post = makePost();
-        // AI returns price = 5000000 (rupees), which should become pricePaise = 500000000000L
+        // AI returns price = 5000000 (rupees) → pricePaise = 500000000 (paise)
         ClassificationResult result = new ClassificationResult(
                 true, PropertyType.LAND, new BigDecimal("5000000"),
                 "Udupi", null, new BigDecimal("10"), "cent",
@@ -824,15 +824,13 @@ class ListingIngestionServiceTest {
 
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
 
-        // KNOWN ISSUE: pricePaise is NOT being set from the AI result
-        // This test documents the current (buggy) behavior
         assertThat(listing.getPrice()).isEqualByComparingTo(new BigDecimal("5000000"));
-        assertThat(listing.getPricePaise()).isNull(); // BUG: Should be 500000000000L
+        assertThat(listing.getPricePaise()).isEqualTo(500_000_000L); // 5,000,000 * 100
 
-        // Because pricePaise is null, pricePerCentPaise is also null
+        // With pricePaise now populated, pricePerCentPaise is also computed
         assertThat(listing.getAreaCent()).isNotNull();
         assertThat(listing.getAreaCent()).isEqualByComparingTo(new BigDecimal("10"));
-        assertThat(listing.getPricePerCentPaise()).isNull(); // Cannot compute without pricePaise
+        assertThat(listing.getPricePerCentPaise()).isNotNull(); // 500000000 / 10 = 50000000
     }
 
     // --- Lifecycle signals: repost counting ---
@@ -999,5 +997,44 @@ class ListingIngestionServiceTest {
         assertThat(listing).isNotNull();
         assertThat(listing.getRepostCount()).isEqualTo(99);
         assertThat(listing.isDuplicate()).isTrue();
+    }
+
+    // --- RE-171: pricePaise populated on ingestion path ---
+
+    @Test
+    void createFrom_withPrice_populatesPricePaise() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, new BigDecimal("5000000"),
+                "Udupi", 3, null, null,
+                null, null, null, null, "3BHK house", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
+        when(listingRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingIngestionService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getPricePaise()).isEqualTo(500_000_000L); // 5,000,000 * 100
+    }
+
+    @Test
+    void createFrom_withNullPrice_leavesPricePaiseNull() {
+        RawPost post = makePost();
+        ClassificationResult result = new ClassificationResult(
+                true, PropertyType.HOUSE, null,
+                "Udupi", null, null, null,
+                null, null, null, null, "House", 80
+        );
+
+        when(listingRepository.existsByRawPostId(post.getId())).thenReturn(false);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing listing = listingIngestionService.createFrom(post, result, "test-model");
+
+        assertThat(listing).isNotNull();
+        assertThat(listing.getPricePaise()).isNull();
     }
 }
