@@ -19,9 +19,9 @@ Pre-review flags:
 - RE-144: security-reviewer required (RLS on authority_evidence — owner-scoped access)
 - RE-145: security-reviewer required (RLS on listing_complaint — non-owner INSERT constraint)
 
-Completed: (none yet)
+Completed: RE-142 ✅ PR #531
 
-Status: TEAM-LEAD PRE-FLIGHT COMPLETE — awaiting user confirmation on 2 minor scope questions
+Status: IN PROGRESS — RE-143 next
 
 ---
 

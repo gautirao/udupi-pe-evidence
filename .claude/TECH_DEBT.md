@@ -73,7 +73,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 
 | ID | Source | Description | Risk | Added |
 |----|--------|-------------|------|-------|
-| _(none yet)_ | | | | |
+| DB-1 | RE-143 | **`listing_verification_dimension.updated_at` has no auto-update trigger** — maintained by app layer only. If a backend path forgets to set it, column retains creation timestamp. Add a BEFORE UPDATE trigger (like `update_property_listings_updated_at` in V0) in a follow-up migration. | Low | 2026-03-21 |
 
 ## Infrastructure
 
