@@ -226,7 +226,7 @@ export function useCreateListing() {
  */
 export function useGetListing(id: string) {
   return useQuery({
-    queryKey: ['listing', id],
+    queryKey: ['listing-broker', id],
     queryFn: () => api.get<ListingResponse>(`/api/listings/${id}`),
     enabled: !!id,
   });
@@ -247,7 +247,7 @@ export function useUpdateListing(id: string) {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['listing', id] });
+      queryClient.invalidateQueries({ queryKey: ['listing-broker', id] });
     },
     onError: (error: Error) => {
       toast({
@@ -370,7 +370,9 @@ export function useSubmitListing(listingId: string | undefined) {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['listing', listingId] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
     },
   });
 }

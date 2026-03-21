@@ -133,7 +133,7 @@ function renderWithListing(listing: ReturnType<typeof makeListing> | null, loadi
 
   // Pre-populate TanStack Query cache to avoid network call
   if (listing !== null) {
-    queryClient.setQueryData(['listing', 'listing-123'], listing);
+    queryClient.setQueryData(['listing-public', 'listing-123'], listing);
   }
   // Pre-populate price history cache with empty array (no price changes by default)
   queryClient.setQueryData(['listing-price-history', 'listing-123'], []);
@@ -260,7 +260,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(['listing', 'listing-123'], null);
+    queryClient.setQueryData(['listing-public', 'listing-123'], null);
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
@@ -275,7 +275,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(['listing', 'listing-123'], null);
+    queryClient.setQueryData(['listing-public', 'listing-123'], null);
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>

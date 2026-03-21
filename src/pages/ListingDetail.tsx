@@ -68,7 +68,7 @@ interface PublicListingDetail extends ListingResponse {
 
 function useListingById(id: string | undefined) {
   return useQuery({
-    queryKey: ['listing', id],
+    queryKey: ['listing-public', id],
     queryFn: () =>
       api.get<PublicListingDetail>(`/api/public/listings/${id}`),
     enabled: !!id,
