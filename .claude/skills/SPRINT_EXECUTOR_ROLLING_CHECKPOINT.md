@@ -137,7 +137,16 @@ For each GitHub issue (PR N):
    gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1
    gh issue close <number>
    ```
-8. **Play chime** — `afplay /System/Library/Sounds/Hero.aiff`
+8. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
+
+   Immediately after the chime, output a single progress line using the execution order from the checkpoint preamble:
+   ```
+   RE-NNN merged. Sprint progress: RE-AAA ✅ · RE-BBB ✅ · RE-NNN ✅ · RE-CCC (next) · RE-DDD
+   ```
+   - Completed issues: `RE-NNN ✅`
+   - Next issue: `RE-CCC (next)`
+   - Remaining issues after next: just the ID, no annotation
+   - All issues in execution order on one line, separated by ` · `
 
 **9. Inter-PR Plan Check (NEW — after PR N completes, before PR N+1 starts)**
    - If this is not the last PR: read the checkpoint's `Touched files` and `Key decisions` from the PR that just completed.
