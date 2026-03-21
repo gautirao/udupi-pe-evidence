@@ -25,6 +25,11 @@ public interface ListingStatusHistoryRepository extends JpaRepository<ListingSta
      * <p>
      * Used by the withdraw-from-review guard to prevent a race where the dealer
      * withdraws after the admin has already taken terminal action.
+     * <p>
+     * Index coverage: {@code idx_lsh_listing_occurred(listingId, occurredAt)} (added in V43
+     * migration) covers the leading {@code listingId = :listingId AND occurredAt > :after}
+     * predicates. The {@code fromStatus} and {@code toStatus} filters are applied post-index
+     * as a residual predicate over the small set of rows returned for that listing.
      */
     @Query("""
             SELECT CASE WHEN COUNT(h) > 0 THEN true ELSE false END

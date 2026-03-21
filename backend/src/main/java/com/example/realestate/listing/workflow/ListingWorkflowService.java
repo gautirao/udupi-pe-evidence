@@ -146,12 +146,7 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorType(ActorType.ADMIN);
         listing.setStatusChangedByActorId(adminUserId);
 
-        // Transparency timestamps: firstPublishedAt set only on the first LIVE transition;
-        // lastLiveAt is always refreshed.
-        if (listing.getFirstPublishedAt() == null) {
-            listing.setFirstPublishedAt(nowOdt);
-        }
-        listing.setLastLiveAt(nowOdt);
+        applyLiveTransitionTimestamps(listing, nowOdt);
 
         Listing saved = listingRepository.save(listing);
 
@@ -605,10 +600,7 @@ public class ListingWorkflowService {
 
         listing.setStatus(ListingStatus.LIVE.toDbValue());
         listing.setApprovedAt(now);
-        listing.setLastLiveAt(nowOdt);
-        if (listing.getFirstPublishedAt() == null) {
-            listing.setFirstPublishedAt(nowOdt);
-        }
+        applyLiveTransitionTimestamps(listing, nowOdt);
         listing.setStatusReasonNote(moderationNote);
         listing.setReviewedAt(nowOdt);
         listing.setReviewedBy(adminId);
@@ -846,12 +838,7 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorType(ActorType.ADMIN);
         listing.setStatusChangedByActorId(adminId);
         listing.setUpdatedAt(nowOdt);
-
-        // Transparency timestamps
-        if (listing.getFirstPublishedAt() == null) {
-            listing.setFirstPublishedAt(nowOdt);
-        }
-        listing.setLastLiveAt(nowOdt);
+        applyLiveTransitionTimestamps(listing, nowOdt);
 
         Listing saved = listingRepository.save(listing);
 
@@ -985,5 +972,21 @@ public class ListingWorkflowService {
         }
 
         return errors;
+    }
+
+    /**
+     * Sets transparency timestamps for a LIVE transition.
+     * {@code firstPublishedAt} is write-once: set only when null (first LIVE transition).
+     * {@code lastLiveAt} is always refreshed on every LIVE transition.
+     *
+     * <p><b>IMPORTANT:</b> Do NOT call this from {@code restoreArchivedListing}.
+     * That method only refreshes {@code lastLiveAt} (the listing was already published —
+     * {@code firstPublishedAt} is preserved as-is).
+     */
+    private void applyLiveTransitionTimestamps(Listing listing, OffsetDateTime nowOdt) {
+        if (listing.getFirstPublishedAt() == null) {
+            listing.setFirstPublishedAt(nowOdt);
+        }
+        listing.setLastLiveAt(nowOdt);
     }
 }
