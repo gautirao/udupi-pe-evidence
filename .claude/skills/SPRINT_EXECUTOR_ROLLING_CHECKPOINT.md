@@ -128,9 +128,9 @@ For each GitHub issue (PR N):
    - `git commit -m "<type>(<scope>): <description> (PR-<id>)"`
    - `git push -u origin <branch>`
    - `gh pr create --title "..." --body "..." --base main`
-   - Wait for CI: `gh pr checks <pr-number> --watch --timeout 600`
-   - If CI fails: play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint.
-   - If CI green: merge PR via `gh pr merge <number> --merge --delete-branch`
+   - **Local E2E is the primary merge gate.** If the pre-push hook ran E2E and it passed (40/0 failures, marker written), proceed to merge immediately — do NOT wait for CI.
+   - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures (billing limits, runner unavailability, network timeouts) do NOT block merge when local E2E passed.
+   - Merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
 7. **Close issue** — set GitHub Project item status to "Done" and close the issue:
    ```bash
