@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -116,5 +117,69 @@ class ListingImageRegistrarTest {
         ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    // ==================== Test 5: DB lock timeout (PessimisticLockingFailureException) → 503 ====================
+
+    /**
+     * RE-164: when Render's shared Postgres fires statement_timeout or lock_timeout
+     * before the SELECT ... FOR UPDATE lock is granted, findByIdWithLock() throws
+     * PessimisticLockingFailureException. register() must return 503 with
+     * Retry-After: 1 rather than propagate as a 500.
+     */
+    @Test
+    void register_lockTimeout_returns503WithRetryAfter() {
+        when(listingRepository.findByIdWithLock(LISTING_ID))
+                .thenThrow(new PessimisticLockingFailureException("lock timeout"));
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("1");
+        @SuppressWarnings("unchecked")
+        java.util.Map<String, Object> body = (java.util.Map<String, Object>) response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.get("error")).isEqualTo("Upload temporarily busy, please retry");
+    }
+
+    // ==================== Test 6: listing deleted between controller check and lock step ====================
+
+    /**
+     * If the listing is deleted between the ownership check in the controller and the
+     * findByIdWithLock call here, the repository returns Optional.empty().
+     * register() does NOT guard on the empty result — it proceeds to countByListingId
+     * and saveAndFlush.  In production, either the FK constraint on listing_image
+     * (listing_id → property_listings.id) fires a DataIntegrityViolationException
+     * (returned as 409) or — if no FK exists — the image row is inserted for a
+     * non-existent listing.
+     *
+     * This test verifies the current observable behaviour at the unit level:
+     * with an empty lock result and a saveAndFlush that succeeds (mock has no FK),
+     * the method returns 201.  This is the known gap documented in the registrar
+     * comment — it does not represent a regression target, but makes the behaviour
+     * explicit so a future FK addition will cause this test to need updating.
+     */
+    @Test
+    void register_listingDeletedBeforeLock_proceedsWithoutError() {
+        // findByIdWithLock returns empty (listing deleted between controller check and here)
+        when(listingRepository.findByIdWithLock(LISTING_ID)).thenReturn(Optional.empty());
+        when(imageRepository.countByListingId(LISTING_ID)).thenReturn(0L);
+
+        ListingImage saved = new ListingImage();
+        saved.setId(IMAGE_ID);
+        saved.setListingId(LISTING_ID);
+        saved.setStoragePath(validRequest().storagePath());
+        saved.setUrl(validRequest().url());
+        saved.setPosition(0);
+        saved.setCreatedAt(OffsetDateTime.now());
+
+        when(imageRepository.saveAndFlush(any(ListingImage.class))).thenReturn(saved);
+
+        ResponseEntity<?> response = registrar.register(LISTING_ID, validRequest(), CALLER_ID);
+
+        // Current behaviour: no FK at mock layer → 201 returned.
+        // A real FK on property_listings.id would instead surface a
+        // DataIntegrityViolationException → 409.
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     }
 }

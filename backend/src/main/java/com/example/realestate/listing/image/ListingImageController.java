@@ -7,6 +7,8 @@ import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +42,7 @@ public class ListingImageController {
     private static final Logger log = LoggerFactory.getLogger(ListingImageController.class);
 
     private static final int MAX_IMAGES = 10;
+    private static final String RETRY_AFTER_SECONDS = "1";
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
     private static final Set<String> MUTABLE_STATUSES = Set.of(
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
@@ -117,7 +120,20 @@ public class ListingImageController {
         // Delegate to a separate Spring bean so @Transactional proxy is honoured.
         // Self-calls within the same bean bypass the proxy and would leave the
         // count-check and save running without a transaction or pessimistic lock.
-        return imageRegistrar.register(listingId, req, caller.userId());
+        // Defensive catch: if PessimisticLockingFailureException somehow escapes
+        // the registrar (e.g. thrown during transaction commit), surface 503 here
+        // rather than letting the default exception handler return 500.
+        try {
+            return imageRegistrar.register(listingId, req, caller.userId());
+        } catch (PessimisticLockingFailureException e) {
+            log.warn("POST /api/listings/{}/images -> 503 lock timeout (controller) userId={}",
+                    listingId, caller.userId());
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Retry-After", RETRY_AFTER_SECONDS);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .headers(headers)
+                    .body(Map.of("error", "Upload temporarily busy, please retry"));
+        }
     }
 
     // ==================== DELETE — remove image metadata ====================
