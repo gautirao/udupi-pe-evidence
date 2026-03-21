@@ -1,7 +1,6 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.core.Listing;
-import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.crud.ListingCrudService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
@@ -84,9 +83,6 @@ class ListingControllerTest {
     private ListingWorkflowService listingWorkflowService;
 
     @MockitoBean
-    private ListingRepository listingRepository;
-
-    @MockitoBean
     private ListingImageRepository listingImageRepository;
 
     @MockitoBean
@@ -97,7 +93,7 @@ class ListingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingCrudService, listingWorkflowService, listingRepository, listingImageRepository,
+        reset(listingCrudService, listingWorkflowService, listingImageRepository,
                 listingResponseMapper, userRoleService);
         // Default stub: no images; individual tests override when imageCount matters.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
@@ -796,7 +792,7 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Desc");
         l.setCreatedBy(DEALER_ID);
         l.setReraNumber("PRM/KA/2023/0042");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(java.util.Optional.of(l));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(l);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -811,7 +807,7 @@ class ListingControllerTest {
                 "Manipal", new BigDecimal("5000000"), "Desc");
         l.setCreatedBy(DEALER_ID);
         l.setReraNumber("INVALID-RERA");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(java.util.Optional.of(l));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(l);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -829,7 +825,7 @@ class ListingControllerTest {
         l.setPossessionStatus("under_construction");
         l.setExpectedPossessionDate(LocalDate.of(2026, 12, 31));
         l.setApprovalsDeclared("{\"building_plan\":true,\"occupancy_certificate\":false,\"local_authority_approval\":true}");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(java.util.Optional.of(l));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(l);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1001,7 +997,7 @@ class ListingControllerTest {
 
         Listing archived = buildListing(LISTING_ID, "ARCHIVED", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(archived));
+        when(listingWorkflowService.archiveListing(LISTING_ID, DEALER_ID, null)).thenReturn(archived);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1056,7 +1052,7 @@ class ListingControllerTest {
 
         Listing reopened = buildListing(LISTING_ID, "DRAFT", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "Reopened");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(reopened));
+        when(listingWorkflowService.reopenRejectedListing(LISTING_ID, DEALER_ID)).thenReturn(reopened);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1099,7 +1095,7 @@ class ListingControllerTest {
 
         Listing reopened = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Reopened from archive");
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(reopened));
+        when(listingWorkflowService.reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID)).thenReturn(reopened);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1251,10 +1247,8 @@ class ListingControllerTest {
     @Test
     void getById_scrapedListing_dealerCaller_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        Listing scraped = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
-                "Udupi", new BigDecimal("8000000"), "Scraped listing");
-        scraped.setCreatedBy(null); // SCRAPED: no owner
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+        doThrow(new ListingOwnershipException(LISTING_ID))
+                .when(listingWorkflowService).findListingForCaller(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1269,7 +1263,7 @@ class ListingControllerTest {
         Listing scraped = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
                 "Udupi", new BigDecimal("8000000"), "Scraped listing");
         scraped.setCreatedBy(null); // SCRAPED: no owner
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, adminId, true)).thenReturn(scraped);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(adminId.toString()))))
@@ -1283,7 +1277,7 @@ class ListingControllerTest {
         Listing ownedListing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("5000000"), "Mine");
         ownedListing.setCreatedBy(DEALER_ID);
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownedListing));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(ownedListing);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1293,12 +1287,9 @@ class ListingControllerTest {
 
     @Test
     void getById_differentBroker_returns403() throws Exception {
-        UUID otherDealerId = UUID.fromString("00000000-0000-0000-0000-000000000003");
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        Listing otherListing = buildListing(LISTING_ID, "DRAFT", "house", "Other House",
-                "Manipal", new BigDecimal("4000000"), "Not mine");
-        otherListing.setCreatedBy(otherDealerId);
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(otherListing));
+        doThrow(new ListingOwnershipException(LISTING_ID))
+                .when(listingWorkflowService).findListingForCaller(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -1310,7 +1301,8 @@ class ListingControllerTest {
     void getById_notFound_returns404() throws Exception {
         UUID unknownId = UUID.fromString("00000000-0000-0000-0000-000000000099");
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(unknownId)).thenReturn(Optional.empty());
+        doThrow(new ListingNotFoundException(unknownId))
+                .when(listingWorkflowService).findListingForCaller(unknownId, DEALER_ID, false);
 
         mockMvc.perform(get("/api/listings/" + unknownId)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))

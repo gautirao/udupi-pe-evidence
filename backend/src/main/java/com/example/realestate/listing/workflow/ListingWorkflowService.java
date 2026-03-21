@@ -300,6 +300,31 @@ public class ListingWorkflowService {
     }
 
     /**
+     * Finds a listing by ID and checks caller ownership.
+     * STATUS-AGNOSTIC: works for all statuses including ARCHIVED.
+     * Null-safe on createdBy.
+     *
+     * @param listingId  the listing to find
+     * @param callerId   the caller's user ID
+     * @param isAdmin    if true, ownership check is skipped
+     * @return the listing if found and owned
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing not owned by caller (and caller is not admin)
+     */
+    @Transactional(readOnly = true)
+    public Listing findListingForCaller(UUID listingId, UUID callerId, boolean isAdmin) {
+        Listing listing = listingRepository.findById(listingId)
+                .orElseThrow(() -> new ListingNotFoundException(listingId));
+        if (!isAdmin) {
+            UUID createdBy = listing.getCreatedBy();
+            if (createdBy == null || !createdBy.equals(callerId)) {
+                throw new ListingOwnershipException(listingId);
+            }
+        }
+        return listing;
+    }
+
+    /**
      * Dealer archives own listing: LIVE/DRAFT/REJECTED -> ARCHIVED.
      * Uses the transition policy to validate the state change.
      *
@@ -310,7 +335,7 @@ public class ListingWorkflowService {
      * @throws ListingStatusException   if transition is not allowed by the policy
      */
     @Transactional
-    public void archiveListing(UUID listingId, UUID actorId, String reasonNote) {
+    public Listing archiveListing(UUID listingId, UUID actorId, String reasonNote) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, actorId, false);
         ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
 
@@ -329,7 +354,7 @@ public class ListingWorkflowService {
         }
         listing.setUpdatedAt(nowOdt);
 
-        listingRepository.save(listing);
+        Listing saved = listingRepository.save(listing);
 
         ListingStatusHistory history = new ListingStatusHistory();
         history.setListingId(listing.getId());
@@ -343,6 +368,7 @@ public class ListingWorkflowService {
         statusHistoryRepository.save(history);
 
         log.info("Archived listing listingId={} by actorId={} fromStatus={}", listingId, actorId, previousStatus);
+        return saved;
     }
 
     /**
@@ -411,7 +437,7 @@ public class ListingWorkflowService {
      * @throws ListingStatusException   if transition is not allowed by the policy (e.g. listing is not REJECTED)
      */
     @Transactional
-    public void reopenRejectedListing(UUID listingId, UUID actorId) {
+    public Listing reopenRejectedListing(UUID listingId, UUID actorId) {
         // REJECTED listings are NOT filtered by findOwned(), so this works
         Listing listing = listingOwnershipGuard.findOwned(listingId, actorId, false);
         ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
@@ -428,7 +454,7 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorId(actorId);
         listing.setUpdatedAt(nowOdt);
 
-        listingRepository.save(listing);
+        Listing saved = listingRepository.save(listing);
 
         ListingStatusHistory history = new ListingStatusHistory();
         history.setListingId(listing.getId());
@@ -440,6 +466,7 @@ public class ListingWorkflowService {
 
         log.info("Reopened rejected listing listingId={} by actorId={} fromStatus={} toStatus=DRAFT",
                 listingId, actorId, previousStatus);
+        return saved;
     }
 
     /**
@@ -458,7 +485,7 @@ public class ListingWorkflowService {
      * @throws ListingStatusException    if transition is not allowed by the policy (e.g. listing is not ARCHIVED)
      */
     @Transactional
-    public void reopenArchivedListingAsDraft(UUID listingId, UUID actorId) {
+    public Listing reopenArchivedListingAsDraft(UUID listingId, UUID actorId) {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new ListingNotFoundException(listingId));
 
@@ -481,7 +508,7 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorId(actorId);
         listing.setUpdatedAt(nowOdt);
 
-        listingRepository.save(listing);
+        Listing saved = listingRepository.save(listing);
 
         ListingStatusHistory history = new ListingStatusHistory();
         history.setListingId(listing.getId());
@@ -493,6 +520,7 @@ public class ListingWorkflowService {
 
         log.info("Reopened archived listing listingId={} by actorId={} fromStatus={} toStatus=DRAFT",
                 listingId, actorId, previousStatus);
+        return saved;
     }
 
     /**
