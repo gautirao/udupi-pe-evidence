@@ -46,6 +46,9 @@ public class ViewingRequest {
     @Column(name = "cancelled_by")
     private String cancelledBy;
 
+    @Column(name = "cancellation_reason", length = 100)
+    private String cancellationReason;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -132,6 +135,14 @@ public class ViewingRequest {
 
     public void setCancelledBy(String cancelledBy) {
         this.cancelledBy = cancelledBy;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
     }
 
     public OffsetDateTime getCreatedAt() {
