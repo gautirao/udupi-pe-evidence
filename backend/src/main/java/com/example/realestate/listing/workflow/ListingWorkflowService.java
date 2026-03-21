@@ -795,7 +795,9 @@ public class ListingWorkflowService {
      * Admin approves a scraped listing directly to LIVE (exceptional path).
      * Requires the listing to be claimed (have an owner) and to pass completeness validation.
      *
-     * <p>No event publishing for now — SCRAPED to LIVE is an admin-only exceptional path.
+     * <p>RE-185: event publishing and duplicate detection are now mirrored from
+     * {@link #approveListing} so that scraped listings participate in area notifications
+     * and proximity-duplicate checks on the same terms as broker-submitted listings.
      *
      * @param listingId the scraped listing to approve
      * @param adminId   the admin performing the action
@@ -850,6 +852,26 @@ public class ListingWorkflowService {
         history.setActorType(ActorType.ADMIN);
         history.setActorId(adminId);
         statusHistoryRepository.save(history);
+
+        try {
+            proximityDuplicateService.detectAndRecord(saved);
+        } catch (Exception e) {
+            log.warn("Proximity duplicate detection failed for listingId={}: {}",
+                    listingId, e.getMessage(), e);
+        }
+
+        if (listing.getCreatedBy() != null) {
+            String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+            applicationEventPublisher.publishEvent(
+                    new ListingApprovedEvent(saved, listing.getCreatedBy(), title));
+        }
+
+        if (saved.getAreaKey() != null) {
+            String listingTitle = Objects.requireNonNullElse(saved.getTitle(), "New property");
+            applicationEventPublisher.publishEvent(
+                    new NewListingInAreaEvent(saved.getId(), saved.getAreaKey(), saved.getAreaLabel(),
+                            listingTitle, saved.getPropertyType(), saved.getPricePaise()));
+        }
 
         log.info("Approved scraped listing listingId={} by adminId={} fromStatus={} toStatus=LIVE",
                 listingId, adminId, currentStatus);
