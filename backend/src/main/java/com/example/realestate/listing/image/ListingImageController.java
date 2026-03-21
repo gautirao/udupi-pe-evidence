@@ -3,6 +3,9 @@ package com.example.realestate.listing.image;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.exception.ListingNotFoundException;
+import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,15 +51,18 @@ public class ListingImageController {
     private final ListingImageRepository imageRepository;
     private final ListingImageRegistrar imageRegistrar;
     private final ListingImageService imageService;
+    private final ListingWorkflowService listingWorkflowService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
                                    ListingImageRegistrar imageRegistrar,
-                                   ListingImageService imageService) {
+                                   ListingImageService imageService,
+                                   ListingWorkflowService listingWorkflowService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.imageRegistrar = imageRegistrar;
         this.imageService = imageService;
+        this.listingWorkflowService = listingWorkflowService;
     }
 
     // ==================== GET — list images ====================
@@ -204,23 +210,24 @@ public class ListingImageController {
      * authorised to proceed.
      */
     private FindResult findOwnedListing(UUID listingId, CallerInfo caller) {
-        Listing listing = listingRepository.findById(listingId).orElse(null);
-        if (listing == null) {
+        try {
+            Listing listing = listingWorkflowService.findListingForCaller(
+                    listingId, caller.userId(), caller.isAdmin());
+            return FindResult.ok(listing);
+        } catch (ListingNotFoundException e) {
             return FindResult.notFound(notFound("Listing not found"));
-        }
-        if (!caller.isAdmin()) {
-            if (listing.getCreatedBy() == null) {
-                // SCRAPED listing — no owner; non-admin callers are forbidden, not "not found".
+        } catch (ListingOwnershipException e) {
+            // Distinguish scraped (null createdBy → 403) from wrong owner (non-null → 404).
+            // Re-read is acceptable on the rare auth-fail path.
+            Listing raw = listingRepository.findById(listingId).orElse(null);
+            if (raw != null && raw.getCreatedBy() == null) {
                 log.warn("findOwnedListing listingId={} caller={} reason=scraped_no_owner -> 403",
                         listingId, caller.userId());
                 return FindResult.forbidden(ResponseEntity.status(HttpStatus.FORBIDDEN)
                         .body(Map.of("error", "Access denied: listing has no owner")));
             }
-            if (!caller.userId().equals(listing.getCreatedBy())) {
-                return FindResult.notFound(notFound("Listing not found"));
-            }
+            return FindResult.notFound(notFound("Listing not found"));
         }
-        return FindResult.ok(listing);
     }
 
     /** Discriminated result from {@link #findOwnedListing}. */

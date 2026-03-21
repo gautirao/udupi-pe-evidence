@@ -1,7 +1,8 @@
 package com.example.realestate.poi;
 
 import com.example.realestate.listing.core.Listing;
-import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
@@ -68,7 +69,7 @@ class ListingPoiControllerTest {
 
     @MockitoBean private ListingPoiService service;
     @MockitoBean private OverpassService overpassService;
-    @MockitoBean private ListingRepository listingRepository;
+    @MockitoBean private ListingWorkflowService listingWorkflowService;
     @MockitoBean private UserRoleService userRoleService;
 
     // ==================== Test 1: returns only approved POIs ====================
@@ -131,20 +132,11 @@ class ListingPoiControllerTest {
     private static final UUID DEALER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID POI_ID    = UUID.fromString("00000000-0000-0000-0000-000000000042");
 
-    /** Returns a SCRAPED listing whose createdBy is null. */
-    private Listing scrapedListing() {
-        Listing l = new Listing();
-        l.setId(LISTING_ID);
-        l.setCreatedBy(null); // SCRAPED — no owner
-        l.setStatus("LIVE");
-        l.setPropertyType("house");
-        return l;
-    }
-
     @Test
     void getSuggestions_scrapedListing_dealerCaller_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -155,7 +147,8 @@ class ListingPoiControllerTest {
     @Test
     void approvePoi_scrapedListing_dealerCaller_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/approve", LISTING_ID, POI_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -166,7 +159,8 @@ class ListingPoiControllerTest {
     @Test
     void pinPoi_scrapedListing_dealerCaller_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/pin", LISTING_ID, POI_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -177,7 +171,8 @@ class ListingPoiControllerTest {
     @Test
     void addManual_scrapedListing_dealerCaller_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -192,7 +187,8 @@ class ListingPoiControllerTest {
     @Test
     void deletePoi_scrapedListing_dealerCaller_returns403() throws Exception {
         when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scrapedListing()));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(delete("/api/listings/{listingId}/pois/{poiId}", LISTING_ID, POI_ID)
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -221,7 +217,8 @@ class ListingPoiControllerTest {
         scraped.setPropertyType("house");
         scraped.setLatitude(null);
         scraped.setLongitude(null);
-        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, ADMIN_ID, true))
+                .thenReturn(scraped);
 
         when(service.getAll(LISTING_ID)).thenReturn(List.of());
 
