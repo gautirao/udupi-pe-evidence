@@ -109,6 +109,20 @@ sentry:
   environment: ${RENDER_SERVICE_NAME:local}
   traces-sample-rate: 0
 
+# Trust ranking score configuration (RE-150).
+# tierBase: base score per tier letter. weights: multipliers for each score component.
+trust:
+  ranking:
+    tier-base:
+      A: 1000
+      B: 750
+      C: 500
+      D: 0
+    weights:
+      freshness: 200
+      profile: 100
+      listing: 100
+
 # Proximity duplicate batch job — nightly backfill scan.
 # Cron uses Spring 6-field format: seconds minutes hours day-of-month month day-of-week.
 # Default: 02:00 UTC. Override via PROXIMITY_BATCH_CRON env var (e.g. "0/5 * * * * *" for dev).

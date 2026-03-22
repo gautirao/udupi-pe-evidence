@@ -25,6 +25,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,6 +55,9 @@ class BadgeServiceTest {
     private TrustTierCalculator trustTierCalculator;
 
     @Mock
+    private RankingScoreCalculator rankingScoreCalculator;
+
+    @Mock
     private AdminAuditService adminAuditService;
 
     // Real ObjectMapper — BadgeService uses it for JSON serialisation; a real instance
@@ -76,6 +80,10 @@ class BadgeServiceTest {
         stubListing = new Listing();
         stubListing.setId(listingId);
         stubListing.setTrustTier("D");
+
+        // Default stub — lenient because null-guard tests throw before reaching
+        // recalculateAndPersistTier and would otherwise trigger UnnecessaryStubbingException.
+        lenient().when(rankingScoreCalculator.calculate(any(Listing.class))).thenReturn(0);
     }
 
     // -------------------------------------------------------------------------
@@ -122,6 +130,8 @@ class BadgeServiceTest {
         when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "C"));
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
         when(listingRepository.save(any())).thenReturn(stubListing);
+        // Override the lenient default (0) so we can assert the value is wired through.
+        when(rankingScoreCalculator.calculate(any(Listing.class))).thenReturn(850);
 
         badgeService.grantBadge(listingId, "IDENTITY", actorId, null);
 
@@ -129,6 +139,9 @@ class BadgeServiceTest {
         ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
         verify(listingRepository).save(listingCaptor.capture());
         assertThat(listingCaptor.getValue().getTrustTier()).isEqualTo("C");
+        // Regression guard: recalculateAndPersistTier must call setRankingScore with the
+        // value returned by RankingScoreCalculator, not silently discard it.
+        assertThat(listingCaptor.getValue().getRankingScore()).isEqualTo(850);
     }
 
     @Test
