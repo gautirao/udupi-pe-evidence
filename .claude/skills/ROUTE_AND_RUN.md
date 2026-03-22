@@ -257,6 +257,8 @@ gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id
 
 In sprint context, `ITEM_ID` comes from the `Project item IDs:` map in the checkpoint preamble. In standalone use, fetch it via the project items GraphQL query in SPRINT_EXECUTOR Sprint Start step 0.
 
+**Combined commands:** Sequential git lifecycle pairs connected with `&&` are allowed when the second command depends on the first (e.g., `git checkout main && git pull origin main`). Do not chain unrelated commands.
+
 These pre-approvals apply to git operations performed within `ROUTE_AND_RUN`'s execution scope. The full sprint PR lifecycle — branch creation, commit, push, PR creation, CI monitoring, merge, post-merge checkout, and issue close — is owned by `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` when invoked from a sprint context. In standalone use, ROUTE_AND_RUN is responsible for the issue close step.
 
 ---
@@ -303,6 +305,8 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 - When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
 
 - After `qa-fast` completes, include its key findings (Critical Paths, Edge Cases, Risks) in the engineer's Task prompt as `qa-fast context:`. This lets the engineer skip redundant codebase exploration and address flagged risks proactively.
+- If the routing includes `security-reviewer`, add this note to the engineer's Task prompt: `Security review will follow — pay attention to: input validation, RLS alignment, no secrets in code, @Transactional boundaries.`
+- If previous PRs in the same sprint had reviewer BLOCKING findings, include those patterns as warnings in the engineer's Task prompt (e.g., "Prior sprint finding: use List<> not Optional<> for non-UNIQUE FK queries").
 - `code-reviewer` runs AFTER the engineer completes the implementation.
 - Skip `code-reviewer` only when: risk=low AND change is single-file AND no logic/behaviour changes (e.g. a constant, label, or config value).
 - If `code-reviewer` returns REQUEST CHANGES: engineer fixes, `code-reviewer` re-runs once.
