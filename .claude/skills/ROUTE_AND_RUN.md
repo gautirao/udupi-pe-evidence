@@ -7,6 +7,7 @@ Do NOT redefine agents.
 Do NOT merge agent outputs.
 Process: triage → route → sequential agent execution → STOP.
 
+<!-- Line budget: ~700 lines. If adding sections, consider extracting routing tables (A–H) to a referenced file. -->
 **Authority:** `ROUTE_AND_RUN` is the single source of truth for per-PR execution policy: change classification, routing logic, agent invocation rules, reviewer/security retry loops, process-doc review requirements, post-engineer materialization checks, and E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` supplies sprint context and records gate outcomes, but must not redefine or override these per-PR rules.
 
 ## Agents
@@ -74,7 +75,7 @@ The pre-push hook runs as a best-effort local backstop for Trivial changes — i
 - **Normal:** use standard evidence — routing used, changed files, tests run, reviewer result, E2E result.
 - **High-risk / failure / escalation:** use full structured evidence with rationale and failure details.
 
-Prefer compact status fields over narrative prose unless a gate fails, escalates, or requires manual judgment.
+Prefer compact status fields over narrative prose unless a gate fails, escalates, or requires manual judgment. If a Normal-risk run encounters a gate failure or escalation mid-flow, switch to full evidence for the failing stage onward.
 
 ### Process-doc self-review (required)
 
@@ -395,7 +396,7 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 - Preserve exact file:line references
 - Separate backend and frontend findings if both were reviewed
 - Never dilute BLOCKING findings in the summary
-- **Agent-to-Checkpoint Warning Channel (NEW):** Any agent (`qa-fast`, `code-reviewer`, `security-reviewer`, `architect`, etc.) can emit structured warnings that are captured in the checkpoint's `Risks` field. Format:
+- **Agent-to-Checkpoint Warning Channel:** Any agent (`qa-fast`, `code-reviewer`, `security-reviewer`, `architect`, etc.) can emit structured warnings that are captured in the checkpoint's `Risks` field. Format:
   ```
   ROUTE_AND_RUN_WARNING: <severity:LOW|MED|HIGH> <message>
   ```
