@@ -377,6 +377,201 @@ export function useSubmitListing(listingId: string | undefined) {
   });
 }
 
+/** Parses an ApiError body for a user-readable message, falling back to error.message. */
+function parseErrorMessage(error: Error): string {
+  if ('body' in error) {
+    const body = (error as { body: unknown }).body;
+    if (body !== null && typeof body === 'object' && 'error' in body && typeof (body as Record<string, unknown>).error === 'string') {
+      return (body as Record<string, string>).error;
+    }
+  }
+  return error.message;
+}
+
+/**
+ * Archives a LIVE or REJECTED listing via POST /api/listings/{id}/archive.
+ * On success transitions status to ARCHIVED.
+ */
+export function useArchiveListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      return api.post<ListingResponse>(`/api/listings/${listingId}/archive`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to archive listing',
+        description: parseErrorMessage(error),
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * Withdraws a PENDING_REVIEW listing back to DRAFT via PUT /api/listings/{id}/withdraw.
+ * Returns 204 No Content — response body is never read.
+ */
+export function useWithdrawListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      await api.put<void>(`/api/listings/${listingId}/withdraw`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to withdraw listing',
+        description: parseErrorMessage(error),
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * Reopens a REJECTED listing back to DRAFT via POST /api/listings/{id}/reopen.
+ */
+export function useReopenListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      return api.post<ListingResponse>(`/api/listings/${listingId}/reopen`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to reopen listing',
+        description: parseErrorMessage(error),
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * Reopens an ARCHIVED listing back to DRAFT via POST /api/listings/{id}/reopen-as-draft.
+ */
+export function useReopenAsDraftListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      return api.post<ListingResponse>(`/api/listings/${listingId}/reopen-as-draft`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to reopen listing as draft',
+        description: parseErrorMessage(error),
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * Resubmits an ARCHIVED listing for review via POST /api/listings/{id}/submit.
+ * Uses the same /submit endpoint as the DRAFT → PENDING_REVIEW path.
+ */
+export function useResubmitArchivedListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      return api.post<ListingResponse>(`/api/listings/${listingId}/submit`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to resubmit listing',
+        description: parseErrorMessage(error),
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+/**
+ * Restores an ARCHIVED listing to LIVE via PUT /api/listings/{id}/restore.
+ * Always shown regardless of eligibility — backend returns 422 if ineligible.
+ */
+export function useRestoreListing(listingId: string | undefined) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!listingId) throw new Error('No listing ID');
+      return api.put<ListingResponse>(`/api/listings/${listingId}/restore`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
+      queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
+      if (listingId) {
+        queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Failed to restore listing',
+        description: parseErrorMessage(error),
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
 // Legacy aliases — kept for backward compatibility with old useDealerListings imports
 /** @deprecated Use useBrokerMyListings */
 export { useBrokerMyListings as useDealerMyListings };

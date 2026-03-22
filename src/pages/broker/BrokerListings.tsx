@@ -7,6 +7,12 @@ import {
   useBulkDeleteListings,
   useDuplicateListing,
   useSubmitListing,
+  useArchiveListing,
+  useWithdrawListing,
+  useReopenListing,
+  useReopenAsDraftListing,
+  useResubmitArchivedListing,
+  useRestoreListing,
   type ListingResponse,
 } from '@/hooks/useBrokerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -166,6 +172,235 @@ function DuplicateButton({ listing }: { listing: ListingResponse }) {
         <Copy className="h-3.5 w-3.5 mr-1" />
       )}
       Duplicate
+    </Button>
+  );
+}
+
+/**
+ * Archive button — LIVE and REJECTED listings.
+ * Requires confirmation before POSTing /archive.
+ */
+function ArchiveButton({ listing }: { listing: ListingResponse }) {
+  const archiveMutation = useArchiveListing(listing.id);
+  const { toast } = useToast();
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={archiveMutation.isPending}>
+          {archiveMutation.isPending ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              Archiving…
+            </>
+          ) : (
+            'Archive'
+          )}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Archive Listing</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to archive this listing?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              archiveMutation.mutate(undefined, {
+                onSuccess: () => {
+                  toast({ title: 'Listing archived' });
+                },
+              });
+            }}
+          >
+            Archive
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * Withdraw button — PENDING_REVIEW listings.
+ * Requires confirmation before PUTting /withdraw (returns 204 No Content).
+ */
+function WithdrawButton({ listing }: { listing: ListingResponse }) {
+  const withdrawMutation = useWithdrawListing(listing.id);
+  const { toast } = useToast();
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={withdrawMutation.isPending}>
+          {withdrawMutation.isPending ? (
+            <>
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              Withdrawing…
+            </>
+          ) : (
+            'Withdraw'
+          )}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Withdraw Listing</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will move the listing back to Draft.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              withdrawMutation.mutate(undefined, {
+                onSuccess: () => {
+                  toast({ title: 'Listing withdrawn to draft' });
+                },
+              });
+            }}
+          >
+            Withdraw
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+/**
+ * Reopen button — REJECTED listings only, no confirm required.
+ * POSTs /reopen to move listing back to DRAFT.
+ */
+function ReopenButton({ listing }: { listing: ListingResponse }) {
+  const reopenMutation = useReopenListing(listing.id);
+  const { toast } = useToast();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={reopenMutation.isPending}
+      onClick={() => {
+        reopenMutation.mutate(undefined, {
+          onSuccess: () => {
+            toast({ title: 'Listing reopened for editing' });
+          },
+        });
+      }}
+    >
+      {reopenMutation.isPending ? (
+        <>
+          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+          Reopening…
+        </>
+      ) : (
+        'Reopen for Editing'
+      )}
+    </Button>
+  );
+}
+
+/**
+ * Reopen as Draft button — ARCHIVED listings only, no confirm required.
+ * POSTs /reopen-as-draft to move listing to DRAFT.
+ */
+function ReopenAsDraftButton({ listing }: { listing: ListingResponse }) {
+  const reopenAsDraftMutation = useReopenAsDraftListing(listing.id);
+  const { toast } = useToast();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={reopenAsDraftMutation.isPending}
+      onClick={() => {
+        reopenAsDraftMutation.mutate(undefined, {
+          onSuccess: () => {
+            toast({ title: 'Listing reopened as draft' });
+          },
+        });
+      }}
+    >
+      {reopenAsDraftMutation.isPending ? (
+        <>
+          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+          Reopening…
+        </>
+      ) : (
+        'Reopen as Draft'
+      )}
+    </Button>
+  );
+}
+
+/**
+ * Resubmit button — ARCHIVED listings only, no confirm required.
+ * POSTs /submit to move listing to PENDING_REVIEW.
+ */
+function ResubmitArchivedButton({ listing }: { listing: ListingResponse }) {
+  const resubmitMutation = useResubmitArchivedListing(listing.id);
+  const { toast } = useToast();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={resubmitMutation.isPending}
+      onClick={() => {
+        resubmitMutation.mutate(undefined, {
+          onSuccess: () => {
+            toast({ title: 'Listing resubmitted for review' });
+          },
+        });
+      }}
+    >
+      {resubmitMutation.isPending ? (
+        <>
+          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+          Resubmitting…
+        </>
+      ) : (
+        'Resubmit'
+      )}
+    </Button>
+  );
+}
+
+/**
+ * Restore to Live button — ARCHIVED listings only, no confirm required.
+ * Always shown; backend returns 422 if ineligible.
+ * PUTs /restore to move listing back to LIVE.
+ */
+function RestoreButton({ listing }: { listing: ListingResponse }) {
+  const restoreMutation = useRestoreListing(listing.id);
+  const { toast } = useToast();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={restoreMutation.isPending}
+      onClick={() => {
+        restoreMutation.mutate(undefined, {
+          onSuccess: () => {
+            toast({ title: 'Listing restored to live' });
+          },
+        });
+      }}
+    >
+      {restoreMutation.isPending ? (
+        <>
+          <Loader2 className="h-3 w-3 animate-spin mr-1" />
+          Restoring…
+        </>
+      ) : (
+        'Restore to Live'
+      )}
     </Button>
   );
 }
@@ -527,12 +762,18 @@ export default function BrokerListings() {
                     </Button>
                     <DuplicateButton listing={listing} />
                     {listing.status === 'LIVE' && (
-                      <Button variant="outline" size="sm" asChild>
-                        <Link to={`/broker/bookings?listingId=${listing.id}`}>
-                          <CalendarDays className="h-3.5 w-3.5 mr-1" />
-                          Booking enquiries
-                        </Link>
-                      </Button>
+                      <>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/broker/bookings?listingId=${listing.id}`}>
+                            <CalendarDays className="h-3.5 w-3.5 mr-1" />
+                            Booking enquiries
+                          </Link>
+                        </Button>
+                        <ArchiveButton listing={listing} />
+                      </>
+                    )}
+                    {listing.status === 'PENDING_REVIEW' && (
+                      <WithdrawButton listing={listing} />
                     )}
                     {EDITABLE_STATUSES.includes(listing.status) && (
                       <>
@@ -542,12 +783,23 @@ export default function BrokerListings() {
                         {listing.status === 'DRAFT' ? (
                           <DraftSubmitButton listing={listing} />
                         ) : (
-                          <Button size="sm" asChild>
-                            <Link to={`/broker/listings/${listing.id}/edit`}>
-                              Edit &amp; Resubmit
-                            </Link>
-                          </Button>
+                          <>
+                            <Button size="sm" asChild>
+                              <Link to={`/broker/listings/${listing.id}/edit`}>
+                                Edit &amp; Resubmit
+                              </Link>
+                            </Button>
+                            <ReopenButton listing={listing} />
+                            <ArchiveButton listing={listing} />
+                          </>
                         )}
+                      </>
+                    )}
+                    {listing.status === 'ARCHIVED' && (
+                      <>
+                        <ReopenAsDraftButton listing={listing} />
+                        <ResubmitArchivedButton listing={listing} />
+                        <RestoreButton listing={listing} />
                       </>
                     )}
                     {(listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
