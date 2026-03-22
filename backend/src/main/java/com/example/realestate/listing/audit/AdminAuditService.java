@@ -3,9 +3,11 @@ package com.example.realestate.listing.audit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.SqlParameterValue;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.sql.Types;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -59,13 +61,19 @@ public class AdminAuditService {
     public void record(UUID adminId, String action, String entityType,
                        UUID entityId, String beforeJson, String afterJson) {
         try {
+            // beforeJson and afterJson are jsonb columns. When the value is null (e.g. new-row
+            // grants have no prior state), a plain Java null passed to CAST(? AS jsonb) causes
+            // some JDBC drivers to emit an empty string instead of SQL NULL, which fails the cast.
+            // SqlParameterValue(Types.OTHER, null) ensures the driver emits a proper SQL NULL.
             jdbcTemplate.update(
                     """
                     INSERT INTO public.admin_audit_log
                         (admin_id, action, entity_type, entity_id, before_json, after_json)
                     VALUES (?, ?, ?, ?, CAST(? AS jsonb), CAST(? AS jsonb))
                     """,
-                    adminId, action, entityType, entityId, beforeJson, afterJson);
+                    adminId, action, entityType, entityId,
+                    new SqlParameterValue(Types.OTHER, beforeJson),
+                    new SqlParameterValue(Types.OTHER, afterJson));
             log.debug("Audit record written adminId={} action={} entityType={} entityId={}",
                     adminId, action, entityType, entityId);
         } catch (Exception e) {

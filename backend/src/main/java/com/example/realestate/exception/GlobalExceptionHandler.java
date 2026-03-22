@@ -2,6 +2,7 @@ package com.example.realestate.exception;
 
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.trust.BadgeNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.mapping.PropertyReferenceException;
@@ -60,6 +61,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Listing status transition rejected: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage()));
+    }
+
+    // ===== BadgeNotFoundException → 404 =====
+
+    @ExceptionHandler(BadgeNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleBadgeNotFound(BadgeNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "BADGE_NOT_FOUND", "message", ex.getMessage()));
     }
 
     // ===== PropertyReferenceException → 400 =====
