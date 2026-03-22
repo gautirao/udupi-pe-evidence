@@ -5,7 +5,7 @@ Execute a sprint plan PR-by-PR using ROUTE_AND_RUN with resumable rolling checkp
 
 Checkpoint is the single source of truth.
 
-**Authority:** `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` is the single source of truth for sprint execution state, rolling checkpoints, PR lifecycle, and resume behavior. It delegates per-PR execution to `ROUTE_AND_RUN`, which owns routing logic, agent invocation rules, and the default E2E validation policy.
+**Authority:** `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` is the sprint-level source of truth for issue ordering, dependency handling, project state transitions, merge/close flow, checkpoint persistence, and resume behavior. `ROUTE_AND_RUN.md` is the single source of truth for per-PR execution policy: change classification, routing logic, agent invocation rules, reviewer/security retry loops, process-doc review requirements, post-engineer materialization checks, and E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` may supply sprint context and record outputs, but must not redefine or override these per-PR rules.
 
 ---
 
@@ -106,20 +106,14 @@ For each GitHub issue (PR N):
    - Do NOT proceed to engineer until failure is confirmed.
 4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`.
 
-   **DRY boundary:** Routing logic, agent invocation rules (including pre-flight requirements), reviewer/security retry loops, process-doc review requirements, post-engineer materialization checks, and E2E validation policy are all **owned exclusively by `ROUTE_AND_RUN`** — do not re-derive or restate them here. `SPRINT_EXECUTOR` supplies sprint context and records gate outcomes only.
-
    Sprint-specific context for `qa-fast` — always pass this prompt:
    > "Review the codebase and identify risks for this planned change: [issue description]. Acceptance criteria: [AC from enriched spec]. The feature does not exist yet."
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
 
-4b. **Engineer materialization validation** — After the engineer agent completes, validate per the `ROUTE_AND_RUN.md` "Post-Engineer Materialization Check (Mandatory)" section. If validation passes, proceed to code-reviewer and record `Engineer materialization: PASS` in the checkpoint. If validation fails: do NOT invoke code-reviewer; re-invoke the engineer once with the failing check(s) named explicitly. If validation fails again: emit BLOCKED checkpoint (`Engineer materialization: FAIL`), play `afplay /System/Library/Sounds/Basso.aiff`, surface to user, stop.
+   **Boundary rule:** `ROUTE_AND_RUN.md` owns change classification, reviewer/security retry loops, process-doc review, post-engineer materialization checks, and E2E gate policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` records the outcomes of those gates in the checkpoint but does not restate, reinterpret, or override them here.
 
-5. **E2E gate** — Owned by `ROUTE_AND_RUN` Step 3. For Normal and High-risk changes, `qa` runs in verification mode after all reviewers APPROVE, before commit/push/PR. Change classification (trivial/normal/high-risk/doc-only) is determined by ROUTE_AND_RUN Step 1B — no sprint-layer override.
-
-   If QA E2E gate fails: ROUTE_AND_RUN Step 3 handles failure routing (back to engineer, max 2 fix-verify cycles — see ROUTE_AND_RUN Step 3 for early escalation triggers). If still failing after max cycles: play `afplay /System/Library/Sounds/Basso.aiff`, surface failure to user, emit BLOCKED checkpoint. Do NOT auto-fix.
-
-6. **Git + PR**
+5. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
    - Verify no uncommitted changes on main: `git status --short`
    - `git checkout -b <type>/pr-<id>-<short-slug>`
@@ -132,7 +126,7 @@ For each GitHub issue (PR N):
    - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures (billing limits, runner unavailability, network timeouts) do NOT block merge when local E2E passed.
    - Merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
-7. **Close issue + update project status**
+6. **Close issue + update project status**
    **Step A — Close the issue (always required):**
    ```bash
    gh issue close <number>
@@ -146,7 +140,7 @@ For each GitHub issue (PR N):
    - If GitHub Project automation moved the item to Done automatically (triggered by issue close): verify the item status, then skip — `gh project item-edit` is optional.
    - If automation did not fire or is not configured: `gh project item-edit` is required.
    - Do not leave a non-Done project card after a merged PR.
-8. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
+7. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
 
    Immediately after the chime, output a single progress line using the execution order from the checkpoint preamble:
    ```
@@ -157,19 +151,19 @@ For each GitHub issue (PR N):
    - Remaining issues after next: just the ID, no annotation
    - All issues in execution order on one line, separated by ` · `
 
-**9. Inter-PR Plan Check (NEW — after PR N completes, before PR N+1 starts)**
+**8. Inter-PR Plan Check (after PR N completes, before PR N+1 starts)**
    - If this is not the last PR: read the checkpoint's `Touched files` and `Key decisions` from the PR that just completed.
    - Cross-reference against the enriched spec for the next PR (cached from Sprint Start step 3).
    - Check the `Dependencies:` section: if the next PR depends on any blocked PR, flag it.
    - If the next PR's likely files overlap with files modified by PR N, compare their specs and key decisions: does PR N invalidate PR N+1's spec or scope?
    - If conflict detected: play `afplay /System/Library/Sounds/Ping.aiff`, surface the conflict to the user with affected issue IDs and specs, and pause.
-   - If no conflict: proceed silently to step 10.
+   - If no conflict: proceed silently to step 9.
 
-10. **Emit checkpoint + persist to file**
+9. **Emit checkpoint + persist to file**
    - **Conversation output:** use the slim checkpoint format (omitting Sprint issues, Execution order, Dependencies, Enriched specs — already established in preamble). Full format only for the first checkpoint of a sprint.
    - **File output:** always write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — preamble format with Sprint issues, Execution order, Dependencies, and ALL enriched specs for remaining issues. This file is the authoritative resume source and must be self-contained (readable by a fresh conversation with no prior history).
 
-**10a. Compact before next PR (conditional)**
+**9a. Compact before next PR (conditional)**
    - After writing the checkpoint file, invoke `/compact` only if context growth is making responses noticeably slower or the conversation is approaching context limits.
    - After compaction, read `.claude/SPRINT_CHECKPOINT.md` to restore full sprint context before starting the next PR.
    - If context is still lean, skip compaction and continue — the checkpoint file is the fallback on automatic context compression regardless.
