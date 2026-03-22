@@ -27,6 +27,13 @@ import { RERACard } from '@/components/listing/RERACard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 
+const DIMENSION_LABELS: Record<string, string> = {
+  IDENTITY: 'Identity Verified',
+  LOCATION: 'Location Verified',
+  PHOTOS: 'Photos Verified',
+  AUTHORITY: 'Authority Verified',
+};
+
 const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
   land: { label: 'Land', badgeClass: 'bg-green-100 text-green-800 border-0' },
   house: { label: 'House', badgeClass: 'bg-blue-100 text-blue-800 border-0' },
@@ -84,6 +91,19 @@ function useListingPriceHistory(id: string | undefined) {
   });
 }
 
+interface TrustPublicResponse {
+  badges: { dimensionType: string; grantedAt: string }[];
+}
+
+function useTrustBadges(id: string | undefined) {
+  return useQuery({
+    queryKey: ['listing-trust', id],
+    queryFn: () => api.get<TrustPublicResponse>(`/api/listings/${id}/trust`),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+}
+
 export default function ListingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -92,6 +112,7 @@ export default function ListingDetail() {
   const { toast } = useToast();
   const { data: listing, isLoading, error } = useListingById(id);
   const { data: priceHistory = [] } = useListingPriceHistory(id);
+  const { data: trustData } = useTrustBadges(id);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
@@ -581,6 +602,28 @@ export default function ListingDetail() {
               expectedPossessionDate={listing.expectedPossessionDate}
               approvalsDeclared={listing.approvalsDeclared}
             />
+
+            {/* Trust badges (RE-156) */}
+            {trustData && trustData.badges.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
+                    Verified by Udupi Properties
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {trustData.badges.map((badge) => (
+                      <span
+                        key={badge.dimensionType}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                      >
+                        {DIMENSION_LABELS[badge.dimensionType] ?? badge.dimensionType}
+                      </span>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Land listings show location panel above photos — skip here */}
             {listing.propertyType !== 'land' && (

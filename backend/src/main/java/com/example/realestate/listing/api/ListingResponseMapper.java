@@ -3,6 +3,7 @@ package com.example.realestate.listing.api;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.trust.ListingVerificationDimensionRepository;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -31,9 +32,12 @@ public class ListingResponseMapper {
     private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
 
     private final ListingImageRepository listingImageRepository;
+    private final ListingVerificationDimensionRepository dimensionRepository;
 
-    public ListingResponseMapper(ListingImageRepository listingImageRepository) {
+    public ListingResponseMapper(ListingImageRepository listingImageRepository,
+                                 ListingVerificationDimensionRepository dimensionRepository) {
         this.listingImageRepository = listingImageRepository;
+        this.dimensionRepository = dimensionRepository;
     }
 
     /**
@@ -74,19 +78,28 @@ public class ListingResponseMapper {
                 .stream()
                 .collect(Collectors.groupingBy(ListingImage::getListingId));
 
+        Map<UUID, Long> earnedCountByListing = dimensionRepository
+                .findAllByListingIdInAndBadgeState(ids, "EARNED")
+                .stream()
+                .collect(Collectors.groupingBy(
+                        d -> d.getListingId(),
+                        Collectors.counting()));
+
         return listings.stream()
                 .map(l -> build(l,
                         includeRejectionReason ? l.getRejectionReason() : null,
-                        imagesByListing.getOrDefault(l.getId(), List.of())))
+                        imagesByListing.getOrDefault(l.getId(), List.of()),
+                        earnedCountByListing.getOrDefault(l.getId(), 0L).intValue()))
                 .toList();
     }
 
     private ListingResponse build(Listing l, String rejectionReason) {
         var images = listingImageRepository.findByListingIdOrderByPositionAsc(l.getId());
-        return build(l, rejectionReason, images);
+        int earnedBadgeCount = (int) dimensionRepository.countByListingIdAndBadgeState(l.getId(), "EARNED");
+        return build(l, rejectionReason, images, earnedBadgeCount);
     }
 
-    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images) {
+    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -130,6 +143,6 @@ public class ListingResponseMapper {
                 l.getSellerType(),
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
-                l.getApprovalsDeclared(), reraValid);
+                l.getApprovalsDeclared(), reraValid, earnedBadgeCount);
     }
 }

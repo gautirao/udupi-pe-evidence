@@ -109,7 +109,7 @@ class PublicListingControllerTest {
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
-                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid);
+                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0);
         });
     }
 

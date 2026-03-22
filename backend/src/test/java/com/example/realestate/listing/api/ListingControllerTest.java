@@ -134,7 +134,12 @@ class ListingControllerTest {
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
-                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid);
+                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0);
+        });
+        // Batch variant: delegate each listing through the single-listing stub.
+        when(listingResponseMapper.toResponseList(any())).thenAnswer(inv -> {
+            java.util.List<Listing> listings = inv.getArgument(0);
+            return listings.stream().map(l -> listingResponseMapper.toResponse(l)).toList();
         });
     }
 

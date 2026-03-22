@@ -3,6 +3,7 @@ package com.example.realestate.listing.api;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.trust.ListingVerificationDimensionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -25,15 +27,20 @@ import static org.mockito.Mockito.when;
 class ListingResponseMapperTest {
 
     private ListingImageRepository listingImageRepository;
+    private ListingVerificationDimensionRepository dimensionRepository;
     private ListingResponseMapper mapper;
 
     @BeforeEach
     void setUp() {
         listingImageRepository = mock(ListingImageRepository.class);
-        mapper = new ListingResponseMapper(listingImageRepository);
+        dimensionRepository = mock(ListingVerificationDimensionRepository.class);
+        mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository);
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
+        // Default: no earned badges
+        when(dimensionRepository.countByListingIdAndBadgeState(any(), anyString())).thenReturn(0L);
+        when(dimensionRepository.findAllByListingIdInAndBadgeState(anyList(), anyString())).thenReturn(List.of());
     }
 
     // ==================== toResponse includes rejectionReason ====================
@@ -236,7 +243,7 @@ class ListingResponseMapperTest {
         img2a.setUrl("https://example.com/l2-only.jpg");
         img2a.setPosition(0);
 
-        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyCollection()))
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
                 .thenReturn(List.of(img1a, img1b, img2a));
 
         List<ListingResponse> responses = mapper.toResponseList(List.of(l1, l2));
@@ -258,7 +265,7 @@ class ListingResponseMapperTest {
     void toResponseList_listingWithNoImages_imageCountZeroAndFirstUrlNull() {
         Listing l = buildListing("DRAFT");
 
-        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyCollection()))
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
                 .thenReturn(List.of());
 
         List<ListingResponse> responses = mapper.toResponseList(List.of(l));

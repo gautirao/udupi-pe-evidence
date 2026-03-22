@@ -57,7 +57,9 @@ public record ListingResponse(
         LocalDate expectedPossessionDate,
         String approvalsDeclared,
         /** true when reraNumber matches Karnataka RERA format; computed at read time, not stored. */
-        boolean reraValid
+        boolean reraValid,
+        /** Number of EARNED (Verified) trust badges for this listing. Never negative. */
+        int earnedBadgeCount
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

@@ -108,6 +108,7 @@ export interface ListingResponse {
   securityDepositMonths: number | null;
   lockInMonths: number | null;
   sellerType: string | null;
+  earnedBadgeCount: number;
 }
 
 /**

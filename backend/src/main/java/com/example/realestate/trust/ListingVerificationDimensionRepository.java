@@ -27,6 +27,10 @@ public interface ListingVerificationDimensionRepository
 
     boolean existsByListingIdAndDimensionType(UUID listingId, String dimensionType);
 
+    List<ListingVerificationDimension> findAllByListingIdInAndBadgeState(List<UUID> listingIds, String badgeState);
+
+    long countByListingIdAndBadgeState(UUID listingId, String badgeState);
+
     @Transactional
     void deleteByListingId(UUID listingId);
 }

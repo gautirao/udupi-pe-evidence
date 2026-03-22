@@ -116,7 +116,7 @@ class AdminListingControllerTest {
                     l.getMonthlyRent(), l.getSecurityDepositMonths(), l.getLockInMonths(),
                     l.getSellerType(), 0, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
-                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid);
+                    l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0);
         });
     }
 
