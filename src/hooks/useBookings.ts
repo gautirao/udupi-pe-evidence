@@ -21,7 +21,7 @@ export interface BookingResponse {
   brokerId: string;
   requestedDate: string;       // "YYYY-MM-DD"
   requestedTimeSlot: string;   // "HH:MM-HH:MM"
-  status: 'REQUESTED' | 'CONFIRMED' | 'DECLINED' | 'CANCELLED' | 'COMPLETED';
+  status: 'REQUESTED' | 'CONFIRMED' | 'DECLINED' | 'CANCELLED' | 'COMPLETED' | 'NEEDS_RESOLUTION';
   requesterMessage: string | null;
   declineReason: string | null;
   cancelledBy: string | null;  // 'user' | 'broker' | null

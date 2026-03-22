@@ -225,4 +225,19 @@ describe('MyBookings page', () => {
 
     expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
   });
+
+  it('shows "On Hold" badge and no Cancel Booking button for NEEDS_RESOLUTION bookings', () => {
+    vi.mocked(useMyBookings).mockReturnValue({
+      data: [makeBooking({ status: 'NEEDS_RESOLUTION' })],
+      isLoading: false,
+      isError: false,
+      totalPages: 1,
+      totalElements: 1,
+    } as ReturnType<typeof useMyBookings>);
+
+    renderMyBookings();
+
+    expect(screen.getByText('On Hold')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel Booking' })).not.toBeInTheDocument();
+  });
 });

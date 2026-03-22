@@ -1,4 +1,4 @@
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { Navigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Calendar, Clock } from 'lucide-react';
+import { Loader2, Calendar, Clock, AlertTriangle } from 'lucide-react';
 import {
   useBrokerBookings,
   useConfirmBooking,
@@ -60,6 +60,7 @@ export default function BrokerBookings() {
 
   const requestedBookings = (bookings ?? []).filter((b) => b.status === 'REQUESTED');
   const confirmedBookings = (bookings ?? []).filter((b) => b.status === 'CONFIRMED');
+  const needsResolutionBookings = (bookings ?? []).filter((b) => b.status === 'NEEDS_RESOLUTION');
 
   return (
     <AppLayout>
@@ -67,6 +68,16 @@ export default function BrokerBookings() {
         <h1 className="text-3xl font-bold mb-8">
           {listingId ? 'Booking Requests — This Listing' : 'Booking Requests'}
         </h1>
+
+        {/* Needs Resolution alert banner */}
+        {needsResolutionBookings.length > 0 && (
+          <Alert className="mb-8 border-amber-400 bg-amber-50 text-amber-800">
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            <AlertDescription>
+              Action required: {needsResolutionBookings.length} booking(s) need your attention
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Pending Requests */}
         <section className="mb-10">
@@ -132,6 +143,70 @@ export default function BrokerBookings() {
                           Decline
                         </Button>
                       </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Needs Resolution */}
+        <section className="mb-10">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            Needs Resolution
+            {needsResolutionBookings.length > 0 && (
+              <Badge className="bg-amber-100 text-amber-800 border border-amber-300">
+                {needsResolutionBookings.length}
+              </Badge>
+            )}
+          </h2>
+
+          {isError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>
+                Failed to load bookings. Please try again.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {bookingsLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading...</span>
+            </div>
+          ) : needsResolutionBookings.length === 0 ? (
+            <p className="text-muted-foreground">No bookings need resolution.</p>
+          ) : (
+            <div className="space-y-3">
+              {needsResolutionBookings.map((booking) => (
+                <Card key={booking.id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {booking.requestedDate}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3.5 w-3.5" />
+                            {booking.requestedTimeSlot}
+                          </span>
+                        </div>
+                        <Link
+                          to={`/listing/${booking.listingId}`}
+                          className="text-primary hover:underline text-sm font-medium"
+                        >
+                          View Listing
+                        </Link>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-100 text-amber-800 border-amber-300 shrink-0"
+                      >
+                        On Hold
+                      </Badge>
                     </div>
                   </CardContent>
                 </Card>

@@ -24,6 +24,7 @@ const STATUS_LABEL: Record<BookingResponse['status'], string> = {
   DECLINED: 'Declined',
   CANCELLED: 'Cancelled',
   COMPLETED: 'Completed',
+  NEEDS_RESOLUTION: 'On Hold',
 };
 
 const STATUS_CLASS: Record<BookingResponse['status'], string> = {
@@ -32,6 +33,7 @@ const STATUS_CLASS: Record<BookingResponse['status'], string> = {
   DECLINED: 'text-destructive border-destructive',
   CANCELLED: 'text-muted-foreground border-muted',
   COMPLETED: 'text-blue-600 border-blue-400',
+  NEEDS_RESOLUTION: 'bg-amber-100 text-amber-800 border-amber-300',
 };
 
 // ─── Booking card ─────────────────────────────────────────────────────────────
