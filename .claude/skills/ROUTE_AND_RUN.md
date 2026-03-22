@@ -519,8 +519,8 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 - Do NOT merge agent outputs.
 - After final routed agent completes, run Step 3 (QA E2E Gate). If gate PASS (or skipped for Trivial/Doc-only), play `afplay /System/Library/Sounds/Hero.aiff` and STOP.
 - Do NOT suggest improvements beyond scope.
-- One pass only.
-- Only re-run if code-reviewer or security-reviewer marks BLOCKING.
+- Single forward pass by default.
+- Re-runs are allowed only through the defined retry paths: engineer materialization failure (Post-Engineer Materialization Check), reviewer REQUEST CHANGES, ADVISORY-FIX remediation, and QA failure routing (Step 3).
 - Prefer qa-fast over qa unless explicit test-writing required.
 
 ---
@@ -534,7 +534,7 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 3. **Run build commands** — not `npm run build`, not `mvn compile`.
 4. **Interpret test failures as acceptable** — if a test fails, route to agent. Never skip.
 5. **Apply reviewer findings directly** — always re-invoke the responsible engineer.
-6. **Override the E2E gate** — for Normal and High-risk changes, the QA E2E gate must be evaluated and recorded as either PASS or an explicit documented SKIP under the applicability rules. Undocumented omission is not allowed. Skips are only valid when all stated skip conditions are confirmed.
+6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run (or be explicitly satisfied by a valid skip reason per the E2E applicability rules). No exceptions. Run `npm run test:e2e:local` unconditionally; do not pre-check server availability. "Backend not running" is not a valid skip reason — if a server fails to start, surface as BLOCKED.
 7. **Reclassify to dodge gates** — if triage says risk=med or the change has logic, it cannot be Trivial.
 
 ### MUST
@@ -550,6 +550,25 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 
 ---
 
+## Post-Engineer Materialization Check (Mandatory)
+
+After every engineer agent run (for Normal and High-risk code tasks), the orchestrator MUST validate the following before proceeding to code-reviewer:
+
+1. **Pre-flight evidence present** — the engineer's output includes a `Pre-flight` sub-block in Engineer Evidence with all 5 fields populated.
+2. **Changed files non-empty** — `Changed files:` lists at least one file. An empty list for a code task is a materialization failure.
+3. **Implementation artifact present** — the agent returned a branch name (default mode), or a `worktreePath` if and only if the run was explicitly started in worktree mode. A narrative summary with no associated file changes is hallucinated output.
+4. **Summary consistent with changed files** — the implementation summary references files that appear in `Changed files:`. A summary describing 10+ files while `Changed files` lists 0 is a contradiction.
+5. **Engineer Evidence block complete** — all required fields present: Pre-flight, Changed files, Tests run, Test results, Failures, AC coverage.
+
+**If any check fails:**
+- Do NOT pass engineer output to code-reviewer. Treat the run as invalid.
+- Re-invoke the engineer agent with: (a) the specific failed check(s) named explicitly, (b) the original qa-fast context, (c) the full enriched spec.
+- If materialization fails on the second run: play `afplay /System/Library/Sounds/Basso.aiff`, emit BLOCKED checkpoint with `Engineer materialization: FAIL` in the Gate Satisfaction Record, and surface to user. Do NOT proceed.
+
+**Not applicable to:** read-only agents (qa-fast, code-reviewer, security-reviewer, architect, ui-designer, performance-analyst) or Doc-only changes.
+
+---
+
 ## Stage Evidence Contract (Mandatory)
 
 Each stage must produce minimum structured evidence. Missing evidence is a gate failure — the orchestrator must not proceed.
@@ -557,6 +576,17 @@ Each stage must produce minimum structured evidence. Missing evidence is a gate 
 ### Engineer output (required)
 ```
 ## Engineer Evidence
+Pre-flight:
+  Guidance read: [ARCHITECTURE.md, PR_RULES.md, feature spec, other files consulted]
+  Files inspected: [list of existing files surveyed before coding]
+  Planned files to modify: [list with reason for each]
+  Secondary impact areas: [security config | migrations | validation | DTO/API contract | routing/state/UI | tests — or NONE]
+  Likely failure modes: [top 3 — e.g. wrong exception pattern, cross-module repo violation, missing null guard]
+Frontend checks (required for frontend-engineer, N/A otherwise):
+  Route/page entry point: [file:line or N/A]
+  Auth/role guard impact: [affected guard or NONE]
+  Loading/empty/error states handled: [YES — component:line | NO — reason]
+  API fields verified against contract: [YES | field-name missing from contract]
 Changed files: [list with file paths]
 Tests run: [exact command]
 Test results: [X passed / Y failed / Z skipped]
@@ -598,8 +628,12 @@ Code-reviewer: APPROVE | N/A(trivial)
 Security-reviewer: APPROVE | N/A
 E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(refactor-single-service) | SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)
 QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)
+E2E coverage relevance: COVERED | GAP(no auth fixture) | GAP(no spec for flow) | N/A(backend-only) | N/A(trivial) | N/A(doc-only)
+Engineer materialization: PASS | FAIL | N/A(doc-only) | N/A(trivial)
 Process-doc review: PASS | N/A
 All gates satisfied: YES
 ```
 
 If the orchestrator cannot output `All gates satisfied: YES`, it MUST NOT proceed to commit/push/PR.
+
+If `Engineer materialization` is not `PASS` for Normal or High-risk code tasks, `All gates satisfied` cannot be `YES`.

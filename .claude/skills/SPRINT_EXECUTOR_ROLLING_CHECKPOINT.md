@@ -62,7 +62,12 @@ Before the first PR:
 1. Fetch all sprint issue numbers + titles from the current GitHub Project iteration — store in checkpoint preamble as `Sprint issues:` list. Filter the project item list (from step 0) to only items assigned to the current sprint iteration. Issues not yet in the project can be added via `gh project item-add 1 --owner gautirao --url <issue-url>`.
 2. Fetch full descriptions for all issues (one `gh issue view <number> --json title,body` call each) — needed for spec enrichment and team-lead pre-flight.
 3. **Spec enrichment (all issues, once)** — invoke the `spec-enricher` agent (Task tool) with all issue IDs, titles, and descriptions:
+
+   **Mode selection:** If the user says "lightweight" at sprint kickoff, OR if all issue descriptions are 200+ characters with explicit behavioral statements, invoke with:
+   > "Mode: lightweight. Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
+   Otherwise, use the default (full mode) invocation:
    > "Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
+   When in doubt, use full mode.
 
    `spec-enricher` runs on `opus` regardless of your current model — consistent quality is the reason it is a dedicated agent.
 
@@ -115,6 +120,8 @@ For each GitHub issue (PR N):
      - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
      - If findings are CONCERN or SUGGESTION only (no BLOCKING): proceed to commit without a fix pass; log findings in checkpoint Risks.
      - There are no exceptions to this rule — inline fixes by the orchestrator are always a violation.
+
+4b. **Engineer materialization validation** — After the engineer agent completes, validate per the `ROUTE_AND_RUN.md` "Post-Engineer Materialization Check (Mandatory)" section. If validation passes, proceed to code-reviewer and record `Engineer materialization: PASS` in the checkpoint. If validation fails: do NOT invoke code-reviewer; re-invoke the engineer once with the failing check(s) named explicitly. If validation fails again: emit BLOCKED checkpoint (`Engineer materialization: FAIL`), play `afplay /System/Library/Sounds/Basso.aiff`, surface to user, stop.
 
 5. **E2E gate** — Owned by `ROUTE_AND_RUN` Step 3. For Normal and High-risk changes, `qa` runs in verification mode after all reviewers APPROVE, before commit/push/PR. Change classification (trivial/normal/high-risk/doc-only) is determined by ROUTE_AND_RUN Step 1B — no sprint-layer override.
 
@@ -194,7 +201,9 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
+Engineer materialization: <PASS|FAIL|N/A>
 E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
+E2E coverage relevance: <COVERED|GAP(no auth fixture)|GAP(no spec for flow)|N/A>
 Touched files:
 - <file1>
 - <file2>
@@ -218,7 +227,9 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
+Engineer materialization: <PASS|FAIL|N/A>
 E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
+E2E coverage relevance: <COVERED|GAP(no auth fixture)|GAP(no spec for flow)|N/A>
 Touched files:
 - <file1>
 - <file2>
