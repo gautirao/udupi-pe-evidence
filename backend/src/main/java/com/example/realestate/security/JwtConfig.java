@@ -39,6 +39,8 @@ public class JwtConfig {
                         .requestMatchers("/api/ingestion/ingest-posts").permitAll()
                         // Public listing endpoints — no auth required (RE-104)
                         .requestMatchers(HttpMethod.GET, "/api/public/listings/**").permitAll()
+                        // Public trust badge endpoint — no auth required (RE-151)
+                        .requestMatchers(HttpMethod.GET, "/api/listings/*/trust").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));

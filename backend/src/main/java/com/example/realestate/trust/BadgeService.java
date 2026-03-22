@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -46,6 +47,14 @@ public class BadgeService {
     private static final Logger log = LoggerFactory.getLogger(BadgeService.class);
 
     private static final String ENTITY_TYPE_BADGE = "listing_verification_dimension";
+
+    /**
+     * Allowlist of valid dimensionType values (AC3 — RE-151).
+     * Any mutation method that receives a value not in this set throws
+     * {@link IllegalArgumentException} before touching the database.
+     */
+    private static final Set<String> VALID_DIMENSION_TYPES =
+            Set.of("IDENTITY", "LOCATION", "PHOTOS", "AUTHORITY", "DOCUMENTS", "FIELD");
 
     private final ListingVerificationDimensionRepository dimensionRepository;
     private final ListingRepository listingRepository;
@@ -98,6 +107,9 @@ public class BadgeService {
         Objects.requireNonNull(listingId, "listingId must not be null");
         Objects.requireNonNull(dimensionType, "dimensionType must not be null");
         Objects.requireNonNull(actorId, "actorId must not be null");
+        if (!VALID_DIMENSION_TYPES.contains(dimensionType)) {
+            throw new IllegalArgumentException("Invalid dimensionType: " + dimensionType);
+        }
 
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -164,6 +176,9 @@ public class BadgeService {
         Objects.requireNonNull(listingId, "listingId must not be null");
         Objects.requireNonNull(dimensionType, "dimensionType must not be null");
         Objects.requireNonNull(adminId, "adminId must not be null");
+        if (!VALID_DIMENSION_TYPES.contains(dimensionType)) {
+            throw new IllegalArgumentException("Invalid dimensionType: " + dimensionType);
+        }
 
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -222,6 +237,9 @@ public class BadgeService {
         Objects.requireNonNull(listingId, "listingId must not be null");
         Objects.requireNonNull(dimensionType, "dimensionType must not be null");
         Objects.requireNonNull(actorId, "actorId must not be null");
+        if (!VALID_DIMENSION_TYPES.contains(dimensionType)) {
+            throw new IllegalArgumentException("Invalid dimensionType: " + dimensionType);
+        }
 
         OffsetDateTime now = OffsetDateTime.now();
 

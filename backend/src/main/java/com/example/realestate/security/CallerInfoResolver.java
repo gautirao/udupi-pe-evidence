@@ -52,7 +52,7 @@ public class CallerInfoResolver implements HandlerMethodArgumentResolver {
 
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (!(auth instanceof JwtAuthenticationToken token)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Authentication required");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
 
         UUID userId;
