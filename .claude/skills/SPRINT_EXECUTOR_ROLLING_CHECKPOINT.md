@@ -128,15 +128,25 @@ For each GitHub issue (PR N):
    - `git commit -m "<type>(<scope>): <description> (PR-<id>)"`
    - `git push -u origin <branch>`
    - `gh pr create --title "..." --body "..." --base main`
+   - **Workflow invariant:** Every PR body must include `Closes #<issue-number>` for the issue being executed. The issue number comes from the sprint checkpoint's `Sprint issues:` map. Missing closing keyword is a workflow error — this step is not complete until the correct closing keyword is present in the PR body.
    - **Local E2E is the primary merge gate.** If the pre-push hook ran E2E and it passed (40/0 failures, marker written), proceed to merge immediately — do NOT wait for CI.
    - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures (billing limits, runner unavailability, network timeouts) do NOT block merge when local E2E passed.
    - Merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
-7. **Close issue** — set GitHub Project item status to "Done" and close the issue:
+7. **Close issue + update project status**
+   **Step A — Close the issue (always required):**
    ```bash
-   gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1
    gh issue close <number>
    ```
+   If the PR body contains `Closes #<number>`, GitHub auto-closes the issue on merge — `gh issue close` is idempotent, always run it.
+
+   **Step B — Set project status to Done:**
+   ```bash
+   gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1
+   ```
+   - If GitHub Project automation moved the item to Done automatically (triggered by issue close): verify the item status, then skip — `gh project item-edit` is optional.
+   - If automation did not fire or is not configured: `gh project item-edit` is required.
+   - Do not leave a non-Done project card after a merged PR.
 8. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
 
    Immediately after the chime, output a single progress line using the execution order from the checkpoint preamble:
@@ -184,7 +194,7 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
-E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|BLOCKED — reason>
+E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
 Touched files:
 - <file1>
 - <file2>
@@ -208,7 +218,7 @@ Last completed PR: <id + title>
 Status: <DONE|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
-E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|BLOCKED — reason>
+E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
 Touched files:
 - <file1>
 - <file2>

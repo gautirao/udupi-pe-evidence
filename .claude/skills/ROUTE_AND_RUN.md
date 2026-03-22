@@ -233,20 +233,29 @@ Never pause to ask for confirmation before executing any of these:
 - `git commit -m "..."` — commit staged changes
 - `git push -u origin <branch>` — push feature branch to remote
 - `gh pr create ...` — open pull request
+  - **Workflow invariant:** Every PR body must include `Closes #<issue-number>` for the issue being executed. Missing closing keyword is a workflow error — PR creation is not complete until the correct closing keyword is present in the body.
 - `gh pr merge <number> --merge --delete-branch` — merge pull request
 - `git checkout main && git pull origin main` — sync main after merge
 - `gh issue close <number>` — close the associated GitHub issue after PR merge (always, if a GitHub issue number is known)
 - `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1` — set GitHub Project item status to Done (if project item ID is known)
 
-**Post-merge done rule:** After every successful PR merge, both steps are required (when the relevant IDs are known):
-```bash
-# 1. Set GitHub Project item status to Done
-gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1
+**Post-merge done rule:** After every successful PR merge:
 
-# 2. Close the GitHub issue
+**Step A — Close the issue (always required):**
+```bash
 gh issue close <number>
 ```
-Both steps apply to sprint and standalone ROUTE_AND_RUN usage. In sprint context, `ITEM_ID` comes from the `Project item IDs:` map in the checkpoint preamble. In standalone use, fetch it via the project items GraphQL query in SPRINT_EXECUTOR Sprint Start step 0. Do not skip either step — an open issue or a non-Done project card after a merged PR is a tracking gap.
+If the PR body contains `Closes #<number>`, GitHub auto-closes the issue on merge — `gh issue close` is a safety net and is idempotent. Always run it. An open issue after a merged PR is a tracking gap.
+
+**Step B — Set GitHub Project item status to Done:**
+```bash
+gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 25c24fa1
+```
+- If GitHub Project automation is configured to move closed issues to Done automatically: verify the item moved to Done after Step A. Manual `gh project item-edit` is then optional but may be run as a fallback.
+- If automation is not configured, or the item did not move to Done automatically: `gh project item-edit` is required.
+- A non-Done project card after a merged PR is a tracking gap — do not leave it incomplete.
+
+In sprint context, `ITEM_ID` comes from the `Project item IDs:` map in the checkpoint preamble. In standalone use, fetch it via the project items GraphQL query in SPRINT_EXECUTOR Sprint Start step 0.
 
 These pre-approvals apply to git operations performed within `ROUTE_AND_RUN`'s execution scope. The full sprint PR lifecycle — branch creation, commit, push, PR creation, CI monitoring, merge, post-merge checkout, and issue close — is owned by `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` when invoked from a sprint context. In standalone use, ROUTE_AND_RUN is responsible for the issue close step.
 
@@ -373,8 +382,8 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 |------|-------------|---------------|
 | Doc-only | skip | skips (doc pattern match) |
 | Trivial | skip | skips (marker or runs if no marker) |
-| Normal | **required** (see applicability rules below) | skips if marker exists |
-| High-risk | **required** (see applicability rules below) | skips if marker exists |
+| Normal | **must be evaluated** — recorded as PASS or explicit documented SKIP under applicability rules (see below) | skips if marker exists |
+| High-risk | **must be evaluated** — recorded as PASS or explicit documented SKIP under applicability rules (see below) | skips if marker exists |
 
 ### E2E applicability rules (Normal and High-risk)
 
@@ -383,10 +392,17 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 | Frontend — new page/route | YES — full suite | New routes could break existing navigation |
 | Frontend — existing page change | YES — full suite | Could break rendering |
 | Backend — API consumed by existing FE page | YES — full suite | API contract change could break FE |
-| Backend — no FE consumer yet (new endpoint, no FE page wired) | SKIP — `SKIPPED(no FE consumer)` | No frontend route to test against |
+| Backend — all five skip conditions confirmed (see below) | SKIP — `SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)` | No frontend path affected |
 | Doc-only / Trivial | SKIP | No runtime change |
 
-When skipping, the Gate Satisfaction Record must state the specific skip reason (e.g., `SKIPPED(no FE consumer)` or `SKIPPED(backend-only, no API contract change)`).
+**Backend-only skip conditions — ALL five must be confirmed before skipping:**
+1. No frontend files changed
+2. No existing frontend consumer depends on the changed backend behavior
+3. No API contract, response shape, or schema change affects an existing frontend consumer
+4. No qa-fast or routing evidence of a new or modified cross-layer user flow
+5. No uncertainty about frontend impact
+
+**When in doubt, do not skip.** If any condition is unconfirmed or uncertain, E2E must run. The skip reason in the Gate Satisfaction Record must be recorded as `SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)` — using the shortened form `SKIPPED(no FE consumer)` is no longer valid for backend skips; all five conditions must be named.
 
 ### Gate sequence (Normal and High-risk only)
 
@@ -514,7 +530,7 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 3. **Run build commands** — not `npm run build`, not `mvn compile`.
 4. **Interpret test failures as acceptable** — if a test fails, route to agent. Never skip.
 5. **Apply reviewer findings directly** — always re-invoke the responsible engineer.
-6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run. No exceptions.
+6. **Override the E2E gate** — for Normal and High-risk changes, the QA E2E gate must be evaluated and recorded as either PASS or an explicit documented SKIP under the applicability rules. Undocumented omission is not allowed. Skips are only valid when all stated skip conditions are confirmed.
 7. **Reclassify to dodge gates** — if triage says risk=med or the change has logic, it cannot be Trivial.
 
 ### MUST
@@ -576,8 +592,8 @@ Classification evidence: [changed files + behavior impact for trivial; or N/A]
 Engineer tests: PASS | FAIL | SKIPPED(trivial, non-executable)
 Code-reviewer: APPROVE | N/A(trivial)
 Security-reviewer: APPROVE | N/A
-E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(refactor-single-service) | SKIPPED(no FE consumer)
-QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(no FE consumer) | SKIPPED(backend-only, no API contract change)
+E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(refactor-single-service) | SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)
+QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)
 Process-doc review: PASS | N/A
 All gates satisfied: YES
 ```
