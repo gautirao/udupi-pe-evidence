@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -30,6 +32,8 @@ import {
 } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { useAdminListings, useGeocodeMissing } from '@/hooks/useAdminData';
 import { useUpdateListing, PropertyListing, PropertyType } from '@/hooks/usePropertyListings';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
@@ -88,6 +92,8 @@ export default function Listings() {
   const { data: listings = [], isLoading } = useAdminListings(200);
   const updateListing = useUpdateListing();
   const { geocodeMissing, isProcessing: isGeocoding, logs: geocodeLogs, progress: geocodeProgress, reset: resetGeocode } = useGeocodeMissing();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [editingListing, setEditingListing] = useState<PropertyListing | null>(null);
   const [showGeocodeDialog, setShowGeocodeDialog] = useState(false);
@@ -95,6 +101,34 @@ export default function Listings() {
   const [filterValidity, setFilterValidity] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const [restoreRejectedTarget, setRestoreRejectedTarget] = useState<string | null>(null);
+  const [restoreRejectedNote, setRestoreRejectedNote] = useState('');
+
+  const approveScrapedMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/api/admin/listings/${id}/approve-scraped`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-listings'] });
+      toast({ title: 'Listing approved as live' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Approval failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const restoreRejectedMutation = useMutation({
+    mutationFn: ({ id, moderationNote }: { id: string; moderationNote: string }) =>
+      api.post(`/api/admin/listings/${id}/restore-rejected`, { moderationNote }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-listings'] });
+      setRestoreRejectedTarget(null);
+      setRestoreRejectedNote('');
+      toast({ title: 'Listing restored to live' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Restore failed', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const [editForm, setEditForm] = useState({
     locality: '',
@@ -379,15 +413,46 @@ export default function Listings() {
                       {formatRelativeDate(listing.created_at)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" asChild>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <Button variant="ghost" size="icon" asChild aria-label="View listing">
                           <Link to={`/listing/${listing.id}`}>
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleEdit(listing)}>
+                        <Button variant="ghost" size="icon" aria-label="Edit listing" onClick={() => handleEdit(listing)}>
                           <Pencil className="h-4 w-4" />
                         </Button>
+                        {listing.status === 'SCRAPED' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-green-600 border-green-200 hover:bg-green-50"
+                            disabled={approveScrapedMutation.isPending}
+                            onClick={() => approveScrapedMutation.mutate(listing.id)}
+                          >
+                            {approveScrapedMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 mr-1" />
+                            )}
+                            Approve as Live
+                          </Button>
+                        )}
+                        {listing.status === 'REJECTED' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            disabled={restoreRejectedMutation.isPending}
+                            onClick={() => {
+                              setRestoreRejectedTarget(listing.id);
+                              setRestoreRejectedNote('');
+                            }}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-1" />
+                            Restore to Live
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -489,6 +554,65 @@ export default function Listings() {
               <Button onClick={handleSave} disabled={updateListing.isPending}>
                 {updateListing.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Restore to Live Dialog */}
+        <Dialog
+          open={!!restoreRejectedTarget}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRestoreRejectedTarget(null);
+              setRestoreRejectedNote('');
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Restore to Live</DialogTitle>
+              <DialogDescription>
+                This listing will be restored to live status. Provide a moderation note.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2">
+              <Label htmlFor="restore-note">Moderation note</Label>
+              <Textarea
+                id="restore-note"
+                placeholder="Reason for restoring this listing..."
+                value={restoreRejectedNote}
+                onChange={(e) => setRestoreRejectedNote(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRestoreRejectedTarget(null);
+                  setRestoreRejectedNote('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!restoreRejectedNote.trim() || restoreRejectedMutation.isPending}
+                onClick={() => {
+                  if (restoreRejectedTarget && restoreRejectedNote.trim()) {
+                    restoreRejectedMutation.mutate({
+                      id: restoreRejectedTarget,
+                      moderationNote: restoreRejectedNote.trim(),
+                    });
+                  }
+                }}
+              >
+                {restoreRejectedMutation.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                )}
+                Restore to Live
               </Button>
             </DialogFooter>
           </DialogContent>

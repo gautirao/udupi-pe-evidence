@@ -17,6 +17,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table,
   TableBody,
   TableCell,
@@ -26,7 +33,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, CheckCircle2, XCircle, ClipboardList } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ClipboardList, RotateCcw } from 'lucide-react';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
 
 interface PendingListing {
@@ -40,6 +47,13 @@ interface PendingListing {
   created_at: string;
 }
 
+const REJECTION_CODES: { value: string; label: string }[] = [
+  { value: 'INCOMPLETE_INFO', label: 'Incomplete info' },
+  { value: 'DUPLICATE_LISTING', label: 'Duplicate listing' },
+  { value: 'INVALID_PHOTOS', label: 'Invalid photos' },
+  { value: 'POLICY_VIOLATION', label: 'Policy violation' },
+  { value: 'OTHER', label: 'Other' },
+];
 
 export default function PendingListings() {
   const { isAdmin } = useAuth();
@@ -47,7 +61,11 @@ export default function PendingListings() {
   const queryClient = useQueryClient();
 
   const [rejectTarget, setRejectTarget] = useState<PendingListing | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionReasonCode, setRejectionReasonCode] = useState('');
+  const [rejectionNote, setRejectionNote] = useState('');
+
+  const [returnForEditsTarget, setReturnForEditsTarget] = useState<PendingListing | null>(null);
+  const [returnForEditsNote, setReturnForEditsNote] = useState('');
 
   const { data: listings = [], isLoading } = useQuery({
     queryKey: ['pending-listings'],
@@ -76,12 +94,15 @@ export default function PendingListings() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.post(`/api/admin/listings/${id}/reject`, { rejectionReason: reason }),
+    mutationFn: ({ id, code, note }: { id: string; code: string; note: string }) => {
+      const reason = note.trim() ? `${code}: ${note.trim()}` : code;
+      return api.post(`/api/admin/listings/${id}/reject`, { rejectionReason: reason });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pending-listings'] });
       setRejectTarget(null);
-      setRejectionReason('');
+      setRejectionReasonCode('');
+      setRejectionNote('');
       toast({ title: 'Listing Rejected', description: 'The broker has been notified.' });
     },
     onError: (error: Error) => {
@@ -89,12 +110,31 @@ export default function PendingListings() {
     },
   });
 
+  const returnForEditsMutation = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      api.post(`/api/admin/listings/${id}/return-for-edits`, { note }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pending-listings'] });
+      setReturnForEditsTarget(null);
+      setReturnForEditsNote('');
+      toast({ title: 'Returned for edits', description: 'The broker has been notified.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Return failed', description: error.message, variant: 'destructive' });
+    },
+  });
+
   const handleRejectSubmit = () => {
-    if (!rejectTarget || !rejectionReason.trim()) return;
-    rejectMutation.mutate({ id: rejectTarget.id, reason: rejectionReason.trim() });
+    if (!rejectTarget || !rejectionReasonCode) return;
+    rejectMutation.mutate({ id: rejectTarget.id, code: rejectionReasonCode, note: rejectionNote });
   };
 
-  const isBusy = approveMutation.isPending || rejectMutation.isPending;
+  const handleReturnForEditsSubmit = () => {
+    if (!returnForEditsTarget || !returnForEditsNote.trim()) return;
+    returnForEditsMutation.mutate({ id: returnForEditsTarget.id, note: returnForEditsNote.trim() });
+  };
+
+  const isBusy = approveMutation.isPending || rejectMutation.isPending || returnForEditsMutation.isPending;
 
   return (
     <AppLayout>
@@ -172,11 +212,25 @@ export default function PendingListings() {
                         <Button
                           size="sm"
                           variant="outline"
+                          className="text-amber-600 border-amber-200 hover:bg-amber-50"
+                          disabled={isBusy}
+                          onClick={() => {
+                            setReturnForEditsTarget(listing);
+                            setReturnForEditsNote('');
+                          }}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Return for Edits
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="text-red-600 border-red-200 hover:bg-red-50"
                           disabled={isBusy}
                           onClick={() => {
                             setRejectTarget(listing);
-                            setRejectionReason('');
+                            setRejectionReasonCode('');
+                            setRejectionNote('');
                           }}
                         >
                           <XCircle className="h-4 w-4 mr-1" />
@@ -191,31 +245,31 @@ export default function PendingListings() {
           </Card>
         )}
 
-        {/* Reject Dialog */}
+        {/* Return for Edits Dialog */}
         <Dialog
-          open={!!rejectTarget}
+          open={!!returnForEditsTarget}
           onOpenChange={(open) => {
             if (!open) {
-              setRejectTarget(null);
-              setRejectionReason('');
+              setReturnForEditsTarget(null);
+              setReturnForEditsNote('');
             }
           }}
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Reject Listing</DialogTitle>
+              <DialogTitle>Return for Edits</DialogTitle>
               <DialogDescription>
-                Provide a reason for rejection. The broker will be notified.
+                Explain what the broker needs to fix before resubmitting.
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-2">
-              <Label htmlFor="rejection-reason">Reason</Label>
+              <Label htmlFor="return-note">Note</Label>
               <Textarea
-                id="rejection-reason"
-                placeholder="e.g., Incomplete address, missing price details..."
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
+                id="return-note"
+                placeholder="e.g., Please add clearer photos and confirm the exact locality..."
+                value={returnForEditsNote}
+                onChange={(e) => setReturnForEditsNote(e.target.value)}
                 rows={3}
               />
             </div>
@@ -224,15 +278,87 @@ export default function PendingListings() {
               <Button
                 variant="outline"
                 onClick={() => {
+                  setReturnForEditsTarget(null);
+                  setReturnForEditsNote('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                disabled={!returnForEditsNote.trim() || returnForEditsMutation.isPending}
+                onClick={handleReturnForEditsSubmit}
+              >
+                {returnForEditsMutation.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                )}
+                Return for Edits
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reject Dialog */}
+        <Dialog
+          open={!!rejectTarget}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRejectTarget(null);
+              setRejectionReasonCode('');
+              setRejectionNote('');
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Reject Listing</DialogTitle>
+              <DialogDescription>
+                Select a reason for rejection. The broker will be notified.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="rejection-reason-code">Reason</Label>
+                <Select value={rejectionReasonCode} onValueChange={setRejectionReasonCode}>
+                  <SelectTrigger id="rejection-reason-code">
+                    <SelectValue placeholder="Select a reason..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REJECTION_CODES.map(({ value, label }) => (
+                      <SelectItem key={value} value={value}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rejection-note">Additional note (optional)</Label>
+                <Textarea
+                  id="rejection-note"
+                  placeholder="Add any additional context for the broker..."
+                  value={rejectionNote}
+                  onChange={(e) => setRejectionNote(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
                   setRejectTarget(null);
-                  setRejectionReason('');
+                  setRejectionReasonCode('');
+                  setRejectionNote('');
                 }}
               >
                 Cancel
               </Button>
               <Button
                 variant="destructive"
-                disabled={!rejectionReason.trim() || rejectMutation.isPending}
+                disabled={!rejectionReasonCode || rejectMutation.isPending}
                 onClick={handleRejectSubmit}
               >
                 {rejectMutation.isPending && (
