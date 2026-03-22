@@ -73,6 +73,7 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 
 | ID | Source | Description | Risk | Added |
 |----|--------|-------------|------|-------|
+| DB-2 | RE-145 | **`listing_complaint` INSERT allows complaints against DRAFT/ARCHIVED/REJECTED listings** — RLS INSERT policy only blocks owner self-complaint; no restriction on target listing status. If product intent is complaints only against LIVE listings, add `AND (pl.status = 'LIVE' OR (pl.status = 'SCRAPED' AND pl.is_valid = true))` to the EXISTS guard in V49 or a follow-up migration. | Low | 2026-03-22 |
 | DB-1 | RE-143 | **`listing_verification_dimension.updated_at` has no auto-update trigger** — maintained by app layer only. If a backend path forgets to set it, column retains creation timestamp. Add a BEFORE UPDATE trigger (like `update_property_listings_updated_at` in V0) in a follow-up migration. | Low | 2026-03-21 |
 
 ## Infrastructure
