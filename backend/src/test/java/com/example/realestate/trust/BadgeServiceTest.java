@@ -446,4 +446,29 @@ class BadgeServiceTest {
         assertThatThrownBy(() -> badgeService.grantBadge(listingId, "IDENTITY", actorId, null))
                 .isInstanceOf(ListingNotFoundException.class);
     }
+
+    // -------------------------------------------------------------------------
+    // dimensionType allowlist (AC3 from RE-151)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void grantBadge_invalidDimensionType_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> badgeService.grantBadge(listingId, "INVALID_TYPE", actorId, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("INVALID_TYPE");
+    }
+
+    @Test
+    void suspendBadge_invalidDimensionType_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> badgeService.suspendBadge(listingId, "INVALID_TYPE", actorId, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("INVALID_TYPE");
+    }
+
+    @Test
+    void expireBadge_invalidDimensionType_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> badgeService.expireBadge(listingId, "INVALID_TYPE", actorId))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("INVALID_TYPE");
+    }
 }

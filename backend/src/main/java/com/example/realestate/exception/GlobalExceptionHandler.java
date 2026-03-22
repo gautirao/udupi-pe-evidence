@@ -68,7 +68,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(BadgeNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleBadgeNotFound(BadgeNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", "BADGE_NOT_FOUND", "message", ex.getMessage()));
+                .body(Map.of("error", "BADGE_NOT_FOUND"));
+    }
+
+    // ===== IllegalArgumentException → 400 =====
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Invalid argument: {}", ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(Map.of("error", "INVALID_ARGUMENT"));
     }
 
     // ===== PropertyReferenceException → 400 =====
