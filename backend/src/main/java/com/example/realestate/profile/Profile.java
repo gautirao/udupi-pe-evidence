@@ -42,6 +42,18 @@ public class Profile {
     @Column(name = "avatar_url")
     private String avatarUrl;
 
+    @Column(name = "phone_verified", nullable = false)
+    private boolean phoneVerified;
+
+    @Column(name = "org_name", length = 200)
+    private String orgName;
+
+    @Column(name = "rera_broker_id", length = 100)
+    private String reraBrokerId;
+
+    @Column(name = "reputation_score", nullable = false)
+    private int reputationScore;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -100,6 +112,38 @@ public class Profile {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public boolean isPhoneVerified() {
+        return phoneVerified;
+    }
+
+    public void setPhoneVerified(boolean phoneVerified) {
+        this.phoneVerified = phoneVerified;
+    }
+
+    public String getOrgName() {
+        return orgName;
+    }
+
+    public void setOrgName(String orgName) {
+        this.orgName = orgName;
+    }
+
+    public String getReraBrokerId() {
+        return reraBrokerId;
+    }
+
+    public void setReraBrokerId(String reraBrokerId) {
+        this.reraBrokerId = reraBrokerId;
+    }
+
+    public int getReputationScore() {
+        return reputationScore;
+    }
+
+    public void setReputationScore(int reputationScore) {
+        this.reputationScore = reputationScore;
     }
 
     public OffsetDateTime getCreatedAt() {
