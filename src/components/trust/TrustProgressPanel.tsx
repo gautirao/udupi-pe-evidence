@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { User, MapPin, Camera, Shield, ChevronRight, ChevronDown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { api } from '@/lib/api';
+import { api, API_BASE_URL } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── API types ────────────────────────────────────────────────────────────────
 
@@ -73,20 +75,145 @@ const STATE_DISPLAY: Record<BadgeState, StateDisplay> = {
 
 const FALLBACK_STATE: StateDisplay = { label: '', className: 'text-muted-foreground border-muted' };
 
+// ─── PhotoUploadButton ────────────────────────────────────────────────────────
+
+interface PhotoUploadButtonProps {
+  listingId: string;
+  onSuccess: () => void;
+}
+
+function PhotoUploadButton({ listingId, onSuccess }: PhotoUploadButtonProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
+
+  function handleButtonClick() {
+    inputRef.current?.click();
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token ?? null;
+
+      if (!token) {
+        toast({
+          variant: 'destructive',
+          title: 'Session expired',
+          description: 'Please log in again to upload photos.',
+        });
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${token}`,
+      };
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/listings/${listingId}/trust/photos/verify`,
+        {
+          method: 'POST',
+          headers,
+          body: formData,
+        },
+      );
+
+      if (response.status === 409) {
+        toast({
+          title: 'Already submitted',
+          description: 'Your photo is already submitted for review.',
+        });
+        return;
+      }
+
+      if (response.status === 422) {
+        toast({
+          variant: 'destructive',
+          title: 'Photo rejected',
+          description: 'This photo was flagged as a stock image. Please upload an original photo.',
+        });
+        return;
+      }
+
+      if (!response.ok) {
+        toast({
+          variant: 'destructive',
+          title: 'Upload failed',
+          description: 'Upload failed. Please try again.',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Photo submitted',
+        description: 'Photo submitted for review.',
+      });
+      onSuccess();
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Upload failed',
+        description: 'Upload failed. Please try again.',
+      });
+    } finally {
+      setIsUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  }
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        capture="environment"
+        aria-hidden="true"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={isUploading}
+        onClick={handleButtonClick}
+      >
+        {isUploading ? 'Uploading...' : 'Upload Live Photo'}
+      </Button>
+    </>
+  );
+}
+
 // ─── Badge row ────────────────────────────────────────────────────────────────
 
 interface BadgeRowProps {
   badge: TrustProgressBadgeDto;
+  listingId?: string;
+  onPhotoSubmitted?: () => void;
 }
 
-function BadgeRow({ badge }: BadgeRowProps) {
+function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
   const { label: dimensionLabel, Icon } = DIMENSION_META[badge.dimensionType] ?? FALLBACK_DIMENSION;
   const { label: stateLabel, className: stateClassName } = STATE_DISPLAY[badge.badgeState] ?? FALLBACK_STATE;
   // CTA only applies to AVAILABLE badges — PENDING means verification is already in progress.
   const showCta = badge.badgeState === 'AVAILABLE';
 
+  const isPhotosAvailable =
+    showCta &&
+    badge.dimensionType === 'PHOTOS' &&
+    listingId !== undefined &&
+    onPhotoSubmitted !== undefined;
+
   const ctaText =
-    showCta
+    showCta && !isPhotosAvailable
       ? badge.autoGranted === true
         ? 'Auto-granted'
         : 'Verification coming soon'
@@ -99,6 +226,9 @@ function BadgeRow({ badge }: BadgeRowProps) {
       <Badge variant="outline" className={stateClassName}>
         {stateLabel}
       </Badge>
+      {isPhotosAvailable && (
+        <PhotoUploadButton listingId={listingId} onSuccess={onPhotoSubmitted} />
+      )}
       {ctaText && (
         <span className="text-xs text-muted-foreground">{ctaText}</span>
       )}
@@ -178,7 +308,12 @@ export function TrustProgressPanel({ listingId, variant }: TrustProgressPanelPro
     return (
       <div className="space-y-3">
         {badges.map((badge) => (
-          <BadgeRow key={badge.dimensionType} badge={badge} />
+          <BadgeRow
+            key={badge.dimensionType}
+            badge={badge}
+            listingId={badge.dimensionType === 'PHOTOS' ? listingId : undefined}
+            onPhotoSubmitted={badge.dimensionType === 'PHOTOS' ? () => refetch() : undefined}
+          />
         ))}
       </div>
     );
@@ -212,7 +347,12 @@ export function TrustProgressPanel({ listingId, variant }: TrustProgressPanelPro
       {isExpanded && (
         <div id={`trust-details-${listingId}`} className="space-y-3 pt-1">
           {badges.map((badge) => (
-            <BadgeRow key={badge.dimensionType} badge={badge} />
+            <BadgeRow
+              key={badge.dimensionType}
+              badge={badge}
+              listingId={badge.dimensionType === 'PHOTOS' ? listingId : undefined}
+              onPhotoSubmitted={badge.dimensionType === 'PHOTOS' ? () => refetch() : undefined}
+            />
           ))}
         </div>
       )}

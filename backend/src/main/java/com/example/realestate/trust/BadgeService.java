@@ -275,6 +275,68 @@ public class BadgeService {
     }
 
     // -------------------------------------------------------------------------
+    // submitPhotos
+    // -------------------------------------------------------------------------
+
+    /**
+     * Transitions the PHOTOS dimension to PENDING state for a given listing,
+     * indicating the photo is awaiting admin review.
+     *
+     * <p>If the PHOTOS dimension is already PENDING or EARNED, throws
+     * {@link PhotoAlreadySubmittedException} — the caller must surface a 409 conflict.
+     *
+     * <p>If the PHOTOS dimension does not exist, a new row is created with state PENDING.
+     * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED), it is updated to PENDING.
+     *
+     * @param listingId listing for which the photo was submitted; must not be null
+     * @param callerId  UUID of the broker or owner submitting the photo; must not be null
+     */
+    @Transactional
+    public ListingVerificationDimension submitPhotos(UUID listingId, UUID callerId) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, "PHOTOS")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType("PHOTOS");
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        if ("PENDING".equals(previousState) || "EARNED".equals(previousState)) {
+            throw new PhotoAlreadySubmittedException(previousState);
+        }
+
+        dimension.setBadgeState("PENDING");
+        dimension.setUpdatedAt(now);
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String afterJson = buildSimpleStateJson("PHOTOS", "PENDING");
+        String beforeJson = previousState != null ? buildSimpleStateJson("PHOTOS", previousState) : null;
+
+        adminAuditService.record(
+                callerId,
+                "PHOTOS_SUBMITTED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Photos submitted for review listingId={} callerId={}", listingId, callerId);
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
     // getBadges
     // -------------------------------------------------------------------------
 

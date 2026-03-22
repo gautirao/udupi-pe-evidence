@@ -15,6 +15,11 @@ spring:
     enabled: true
     baseline-on-migrate: true
 
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   data:
     web:
       pageable:
@@ -70,7 +75,7 @@ management:
 server:
   port: ${SERVER_PORT:8085}
   tomcat:
-    max-http-post-size: 1048576
+    max-http-post-size: 6291456
   error:
     include-message: never
     include-stack-trace: never

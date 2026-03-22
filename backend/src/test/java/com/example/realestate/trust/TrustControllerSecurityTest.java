@@ -75,6 +75,9 @@ class TrustControllerSecurityTest {
     private ListingRepository listingRepository;
 
     @MockitoBean
+    private PhotoHashService photoHashService;
+
+    @MockitoBean
     private UserRoleService userRoleService;
 
     /**

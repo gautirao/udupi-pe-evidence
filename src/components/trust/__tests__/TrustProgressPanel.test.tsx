@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
@@ -11,6 +11,23 @@ vi.mock('@/lib/api', () => ({
   api: {
     get: vi.fn(),
   },
+  API_BASE_URL: 'http://localhost:8085',
+}));
+
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: { access_token: 'test-token' } },
+      }),
+    },
+  },
+}));
+
+// Toast mock — capture toast calls without rendering Toaster
+const mockToast = vi.fn();
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: () => ({ toast: mockToast }),
 }));
 
 import { api } from '@/lib/api';
@@ -44,6 +61,17 @@ const allBadges = [
   },
 ];
 
+function makePhotosAvailableBadges() {
+  return [
+    {
+      dimensionType: 'PHOTOS' as const,
+      badgeState: 'AVAILABLE' as const,
+      grantedAt: null,
+      autoGranted: null,
+    },
+  ];
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeQueryClient() {
@@ -58,6 +86,19 @@ function renderPanel(props: { listingId?: string; variant?: 'full' | 'compact' }
       <TrustProgressPanel listingId={listingId} variant={variant} />
     </QueryClientProvider>,
   );
+}
+
+function makeFetchResponse(status: number, body: unknown = {}) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+}
+
+function makeFile(name = 'photo.jpg', type = 'image/jpeg') {
+  return new File(['(binary)'], name, { type });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -99,7 +140,7 @@ describe('TrustProgressPanel — full variant', () => {
     expect(await screen.findByText('Verified')).toBeInTheDocument();
   });
 
-  it('AVAILABLE badge shows "Not Started" chip and "Verification coming soon" text', async () => {
+  it('AVAILABLE badge (non-PHOTOS) shows "Not Started" chip and "Verification coming soon" text', async () => {
     vi.mocked(api.get).mockResolvedValue({
       badges: [
         {
@@ -116,6 +157,7 @@ describe('TrustProgressPanel — full variant', () => {
 
     expect(await screen.findByText('Not Started')).toBeInTheDocument();
     expect(screen.getByText('Verification coming soon')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /upload live photo/i })).not.toBeInTheDocument();
   });
 
   it('AUTHORITY with autoGranted=true shows "Auto-granted" instead of "Verification coming soon"', async () => {
@@ -227,5 +269,221 @@ describe('TrustProgressPanel — CTA edge cases', () => {
     expect(await screen.findByText('Pending Review')).toBeInTheDocument();
     expect(screen.queryByText('Verification coming soon')).not.toBeInTheDocument();
     expect(screen.queryByText('Auto-granted')).not.toBeInTheDocument();
+  });
+});
+
+describe('TrustProgressPanel — PHOTOS badge AVAILABLE', () => {
+  it('shows "Upload Live Photo" button for PHOTOS AVAILABLE', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    expect(await screen.findByRole('button', { name: /upload live photo/i })).toBeInTheDocument();
+    expect(screen.queryByText('Verification coming soon')).not.toBeInTheDocument();
+  });
+
+  it('non-PHOTOS AVAILABLE badge shows "Verification coming soon" text, not a button', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: [
+        {
+          dimensionType: 'IDENTITY' as const,
+          badgeState: 'AVAILABLE' as const,
+          grantedAt: null,
+          autoGranted: null,
+        },
+      ],
+      cta: 'IDENTITY',
+    });
+
+    renderPanel({ variant: 'full' });
+
+    expect(await screen.findByText('Verification coming soon')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /upload live photo/i })).not.toBeInTheDocument();
+  });
+
+  it('clicking button triggers file input and POSTs FormData to correct path', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 200 }),
+    );
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    const uploadBtn = await screen.findByRole('button', { name: /upload live photo/i });
+
+    // Grab the hidden file input and assign files to it before clicking the button
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput).not.toBeNull();
+
+    // Simulate file selection via userEvent.upload
+    await userEvent.upload(fileInput, makeFile());
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    const [calledUrl, calledInit] = fetchSpy.mock.calls[0];
+    expect(calledUrl).toContain('/api/listings/listing-42/trust/photos/verify');
+    expect(calledInit?.method).toBe('POST');
+    expect(calledInit?.body).toBeInstanceOf(FormData);
+
+    fetchSpy.mockRestore();
+    void uploadBtn; // suppress unused warning
+  });
+
+  it('successful upload calls onPhotoSubmitted (triggers refetch) and shows success toast', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 200 }),
+    );
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    await screen.findByRole('button', { name: /upload live photo/i });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile());
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'Photo submitted for review.' }),
+      );
+    });
+
+    // api.get should be called a second time due to refetch triggered by onSuccess
+    await waitFor(() => {
+      expect(vi.mocked(api.get)).toHaveBeenCalledTimes(2);
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('422 response shows stock-image error toast', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 422 }),
+    );
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    await screen.findByRole('button', { name: /upload live photo/i });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile());
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'destructive',
+          description: 'This photo was flagged as a stock image. Please upload an original photo.',
+        }),
+      );
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('409 response shows already-submitted info toast', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 409 }),
+    );
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    await screen.findByRole('button', { name: /upload live photo/i });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile());
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description: 'Your photo is already submitted for review.',
+        }),
+      );
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('other error response shows generic error toast', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 500 }),
+    );
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    await screen.findByRole('button', { name: /upload live photo/i });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile());
+
+    await waitFor(() => {
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          variant: 'destructive',
+          description: 'Upload failed. Please try again.',
+        }),
+      );
+    });
+
+    fetchSpy.mockRestore();
+  });
+
+  it('button is disabled and shows "Uploading..." text while upload is in progress', async () => {
+    vi.mocked(api.get).mockResolvedValue({
+      badges: makePhotosAvailableBadges(),
+      cta: 'PHOTOS',
+    });
+
+    // Never resolve so we can inspect mid-upload state
+    let resolveFetch!: (value: Response) => void;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockReturnValue(
+      new Promise<Response>((resolve) => { resolveFetch = resolve; }),
+    );
+
+    renderPanel({ variant: 'full', listingId: 'listing-42' });
+
+    await screen.findByRole('button', { name: /upload live photo/i });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await userEvent.upload(fileInput, makeFile());
+
+    // During upload the button should be disabled with "Uploading..." text
+    await waitFor(() => {
+      const btn = screen.getByRole('button', { name: /uploading/i });
+      expect(btn).toBeDisabled();
+    });
+
+    // Resolve inside act so the resulting state update is flushed cleanly
+    await act(async () => {
+      resolveFetch(new Response('{}', { status: 200 }));
+    });
+    fetchSpy.mockRestore();
   });
 });
