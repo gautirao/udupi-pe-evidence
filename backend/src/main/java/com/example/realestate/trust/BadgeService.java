@@ -50,6 +50,7 @@ public class BadgeService {
     private final ListingVerificationDimensionRepository dimensionRepository;
     private final ListingRepository listingRepository;
     private final TrustTierCalculator trustTierCalculator;
+    private final RankingScoreCalculator rankingScoreCalculator;
     private final AdminAuditService adminAuditService;
     private final ObjectMapper objectMapper;
 
@@ -57,11 +58,13 @@ public class BadgeService {
             ListingVerificationDimensionRepository dimensionRepository,
             ListingRepository listingRepository,
             TrustTierCalculator trustTierCalculator,
+            RankingScoreCalculator rankingScoreCalculator,
             AdminAuditService adminAuditService,
             ObjectMapper objectMapper) {
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
         this.trustTierCalculator = trustTierCalculator;
+        this.rankingScoreCalculator = rankingScoreCalculator;
         this.adminAuditService = adminAuditService;
         this.objectMapper = objectMapper;
     }
@@ -290,6 +293,10 @@ public class BadgeService {
         Listing listing = listingRepository.findById(listingId)
                 .orElseThrow(() -> new ListingNotFoundException(listingId));
         listing.setTrustTier(newTier);
+
+        int rankingScore = rankingScoreCalculator.calculate(listing);
+        listing.setRankingScore(rankingScore);
+
         listingRepository.save(listing);
 
         return newTier;
