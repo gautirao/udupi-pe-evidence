@@ -17,6 +17,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { useBrokerListingStats, useBrokerMyListings } from '@/hooks/useBrokerListings';
+import { TrustProgressPanel } from '@/components/trust/TrustProgressPanel';
 import { formatDistanceToNow } from 'date-fns';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -84,6 +85,10 @@ export default function BrokerDashboard() {
     return <Navigate to="/" replace />;
   }
 
+  const featuredListing = recentData?.listings.find(
+    (l) => l.status === 'LIVE' || l.status === 'PENDING_REVIEW'
+  );
+
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-6 max-w-7xl">
@@ -137,6 +142,20 @@ export default function BrokerDashboard() {
               Retry loading stats
             </Button>
           </div>
+        )}
+
+        {/* Trust progress for first LIVE/PENDING_REVIEW listing */}
+        {featuredListing && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Trust Progress — {featuredListing.title ?? featuredListing.displayId ?? 'Your listing'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TrustProgressPanel listingId={featuredListing.id} variant="full" />
+            </CardContent>
+          </Card>
         )}
 
         {/* Quick actions */}

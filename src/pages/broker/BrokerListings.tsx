@@ -40,6 +40,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { AlertCircle, Building2, CalendarDays, Copy, Eye, ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TrustProgressPanel } from '@/components/trust/TrustProgressPanel';
 
 const EDITABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
@@ -435,6 +436,17 @@ export default function BrokerListings() {
 
   // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Trust panel expand state — panels are mounted only when expanded to avoid N+1 API fan-out
+  const [expandedTrustIds, setExpandedTrustIds] = useState<Set<string>>(new Set());
+  const toggleTrust = (id: string) => {
+    setExpandedTrustIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // Only DRAFT and REJECTED listings can be bulk-deleted
   const deletableListings = useMemo(
@@ -839,6 +851,23 @@ export default function BrokerListings() {
                       </AlertDialog>
                     )}
                   </div>
+                  {(listing.status === 'LIVE' || listing.status === 'PENDING_REVIEW') && (
+                    <div className="mt-4 pt-4 border-t">
+                      <button
+                        className="text-xs text-muted-foreground hover:text-foreground mb-2 underline-offset-2 hover:underline"
+                        onClick={() => toggleTrust(listing.id)}
+                        aria-expanded={expandedTrustIds.has(listing.id)}
+                        aria-controls={`trust-panel-${listing.id}`}
+                      >
+                        {expandedTrustIds.has(listing.id) ? 'Hide trust progress' : 'Show trust progress'}
+                      </button>
+                      {expandedTrustIds.has(listing.id) && (
+                        <div id={`trust-panel-${listing.id}`}>
+                          <TrustProgressPanel listingId={listing.id} variant="compact" />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
               );
