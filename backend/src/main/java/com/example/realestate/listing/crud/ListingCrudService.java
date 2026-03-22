@@ -17,6 +17,7 @@ import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.OwnerListingLimitException;
 import com.example.realestate.poi.PoiQueryProfile;
+import com.example.realestate.trust.BadgeInvalidationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -30,7 +31,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -52,18 +55,21 @@ public class ListingCrudService {
     private final ListingOwnershipGuard listingOwnershipGuard;
     private final ListingDeduplicationService listingDeduplicationService;
     private final PriceChangeLogRepository priceChangeLogRepository;
+    private final BadgeInvalidationService badgeInvalidationService;
 
     public ListingCrudService(
             ListingRepository listingRepository,
             ApplicationEventPublisher applicationEventPublisher,
             ListingOwnershipGuard listingOwnershipGuard,
             ListingDeduplicationService listingDeduplicationService,
-            PriceChangeLogRepository priceChangeLogRepository) {
+            PriceChangeLogRepository priceChangeLogRepository,
+            BadgeInvalidationService badgeInvalidationService) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
         this.listingDeduplicationService = listingDeduplicationService;
         this.priceChangeLogRepository = priceChangeLogRepository;
+        this.badgeInvalidationService = badgeInvalidationService;
     }
 
     /**
@@ -322,9 +328,15 @@ public class ListingCrudService {
                                  String approvalsDeclared) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
-        if (!UPDATABLE_STATUSES.contains(listing.getStatus())) {
+        // Admins may edit listings in any non-archived status (including LIVE).
+        // Brokers are restricted to DRAFT and REJECTED only.
+        if (!isAdmin && !UPDATABLE_STATUSES.contains(listing.getStatus())) {
             throw new ListingStatusException("Cannot update listing with status " + listing.getStatus());
         }
+
+        // Snapshot trust-relevant fields before the update so badge invalidation
+        // can detect which fields changed.
+        Map<String, Object> previousValues = snapshotTrustFields(listing);
 
         // Capture the old price in paise before applying changes, for price-change logging.
         // pricePaise and price (rupees BigDecimal) are independent fields; pricePaise may be null
@@ -412,6 +424,12 @@ public class ListingCrudService {
         Listing saved = listingRepository.save(listing);
         log.info("Updated listing listingId={} by userId={}", listingId, userId);
 
+        // Revoke EARNED badges whose trust-relevant fields changed in this edit.
+        // This runs inside the same transaction — if invalidation fails, the whole update
+        // rolls back rather than leaving listing data and badge state inconsistent.
+        Map<String, Object> newValues = snapshotTrustFields(saved);
+        badgeInvalidationService.invalidateOnEdit(listingId, previousValues, newValues);
+
         // Trigger settlement enrichment when address is confirmed and coordinates are present.
         // Only for property types where settlement context adds value (land, house, commercial).
         if (saved.isAddressConfirmed()
@@ -425,6 +443,25 @@ public class ListingCrudService {
         }
 
         return saved;
+    }
+
+    /**
+     * Captures a snapshot of the listing fields that are relevant for badge invalidation.
+     * Called before and after applying field updates so {@link BadgeInvalidationService}
+     * can determine which material fields changed.
+     *
+     * <p>Keys match the field names used by {@link BadgeInvalidationService}:
+     * {@code latitude}, {@code longitude}, {@code locality}, {@code areaKey},
+     * {@code propertyType}.
+     */
+    private Map<String, Object> snapshotTrustFields(Listing listing) {
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("latitude", listing.getLatitude());
+        snapshot.put("longitude", listing.getLongitude());
+        snapshot.put("locality", listing.getLocality());
+        snapshot.put("areaKey", listing.getAreaKey());
+        snapshot.put("propertyType", listing.getPropertyType());
+        return snapshot;
     }
 
     /**

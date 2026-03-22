@@ -364,8 +364,11 @@ public class BadgeService {
      * not have written the newly-saved dimension to the JDBC connection yet, so
      * {@code TrustTierCalculator.findAllByListingId} would read stale pre-save data
      * and compute the wrong tier within the same transaction.
+     *
+     * <p>Package-visible so that {@link BadgeInvalidationService} can call it after
+     * all badge revocations in a single edit request without a redundant tier recalc.
      */
-    private String recalculateAndPersistTier(UUID listingId) {
+    String recalculateAndPersistTier(UUID listingId) {
         dimensionRepository.flush();
         TrustTierResult result = trustTierCalculator.calculate(listingId);
         String newTier = result.getTier();

@@ -10,6 +10,7 @@ import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.api.BulkDeleteResult;
 import com.example.realestate.listing.api.ListingStatsResponse;
 import com.example.realestate.listing.event.SettlementEnrichmentRequestedEvent;
+import com.example.realestate.trust.BadgeInvalidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,13 +54,17 @@ class ListingCrudServiceTest {
     @Mock
     private PriceChangeLogRepository priceChangeLogRepository;
 
+    @Mock
+    private BadgeInvalidationService badgeInvalidationService;
+
     private ListingCrudService crudService;
 
     @BeforeEach
     void setUp() {
         crudService = new ListingCrudService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
-                listingDeduplicationService, priceChangeLogRepository);
+                listingDeduplicationService, priceChangeLogRepository,
+                badgeInvalidationService);
     }
 
     // --- RE-83: createDraft sets dedupe hash and flags duplicates ---
