@@ -104,22 +104,14 @@ For each GitHub issue (PR N):
 3. **Bug fix gate** — if issue type is bugfix (GitHub issue has label `bug`, or title starts with `fix:`/`bug:`, or description explicitly says "bug" or "defect"):
    - Reproduce the defect with a targeted test or manual step. Confirm it fails. Document in checkpoint.
    - Do NOT proceed to engineer until failure is confirmed.
-4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`. Routing logic, agent invocation rules, code-reviewer skip conditions, and Security Gate triggers are all defined in `ROUTE_AND_RUN.md` — do not re-derive them here.
+4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`.
+
+   **DRY boundary:** Routing logic, agent invocation rules (including pre-flight requirements), reviewer/security retry loops, process-doc review requirements, post-engineer materialization checks, and E2E validation policy are all **owned exclusively by `ROUTE_AND_RUN`** — do not re-derive or restate them here. `SPRINT_EXECUTOR` supplies sprint context and records gate outcomes only.
 
    Sprint-specific context for `qa-fast` — always pass this prompt:
    > "Review the codebase and identify risks for this planned change: [issue description]. Acceptance criteria: [AC from enriched spec]. The feature does not exist yet."
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
-
-   **Reviewer feedback cycle (HARD RULE — orchestrator must not break this):**
-   When `code-reviewer` or `security-reviewer` returns REQUEST CHANGES:
-   - The main agent summarises each finding (severity + what needs fixing).
-   - The orchestrator MUST re-invoke the **engineer agent** (Task tool) with the reviewer's exact findings attached.
-     - The orchestrator MUST NOT apply the fix itself, even for "trivial" or "one-line" changes.
-     - After the engineer fixes, re-invoke `code-reviewer` or `security-reviewer` once for a second pass.
-     - If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
-     - If findings are CONCERN or SUGGESTION only (no BLOCKING): proceed to commit without a fix pass; log findings in checkpoint Risks.
-     - There are no exceptions to this rule — inline fixes by the orchestrator are always a violation.
 
 4b. **Engineer materialization validation** — After the engineer agent completes, validate per the `ROUTE_AND_RUN.md` "Post-Engineer Materialization Check (Mandatory)" section. If validation passes, proceed to code-reviewer and record `Engineer materialization: PASS` in the checkpoint. If validation fails: do NOT invoke code-reviewer; re-invoke the engineer once with the failing check(s) named explicitly. If validation fails again: emit BLOCKED checkpoint (`Engineer materialization: FAIL`), play `afplay /System/Library/Sounds/Basso.aiff`, surface to user, stop.
 
@@ -174,14 +166,13 @@ For each GitHub issue (PR N):
    - If no conflict: proceed silently to step 10.
 
 10. **Emit checkpoint + persist to file**
-   - Output the checkpoint to the conversation (slim format for subsequent PRs is fine)
-   - Write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — always use the preamble format (with Sprint issues, Execution order, Dependencies, and ALL enriched specs for remaining issues). This file is the authoritative resume source after compaction.
-   - The file version must be self-contained: a fresh conversation reading only this file must have enough context to resume without any prior conversation history.
+   - **Conversation output:** use the slim checkpoint format (omitting Sprint issues, Execution order, Dependencies, Enriched specs — already established in preamble). Full format only for the first checkpoint of a sprint.
+   - **File output:** always write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — preamble format with Sprint issues, Execution order, Dependencies, and ALL enriched specs for remaining issues. This file is the authoritative resume source and must be self-contained (readable by a fresh conversation with no prior history).
 
-**10a. Compact before next PR**
-   - After writing the checkpoint file, compact the conversation by invoking `/compact`.
+**10a. Compact before next PR (conditional)**
+   - After writing the checkpoint file, invoke `/compact` only if context growth is making responses noticeably slower or the conversation is approaching context limits.
    - After compaction, read `.claude/SPRINT_CHECKPOINT.md` to restore full sprint context before starting the next PR.
-   - If `/compact` is unavailable or fails, proceed anyway — the checkpoint file still serves as the fallback on automatic context compression.
+   - If context is still lean, skip compaction and continue — the checkpoint file is the fallback on automatic context compression regardless.
 
 ---
 

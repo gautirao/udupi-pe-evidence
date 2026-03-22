@@ -7,7 +7,7 @@ Do NOT redefine agents.
 Do NOT merge agent outputs.
 Process: triage → route → sequential agent execution → STOP.
 
-**Authority:** `ROUTE_AND_RUN` is the single source of truth for routing logic, agent invocation rules, and the default E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` invokes this skill for per-PR execution and may declare sprint-layer overrides on top of it — but does not redefine its core rules.
+**Authority:** `ROUTE_AND_RUN` is the single source of truth for per-PR execution policy: change classification, routing logic, agent invocation rules, reviewer/security retry loops, process-doc review requirements, post-engineer materialization checks, and E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` supplies sprint context and records gate outcomes, but must not redefine or override these per-PR rules.
 
 ## Agents
 qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
@@ -68,29 +68,42 @@ If the orchestrator cannot confidently declare `Behavior impact: NONE`, classify
 
 The pre-push hook runs as a best-effort local backstop for Trivial changes — it is not a guarantee and must not be relied upon as the quality gate.
 
-### Process-doc self-review (required structured evidence)
+### Evidence verbosity by tier
+
+- **Doc-only / Trivial:** use compact evidence only — classification, changed files, behavior impact, and gate result.
+- **Normal:** use standard evidence — routing used, changed files, tests run, reviewer result, E2E result.
+- **High-risk / failure / escalation:** use full structured evidence with rationale and failure details.
+
+Prefer compact status fields over narrative prose unless a gate fails, escalates, or requires manual judgment.
+
+### Process-doc self-review (required)
 
 Required when doc-only classification involves process-doc files: `.claude/agents/` (agent prompts), `.claude/skills/` (routing/checkpoint files), `.claude/prompts/` (review templates), `.github/workflows/` (CI/CD), or any file that defines workflow gates, classification criteria, or agent boundaries.
 
-Before committing, the orchestrator MUST output the following structured evidence block:
+Before committing, the orchestrator MUST output this evidence block:
 
 ```
 ## Process-Doc Review Evidence
-Change summary: [1-2 sentences describing what changed]
-Affected invariants: [list which workflow gates, agent boundaries, classification rules, or skip conditions are touched — or NONE]
+Change summary: [1-2 sentences]
+Affected invariants: [workflow gates / agent boundaries / classification rules / skip conditions touched — or NONE]
 Checklist:
 - [ ] No quality gates were weakened or removed
 - [ ] No agent boundaries were loosened
 - [ ] No classification criteria were made more permissive
 - [ ] No skip conditions were added without justification
 - [ ] Changes are consistent with existing workflow invariants
-Scenario walkthrough (required if routing/classification logic changed):
-- Trivial example: [task] → expected classification: [tier] — [correct? Y/N]
-- Normal example: [task] → expected classification: [tier] — [correct? Y/N]
-- High-risk example: [task] → expected classification: [tier] — [correct? Y/N]
 ```
 
-If any checklist item fails or any scenario produces an unexpected classification, escalate to user before committing.
+**Scenario walkthrough is required only if the change materially alters routing, classification, retry behavior, gate order, or skip logic.** In that case add:
+
+```
+Scenario walkthrough:
+- Trivial example: [task] → expected classification: [tier]
+- Normal example: [task] → expected classification: [tier]
+- High-risk example: [task] → expected classification: [tier]
+```
+
+If any checklist item fails or any required scenario produces an unexpected result, escalate to the user before committing.
 
 ---
 
@@ -295,16 +308,31 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   > The feature does not exist yet — scan the surrounding codebase and flag what could go wrong."
 
 - Engineer agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`) MUST follow these rules — include them verbatim in every engineer Task prompt:
-  > 1. **Read every file you will modify before writing any changes.** Do not assume file contents.
-  > 2. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
-  > 3. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
-  > 4. **Output an AC coverage table** after implementing — one row per AC bullet from the enriched spec:
+
+  **Pre-flight checklist (mandatory before writing any code):**
+  > 1. **Read relevant guidance** — read ARCHITECTURE.md, CLAUDE.md, and any feature-specific spec docs before touching code.
+  > 2. **Verify actual code locations** — find existing controllers, services, repositories, DTOs, migrations, and test classes that this change will touch or extend. Do not assume file paths or class names.
+  > 3. **State exact files to modify and why** — list each file and the specific reason it needs changing.
+  > 4. **State secondary impact areas** — explicitly check: security config, Flyway migrations, validation annotations, DTO/API contract alignment, routing/state/UI wiring, and test coverage. For each area, state YES (will be affected) or NO (not affected) with a one-line reason.
+  > 5. **List top 3 likely failure modes** — e.g. wrong exception class/package, missing Flyway migration, DTO field mismatch, missing null guard.
+
+  **Frontend-specific pre-flight additions (required when engineer is `frontend-engineer`):**
+  > - Locate the route/page entry point, auth/role guard, shared layout/nav components, and any existing E2E or unit tests that cover this flow.
+  > - Identify loading, empty, and error states the UI must handle.
+  > - List API fields consumed by the UI and verify each exists in the backend contract.
+
+  > **Hard gate: Only after producing pre-flight evidence may implementation begin.** A missing `Pre-flight` block in the engineer's output is a protocol violation — the orchestrator must reject the output and re-invoke the engineer.
+
+  **Implementation rules (after pre-flight):**
+  > 6. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
+  > 7. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
+  > 8. **Output an AC coverage table** after implementing — one row per AC bullet from the enriched spec:
   >    `| AC | COVERED? | file:line |`
   >    Mark any AC deliberately excluded as `OUT OF SCOPE — reason`. This table is required; omitting it is a protocol violation.
 
 - When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
 
-- After `qa-fast` completes, include its key findings (Critical Paths, Edge Cases, Risks) in the engineer's Task prompt as `qa-fast context:`. This lets the engineer skip redundant codebase exploration and address flagged risks proactively.
+- After `qa-fast` completes, include its key findings (Critical Paths, Edge Cases, Risks) in the engineer's Task prompt as `qa-fast context:`. These findings must feed into pre-flight steps 2–5, not just the implementation step. This lets the engineer skip redundant codebase exploration and address flagged risks proactively.
 - If the routing includes `security-reviewer`, add this note to the engineer's Task prompt: `Security review will follow — pay attention to: input validation, RLS alignment, no secrets in code, @Transactional boundaries.`
 - If previous PRs in the same sprint had reviewer BLOCKING findings, include those patterns as warnings in the engineer's Task prompt (e.g., "Prior sprint finding: use List<> not Optional<> for non-UNIQUE FK queries").
 - `code-reviewer` runs AFTER the engineer completes the implementation.
@@ -438,6 +466,7 @@ PR creation (commit → push → `gh pr create`) is **not** a step that happens 
 
 | Gate | Required for | Evidence |
 |------|-------------|----------|
+| Engineer materialization PASS | Normal, High-risk | Materialization check output (Post-Engineer Materialization Check) |
 | Engineer tests pass | Normal, High-risk; Trivial per engineer-test rule (Step 1B) | Engineer's test results in output |
 | Code-reviewer APPROVE | Normal, High-risk | Reviewer verdict |
 | Security-reviewer APPROVE | High-risk + Gate F | Reviewer verdict |
@@ -621,6 +650,9 @@ Findings: [CRITICAL/HIGH/MEDIUM/LOW with file:line and exploit path]
 ### Orchestrator gate log (required — output before commit)
 ```
 ## Gate Satisfaction Record
+
+Gate outcomes should be recorded in compact status form by default (e.g. `classification=normal`, `materialization=PASS`, `reviewer=APPROVE`, `security=N/A`, `e2e=PASS`). Add prose only when a gate fails, escalates, or requires explanation.
+
 Classification: [tier]
 Classification evidence: [changed files + behavior impact for trivial; or N/A]
 Engineer tests: PASS | FAIL | SKIPPED(trivial, non-executable)
