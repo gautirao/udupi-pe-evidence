@@ -337,6 +337,83 @@ public class BadgeService {
     }
 
     // -------------------------------------------------------------------------
+    // grantLocationBadge
+    // -------------------------------------------------------------------------
+
+    /**
+     * Grants the LOCATION badge for a listing when the caller has verified their
+     * physical presence at the listing location.
+     *
+     * <p>If the LOCATION badge is already EARNED, throws
+     * {@link LocationAlreadyVerifiedException} — the caller must surface a 409 conflict.
+     *
+     * <p>If the LOCATION badge does not exist, a new row is created with state EARNED.
+     * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED), it is updated to EARNED.
+     *
+     * @param listingId    listing for which location was verified; must not be null
+     * @param callerId     UUID of the broker or owner submitting the GPS coordinates; must not be null
+     * @param distanceMeters computed Haversine distance in meters (written to audit log only)
+     * @param submittedLat submitted latitude (written to audit log only)
+     * @param submittedLon submitted longitude (written to audit log only)
+     */
+    @Transactional
+    public ListingVerificationDimension grantLocationBadge(
+            UUID listingId,
+            UUID callerId,
+            double distanceMeters,
+            double submittedLat,
+            double submittedLon) {
+
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, "LOCATION")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType("LOCATION");
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        if ("EARNED".equals(previousState)) {
+            throw new LocationAlreadyVerifiedException();
+        }
+
+        dimension.setBadgeState("EARNED");
+        dimension.setGrantedAt(now);
+        dimension.setUpdatedAt(now);
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String evidenceNote = String.format(
+                "LOCATION_VERIFIED distance=%.1fm lat=%s lon=%s",
+                distanceMeters, submittedLat, submittedLon);
+
+        String afterJson = buildAuditJson("LOCATION", "EARNED", now.toString(), evidenceNote);
+        String beforeJson = previousState != null ? buildSimpleStateJson("LOCATION", previousState) : null;
+
+        adminAuditService.record(
+                callerId,
+                "LOCATION_VERIFIED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Location badge granted listingId={} callerId={} distanceMeters={}",
+                listingId, callerId, String.format("%.1f", distanceMeters));
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
     // getBadges
     // -------------------------------------------------------------------------
 

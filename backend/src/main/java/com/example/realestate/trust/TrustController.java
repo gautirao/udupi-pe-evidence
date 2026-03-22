@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -24,14 +25,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Exposes two read-only trust endpoints on the /api/listings/{id}/ sub-path.
+ * Trust endpoints on the /api/listings/{id}/ sub-path.
  *
  * <ul>
  *   <li>GET /api/listings/{id}/trust — PUBLIC, unauthenticated</li>
  *   <li>GET /api/listings/{id}/trust-progress — AUTHENTICATED, listing owner only</li>
+ *   <li>POST /api/listings/{id}/trust/photos/verify — AUTHENTICATED, owner only (multipart)</li>
+ *   <li>POST /api/listings/{id}/trust/location/verify — AUTHENTICATED, owner only (JSON)</li>
  * </ul>
  *
- * <p>Neither endpoint ever exposes trustTier or rankingScore. Those fields are
+ * <p>Neither read endpoint ever exposes trustTier or rankingScore. Those fields are
  * internal to the trust pipeline and must not leak to API consumers.
  */
 @RestController
@@ -47,6 +50,9 @@ public class TrustController {
     private static final List<String> BROKER_DIMENSIONS = List.of("IDENTITY", "LOCATION", "PHOTOS", "AUTHORITY");
 
     private static final String AUTHORITY_TYPE = "AUTHORITY";
+
+    /** Maximum Haversine distance in meters for a location verification to be accepted. */
+    private static final double LOCATION_VERIFY_THRESHOLD_METERS = 200.0;
 
     private final BadgeService badgeService;
     private final ListingRepository listingRepository;
@@ -214,5 +220,117 @@ public class TrustController {
                 yield ResponseEntity.ok(Map.of("message", "Photo submitted for review"));
             }
         };
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/listings/{id}/trust/location/verify — AUTHENTICATED, owner-only
+    // -------------------------------------------------------------------------
+
+    /**
+     * Accepts GPS coordinates from the caller, computes the Haversine distance to the
+     * listing's stored location, and if within {@link #LOCATION_VERIFY_THRESHOLD_METERS}
+     * transitions the LOCATION badge from AVAILABLE to EARNED.
+     *
+     * <p>Returns:
+     * <ul>
+     *   <li>200 — location verified; LOCATION badge EARNED. Body: {@code {message, distanceMeters}}</li>
+     *   <li>400 — listing has no stored lat/lng to compare against</li>
+     *   <li>400 — submitted latitude or longitude is null</li>
+     *   <li>403 — caller is not the listing owner</li>
+     *   <li>404 — listing not found</li>
+     *   <li>409 — LOCATION badge already EARNED</li>
+     *   <li>422 — submitted coordinates are more than 200m from the listing location</li>
+     * </ul>
+     */
+    @PostMapping(value = "/{id}/trust/location/verify", consumes = "application/json")
+    public ResponseEntity<?> verifyLocation(
+            CallerInfo caller,
+            @PathVariable UUID id,
+            @RequestBody LocationVerifyRequest request) {
+
+        // 1. Resolve listing + ownership check
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        }
+
+        boolean isOwner = listing.getCreatedBy() != null
+                && listing.getCreatedBy().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            log.warn("Access denied to location/verify listingId={} callerId={}", id, caller.userId());
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
+        }
+
+        // 2. Validate submitted coordinates
+        if (request.getLatitude() == null || request.getLongitude() == null) {
+            return ResponseEntity.status(400).body(
+                    Map.of("error", "latitude and longitude are required"));
+        }
+
+        // 3. Check listing has stored lat/lng
+        if (listing.getLatitude() == null || listing.getLongitude() == null) {
+            return ResponseEntity.status(400).body(
+                    Map.of("error", "Listing has no stored location to compare against"));
+        }
+
+        // 4. Compute Haversine distance
+        double distanceMeters = haversineMeters(
+                listing.getLatitude(), listing.getLongitude(),
+                request.getLatitude(), request.getLongitude());
+
+        long distanceRounded = Math.round(distanceMeters);
+
+        // 5. Check LOCATION badge already EARNED (before threshold check to surface 409 clearly)
+        try {
+            if (distanceMeters <= LOCATION_VERIFY_THRESHOLD_METERS) {
+                // Within threshold — grant the badge
+                badgeService.grantLocationBadge(
+                        id, caller.userId(), distanceMeters,
+                        request.getLatitude(), request.getLongitude());
+
+                log.info("POST /api/listings/{}/trust/location/verify -> 200 callerId={} distanceMeters={}",
+                        id, caller.userId(), distanceRounded);
+                return ResponseEntity.ok(Map.of(
+                        "message", "Location verified",
+                        "distanceMeters", distanceRounded));
+            } else {
+                // Outside threshold
+                log.info("POST /api/listings/{}/trust/location/verify -> 422 callerId={} distanceMeters={}",
+                        id, caller.userId(), distanceRounded);
+                return ResponseEntity.status(422).body(Map.of(
+                        "error", "Location does not match. Measured distance: " + distanceRounded + "m"));
+            }
+        } catch (LocationAlreadyVerifiedException e) {
+            return ResponseEntity.status(409).body(Map.of("error", "Location already verified"));
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Private: Haversine distance calculation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Computes the great-circle distance in meters between two geographic coordinates
+     * using the Haversine formula. Earth radius assumed to be 6 371 000 m.
+     *
+     * @param listingLat  stored listing latitude in decimal degrees
+     * @param listingLon  stored listing longitude in decimal degrees
+     * @param submittedLat submitted GPS latitude in decimal degrees
+     * @param submittedLon submitted GPS longitude in decimal degrees
+     * @return distance in meters (always &ge; 0)
+     */
+    static double haversineMeters(
+            double listingLat, double listingLon,
+            double submittedLat, double submittedLon) {
+
+        double lat1 = Math.toRadians(listingLat);
+        double lat2 = Math.toRadians(submittedLat);
+        double deltaLat = Math.toRadians(submittedLat - listingLat);
+        double deltaLon = Math.toRadians(submittedLon - listingLon);
+        double a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2)
+                + Math.cos(lat1) * Math.cos(lat2)
+                        * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return 6_371_000 * c;
     }
 }
