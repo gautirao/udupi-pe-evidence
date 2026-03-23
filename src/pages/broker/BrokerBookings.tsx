@@ -70,14 +70,23 @@ export default function BrokerBookings() {
         </h1>
 
         {/* Needs Resolution alert banner */}
-        {needsResolutionBookings.length > 0 && (
-          <Alert className="mb-8 border-amber-400 bg-amber-50 text-amber-800">
-            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
-            <AlertDescription>
-              Action required: {needsResolutionBookings.length} booking(s) need your attention
-            </AlertDescription>
-          </Alert>
-        )}
+        {needsResolutionBookings.length > 0 && (() => {
+          const affectedListingIds = [...new Set(needsResolutionBookings.map((b) => b.listingId))];
+          const listingLink = affectedListingIds.length === 1
+            ? `/listing/${affectedListingIds[0]}`
+            : '/broker/listings';
+          return (
+            <Alert className="mb-8 border-amber-400 bg-amber-50 text-amber-800">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              <AlertDescription>
+                You have appointments on hold. Restore the listing to Live to automatically reactivate them.
+                <Link to={listingLink} className="underline font-medium ml-1">
+                  {affectedListingIds.length === 1 ? 'View listing' : 'View your listings'}
+                </Link>
+              </AlertDescription>
+            </Alert>
+          );
+        })()}
 
         {/* Pending Requests */}
         <section className="mb-10">
