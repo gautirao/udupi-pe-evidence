@@ -246,20 +246,84 @@ For each GitHub issue (PR N):
 
 When all issues in the execution order have been merged and closed:
 
-1. **Write final checkpoint** — update `.claude/SPRINT_CHECKPOINT.md` with `Status: SPRINT COMPLETE` and `Next PR: (none)`.
-2. **Archive** — copy the completed checkpoint to the sprint archives directory:
+1. **Integration validation** — run the full E2E suite (`npm run test:e2e:local`) against the accumulated state of main after the final PR merge. This catches regressions caused by the combined effect of multiple sprint PRs that passed individually but interact badly together.
+   - **PASS** → record `Integration validation: PASS` in the final checkpoint. Proceed to step 2.
+   - **FAIL** → do NOT mark sprint as complete. Update checkpoint with `Status: NEEDS FOLLOW-UP` and `Integration validation: FAIL — [failure summary]`. Play `afplay /System/Library/Sounds/Basso.aiff`. Surface the failure to the user with options: (a) investigate and fix as a follow-up PR (create issue), (b) revert the suspected PR (see Revert Protocol below), (c) accept the failure and close the sprint with a known risk. Do not proceed to archiving until the user decides.
+   - **Skip condition:** if the sprint contained only doc-only or trivial PRs with no code changes, skip integration validation and record `Integration validation: SKIPPED(no code PRs)`.
+
+2. **Write final checkpoint** — update `.claude/SPRINT_CHECKPOINT.md` with `Status: SPRINT COMPLETE`, `Integration validation: PASS`, and `Next PR: (none)`.
+3. **Archive** — copy the completed checkpoint to the sprint archives directory:
    ```bash
    mkdir -p .claude/sprint-archives
    cp .claude/SPRINT_CHECKPOINT.md ".claude/sprint-archives/<sprint-label>-complete.md"
    ```
    Use the sprint name from the checkpoint preamble as the filename slug (e.g. `sprint-29-trust-gap-remediation-complete.md`). Archive files are never overwritten.
-3. **Output completion summary:**
+4. **Output completion summary:**
    - PRs merged (in execution order with PR numbers)
    - Execution order deviations, if any (which issues were reordered and why)
    - Blocked or skipped issues, if any
    - Key decisions (aggregated from all checkpoint `Key decisions` fields)
    - Risks carried forward (aggregated from all checkpoint `Risks` fields)
-4. **Play Funk chime:** `afplay /System/Library/Sounds/Funk.aiff`
+   - Integration validation result
+   - Reverted PRs, if any (from `Reverted PRs:` field)
+5. **Play Funk chime:** `afplay /System/Library/Sounds/Funk.aiff`
+
+---
+
+## Revert Protocol (Post-Merge Regression)
+
+When a regression is discovered after a PR has been merged — whether during integration validation, a later sprint PR's E2E run, user testing, or production monitoring — use this protocol. Revert is a controlled correction, not a hidden rewrite. It is preferred over ad hoc forward-fixes when immediate containment is needed.
+
+**Trigger conditions:**
+- Integration validation (Sprint Completion step 1) fails and failure is attributed to a specific merged PR
+- A later sprint PR's E2E run fails on a spec that was NOT modified by the current PR (Scenario B in ROUTE_AND_RUN Failure Routing Protocol) and the user chooses to revert
+- User discovers a regression during manual testing or production monitoring and requests a revert
+
+**Step 1 — Identify the offending PR:**
+- Cross-reference the failing test(s) or reported regression with `Touched files` from previous sprint checkpoints.
+- If the failure is in a spec file: check which PR introduced or last modified that spec (compare against checkpoint `Touched files` history).
+- If the failure is a runtime regression: check which PR modified the affected code path. Use `git log --oneline -- <affected-file>` to narrow down.
+- State the suspected PR number and the evidence linking it to the regression.
+
+**Step 2 — Revert (safe, non-destructive):**
+```bash
+git revert <merge-commit-sha> --no-edit
+```
+- Use `git revert`, NOT `git reset` or force-push. Revert preserves history.
+- If the revert has merge conflicts: play `afplay /System/Library/Sounds/Basso.aiff`, surface the conflicts to the user and stop. Do NOT auto-resolve revert conflicts — they indicate entangled changes that need human judgment.
+- Commit the revert with message: `revert: undo #<PR-number> — <reason>`
+
+**Step 3 — Verify the revert:**
+- Run full E2E suite (`npm run test:e2e:local`) to confirm the regression is resolved and no new issues were introduced by the revert.
+- If PASS: push the revert commit and proceed to step 4.
+- If FAIL: surface to user — the revert itself introduced a new failure or the original regression was not fully contained. Do NOT proceed without user decision.
+
+**Step 4 — Push and record:**
+- Push the revert commit to main (no PR needed for a revert — it's a direct push to contain the regression).
+- If the project requires PRs for all changes: create a minimal revert PR with body: `Reverts #<original-PR-number>. Reason: <regression description>.`
+
+**Step 5 — Update tracking:**
+- **Reopen the original issue** if the reverted PR's issue was closed:
+  ```bash
+  gh issue reopen <number>
+  ```
+  Add comment: "Reverted due to regression: <reason>. Original PR #<number> reverted in commit <sha>."
+- **Create a follow-up bug** if the regression is distinct from the original issue:
+  ```bash
+  gh issue create --title "fix: regression from #<PR-number> — <description>" --label "bug" --body "Introduced by #<PR-number>, reverted in <sha>. Root cause: <if known>."
+  ```
+
+**Step 6 — Update checkpoint and archive:**
+- Add the revert to the `Reverted PRs:` field in the checkpoint:
+  ```
+  Reverted PRs:
+  - #<PR-number> — reverted <YYYY-MM-DD> — <reason>
+  ```
+- Update the sprint progress line: the reverted issue shows `RE-NNN ↩️` instead of `✅`.
+- If the sprint is already archived: update the archive file in-place (this is the one exception to the "never overwrite archives" rule — revert annotations are corrections to historical accuracy, not rewrites).
+- The original PR remains in the checkpoint's `Last completed PR` history — it is not erased. The `Reverted PRs:` field records the correction.
+
+**Rollback is not failure hiding.** The sprint record should show: (a) the PR was merged, (b) a regression was found, (c) the PR was reverted, (d) the issue was reopened or a follow-up was created. This preserves a truthful history.
 
 ---
 
@@ -277,7 +341,10 @@ Execution order: <#NNN | #NNN | ...> (team-lead recommended order, or ORIGINAL i
 Dependencies: <RE-XX depends on RE-YY [confirmed|likely|speculative] | NONE>
 Last completed PR: <id + title>
 Current PR: <#NNN RE-XX title | NONE> (set to NONE when step completes; set to issue being started at step 1b)
-Status: <DONE|IN_PROGRESS|BLOCKED>
+Status: <DONE|IN_PROGRESS|BLOCKED|NEEDS FOLLOW-UP|SPRINT COMPLETE>
+Integration validation: <PASS|FAIL — [summary]|SKIPPED(no code PRs)|PENDING>
+Reverted PRs:
+- <#NNN — reverted YYYY-MM-DD — reason | NONE>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
 Engineer materialization: <PASS|FAIL|N/A>
@@ -310,7 +377,10 @@ Next routing guess:
 Sprint: <name/id>
 Last completed PR: <id + title>
 Current PR: <#NNN RE-XX title | NONE>
-Status: <DONE|IN_PROGRESS|BLOCKED>
+Status: <DONE|IN_PROGRESS|BLOCKED|NEEDS FOLLOW-UP|SPRINT COMPLETE>
+Integration validation: <PASS|FAIL — [summary]|SKIPPED(no code PRs)|PENDING>
+Reverted PRs:
+- <#NNN — reverted YYYY-MM-DD — reason | NONE>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
 Engineer materialization: <PASS|FAIL|N/A>
