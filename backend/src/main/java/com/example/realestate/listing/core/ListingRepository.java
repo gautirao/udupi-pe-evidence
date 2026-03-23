@@ -351,6 +351,48 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             nativeQuery = true)
     Page<Listing> findAllLiveWithCoordinates(Pageable pageable);
 
+    // ===== Polygon search (draw-on-map) =====
+
+    /**
+     * Returns LIVE, non-archived, non-duplicate listings whose coordinates fall within
+     * the given polygon. Uses PostGIS ST_Contains for precise point-in-polygon testing.
+     *
+     * @param polygonWkt WKT representation of the polygon, e.g.
+     *                   {@code POLYGON((74.79 13.35, 74.80 13.36, 74.80 13.34, 74.79 13.35))}
+     *                   Note: WKT uses (longitude latitude) order.
+     * @param pageable   pagination parameters
+     * @return page of listings within the polygon
+     */
+    @Query(value = """
+            SELECT * FROM public.property_listings
+            WHERE status = 'LIVE'
+              AND archived_at IS NULL
+              AND is_duplicate = false
+              AND latitude IS NOT NULL
+              AND longitude IS NOT NULL
+              AND ST_Contains(
+                    ST_GeomFromText(:polygonWkt, 4326),
+                    ST_Point(longitude, latitude)
+              )
+            ORDER BY created_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM public.property_listings
+            WHERE status = 'LIVE'
+              AND archived_at IS NULL
+              AND is_duplicate = false
+              AND latitude IS NOT NULL
+              AND longitude IS NOT NULL
+              AND ST_Contains(
+                    ST_GeomFromText(:polygonWkt, 4326),
+                    ST_Point(longitude, latitude)
+              )
+            """,
+            nativeQuery = true)
+    Page<Listing> findLiveListingsWithinPolygon(
+            @Param("polygonWkt") String polygonWkt,
+            Pageable pageable);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """

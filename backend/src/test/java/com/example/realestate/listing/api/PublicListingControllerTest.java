@@ -18,13 +18,21 @@ import com.example.realestate.security.UserRoleService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -265,6 +273,119 @@ class PublicListingControllerTest {
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.rejectionReason").doesNotExist());
+    }
+
+    // ==================== GET /within-polygon — happy path (empty result) ====================
+
+    @Test
+    void withinPolygon_validPolygon_returns200WithPaginatedResponse() throws Exception {
+        Page<Listing> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 50), 0);
+        when(listingRepository.findLiveListingsWithinPolygon(anyString(), any(PageRequest.class)))
+                .thenReturn(emptyPage);
+        when(listingResponseMapper.toPublicResponseList(any())).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/listings/within-polygon")
+                        .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.totalPages").value(0))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(50));
+    }
+
+    // ==================== GET /within-polygon — with results ====================
+
+    @Test
+    void withinPolygon_withResults_returns200WithContent() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Polygon Villa", "Udupi", new BigDecimal("15000000"), "Inside polygon");
+        Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
+        when(listingRepository.findLiveListingsWithinPolygon(anyString(), any(PageRequest.class)))
+                .thenReturn(page);
+        when(listingResponseMapper.toPublicResponseList(any())).thenAnswer(inv -> {
+            List<Listing> listings = inv.getArgument(0);
+            return listings.stream().map(l -> listingResponseMapper.toPublicResponse(l)).toList();
+        });
+
+        mockMvc.perform(get("/api/public/listings/within-polygon")
+                        .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
+
+    // ==================== GET /within-polygon — invalid JSON -> 400 ====================
+
+    @Test
+    void withinPolygon_invalidJson_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/listings/within-polygon")
+                        .param("polygon", "not-json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid polygon JSON: expected array of [lat,lng] pairs"));
+    }
+
+    // ==================== GET /within-polygon — too few vertices -> 400 ====================
+
+    @Test
+    void withinPolygon_tooFewVertices_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/listings/within-polygon")
+                        .param("polygon", "[[13.35,74.79],[13.36,74.80]]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Polygon must have at least 3 vertices"));
+    }
+
+    // ==================== GET /within-polygon — missing polygon param -> 400 ====================
+
+    @Test
+    void withinPolygon_missingParam_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/listings/within-polygon"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ==================== GET /within-polygon — coordinates out of range -> 400 ====================
+
+    @Test
+    void withinPolygon_coordsOutOfRange_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/listings/within-polygon")
+                        .param("polygon", "[[91.0,74.79],[13.36,74.80],[13.34,74.80]]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Coordinates out of range: lat must be [-90,90], lng must be [-180,180]"));
+    }
+
+    // ==================== parsePolygon unit tests ====================
+
+    @Test
+    void parsePolygon_autoClosesRing() {
+        List<double[]> result = PublicListingController.parsePolygon(
+                "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]");
+        // 3 vertices + 1 auto-close = 4
+        assertEquals(4, result.size());
+        assertEquals(result.get(0)[0], result.get(3)[0]);
+        assertEquals(result.get(0)[1], result.get(3)[1]);
+    }
+
+    @Test
+    void parsePolygon_alreadyClosedRing_noDoubleClose() {
+        List<double[]> result = PublicListingController.parsePolygon(
+                "[[13.35,74.79],[13.36,74.80],[13.34,74.80],[13.35,74.79]]");
+        // Already closed, no extra point
+        assertEquals(4, result.size());
+    }
+
+    @Test
+    void toPolygonWkt_correctFormat() {
+        List<double[]> coords = List.of(
+                new double[]{13.35, 74.79},
+                new double[]{13.36, 74.80},
+                new double[]{13.34, 74.80},
+                new double[]{13.35, 74.79}
+        );
+        String wkt = PublicListingController.toPolygonWkt(coords);
+        // WKT uses lng lat order
+        assertEquals("POLYGON((74.790000 13.350000, 74.800000 13.360000, 74.800000 13.340000, 74.790000 13.350000))", wkt);
     }
 
     // ==================== Helpers ====================

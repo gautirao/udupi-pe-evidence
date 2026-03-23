@@ -5,12 +5,17 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.pricing.PriceChangeLog;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
@@ -18,8 +23,10 @@ import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Public (unauthenticated) listing endpoints.
@@ -79,7 +86,112 @@ public class PublicListingController {
         return ResponseEntity.ok(entries);
     }
 
+    /**
+     * Returns LIVE listings whose coordinates fall within a user-drawn polygon.
+     * The polygon is a JSON-encoded array of [lat, lng] pairs.
+     * Minimum 3 vertices required. The polygon is auto-closed (first point appended if not present).
+     *
+     * <p>Uses PostGIS ST_Contains for precise point-in-polygon testing (Supabase includes PostGIS).
+     *
+     * @param polygon JSON array of [lat, lng] pairs, e.g. {@code [[13.35,74.79],[13.36,74.80],[13.34,74.80]]}
+     * @param page    page number (0-based, default 0)
+     * @param size    page size (default 50, max 200)
+     */
+    @GetMapping("/within-polygon")
+    public ResponseEntity<?> getWithinPolygon(
+            @RequestParam String polygon,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        // Clamp page size to [1, 200]
+        int clampedSize = Math.max(1, Math.min(200, size));
+
+        List<double[]> coordinates;
+        try {
+            coordinates = parsePolygon(polygon);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+
+        String wkt = toPolygonWkt(coordinates);
+        log.debug("GET /api/public/listings/within-polygon — {} vertices, page={}, size={}",
+                coordinates.size(), page, clampedSize);
+
+        Page<Listing> results = listingRepository.findLiveListingsWithinPolygon(
+                wkt, PageRequest.of(page, clampedSize));
+
+        List<ListingResponse> content = listingResponseMapper.toPublicResponseList(results.getContent());
+        return ResponseEntity.ok(Map.of(
+                "content", content,
+                "totalElements", results.getTotalElements(),
+                "totalPages", results.getTotalPages(),
+                "page", results.getNumber(),
+                "size", results.getSize()
+        ));
+    }
+
     // ===== Helpers =====
+
+    /** Maximum number of polygon vertices to accept (prevents abuse with huge polygons). */
+    private static final int MAX_POLYGON_VERTICES = 500;
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    /**
+     * Parses and validates a JSON polygon string into a list of [lat, lng] coordinate pairs.
+     * Auto-closes the polygon if the last point does not equal the first.
+     *
+     * @throws IllegalArgumentException if the polygon is malformed, has fewer than 3 vertices,
+     *         or contains coordinates outside valid WGS84 ranges
+     */
+    static List<double[]> parsePolygon(String polygonJson) {
+        List<List<Double>> raw;
+        try {
+            raw = OBJECT_MAPPER.readValue(polygonJson, new TypeReference<>() {});
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid polygon JSON: expected array of [lat,lng] pairs");
+        }
+
+        if (raw == null || raw.size() < 3) {
+            throw new IllegalArgumentException("Polygon must have at least 3 vertices");
+        }
+        if (raw.size() > MAX_POLYGON_VERTICES) {
+            throw new IllegalArgumentException("Polygon must have at most " + MAX_POLYGON_VERTICES + " vertices");
+        }
+
+        List<double[]> coords = new ArrayList<>(raw.size() + 1);
+        for (List<Double> pair : raw) {
+            if (pair == null || pair.size() != 2 || pair.get(0) == null || pair.get(1) == null) {
+                throw new IllegalArgumentException("Each polygon vertex must be a [lat, lng] pair");
+            }
+            double lat = pair.get(0);
+            double lng = pair.get(1);
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                throw new IllegalArgumentException("Coordinates out of range: lat must be [-90,90], lng must be [-180,180]");
+            }
+            coords.add(new double[]{lat, lng});
+        }
+
+        // Auto-close the polygon ring if not already closed
+        double[] first = coords.get(0);
+        double[] last = coords.get(coords.size() - 1);
+        if (first[0] != last[0] || first[1] != last[1]) {
+            coords.add(new double[]{first[0], first[1]});
+        }
+
+        return coords;
+    }
+
+    /**
+     * Converts a list of [lat, lng] coordinate pairs into a WKT POLYGON string.
+     * PostGIS WKT uses (longitude latitude) order, so we swap the pair order.
+     */
+    static String toPolygonWkt(List<double[]> coords) {
+        String ring = coords.stream()
+                .map(c -> String.format(Locale.US, "%f %f", c[1], c[0])) // WKT = lng lat
+                .collect(Collectors.joining(", "));
+        return "POLYGON((" + ring + "))";
+    }
 
     private static ResponseEntity<Map<String, String>> notFound() {
         return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
