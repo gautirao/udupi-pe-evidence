@@ -525,7 +525,7 @@ test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
     await confirmBtn.click();
 
     // Wait for the toast confirming archive
-    await expect(page.getByText(/listing archived/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/listing archived/i).first()).toBeVisible({ timeout: 10_000 });
 
     // --- Phase 2: ARCHIVED listing — "Reopen for Editing" button visible ---
     // Page should update reactively, but reload to ensure fresh state
@@ -541,7 +541,7 @@ test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
 
     // Click "Reopen for Editing"
     await reopenBtn.click();
-    await expect(page.getByText(/listing reopened/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/listing reopened/i).first()).toBeVisible({ timeout: 10_000 });
 
     // --- Phase 3: DRAFT listing — "Edit Listing" link visible ---
     await page.goto(`/listing/${id}?preview=true`);

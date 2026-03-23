@@ -169,7 +169,7 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
   // Give NearbyPois time to settle (it renders null on empty list)
   await page.waitForTimeout(2_000);
 
-  // NearbyPois card must not be present
-  await expect(page.getByText('Nearby')).toHaveCount(0);
+  // NearbyPois card must not be present (use exact match to avoid matching "Nearby Schools" etc.)
+  await expect(page.getByText('Nearby', { exact: true })).toHaveCount(0);
 });
 
