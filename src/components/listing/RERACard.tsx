@@ -88,7 +88,7 @@ export function RERACard({
                 <ExternalLink className="h-3 w-3" />
               </a>
               {reraValid ? (
-                <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs">Registered</Badge>
+                <Badge className="bg-emerald-100 text-emerald-800 border-0 text-xs">Provided</Badge>
               ) : (
                 <Badge className="bg-amber-100 text-amber-800 border-0 text-xs">Format Unknown</Badge>
               )}

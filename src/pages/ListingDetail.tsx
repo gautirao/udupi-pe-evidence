@@ -391,7 +391,7 @@ export default function ListingDetail() {
                 <div className="mt-2">
                   <Badge variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 gap-1">
                     <ShieldCheck className="h-3.5 w-3.5" />
-                    RERA Registered — {listing.reraNumber}
+                    RERA number provided: {listing.reraNumber}
                   </Badge>
                 </div>
               )}
