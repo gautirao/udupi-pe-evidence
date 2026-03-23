@@ -1,11 +1,25 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { User, MapPin, Camera, Shield, ChevronRight, ChevronDown } from 'lucide-react';
+import { User, MapPin, Camera, Shield, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from '@/components/ui/input-otp';
 import { api, API_BASE_URL } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useIdentityVerification } from '@/hooks/useIdentityVerification';
 import { supabase } from '@/integrations/supabase/client';
 
 // ─── API types ────────────────────────────────────────────────────────────────
@@ -197,6 +211,150 @@ function PhotoUploadButton({ listingId, onSuccess }: PhotoUploadButtonProps) {
   );
 }
 
+// ─── Identity OTP flow ────────────────────────────────────────────────────────
+
+type OtpStep = 'idle' | 'sending' | 'awaiting_code' | 'verifying';
+
+interface IdentityVerifyButtonProps {
+  listingId: string;
+}
+
+function IdentityVerifyButton({ listingId }: IdentityVerifyButtonProps) {
+  const { toast } = useToast();
+  const { requestOtp, verifyOtp } = useIdentityVerification(listingId);
+  const [step, setStep] = useState<OtpStep>('idle');
+  const [code, setCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+
+  async function handleRequestOtp() {
+    setStep('sending');
+    try {
+      await requestOtp.mutateAsync();
+      setCode('');
+      setOtpError(null);
+      setStep('awaiting_code');
+    } catch (err) {
+      setStep('idle');
+      if (err instanceof ApiError && err.status === 503) {
+        toast({ variant: 'destructive', title: 'Could not send SMS', description: 'Try again.' });
+      } else if (err instanceof ApiError && err.status === 429) {
+        toast({ variant: 'destructive', title: 'Too many attempts', description: 'Try again in 1 hour.' });
+      } else {
+        toast({ variant: 'destructive', title: 'OTP send failed', description: 'Please try again.' });
+      }
+    }
+  }
+
+  async function handleVerify() {
+    if (code.length !== 6) return;
+    setStep('verifying');
+    try {
+      await verifyOtp.mutateAsync(code);
+      setStep('idle');
+      setCode('');
+      toast({ title: 'Identity verified', description: 'Your identity badge is now earned.' });
+    } catch (err) {
+      setStep('awaiting_code');
+      if (err instanceof ApiError && err.status === 429) {
+        setOtpError('Too many attempts. Try again in 1 hour.');
+      } else {
+        setOtpError('Incorrect code. Please try again.');
+      }
+    }
+  }
+
+  function handleModalClose(open: boolean) {
+    if (!open) {
+      setStep('idle');
+      setCode('');
+      setOtpError(null);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={step === 'sending'}
+        onClick={handleRequestOtp}
+      >
+        {step === 'sending' ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+            Sending…
+          </>
+        ) : (
+          'Verify your identity'
+        )}
+      </Button>
+
+      <Dialog open={step === 'awaiting_code' || step === 'verifying'} onOpenChange={handleModalClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify your identity</DialogTitle>
+            <DialogDescription>
+              Enter the 6-digit code sent to your registered phone number.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-2">
+            <InputOTP
+              maxLength={6}
+              value={code}
+              onChange={setCode}
+              disabled={step === 'verifying'}
+            >
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+                <InputOTPSlot index={4} />
+                <InputOTPSlot index={5} />
+              </InputOTPGroup>
+            </InputOTP>
+            {otpError && (
+              <p className="text-sm text-destructive">{otpError}</p>
+            )}
+            <div className="flex gap-2 w-full justify-end">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={step === 'verifying'}
+                onClick={() => handleModalClose(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={step === 'verifying'}
+                onClick={handleRequestOtp}
+              >
+                Resend code
+              </Button>
+              <Button
+                size="sm"
+                disabled={code.length !== 6 || step === 'verifying'}
+                onClick={handleVerify}
+              >
+                {step === 'verifying' ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                    Verifying…
+                  </>
+                ) : (
+                  'Submit'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ─── Badge row ────────────────────────────────────────────────────────────────
 
 interface BadgeRowProps {
@@ -217,8 +375,13 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
     listingId !== undefined &&
     onPhotoSubmitted !== undefined;
 
+  const isIdentityAvailable =
+    showCta &&
+    badge.dimensionType === 'IDENTITY' &&
+    listingId !== undefined;
+
   const ctaText =
-    showCta && !isPhotosAvailable
+    showCta && !isPhotosAvailable && !isIdentityAvailable
       ? badge.autoGranted === true
         ? 'Auto-granted'
         : 'Verification coming soon'
@@ -237,6 +400,9 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
         </Badge>
         {isPhotosAvailable && (
           <PhotoUploadButton listingId={listingId} onSuccess={onPhotoSubmitted} />
+        )}
+        {isIdentityAvailable && (
+          <IdentityVerifyButton listingId={listingId} />
         )}
         {ctaText && (
           <span className="text-xs text-muted-foreground">{ctaText}</span>
@@ -326,7 +492,7 @@ export function TrustProgressPanel({ listingId, variant }: TrustProgressPanelPro
           <BadgeRow
             key={badge.dimensionType}
             badge={badge}
-            listingId={badge.dimensionType === 'PHOTOS' ? listingId : undefined}
+            listingId={badge.dimensionType === 'PHOTOS' || badge.dimensionType === 'IDENTITY' ? listingId : undefined}
             onPhotoSubmitted={badge.dimensionType === 'PHOTOS' ? () => refetch() : undefined}
           />
         ))}
@@ -365,7 +531,7 @@ export function TrustProgressPanel({ listingId, variant }: TrustProgressPanelPro
             <BadgeRow
               key={badge.dimensionType}
               badge={badge}
-              listingId={badge.dimensionType === 'PHOTOS' ? listingId : undefined}
+              listingId={badge.dimensionType === 'PHOTOS' || badge.dimensionType === 'IDENTITY' ? listingId : undefined}
               onPhotoSubmitted={badge.dimensionType === 'PHOTOS' ? () => refetch() : undefined}
             />
           ))}
