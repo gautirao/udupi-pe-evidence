@@ -624,9 +624,9 @@ public class TrustController {
             return ResponseEntity.status(400).body(Map.of("error", "No file uploaded"));
         }
 
-        // 4. Validate file size (5 MB limit)
-        if (file.getSize() > 5L * 1024 * 1024) {
-            return ResponseEntity.status(413).body(Map.of("error", "File size must not exceed 5 MB"));
+        // 4. Validate file size (10 MB limit)
+        if (file.getSize() > 10L * 1024 * 1024) {
+            return ResponseEntity.status(413).body(Map.of("error", "File size must not exceed 10 MB"));
         }
 
         // 5. Validate file magic bytes (defence against Content-Type spoofing)

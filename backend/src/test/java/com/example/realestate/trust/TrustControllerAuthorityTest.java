@@ -174,10 +174,10 @@ class TrustControllerAuthorityTest {
     }
 
     private MockMultipartFile oversizedFile() {
-        // 6 MB > 5 MB limit
+        // 11 MB > 10 MB limit
         return new MockMultipartFile(
                 "file", "big.pdf", "application/pdf",
-                new byte[6 * 1024 * 1024]);
+                new byte[11 * 1024 * 1024]);
     }
 
     private MockMultipartFile wrongTypeFile() {
@@ -409,7 +409,7 @@ class TrustControllerAuthorityTest {
     }
 
     /**
-     * File exceeds 5 MB -> 413.
+     * File exceeds 10 MB -> 413.
      */
     @Test
     void submitMandate_fileTooLarge_returns413() throws Exception {
@@ -419,7 +419,7 @@ class TrustControllerAuthorityTest {
                         .file(oversizedFile())
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
                 .andExpect(status().isPayloadTooLarge())
-                .andExpect(jsonPath("$.error").value("File size must not exceed 5 MB"));
+                .andExpect(jsonPath("$.error").value("File size must not exceed 10 MB"));
     }
 
     /**

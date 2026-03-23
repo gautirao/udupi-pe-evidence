@@ -17,8 +17,8 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 5MB
-      max-request-size: 6MB
+      max-file-size: 10MB
+      max-request-size: 12MB
 
   data:
     web:
@@ -75,7 +75,7 @@ management:
 server:
   port: ${SERVER_PORT:8085}
   tomcat:
-    max-http-post-size: 6291456
+    max-http-post-size: 12582912
   error:
     include-message: never
     include-stack-trace: never
