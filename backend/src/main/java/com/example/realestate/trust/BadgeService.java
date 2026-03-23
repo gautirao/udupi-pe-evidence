@@ -477,6 +477,132 @@ public class BadgeService {
     }
 
     // -------------------------------------------------------------------------
+    // grantAuthorityBadge
+    // -------------------------------------------------------------------------
+
+    /**
+     * Grants the AUTHORITY badge for a listing when the owner has verified their identity
+     * via OTP (owner fast path).
+     *
+     * <p>If the AUTHORITY badge is already EARNED, throws
+     * {@link AuthorityAlreadyVerifiedException} — the caller must surface a 409 conflict.
+     *
+     * <p>If the AUTHORITY badge does not exist, a new row is created with state EARNED.
+     * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED, PENDING), it is
+     * updated to EARNED.
+     *
+     * @param listingId listing for which authority was verified; must not be null
+     * @param callerId  UUID of the owner who verified via OTP; must not be null
+     */
+    @Transactional
+    public ListingVerificationDimension grantAuthorityBadge(UUID listingId, UUID callerId) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, "AUTHORITY")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType("AUTHORITY");
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        if ("EARNED".equals(previousState)) {
+            throw new AuthorityAlreadyVerifiedException();
+        }
+
+        dimension.setBadgeState("EARNED");
+        dimension.setGrantedAt(now);
+        dimension.setUpdatedAt(now);
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String afterJson = buildAuditJson("AUTHORITY", "EARNED", now.toString(), "AUTHORITY_VERIFIED via owner OTP");
+        String beforeJson = previousState != null ? buildSimpleStateJson("AUTHORITY", previousState) : null;
+
+        adminAuditService.record(
+                callerId,
+                "AUTHORITY_VERIFIED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Authority badge granted listingId={} callerId={}", listingId, callerId);
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
+    // submitAuthorityMandate
+    // -------------------------------------------------------------------------
+
+    /**
+     * Transitions the AUTHORITY dimension to PENDING state for a given listing,
+     * indicating a broker mandate document is awaiting admin review.
+     *
+     * <p>If the AUTHORITY dimension is already PENDING or EARNED, throws
+     * {@link AuthorityMandateAlreadySubmittedException} — the caller must surface a 409 conflict.
+     *
+     * <p>If the AUTHORITY dimension does not exist, a new row is created with state PENDING.
+     * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED), it is updated to PENDING.
+     *
+     * @param listingId listing for which the mandate was submitted; must not be null
+     * @param callerId  UUID of the broker submitting the mandate; must not be null
+     */
+    @Transactional
+    public ListingVerificationDimension submitAuthorityMandate(UUID listingId, UUID callerId) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, "AUTHORITY")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType("AUTHORITY");
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        if ("PENDING".equals(previousState) || "EARNED".equals(previousState)) {
+            throw new AuthorityMandateAlreadySubmittedException(previousState);
+        }
+
+        dimension.setBadgeState("PENDING");
+        dimension.setUpdatedAt(now);
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String afterJson = buildSimpleStateJson("AUTHORITY", "PENDING");
+        String beforeJson = previousState != null ? buildSimpleStateJson("AUTHORITY", previousState) : null;
+
+        adminAuditService.record(
+                callerId,
+                "AUTHORITY_MANDATE_SUBMITTED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Authority mandate submitted for review listingId={} callerId={}", listingId, callerId);
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
     // getBadges
     // -------------------------------------------------------------------------
 

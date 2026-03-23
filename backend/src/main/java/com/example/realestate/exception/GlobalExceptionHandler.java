@@ -2,6 +2,7 @@ package com.example.realestate.exception;
 
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.trust.AuthorityAlreadyVerifiedException;
 import com.example.realestate.trust.BadgeNotFoundException;
 import com.example.realestate.trust.IdentityAlreadyVerifiedException;
 import com.example.realestate.trust.otp.OtpRateLimitException;
@@ -130,6 +131,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     public ResponseEntity<Map<String, String>> handleIdentityAlreadyVerified(IdentityAlreadyVerifiedException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", "Identity already verified"));
+    }
+
+    // ===== AuthorityAlreadyVerifiedException → 409 =====
+
+    @ExceptionHandler(AuthorityAlreadyVerifiedException.class)
+    public ResponseEntity<Map<String, String>> handleAuthorityAlreadyVerified(AuthorityAlreadyVerifiedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Authority already verified"));
     }
 
     // ===== Fallback Exception → 500 =====

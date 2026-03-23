@@ -430,6 +430,207 @@ public class TrustController {
     }
 
     // -------------------------------------------------------------------------
+    // POST /api/listings/{id}/trust/authority/request-otp — OWNER listings only
+    // -------------------------------------------------------------------------
+
+    /**
+     * Triggers an OTP send to the phone number stored on the caller's profile.
+     * Only valid for owner-type listings; broker listings must use submit-mandate instead.
+     *
+     * <p>Returns:
+     * <ul>
+     *   <li>200 — OTP sent successfully</li>
+     *   <li>400 — seller_type is not "owner", or no phone on profile</li>
+     *   <li>403 — caller is not the listing owner</li>
+     *   <li>404 — listing not found</li>
+     *   <li>409 — AUTHORITY badge already EARNED</li>
+     *   <li>503 — OTP delivery failed</li>
+     * </ul>
+     */
+    @PostMapping(value = "/{id}/trust/authority/request-otp")
+    public ResponseEntity<?> requestAuthorityOtp(CallerInfo caller, @PathVariable UUID id) {
+        // 1. Resolve listing + ownership check
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        }
+
+        boolean isOwner = listing.getCreatedBy() != null
+                && listing.getCreatedBy().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            log.warn("Access denied to authority/request-otp listingId={} callerId={}", id, caller.userId());
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
+        }
+
+        // 2. Validate seller type
+        if (!"owner".equals(listing.getSellerType())) {
+            return ResponseEntity.status(400).body(Map.of("error", "Authority OTP is for owner listings only"));
+        }
+
+        // 3. Resolve caller's profile and phone
+        Profile profile = profileRepository.findByUserId(caller.userId()).orElse(null);
+        String phone = (profile != null) ? profile.getPhone() : null;
+        if (phone == null || phone.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
+        }
+
+        // 4. Check AUTHORITY badge not already EARNED
+        List<ListingVerificationDimension> badges = badgeService.getBadges(id);
+        boolean alreadyEarned = badges.stream()
+                .anyMatch(b -> "AUTHORITY".equals(b.getDimensionType()) && "EARNED".equals(b.getBadgeState()));
+        if (alreadyEarned) {
+            return ResponseEntity.status(409).body(Map.of("error", "Authority already verified"));
+        }
+
+        // 5. Send OTP — phone is not echoed in the response
+        try {
+            otpService.sendOtp(phone);
+        } catch (OtpDeliveryException e) {
+            log.error("OTP delivery failed for authority listingId={} callerId={}", id, caller.userId(), e);
+            return ResponseEntity.status(503).body(Map.of("error", "OTP delivery failed"));
+        }
+
+        log.info("POST /api/listings/{}/trust/authority/request-otp -> 200 callerId={}", id, caller.userId());
+        return ResponseEntity.ok(Map.of("message", "OTP sent"));
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/listings/{id}/trust/authority/verify-otp — OWNER listings only
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verifies the OTP code submitted by the caller and, if valid, grants the AUTHORITY badge.
+     * Only valid for owner-type listings.
+     *
+     * <p>Returns:
+     * <ul>
+     *   <li>200 — OTP verified; AUTHORITY badge EARNED</li>
+     *   <li>400 — invalid or expired OTP, seller_type not "owner", or no phone on profile</li>
+     *   <li>403 — caller is not the listing owner</li>
+     *   <li>404 — listing not found</li>
+     * </ul>
+     */
+    @PostMapping(value = "/{id}/trust/authority/verify-otp", consumes = "application/json")
+    public ResponseEntity<?> verifyAuthorityOtp(
+            CallerInfo caller,
+            @PathVariable UUID id,
+            @RequestBody OtpVerifyRequest request) {
+
+        // 1. Resolve listing + ownership check
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        }
+
+        boolean isOwner = listing.getCreatedBy() != null
+                && listing.getCreatedBy().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            log.warn("Access denied to authority/verify-otp listingId={} callerId={}", id, caller.userId());
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
+        }
+
+        // 2. Validate seller type
+        if (!"owner".equals(listing.getSellerType())) {
+            return ResponseEntity.status(400).body(Map.of("error", "Authority OTP is for owner listings only"));
+        }
+
+        // 3. Resolve caller's profile and phone
+        Profile profile = profileRepository.findByUserId(caller.userId()).orElse(null);
+        String phone = (profile != null) ? profile.getPhone() : null;
+        if (phone == null || phone.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
+        }
+
+        // 4. Validate OTP code format (6 digits max, digits only)
+        String code = request.getCode();
+        if (code == null || code.isBlank() || code.length() > 8 || !code.matches("\\d+")) {
+            return ResponseEntity.status(400).body(Map.of("error", "Invalid OTP format"));
+        }
+
+        // 5. Verify OTP
+        boolean valid = otpService.verifyOtp(phone, code);
+        if (!valid) {
+            return ResponseEntity.status(400).body(Map.of("error", "Invalid or expired OTP"));
+        }
+
+        // 6. Grant AUTHORITY badge
+        badgeService.grantAuthorityBadge(id, caller.userId());
+
+        log.info("POST /api/listings/{}/trust/authority/verify-otp -> 200 callerId={}", id, caller.userId());
+        return ResponseEntity.ok(Map.of("message", "Authority verified"));
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/listings/{id}/trust/authority/submit-mandate — BROKER listings only
+    // -------------------------------------------------------------------------
+
+    /**
+     * Accepts a mandate document upload from a broker and transitions the AUTHORITY badge
+     * to PENDING for admin review.
+     * Only valid for broker-type listings; owner listings use the OTP fast path.
+     *
+     * <p>Returns:
+     * <ul>
+     *   <li>200 — mandate accepted; AUTHORITY dimension set to PENDING</li>
+     *   <li>400 — missing/empty file, wrong content type, or seller_type not "broker"</li>
+     *   <li>403 — caller is not the listing owner</li>
+     *   <li>404 — listing not found</li>
+     *   <li>409 — AUTHORITY mandate already PENDING or EARNED</li>
+     *   <li>413 — file exceeds 5 MB limit</li>
+     * </ul>
+     */
+    @PostMapping(value = "/{id}/trust/authority/submit-mandate", consumes = "multipart/form-data")
+    public ResponseEntity<?> submitAuthorityMandate(
+            CallerInfo caller,
+            @PathVariable UUID id,
+            @RequestPart("file") MultipartFile file) {
+
+        // 1. Resolve listing + ownership check
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        }
+
+        boolean isOwner = listing.getCreatedBy() != null
+                && listing.getCreatedBy().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            log.warn("Access denied to authority/submit-mandate listingId={} callerId={}", id, caller.userId());
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
+        }
+
+        // 2. Validate seller type
+        if (!"broker".equals(listing.getSellerType())) {
+            return ResponseEntity.status(400).body(Map.of("error", "Mandate upload is for broker listings only"));
+        }
+
+        // 3. Validate file presence
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.status(400).body(Map.of("error", "No file uploaded"));
+        }
+
+        // 4. Validate file size (5 MB limit)
+        if (file.getSize() > 5L * 1024 * 1024) {
+            return ResponseEntity.status(413).body(Map.of("error", "File size must not exceed 5 MB"));
+        }
+
+        // 5. Validate file magic bytes (defence against Content-Type spoofing)
+        if (!isMandateFileTypeAllowed(file)) {
+            return ResponseEntity.status(400).body(Map.of("error", "File must be a PDF or image (JPEG/PNG)"));
+        }
+
+        // 6. Transition AUTHORITY badge to PENDING
+        try {
+            badgeService.submitAuthorityMandate(id, caller.userId());
+        } catch (AuthorityMandateAlreadySubmittedException e) {
+            return ResponseEntity.status(409).body(
+                    Map.of("error", "Authority mandate is already " + e.getCurrentState().toLowerCase()));
+        }
+
+        log.info("POST /api/listings/{}/trust/authority/submit-mandate -> 200 callerId={}", id, caller.userId());
+        return ResponseEntity.ok(Map.of("message", "Mandate submitted for review"));
+    }
+
+    // -------------------------------------------------------------------------
     // Private: transactional helpers
     // -------------------------------------------------------------------------
 
@@ -442,6 +643,47 @@ public class TrustController {
         profile.setPhoneVerified(true);
         profileRepository.save(profile);
         badgeService.grantIdentityBadge(listingId, callerId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private: mandate file magic-byte validation
+    // -------------------------------------------------------------------------
+
+    /**
+     * Validates the first bytes of an uploaded file against known magic byte signatures,
+     * defending against Content-Type spoofing where the client declares a safe MIME type
+     * but uploads different content.
+     *
+     * <p>Accepted: PDF ({@code %PDF}), JPEG ({@code \xFF\xD8\xFF}), PNG ({@code \x89PNG}).
+     *
+     * @param file the uploaded multipart file
+     * @return {@code true} if the file starts with a recognised mandate-document signature;
+     *         {@code false} otherwise (including on read errors)
+     */
+    private boolean isMandateFileTypeAllowed(MultipartFile file) {
+        try {
+            byte[] header = new byte[8];
+            int read = file.getInputStream().read(header, 0, header.length);
+            if (read < 4) {
+                return false;
+            }
+            // PDF: starts with %PDF (25 50 44 46)
+            if (header[0] == 0x25 && header[1] == 0x50 && header[2] == 0x44 && header[3] == 0x46) {
+                return true;
+            }
+            // JPEG: starts with FF D8 FF
+            if ((header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8 && (header[2] & 0xFF) == 0xFF) {
+                return true;
+            }
+            // PNG: starts with 89 50 4E 47
+            if ((header[0] & 0xFF) == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47) {
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("Failed to read mandate file header for magic byte check", e);
+            return false;
+        }
     }
 
     // -------------------------------------------------------------------------
