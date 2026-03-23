@@ -6,6 +6,7 @@ import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.trust.otp.OtpService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -87,6 +88,9 @@ class TrustControllerSecurityTest {
 
     @MockitoBean
     private OtpService otpService;
+
+    @MockitoBean
+    private SupabaseStorageService supabaseStorageService;
 
     /**
      * Unauthenticated GET /trust must not be rejected by Spring Security.

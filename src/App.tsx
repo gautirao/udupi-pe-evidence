@@ -39,6 +39,7 @@ const ProcessPosts = lazy(() => import("./pages/admin/ProcessPosts"));
 const PendingListings = lazy(() => import("./pages/admin/PendingListings"));
 const LocalityNormalizer = lazy(() => import("./pages/admin/LocalityNormalizer"));
 const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
+const TrustReviewQueue = lazy(() => import("./pages/admin/TrustReviewQueue"));
 
 const queryClient = new QueryClient();
 
@@ -267,6 +268,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireAdmin>
                     <AuditLog />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/trust-review"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <TrustReviewQueue />
                   </ProtectedRoute>
                 }
               />

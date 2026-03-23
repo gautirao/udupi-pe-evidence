@@ -65,6 +65,14 @@ public class ListingVerificationDimension {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    /**
+     * Supabase Storage public URL of the uploaded verification asset
+     * (photo, mandate document) for ops review. Nullable — rows created
+     * before RE-163 do not have an asset URL.
+     */
+    @Column(name = "verification_asset_url", length = 2048)
+    private String verificationAssetUrl;
+
     // Getters and setters
 
     public UUID getId() {
@@ -129,5 +137,13 @@ public class ListingVerificationDimension {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getVerificationAssetUrl() {
+        return verificationAssetUrl;
+    }
+
+    public void setVerificationAssetUrl(String verificationAssetUrl) {
+        this.verificationAssetUrl = verificationAssetUrl;
     }
 }

@@ -8,6 +8,7 @@ import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.trust.otp.OtpService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -100,9 +101,12 @@ class TrustControllerLocationTest {
     @MockitoBean
     private OtpService otpService;
 
+    @MockitoBean
+    private SupabaseStorageService supabaseStorageService;
+
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, photoHashService, userRoleService);
+        reset(badgeService, listingRepository, photoHashService, userRoleService, supabaseStorageService);
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
     }

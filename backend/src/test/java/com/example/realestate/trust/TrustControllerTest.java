@@ -8,6 +8,7 @@ import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.trust.otp.OtpService;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
@@ -87,9 +88,12 @@ class TrustControllerTest {
     @MockitoBean
     private OtpService otpService;
 
+    @MockitoBean
+    private SupabaseStorageService supabaseStorageService;
+
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, userRoleService);
+        reset(badgeService, listingRepository, userRoleService, supabaseStorageService);
         // Default: CallerInfoResolver resolves OWNER_ID as role "broker" (not admin)
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));

@@ -4,6 +4,7 @@ import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.profile.Profile;
 import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
@@ -101,10 +103,13 @@ class TrustControllerAuthorityTest {
     @MockitoBean
     private OtpService otpService;
 
+    @MockitoBean
+    private SupabaseStorageService supabaseStorageService;
+
     @BeforeEach
     void setUp() {
         reset(badgeService, listingRepository, photoHashService, userRoleService,
-                profileRepository, otpService);
+                profileRepository, otpService, supabaseStorageService);
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
     }
@@ -437,7 +442,7 @@ class TrustControllerAuthorityTest {
     @Test
     void submitMandate_alreadySubmitted_returns409() throws Exception {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(brokerTypeListing()));
-        when(badgeService.submitAuthorityMandate(LISTING_ID, OWNER_ID))
+        when(badgeService.submitAuthorityMandate(any(), any(), any()))
                 .thenThrow(new AuthorityMandateAlreadySubmittedException("PENDING"));
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
@@ -458,7 +463,7 @@ class TrustControllerAuthorityTest {
         pending.setListingId(LISTING_ID);
         pending.setDimensionType("AUTHORITY");
         pending.setBadgeState("PENDING");
-        when(badgeService.submitAuthorityMandate(LISTING_ID, OWNER_ID)).thenReturn(pending);
+        when(badgeService.submitAuthorityMandate(any(), any(), any())).thenReturn(pending);
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(validPdfFile())
@@ -466,6 +471,6 @@ class TrustControllerAuthorityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Mandate submitted for review"));
 
-        verify(badgeService).submitAuthorityMandate(LISTING_ID, OWNER_ID);
+        verify(badgeService).submitAuthorityMandate(any(), any(), any());
     }
 }

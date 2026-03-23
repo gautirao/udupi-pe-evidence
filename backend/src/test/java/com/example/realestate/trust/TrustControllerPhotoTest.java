@@ -4,6 +4,7 @@ import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
@@ -26,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -83,9 +85,12 @@ class TrustControllerPhotoTest {
     @MockitoBean
     private OtpService otpService;
 
+    @MockitoBean
+    private SupabaseStorageService supabaseStorageService;
+
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, photoHashService, userRoleService);
+        reset(badgeService, listingRepository, photoHashService, userRoleService, supabaseStorageService);
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
     }
@@ -231,7 +236,7 @@ class TrustControllerPhotoTest {
         pending.setListingId(LISTING_ID);
         pending.setDimensionType("PHOTOS");
         pending.setBadgeState("PENDING");
-        when(badgeService.submitPhotos(LISTING_ID, OWNER_ID)).thenReturn(pending);
+        when(badgeService.submitPhotos(any(), any(), any())).thenReturn(pending);
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
@@ -247,7 +252,7 @@ class TrustControllerPhotoTest {
     void submitPhoto_alreadyPending_returns409() throws Exception {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
         when(photoHashService.verifyAndCheck(any())).thenReturn(PhotoVerifyResult.OK);
-        when(badgeService.submitPhotos(any(), any()))
+        when(badgeService.submitPhotos(any(), any(), any()))
                 .thenThrow(new PhotoAlreadySubmittedException("PENDING"));
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)

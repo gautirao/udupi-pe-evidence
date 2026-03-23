@@ -31,6 +31,8 @@ public interface ListingVerificationDimensionRepository
 
     long countByListingIdAndBadgeState(UUID listingId, String badgeState);
 
+    List<ListingVerificationDimension> findAllByBadgeStateOrderByUpdatedAtAsc(String badgeState);
+
     @Transactional
     void deleteByListingId(UUID listingId);
 }

@@ -3,6 +3,7 @@ package com.example.realestate.trust;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.profile.Profile;
 import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfo;
@@ -64,18 +65,21 @@ public class TrustController {
     private final PhotoHashService photoHashService;
     private final ProfileRepository profileRepository;
     private final OtpService otpService;
+    private final SupabaseStorageService supabaseStorageService;
 
     public TrustController(
             BadgeService badgeService,
             ListingRepository listingRepository,
             PhotoHashService photoHashService,
             ProfileRepository profileRepository,
-            OtpService otpService) {
+            OtpService otpService,
+            SupabaseStorageService supabaseStorageService) {
         this.badgeService = badgeService;
         this.listingRepository = listingRepository;
         this.photoHashService = photoHashService;
         this.profileRepository = profileRepository;
         this.otpService = otpService;
+        this.supabaseStorageService = supabaseStorageService;
     }
 
     // -------------------------------------------------------------------------
@@ -221,8 +225,20 @@ public class TrustController {
                         Map.of("error", "This photo was flagged as a stock image. Please upload an original photo."));
             }
             case OK -> {
+                // Upload photo to Supabase Storage (best-effort; failure does not block PENDING transition)
+                String assetUrl = null;
                 try {
-                    badgeService.submitPhotos(id, caller.userId());
+                    String ct = file.getContentType() != null ? file.getContentType() : "image/jpeg";
+                    String ext = getExtensionFromContentType(ct);
+                    String path = id + "/photos/" + UUID.randomUUID() + "." + ext;
+                    assetUrl = supabaseStorageService.uploadObject(
+                            "trust-assets", path, file.getBytes(), ct
+                    ).orElse(null);
+                } catch (Exception e) {
+                    log.warn("Photo upload to storage failed — proceeding without URL listingId={}", id, e);
+                }
+                try {
+                    badgeService.submitPhotos(id, caller.userId(), assetUrl);
                 } catch (PhotoAlreadySubmittedException e) {
                     yield ResponseEntity.status(409).body(
                             Map.of("error", "Photo verification is already " + e.getCurrentState().toLowerCase()));
@@ -618,9 +634,22 @@ public class TrustController {
             return ResponseEntity.status(400).body(Map.of("error", "File must be a PDF or image (JPEG/PNG)"));
         }
 
-        // 6. Transition AUTHORITY badge to PENDING
+        // 6. Upload mandate to Supabase Storage (best-effort; failure does not block PENDING transition)
+        String assetUrl = null;
         try {
-            badgeService.submitAuthorityMandate(id, caller.userId());
+            String ext = getExtensionFromContentType(file.getContentType());
+            String path = id + "/mandates/" + UUID.randomUUID() + "." + ext;
+            assetUrl = supabaseStorageService.uploadObject(
+                    "trust-assets", path, file.getBytes(),
+                    file.getContentType() != null ? file.getContentType() : "application/octet-stream"
+            ).orElse(null);
+        } catch (Exception e) {
+            log.warn("Mandate upload to storage failed — proceeding without URL listingId={}", id, e);
+        }
+
+        // 7. Transition AUTHORITY badge to PENDING
+        try {
+            badgeService.submitAuthorityMandate(id, caller.userId(), assetUrl);
         } catch (AuthorityMandateAlreadySubmittedException e) {
             return ResponseEntity.status(409).body(
                     Map.of("error", "Authority mandate is already " + e.getCurrentState().toLowerCase()));
@@ -643,6 +672,21 @@ public class TrustController {
         profile.setPhoneVerified(true);
         profileRepository.save(profile);
         badgeService.grantIdentityBadge(listingId, callerId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private: content-type to file extension mapping
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns a file extension for a given MIME type.
+     * Defaults to "jpg" for unrecognised types — callers must validate the
+     * content type before passing it here.
+     */
+    private static String getExtensionFromContentType(String contentType) {
+        if ("application/pdf".equals(contentType)) return "pdf";
+        if ("image/png".equals(contentType)) return "png";
+        return "jpg"; // default for image/jpeg and image/jpg
     }
 
     // -------------------------------------------------------------------------

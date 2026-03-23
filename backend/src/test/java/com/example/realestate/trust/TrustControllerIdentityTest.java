@@ -9,6 +9,7 @@ import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.trust.otp.OtpDeliveryException;
 import com.example.realestate.trust.otp.OtpSendResult;
 import com.example.realestate.trust.otp.OtpService;
@@ -99,10 +100,13 @@ class TrustControllerIdentityTest {
     @MockitoBean
     private OtpService otpService;
 
+    @MockitoBean
+    private SupabaseStorageService supabaseStorageService;
+
     @BeforeEach
     void setUp() {
         reset(badgeService, listingRepository, photoHashService, userRoleService,
-                profileRepository, otpService);
+                profileRepository, otpService, supabaseStorageService);
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
     }

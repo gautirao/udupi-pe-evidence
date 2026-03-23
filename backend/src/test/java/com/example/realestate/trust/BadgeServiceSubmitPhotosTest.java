@@ -104,7 +104,7 @@ class BadgeServiceSubmitPhotosTest {
                 .thenReturn(Optional.empty());
         when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ListingVerificationDimension result = badgeService.submitPhotos(listingId, callerId);
+        ListingVerificationDimension result = badgeService.submitPhotos(listingId, callerId, null);
 
         assertThat(result.getBadgeState()).isEqualTo("PENDING");
         assertThat(result.getDimensionType()).isEqualTo("PHOTOS");
@@ -123,7 +123,7 @@ class BadgeServiceSubmitPhotosTest {
                 .thenReturn(Optional.of(existing));
         when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ListingVerificationDimension result = badgeService.submitPhotos(listingId, callerId);
+        ListingVerificationDimension result = badgeService.submitPhotos(listingId, callerId, null);
 
         assertThat(result.getBadgeState()).isEqualTo("PENDING");
     }
@@ -136,7 +136,7 @@ class BadgeServiceSubmitPhotosTest {
         when(dimensionRepository.findByListingIdAndDimensionType(listingId, "PHOTOS"))
                 .thenReturn(Optional.of(dimensionWithState("PENDING")));
 
-        assertThatThrownBy(() -> badgeService.submitPhotos(listingId, callerId))
+        assertThatThrownBy(() -> badgeService.submitPhotos(listingId, callerId, null))
                 .isInstanceOf(PhotoAlreadySubmittedException.class)
                 .satisfies(ex -> assertThat(
                         ((PhotoAlreadySubmittedException) ex).getCurrentState()).isEqualTo("PENDING"));
@@ -150,7 +150,7 @@ class BadgeServiceSubmitPhotosTest {
         when(dimensionRepository.findByListingIdAndDimensionType(listingId, "PHOTOS"))
                 .thenReturn(Optional.of(dimensionWithState("EARNED")));
 
-        assertThatThrownBy(() -> badgeService.submitPhotos(listingId, callerId))
+        assertThatThrownBy(() -> badgeService.submitPhotos(listingId, callerId, null))
                 .isInstanceOf(PhotoAlreadySubmittedException.class)
                 .satisfies(ex -> assertThat(
                         ((PhotoAlreadySubmittedException) ex).getCurrentState()).isEqualTo("EARNED"));

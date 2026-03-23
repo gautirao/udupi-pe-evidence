@@ -27,6 +27,7 @@ import {
   FileText,
   Home,
   Shield,
+  ShieldCheck,
   Chrome,
   Sparkles,
   Copy,
@@ -63,6 +64,7 @@ const adminNavigation = [
   { name: 'Chrome Extension', href: '/admin/extension', icon: Chrome },
   { name: 'Locality Normalizer', href: '/admin/localities', icon: MapPin },
   { name: 'Audit Log', href: '/admin/audit-log', icon: Shield },
+  { name: 'Trust Review', href: '/admin/trust-review', icon: ShieldCheck },
 ];
 
 const brokerNavigation = [

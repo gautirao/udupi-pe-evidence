@@ -292,7 +292,8 @@ public class BadgeService {
      * @param callerId  UUID of the broker or owner submitting the photo; must not be null
      */
     @Transactional
-    public ListingVerificationDimension submitPhotos(UUID listingId, UUID callerId) {
+    public ListingVerificationDimension submitPhotos(
+            UUID listingId, UUID callerId, String verificationAssetUrl) {
         Objects.requireNonNull(listingId, "listingId must not be null");
         Objects.requireNonNull(callerId, "callerId must not be null");
 
@@ -315,6 +316,9 @@ public class BadgeService {
 
         dimension.setBadgeState("PENDING");
         dimension.setUpdatedAt(now);
+        if (verificationAssetUrl != null) {
+            dimension.setVerificationAssetUrl(verificationAssetUrl);
+        }
 
         ListingVerificationDimension saved = dimensionRepository.save(dimension);
 
@@ -558,7 +562,8 @@ public class BadgeService {
      * @param callerId  UUID of the broker submitting the mandate; must not be null
      */
     @Transactional
-    public ListingVerificationDimension submitAuthorityMandate(UUID listingId, UUID callerId) {
+    public ListingVerificationDimension submitAuthorityMandate(
+            UUID listingId, UUID callerId, String verificationAssetUrl) {
         Objects.requireNonNull(listingId, "listingId must not be null");
         Objects.requireNonNull(callerId, "callerId must not be null");
 
@@ -581,6 +586,9 @@ public class BadgeService {
 
         dimension.setBadgeState("PENDING");
         dimension.setUpdatedAt(now);
+        if (verificationAssetUrl != null) {
+            dimension.setVerificationAssetUrl(verificationAssetUrl);
+        }
 
         ListingVerificationDimension saved = dimensionRepository.save(dimension);
 
@@ -600,6 +608,59 @@ public class BadgeService {
         log.info("Authority mandate submitted for review listingId={} callerId={}", listingId, callerId);
 
         return saved;
+    }
+
+    // -------------------------------------------------------------------------
+    // rejectBadgeSubmission
+    // -------------------------------------------------------------------------
+
+    /**
+     * Rejects a PENDING badge submission, reverting it to AVAILABLE, and writes
+     * a {@code BADGE_SUBMISSION_REJECTED} audit record.
+     *
+     * <p>Throws {@link BadgeNotFoundException} if the dimension row does not exist.
+     * Throws {@link IllegalStateException} if the dimension is not in PENDING state —
+     * callers must guard with a 409 before calling this method.
+     *
+     * @param dimensionId UUID of the {@link ListingVerificationDimension} row to reject
+     * @param adminId     UUID of the admin performing the rejection
+     */
+    @Transactional
+    public void rejectBadgeSubmission(UUID dimensionId, UUID adminId) {
+        Objects.requireNonNull(dimensionId, "dimensionId must not be null");
+        Objects.requireNonNull(adminId, "adminId must not be null");
+
+        ListingVerificationDimension dimension = dimensionRepository.findById(dimensionId)
+                .orElseThrow(() -> new BadgeNotFoundException(dimensionId, ""));
+
+        if (!"PENDING".equals(dimension.getBadgeState())) {
+            throw new IllegalStateException("Badge is not PENDING: " + dimension.getBadgeState());
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        String dimensionType = dimension.getDimensionType();
+        UUID listingId = dimension.getListingId();
+
+        String beforeJson = buildSimpleStateJson(dimensionType, "PENDING");
+
+        dimension.setBadgeState("AVAILABLE");
+        dimension.setUpdatedAt(now);
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String afterJson = buildSimpleStateJson(dimensionType, "AVAILABLE");
+
+        adminAuditService.record(
+                adminId,
+                "BADGE_SUBMISSION_REJECTED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Badge submission rejected dimensionId={} dimension={} listingId={} adminId={}",
+                dimensionId, dimensionType, listingId, adminId);
     }
 
     // -------------------------------------------------------------------------

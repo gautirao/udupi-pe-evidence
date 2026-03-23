@@ -12,6 +12,8 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.Optional;
+
 /**
  * Best-effort Supabase Storage object deletion via the Admin REST API (service_role key).
  *
@@ -66,6 +68,56 @@ public class SupabaseStorageService {
             log.info("SupabaseStorageService: enabled — bucket={} url={}", bucket, supabaseUrl);
         } else {
             log.info("SupabaseStorageService: disabled (set SUPABASE_STORAGE_ENABLED=true to enable)");
+        }
+    }
+
+    /**
+     * Upload bytes to Supabase Storage and return the public URL.
+     * Non-fatal: returns {@link Optional#empty()} on any failure.
+     *
+     * @param storageBucket bucket name (e.g. "trust-assets")
+     * @param storagePath   path within bucket (e.g. "listingId/photos/uuid.jpg")
+     * @param content       file bytes
+     * @param contentType   MIME type (e.g. "image/jpeg", "application/pdf")
+     * @return Optional containing the public URL, or empty if disabled or upload failed
+     */
+    public Optional<String> uploadObject(
+            String storageBucket, String storagePath, byte[] content, String contentType) {
+        if (!enabled) {
+            log.debug("Storage upload skipped (disabled): path={}", storagePath);
+            return Optional.empty();
+        }
+        if (storagePath == null || storagePath.contains("..")) {
+            log.warn("Storage upload rejected — unsafe path: path={}", storagePath);
+            return Optional.empty();
+        }
+
+        String url = UriComponentsBuilder.fromHttpUrl(supabaseUrl)
+                .pathSegment("storage", "v1", "object", storageBucket)
+                .path("/" + storagePath)
+                .build().toUriString();
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + serviceRoleKey);
+            headers.set("Content-Type", contentType);
+            restTemplate.exchange(url, HttpMethod.POST,
+                    new HttpEntity<>(content, headers), Void.class);
+
+            // Build the public URL
+            String publicUrl = UriComponentsBuilder.fromHttpUrl(supabaseUrl)
+                    .pathSegment("storage", "v1", "object", "public", storageBucket)
+                    .path("/" + storagePath)
+                    .build().toUriString();
+
+            log.info("Storage object uploaded: path={}", storagePath);
+            return Optional.of(publicUrl);
+        } catch (RestClientResponseException e) {
+            log.warn("Storage upload failed — path={} status={}", storagePath, e.getStatusCode());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("Storage upload failed — path={} error={}", storagePath, e.getClass().getSimpleName());
+            return Optional.empty();
         }
     }
 
