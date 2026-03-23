@@ -60,6 +60,13 @@ public class TrustController {
     /** Maximum Haversine distance in meters for a location verification to be accepted. */
     private static final double LOCATION_VERIFY_THRESHOLD_METERS = 200.0;
 
+    /**
+     * Maximum OTP verify attempts before the badge is set to FAILED and a 24-hour lockout
+     * is applied. Must match {@code StubOtpProvider.MAX_ATTEMPTS} (and the equivalent in
+     * the production provider when it is introduced).
+     */
+    private static final int OTP_MAX_ATTEMPTS = 5;
+
     private final BadgeService badgeService;
     private final ListingRepository listingRepository;
     private final PhotoHashService photoHashService;
@@ -371,12 +378,28 @@ public class TrustController {
             return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
         }
 
-        // 3. Check IDENTITY badge not already EARNED
+        // 3. Check IDENTITY badge not already EARNED; also handle lockout
         List<ListingVerificationDimension> badges = badgeService.getBadges(id);
-        boolean alreadyEarned = badges.stream()
-                .anyMatch(b -> "IDENTITY".equals(b.getDimensionType()) && "EARNED".equals(b.getBadgeState()));
-        if (alreadyEarned) {
+        ListingVerificationDimension identityDimension = badges.stream()
+                .filter(b -> "IDENTITY".equals(b.getDimensionType()))
+                .findFirst()
+                .orElse(null);
+
+        if (identityDimension != null && "EARNED".equals(identityDimension.getBadgeState())) {
             return ResponseEntity.status(409).body(Map.of("error", "Identity already verified"));
+        }
+
+        // 3a. Lockout check — if badge is FAILED with a future lock, reject with 429
+        if (identityDimension != null && identityDimension.getOtpLockedUntil() != null) {
+            if (identityDimension.getOtpLockedUntil().isAfter(OffsetDateTime.now())) {
+                log.warn("OTP request blocked by lockout listingId={} callerId={} lockedUntil={}",
+                        id, caller.userId(), identityDimension.getOtpLockedUntil());
+                return ResponseEntity.status(429).body(Map.of(
+                        "error", "OTP locked. Retry after 24 hours.",
+                        "lockedUntil", identityDimension.getOtpLockedUntil().toString()));
+            }
+            // Lockout has expired — clear it before issuing a new OTP
+            badgeService.resetOtpLockout(id, "IDENTITY");
         }
 
         // 4. Send OTP — phone is not echoed in the response
@@ -435,7 +458,18 @@ public class TrustController {
         // 3. Verify OTP
         boolean valid = otpService.verifyOtp(phone, request.getCode());
         if (!valid) {
-            return ResponseEntity.status(400).body(Map.of("error", "Invalid or expired OTP"));
+            int attemptCount = badgeService.incrementOtpAttemptCount(id, "IDENTITY");
+            if (attemptCount >= OTP_MAX_ATTEMPTS) {
+                badgeService.failBadgeWithLockout(id, "IDENTITY", caller.userId());
+                log.warn("OTP max attempts reached listingId={} callerId={} attempts={}",
+                        id, caller.userId(), attemptCount);
+                return ResponseEntity.status(403).body(
+                        Map.of("error", "Maximum OTP attempts exceeded. Try again after 24 hours."));
+            }
+            int remaining = OTP_MAX_ATTEMPTS - attemptCount;
+            return ResponseEntity.status(400).body(Map.of(
+                    "error", "Incorrect OTP.",
+                    "attemptsRemaining", remaining));
         }
 
         // 4. Mark phone as verified on profile and grant badge — both in one transaction

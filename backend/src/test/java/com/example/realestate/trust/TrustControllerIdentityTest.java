@@ -239,20 +239,99 @@ class TrustControllerIdentityTest {
     // -------------------------------------------------------------------------
 
     /**
-     * OTP code is invalid or expired -> 400.
+     * OTP code is invalid and attempt count is below max -> 400 with attemptsRemaining.
      */
     @Test
     void verifyOtp_invalidCode_returns400() throws Exception {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
         when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
         when(otpService.verifyOtp(PHONE, "000000")).thenReturn(false);
+        when(badgeService.incrementOtpAttemptCount(LISTING_ID, "IDENTITY")).thenReturn(1);
 
         mockMvc.perform(post("/api/listings/{id}/trust/identity/verify-otp", LISTING_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(verifyBody("000000"))
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error").value("Invalid or expired OTP"));
+                .andExpect(jsonPath("$.error").value("Incorrect OTP."))
+                .andExpect(jsonPath("$.attemptsRemaining").value(4));
+    }
+
+    /**
+     * Five consecutive failed verifications -> 403 on the fifth, badge state set to FAILED.
+     */
+    @Test
+    void verify_otp_max_attempts_sets_failed_state() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
+        when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
+        when(otpService.verifyOtp(PHONE, "000000")).thenReturn(false);
+        // incrementOtpAttemptCount returns 5 (max) on the fifth call
+        when(badgeService.incrementOtpAttemptCount(LISTING_ID, "IDENTITY")).thenReturn(5);
+
+        ListingVerificationDimension failedDimension = new ListingVerificationDimension();
+        failedDimension.setListingId(LISTING_ID);
+        failedDimension.setDimensionType("IDENTITY");
+        failedDimension.setBadgeState("FAILED");
+        failedDimension.setOtpLockedUntil(OffsetDateTime.now().plusHours(24));
+        when(badgeService.failBadgeWithLockout(LISTING_ID, "IDENTITY", OWNER_ID))
+                .thenReturn(failedDimension);
+
+        mockMvc.perform(post("/api/listings/{id}/trust/identity/verify-otp", LISTING_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(verifyBody("000000"))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error")
+                        .value("Maximum OTP attempts exceeded. Try again after 24 hours."));
+
+        verify(badgeService).failBadgeWithLockout(LISTING_ID, "IDENTITY", OWNER_ID);
+    }
+
+    /**
+     * Badge is FAILED with a future lockedUntil -> 429 returned before OTP send.
+     */
+    @Test
+    void request_otp_during_lockout_returns_429() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
+        when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
+
+        ListingVerificationDimension lockedDimension = new ListingVerificationDimension();
+        lockedDimension.setListingId(LISTING_ID);
+        lockedDimension.setDimensionType("IDENTITY");
+        lockedDimension.setBadgeState("FAILED");
+        lockedDimension.setOtpLockedUntil(OffsetDateTime.now().plusHours(23));
+        when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of(lockedDimension));
+
+        mockMvc.perform(post("/api/listings/{id}/trust/identity/request-otp", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.error").value("OTP locked. Retry after 24 hours."))
+                .andExpect(jsonPath("$.lockedUntil").exists());
+    }
+
+    /**
+     * Badge is FAILED with a past lockedUntil -> lockout reset, OTP sent, 200 returned.
+     */
+    @Test
+    void request_otp_after_lockout_expiry_resets_state() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
+        when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
+
+        ListingVerificationDimension expiredLockDimension = new ListingVerificationDimension();
+        expiredLockDimension.setListingId(LISTING_ID);
+        expiredLockDimension.setDimensionType("IDENTITY");
+        expiredLockDimension.setBadgeState("FAILED");
+        // lockedUntil is in the past — lockout has expired
+        expiredLockDimension.setOtpLockedUntil(OffsetDateTime.now().minusHours(1));
+        when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of(expiredLockDimension));
+        when(otpService.sendOtp(PHONE)).thenReturn(stubSendResult());
+
+        mockMvc.perform(post("/api/listings/{id}/trust/identity/request-otp", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("OTP sent"));
+
+        verify(badgeService).resetOtpLockout(LISTING_ID, "IDENTITY");
     }
 
     /**

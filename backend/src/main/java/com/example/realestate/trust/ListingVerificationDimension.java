@@ -42,7 +42,7 @@ public class ListingVerificationDimension {
 
     /**
      * Current badge state for this dimension.
-     * Valid values: AVAILABLE, PENDING, EARNED, EXPIRED, SUSPENDED.
+     * Valid values: AVAILABLE, PENDING, EARNED, EXPIRED, SUSPENDED, FAILED.
      * DB default: AVAILABLE.
      */
     @Column(name = "badge_state", nullable = false, length = 20)
@@ -72,6 +72,23 @@ public class ListingVerificationDimension {
      */
     @Column(name = "verification_asset_url", length = 2048)
     private String verificationAssetUrl;
+
+    /**
+     * Number of failed OTP verify attempts for this dimension since the last successful
+     * {@code send} call. Reset to 0 whenever a new OTP is sent.
+     * Added in V53 (CU-6 OTP lockout).
+     */
+    @Column(name = "otp_attempt_count", nullable = false)
+    private int otpAttemptCount = 0;
+
+    /**
+     * When set to a future timestamp, new OTP requests and verify attempts are rejected
+     * until this time has passed (24-hour lockout after MAX_ATTEMPTS failures).
+     * Null means no active lockout.
+     * Added in V53 (CU-6 OTP lockout).
+     */
+    @Column(name = "otp_locked_until")
+    private OffsetDateTime otpLockedUntil;
 
     // Getters and setters
 
@@ -145,5 +162,21 @@ public class ListingVerificationDimension {
 
     public void setVerificationAssetUrl(String verificationAssetUrl) {
         this.verificationAssetUrl = verificationAssetUrl;
+    }
+
+    public int getOtpAttemptCount() {
+        return otpAttemptCount;
+    }
+
+    public void setOtpAttemptCount(int otpAttemptCount) {
+        this.otpAttemptCount = otpAttemptCount;
+    }
+
+    public OffsetDateTime getOtpLockedUntil() {
+        return otpLockedUntil;
+    }
+
+    public void setOtpLockedUntil(OffsetDateTime otpLockedUntil) {
+        this.otpLockedUntil = otpLockedUntil;
     }
 }

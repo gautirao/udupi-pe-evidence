@@ -664,6 +664,150 @@ public class BadgeService {
     }
 
     // -------------------------------------------------------------------------
+    // failBadgeWithLockout
+    // -------------------------------------------------------------------------
+
+    /**
+     * Transitions a badge to FAILED state and sets a 24-hour OTP lockout.
+     *
+     * <p>Called when the caller has exhausted all OTP verify attempts. Sets
+     * {@code badge_state = "FAILED"}, {@code otp_locked_until = now + 24h},
+     * and writes a {@code OTP_MAX_ATTEMPTS_EXCEEDED} audit record.
+     *
+     * <p>If the (listingId, dimensionType) row does not yet exist, a new one is
+     * created — this handles the edge case where verify is called before any prior
+     * DB row exists (which should not happen in practice, but is safe to handle here).
+     *
+     * @param listingId     listing whose badge is to be failed; must not be null
+     * @param dimensionType verification dimension category; must not be null
+     * @param actorId       UUID of the user who exhausted their attempts; must not be null
+     */
+    @Transactional
+    public ListingVerificationDimension failBadgeWithLockout(
+            UUID listingId, String dimensionType, UUID actorId) {
+
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(dimensionType, "dimensionType must not be null");
+        Objects.requireNonNull(actorId, "actorId must not be null");
+        if (!VALID_DIMENSION_TYPES.contains(dimensionType)) {
+            throw new IllegalArgumentException("Invalid dimensionType: " + dimensionType);
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime lockedUntil = now.plusHours(24);
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, dimensionType)
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType(dimensionType);
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        dimension.setBadgeState("FAILED");
+        dimension.setOtpLockedUntil(lockedUntil);
+        dimension.setUpdatedAt(now);
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        String newTier = recalculateAndPersistTier(listingId);
+
+        String beforeJson = previousState != null ? buildSimpleStateJson(dimensionType, previousState) : null;
+        String afterJson = buildFailedLockoutAuditJson(dimensionType, lockedUntil.toString());
+
+        adminAuditService.record(
+                actorId,
+                "OTP_MAX_ATTEMPTS_EXCEEDED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.warn("OTP max attempts exceeded listingId={} dimension={} lockedUntil={} actorId={}",
+                listingId, dimensionType, lockedUntil, actorId);
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
+    // resetOtpLockout
+    // -------------------------------------------------------------------------
+
+    /**
+     * Resets the OTP lockout state on a dimension, returning it to AVAILABLE.
+     *
+     * <p>Called when a lockout has expired (i.e. {@code otp_locked_until} is in the past)
+     * before issuing a new OTP send. Clears {@code badge_state} to AVAILABLE,
+     * {@code otp_attempt_count} to 0, and {@code otp_locked_until} to null.
+     *
+     * <p>If no row exists for the (listingId, dimensionType) pair, this method is a no-op —
+     * the dimension is already in its initial AVAILABLE state.
+     *
+     * @param listingId     listing whose lockout is to be reset; must not be null
+     * @param dimensionType verification dimension category; must not be null
+     */
+    @Transactional
+    public void resetOtpLockout(UUID listingId, String dimensionType) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(dimensionType, "dimensionType must not be null");
+
+        dimensionRepository
+                .findByListingIdAndDimensionType(listingId, dimensionType)
+                .ifPresent(dimension -> {
+                    OffsetDateTime now = OffsetDateTime.now();
+                    dimension.setBadgeState("AVAILABLE");
+                    dimension.setOtpAttemptCount(0);
+                    dimension.setOtpLockedUntil(null);
+                    dimension.setUpdatedAt(now);
+                    dimensionRepository.save(dimension);
+                    log.info("OTP lockout reset listingId={} dimension={}", listingId, dimensionType);
+                });
+    }
+
+    // -------------------------------------------------------------------------
+    // incrementOtpAttemptCount
+    // -------------------------------------------------------------------------
+
+    /**
+     * Increments the OTP attempt counter for the given (listingId, dimensionType) pair
+     * and returns the new count.
+     *
+     * <p>If no row exists yet, a new AVAILABLE row is created with {@code otp_attempt_count = 1}.
+     * This preserves the invariant that attempt tracking starts from the first failed call.
+     *
+     * @param listingId     listing whose attempt count is to be incremented; must not be null
+     * @param dimensionType verification dimension category; must not be null
+     * @return the updated attempt count after incrementing
+     */
+    @Transactional
+    public int incrementOtpAttemptCount(UUID listingId, String dimensionType) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(dimensionType, "dimensionType must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, dimensionType)
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType(dimensionType);
+                    d.setBadgeState("AVAILABLE");
+                    return d;
+                });
+
+        int newCount = dimension.getOtpAttemptCount() + 1;
+        dimension.setOtpAttemptCount(newCount);
+        dimension.setUpdatedAt(now);
+        dimensionRepository.save(dimension);
+
+        return newCount;
+    }
+
+    // -------------------------------------------------------------------------
     // getBadges
     // -------------------------------------------------------------------------
 
@@ -726,6 +870,18 @@ public class BadgeService {
         if (evidenceNote != null) {
             payload.put("evidenceNote", evidenceNote);
         }
+        return toJsonOrNull(payload);
+    }
+
+    /**
+     * Serializes the OTP lockout audit payload to a JSON string via Jackson.
+     * Returns null on serialization failure (audit silently skipped; main transaction still commits).
+     */
+    private String buildFailedLockoutAuditJson(String dimensionType, String lockedUntil) {
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("dimensionType", dimensionType);
+        payload.put("badgeState", "FAILED");
+        payload.put("lockedUntil", lockedUntil);
         return toJsonOrNull(payload);
     }
 
