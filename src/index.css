@@ -209,6 +209,23 @@
   .marker-other {
     background-color: hsl(var(--pin-other));
   }
+
+  /* Leaflet Draw toolbar overrides — match design system */
+  .leaflet-draw-toolbar a {
+    @apply bg-card border-border;
+  }
+
+  .leaflet-draw-toolbar a:hover {
+    @apply bg-muted;
+  }
+
+  .leaflet-draw-actions a {
+    @apply bg-card text-foreground border-border;
+  }
+
+  .leaflet-draw-actions a:hover {
+    @apply bg-muted;
+  }
 }
 
 /* Custom scrollbar */

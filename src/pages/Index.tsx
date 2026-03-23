@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal } from 'lucide-react';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
@@ -28,6 +28,17 @@ export default function Index() {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  const handlePolygonDrawn = useCallback((polygon: [number, number][]) => {
+    setFilters((prev) => ({ ...prev, polygon }));
+  }, []);
+
+  const handlePolygonCleared = useCallback(() => {
+    setFilters((prev) => {
+      const { polygon: _removed, ...rest } = prev;
+      return rest;
+    });
+  }, []);
 
   const { data: listings = [], isLoading: listingsLoading, error: listingsError } = usePropertyListings(filters);
 
@@ -132,6 +143,9 @@ export default function Index() {
               selectedListing={selectedListing}
               onSelectListing={setSelectedListing}
               focusBounds={focusBounds}
+              polygon={filters.polygon}
+              onPolygonDrawn={handlePolygonDrawn}
+              onPolygonCleared={handlePolygonCleared}
             />
           )}
 
@@ -181,6 +195,15 @@ export default function Index() {
           <div className="absolute top-4 right-4 z-[1000]">
             <Card className="px-3 py-2 bg-card/95 backdrop-blur">
               <div className="flex items-center gap-4 text-sm">
+                {filters.polygon && (
+                  <>
+                    <div className="flex items-center gap-1.5 text-primary">
+                      <PenTool className="h-4 w-4" />
+                      <span className="font-medium">Area search</span>
+                    </div>
+                    <div className="text-muted-foreground">|</div>
+                  </>
+                )}
                 <div className="flex items-center gap-1.5">
                   <MapPin className="h-4 w-4 text-primary" />
                   <span className="font-medium">{listingsWithCoords.length}</span>
@@ -190,6 +213,21 @@ export default function Index() {
                 <div className="text-muted-foreground">
                   {filteredListings.length} total listings
                 </div>
+                {filters.polygon && (
+                  <>
+                    <div className="text-muted-foreground">|</div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                      onClick={handlePolygonCleared}
+                      aria-label="Clear polygon search"
+                    >
+                      <X className="h-3.5 w-3.5 mr-1" />
+                      Clear area
+                    </Button>
+                  </>
+                )}
               </div>
             </Card>
           </div>

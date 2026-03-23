@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'commercial_building' | 'warehouse' | 'commercial_land' | 'other';
@@ -96,6 +97,8 @@ export interface PropertyFilters {
   reraRegistered?: boolean;
   /** Client-side: show only listings where possessionStatus === 'ready_to_move' */
   readyToMove?: boolean;
+  /** Draw-on-map polygon: array of [lat, lng] pairs. When set, queries the backend PostGIS endpoint. */
+  polygon?: [number, number][];
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
@@ -104,11 +107,125 @@ export interface PropertyListingWithImages extends PropertyListing {
   } | null;
 }
 
+// ---- Polygon search (Spring Boot backend) ----
+
+/** Shape returned by GET /api/public/listings/within-polygon */
+interface PolygonListingResponse {
+  id: string;
+  listingNumber: number | null;
+  status: string;
+  propertyType: string;
+  title: string | null;
+  locality: string | null;
+  price: number | null;
+  description: string | null;
+  landArea: number | null;
+  landAreaUnit: string | null;
+  bedrooms: number | null;
+  builtArea: number | null;
+  builtAreaUnit: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  firstImageUrl: string | null;
+  imageCount: number;
+  createdAt: string;
+  updatedAt: string;
+  sellerType: string | null;
+  listingPurpose: string | null;
+  reraNumber: string | null;
+  daysOnMarket: number;
+  backOnMarket: boolean;
+  lastUpdatedAt: string | null;
+  firstPublishedAt: string | null;
+  possessionStatus: string | null;
+  reraValid: boolean;
+}
+
+interface PolygonPageResponse {
+  content: PolygonListingResponse[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  size: number;
+}
+
+/** Maps backend camelCase ListingResponse to frontend snake_case PropertyListing. */
+function polygonResponseToListing(r: PolygonListingResponse): PropertyListing & { images: PropertyImage[] } {
+  const images: PropertyImage[] = r.firstImageUrl ? [{ url: r.firstImageUrl }] : [];
+  return {
+    id: r.id,
+    property_type: r.propertyType as PropertyType,
+    title: r.title,
+    locality: r.locality,
+    price: r.price !== null ? Number(r.price) : null,
+    price_unit: 'INR',
+    land_area: r.landArea !== null ? Number(r.landArea) : null,
+    land_area_unit: r.landAreaUnit,
+    built_area: r.builtArea !== null ? Number(r.builtArea) : null,
+    built_area_unit: r.builtAreaUnit,
+    bedrooms: r.bedrooms,
+    bathrooms: null,
+    contact_info: null,
+    contact_phone: null,
+    description: r.description,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    confidence_score: null,
+    language_detected: null,
+    price_per_cent_paise: null,
+    is_valid: true,
+    is_duplicate: false,
+    status: r.status,
+    listing_number: r.listingNumber ?? undefined,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt,
+    rera_number: r.reraNumber,
+    raw_post_id: null,
+    listing_purpose: r.listingPurpose ?? 'sale',
+    carpet_area: null,
+    carpet_area_unit: null,
+    floor_number: null,
+    total_floors: null,
+    furnishing_status: null,
+    washrooms: null,
+    parking_count: null,
+    road_frontage_ft: null,
+    commercial_usage: null,
+    number_of_units: null,
+    monthly_rent: null,
+    security_deposit_months: null,
+    lock_in_months: null,
+    seller_type: r.sellerType as PropertyListing['seller_type'],
+    firstPublishedAt: r.firstPublishedAt,
+    lastUpdatedAt: r.lastUpdatedAt,
+    daysOnMarket: r.daysOnMarket,
+    backOnMarket: r.backOnMarket,
+    possessionStatus: r.possessionStatus,
+    reraValid: r.reraValid,
+    images,
+  };
+}
+
+async function fetchPolygonListings(polygon: [number, number][]): Promise<(PropertyListing & { images: PropertyImage[] })[]> {
+  const polygonParam = JSON.stringify(polygon);
+  // Fetch up to 200 results (backend max page size) — polygon search is spatial, no further pagination in the UI for now
+  const data = await api.get<PolygonPageResponse>(
+    `/api/public/listings/within-polygon?polygon=${encodeURIComponent(polygonParam)}&size=200`,
+    { skipAuth: true },
+  );
+  return data.content.map(polygonResponseToListing);
+}
+
 export function usePropertyListings(filters?: PropertyFilters) {
   return useQuery({
     queryKey: ['property-listings', filters],
     staleTime: 60_000,
     queryFn: async () => {
+      // When a polygon is drawn, use the backend PostGIS endpoint
+      if (filters?.polygon && filters.polygon.length >= 3) {
+        return fetchPolygonListings(filters.polygon);
+      }
+
       let query = supabase
         .from('property_listings')
         .select('*, raw_posts(images)')
@@ -159,7 +276,7 @@ export function usePropertyListings(filters?: PropertyFilters) {
       const { data, error } = await query;
 
       if (error) throw error;
-      
+
       // Transform to include images at the listing level
       let results = (data as unknown as PropertyListingWithImages[]).map(listing => {
         const rawImages = listing.raw_posts?.images;

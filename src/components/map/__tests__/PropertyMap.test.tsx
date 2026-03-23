@@ -46,6 +46,12 @@ vi.mock('leaflet/dist/leaflet.css', () => ({}));
 vi.mock('leaflet.markercluster/dist/MarkerCluster.css', () => ({}));
 vi.mock('leaflet.markercluster/dist/MarkerCluster.Default.css', () => ({}));
 vi.mock('leaflet.markercluster', () => ({}));
+vi.mock('leaflet-draw', () => ({}));
+vi.mock('leaflet-draw/dist/leaflet.draw.css', () => ({}));
+
+vi.mock('@/components/map/DrawControl', () => ({
+  DrawControl: () => null,
+}));
 
 vi.mock('@/components/ui/card', () => ({
   Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

@@ -100,7 +100,8 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     !!filters.backOnMarket ||
     !!filters.newToMarket ||
     !!filters.reraRegistered ||
-    !!filters.readyToMove;
+    !!filters.readyToMove ||
+    (filters.polygon && filters.polygon.length > 0);
 
   return (
     <Card className="h-full overflow-hidden flex flex-col">

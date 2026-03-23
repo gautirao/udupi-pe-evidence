@@ -7,6 +7,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
+import { DrawControl } from '@/components/map/DrawControl';
 import { Card } from '@/components/ui/card';
 
 // Extended listing with images for map display
@@ -75,6 +76,12 @@ interface PropertyMapProps {
   selectedListing?: PropertyListingWithImages | null;
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
   focusBounds?: [[number, number], [number, number]] | null;
+  /** Current polygon coordinates from draw-on-map. Passed to DrawControl for overlay rendering. */
+  polygon?: [number, number][] | null;
+  /** Called when the user finishes drawing a polygon on the map. */
+  onPolygonDrawn?: (polygon: [number, number][]) => void;
+  /** Called when the user clears the drawn polygon. */
+  onPolygonCleared?: () => void;
 }
 
 function MapController({
@@ -175,7 +182,7 @@ function MarkerClusterLayer({
   return null;
 }
 
-export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds }: PropertyMapProps) {
+export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -194,6 +201,13 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
         />
         <MapController selectedListing={selectedListing} focusBounds={focusBounds} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+        {onPolygonDrawn && onPolygonCleared && (
+          <DrawControl
+            polygon={polygon}
+            onPolygonDrawn={onPolygonDrawn}
+            onPolygonCleared={onPolygonCleared}
+          />
+        )}
       </MapContainer>
 
       {/* Legend */}
