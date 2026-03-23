@@ -62,6 +62,7 @@ public class BadgeService {
     private final RankingScoreCalculator rankingScoreCalculator;
     private final AdminAuditService adminAuditService;
     private final ObjectMapper objectMapper;
+    private final AuthorityEvidenceRepository authorityEvidenceRepository;
 
     public BadgeService(
             ListingVerificationDimensionRepository dimensionRepository,
@@ -69,13 +70,15 @@ public class BadgeService {
             TrustTierCalculator trustTierCalculator,
             RankingScoreCalculator rankingScoreCalculator,
             AdminAuditService adminAuditService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            AuthorityEvidenceRepository authorityEvidenceRepository) {
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
         this.trustTierCalculator = trustTierCalculator;
         this.rankingScoreCalculator = rankingScoreCalculator;
         this.adminAuditService = adminAuditService;
         this.objectMapper = objectMapper;
+        this.authorityEvidenceRepository = authorityEvidenceRepository;
     }
 
     // -------------------------------------------------------------------------
@@ -129,6 +132,20 @@ public class BadgeService {
         dimension.setUpdatedAt(now);
 
         ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        if ("AUTHORITY".equals(dimensionType)) {
+            authorityEvidenceRepository
+                    .findAllByListingIdAndReviewState(listingId, "PENDING")
+                    .stream()
+                    .findFirst()
+                    .ifPresent(e -> {
+                        e.setReviewState("APPROVED");
+                        e.setVerifiedBy(actorId);
+                        e.setVerifiedAt(now);
+                        e.setUpdatedAt(now);
+                        authorityEvidenceRepository.save(e);
+                    });
+        }
 
         String newTier = recalculateAndPersistTier(listingId);
 
@@ -592,6 +609,14 @@ public class BadgeService {
 
         ListingVerificationDimension saved = dimensionRepository.save(dimension);
 
+        AuthorityEvidence evidence = new AuthorityEvidence();
+        evidence.setListingId(listingId);
+        evidence.setEvidenceType("MANDATE_DOCUMENT");
+        evidence.setEvidenceValue(verificationAssetUrl);
+        evidence.setReviewState("PENDING");
+        evidence.setUpdatedAt(now);
+        authorityEvidenceRepository.save(evidence);
+
         recalculateAndPersistTier(listingId);
 
         String afterJson = buildSimpleStateJson("AUTHORITY", "PENDING");
@@ -646,6 +671,20 @@ public class BadgeService {
         dimension.setBadgeState("AVAILABLE");
         dimension.setUpdatedAt(now);
         ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        if ("AUTHORITY".equals(dimensionType)) {
+            authorityEvidenceRepository
+                    .findAllByListingIdAndReviewState(listingId, "PENDING")
+                    .stream()
+                    .findFirst()
+                    .ifPresent(e -> {
+                        e.setReviewState("REJECTED");
+                        e.setVerifiedBy(adminId);
+                        e.setVerifiedAt(now);
+                        e.setUpdatedAt(now);
+                        authorityEvidenceRepository.save(e);
+                    });
+        }
 
         recalculateAndPersistTier(listingId);
 

@@ -60,6 +60,9 @@ class BadgeServiceTest {
     @Mock
     private AdminAuditService adminAuditService;
 
+    @Mock
+    private AuthorityEvidenceRepository authorityEvidenceRepository;
+
     // Real ObjectMapper — BadgeService uses it for JSON serialisation; a real instance
     // avoids stubbing every writeValueAsString call while keeping the test fast (no I/O).
     @Spy
@@ -470,5 +473,169 @@ class BadgeServiceTest {
         assertThatThrownBy(() -> badgeService.expireBadge(listingId, "INVALID_TYPE", actorId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("INVALID_TYPE");
+    }
+
+    // -------------------------------------------------------------------------
+    // CU-10: submitAuthorityMandate writes authority_evidence row
+    // -------------------------------------------------------------------------
+
+    @Test
+    void submitAuthorityMandate_savesEvidenceRow_withPendingState() {
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "AUTHORITY"))
+                .thenReturn(Optional.empty());
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "D"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+        when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        String mandateUrl = "https://storage.example.com/mandate.pdf";
+        badgeService.submitAuthorityMandate(listingId, actorId, mandateUrl);
+
+        ArgumentCaptor<AuthorityEvidence> captor = ArgumentCaptor.forClass(AuthorityEvidence.class);
+        verify(authorityEvidenceRepository).save(captor.capture());
+
+        AuthorityEvidence saved = captor.getValue();
+        assertThat(saved.getListingId()).isEqualTo(listingId);
+        assertThat(saved.getEvidenceType()).isEqualTo("MANDATE_DOCUMENT");
+        assertThat(saved.getEvidenceValue()).isEqualTo(mandateUrl);
+        assertThat(saved.getReviewState()).isEqualTo("PENDING");
+        assertThat(saved.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void submitAuthorityMandate_savesEvidenceRow_withNullUrl_whenNoUrlProvided() {
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "AUTHORITY"))
+                .thenReturn(Optional.empty());
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "D"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+        when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        badgeService.submitAuthorityMandate(listingId, actorId, null);
+
+        ArgumentCaptor<AuthorityEvidence> captor = ArgumentCaptor.forClass(AuthorityEvidence.class);
+        verify(authorityEvidenceRepository).save(captor.capture());
+        assertThat(captor.getValue().getReviewState()).isEqualTo("PENDING");
+        assertThat(captor.getValue().getEvidenceValue()).isNull();
+    }
+
+    // -------------------------------------------------------------------------
+    // CU-10: grantBadge(AUTHORITY) updates pending evidence row to APPROVED
+    // -------------------------------------------------------------------------
+
+    @Test
+    void grantBadge_authority_updatesEvidenceRowToApproved_whenPendingEvidenceExists() {
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "AUTHORITY"))
+                .thenReturn(Optional.empty());
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "A"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+
+        AuthorityEvidence pendingEvidence = new AuthorityEvidence();
+        pendingEvidence.setListingId(listingId);
+        pendingEvidence.setEvidenceType("MANDATE_DOCUMENT");
+        pendingEvidence.setReviewState("PENDING");
+        pendingEvidence.setUpdatedAt(OffsetDateTime.now().minusDays(1));
+
+        when(authorityEvidenceRepository.findAllByListingIdAndReviewState(listingId, "PENDING"))
+                .thenReturn(List.of(pendingEvidence));
+        when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        badgeService.grantBadge(listingId, "AUTHORITY", actorId, "Admin approved mandate");
+
+        ArgumentCaptor<AuthorityEvidence> captor = ArgumentCaptor.forClass(AuthorityEvidence.class);
+        verify(authorityEvidenceRepository).save(captor.capture());
+
+        AuthorityEvidence updated = captor.getValue();
+        assertThat(updated.getReviewState()).isEqualTo("APPROVED");
+        assertThat(updated.getVerifiedBy()).isEqualTo(actorId);
+        assertThat(updated.getVerifiedAt()).isNotNull();
+        assertThat(updated.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void grantBadge_nonAuthority_doesNotTouchEvidenceRepository() {
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "PHOTOS"))
+                .thenReturn(Optional.empty());
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "C"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+
+        badgeService.grantBadge(listingId, "PHOTOS", actorId, null);
+
+        verify(authorityEvidenceRepository, never()).findAllByListingIdAndReviewState(any(), any());
+        verify(authorityEvidenceRepository, never()).save(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // CU-10: rejectBadgeSubmission(AUTHORITY) updates pending evidence row to REJECTED
+    // -------------------------------------------------------------------------
+
+    @Test
+    void rejectBadgeSubmission_authority_updatesEvidenceRowToRejected_whenPendingEvidenceExists() {
+        ListingVerificationDimension pending = existingDimension("AUTHORITY", "PENDING");
+        UUID dimensionId = UUID.randomUUID();
+        try {
+            java.lang.reflect.Field f = ListingVerificationDimension.class.getDeclaredField("id");
+            f.setAccessible(true);
+            f.set(pending, dimensionId);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+
+        when(dimensionRepository.findById(dimensionId)).thenReturn(Optional.of(pending));
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "D"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+
+        AuthorityEvidence pendingEvidence = new AuthorityEvidence();
+        pendingEvidence.setListingId(listingId);
+        pendingEvidence.setEvidenceType("MANDATE_DOCUMENT");
+        pendingEvidence.setReviewState("PENDING");
+        pendingEvidence.setUpdatedAt(OffsetDateTime.now().minusDays(1));
+
+        when(authorityEvidenceRepository.findAllByListingIdAndReviewState(listingId, "PENDING"))
+                .thenReturn(List.of(pendingEvidence));
+        when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        badgeService.rejectBadgeSubmission(dimensionId, actorId);
+
+        ArgumentCaptor<AuthorityEvidence> captor = ArgumentCaptor.forClass(AuthorityEvidence.class);
+        verify(authorityEvidenceRepository).save(captor.capture());
+
+        AuthorityEvidence updated = captor.getValue();
+        assertThat(updated.getReviewState()).isEqualTo("REJECTED");
+        assertThat(updated.getVerifiedBy()).isEqualTo(actorId);
+        assertThat(updated.getVerifiedAt()).isNotNull();
+        assertThat(updated.getUpdatedAt()).isNotNull();
+    }
+
+    @Test
+    void rejectBadgeSubmission_nonAuthority_doesNotTouchEvidenceRepository() {
+        ListingVerificationDimension pending = existingDimension("PHOTOS", "PENDING");
+        UUID dimensionId = UUID.randomUUID();
+        try {
+            java.lang.reflect.Field f = ListingVerificationDimension.class.getDeclaredField("id");
+            f.setAccessible(true);
+            f.set(pending, dimensionId);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+
+        when(dimensionRepository.findById(dimensionId)).thenReturn(Optional.of(pending));
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId)).thenReturn(new TrustTierResult(listingId, "D"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+
+        badgeService.rejectBadgeSubmission(dimensionId, actorId);
+
+        verify(authorityEvidenceRepository, never()).findAllByListingIdAndReviewState(any(), any());
+        verify(authorityEvidenceRepository, never()).save(any());
     }
 }

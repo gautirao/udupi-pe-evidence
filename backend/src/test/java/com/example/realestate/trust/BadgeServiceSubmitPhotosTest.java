@@ -43,6 +43,9 @@ class BadgeServiceSubmitPhotosTest {
     @Mock
     private AdminAuditService adminAuditService;
 
+    @Mock
+    private AuthorityEvidenceRepository authorityEvidenceRepository;
+
     @Spy
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -60,7 +63,8 @@ class BadgeServiceSubmitPhotosTest {
                 trustTierCalculator,
                 rankingScoreCalculator,
                 adminAuditService,
-                objectMapper);
+                objectMapper,
+                authorityEvidenceRepository);
 
         listingId = UUID.randomUUID();
         callerId = UUID.randomUUID();
