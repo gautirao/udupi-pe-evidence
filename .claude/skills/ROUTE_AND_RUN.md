@@ -382,8 +382,16 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 
   **Uncertainty tie-breaker:** If it is unclear whether the change introduces or modifies a cross-layer flow requiring E2E authoring, default to YES. The skip conditions above are the only valid escape hatches.
 - `qa` in **verification mode** runs AFTER all reviewers APPROVE (and after E2E authoring if applicable), BEFORE commit/push/PR, for Normal and High-risk changes only.
-  When invoking verification mode, use this exact Task prompt:
+  When invoking verification mode, construct the Task prompt based on context:
+
+  **Default (standalone or no targeted-files override):**
   > "Mode: verification. Run the full E2E suite (`npm run test:e2e:local`) and report results. Do NOT write or modify any code. Do NOT fix failing tests. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
+
+  **Targeted-first (when sprint context provides `targeted_files` and no full-suite trigger):**
+  > "Mode: verification. Run targeted E2E first: `npx playwright test [targeted_files] --project=chromium`. If all targeted tests pass, report PASS (targeted-only). Do NOT run the full suite unless a targeted test fails. Do NOT write or modify any code. Report pass/fail with exact failure output for any failures. Changed files in this PR: [list files]. Classification: [normal|high-risk]."
+
+  **Full-suite triggers (override targeted-first back to full suite):** every 3rd PR in a sprint, last PR in the sprint, PR modified any shared fixture file (`e2e/fixtures/`, `e2e/pages/`, `global-setup.ts`, `playwright.config.ts`), or PR modified auth/session setup.
+
   If QA reports FAIL, apply the Failure Routing Protocol in Step 3. Do NOT proceed to commit/push/PR until QA reports PASS.
 
 #### Code-Reviewer Invocation Protocol
@@ -561,6 +569,19 @@ Re-invoke QA verification mode (cycle 2)
 - **No dismissing failures**: all failures must be surfaced verbatim. The orchestrator cannot decide failures are "minor" or "known" without user approval.
 - **Flaky/environmental failures still block**: failures classified by QA as `likely-flaky` or `environmental` still block PR creation — they are not auto-dismissed. However, they should not be automatically treated as feature regressions owned by the implementing engineer unless QA's triage evidence links the failure to the changed files. When escalating flaky/environmental failures, include QA's failure character classification so the user can make an informed decision.
 
+### Test-type E2E failure attribution (when triage Type is `test`)
+
+When the implementing agent is `qa` (test-type PR per section G), E2E failures require attribution before routing:
+
+**Scenario A — failing spec was created or modified by THIS PR:**
+Treat as a test bug, not an app regression. Re-invoke `qa` agent with the exact failure output. Standard one-retry rule applies. After qa fixes the test, **re-invoke code-reviewer for a delta review** — pass only the diff since the original APPROVE with instruction: "Delta review: these lines changed after your original APPROVE to fix a failing E2E test. Check for: weakened assertions, added hard waits, removed test blocks, suppression (`skip`/`fixme`), or any change that makes the test less rigorous. Verdict: APPROVE or REQUEST CHANGES." If REQUEST CHANGES: standard fix cycle. If still failing after one qa retry: surface to user, do not proceed.
+
+**Scenario B — failing spec was NOT modified by THIS PR:**
+This is not the current PR's fault. Do NOT route the failure to the current PR's `qa` agent.
+1. If sprint context is available: check if the failing spec was introduced by an earlier sprint PR (compare against `Touched files` in previous checkpoints). If yes: classify as `cross-PR regression`. Surface to user: "Spec `<name>` introduced by RE-XX is failing during RE-YY's E2E run. This is not RE-YY's fault. Options: (a) fix the earlier spec now, (b) quarantine and continue, (c) pause." Log `ROUTE_AND_RUN_WARNING: MED Cross-PR regression: <spec-name>` in Risks.
+2. If no sprint context, or the spec predates this sprint: classify as `pre-existing regression`. Surface to user with the same options.
+3. In all Scenario B cases: the current PR's E2E gate is BLOCKED until the user decides. The orchestrator does NOT auto-dismiss.
+
 ### Responsibility assignment (for failure routing)
 
 1. **Primary rule**: route to the implementation agent whose changed files are in the failing test's execution path. If only one engineer ran → that engineer.
@@ -644,6 +665,22 @@ After every engineer agent run (for Normal and High-risk code tasks), the orches
 
 ---
 
+## Spec Invalidation Check (sprint context only)
+
+After materialization passes and before proceeding to code-reviewer, if the current execution is invoked from SPRINT_EXECUTOR (enriched spec ACs are available), examine the engineer's AC coverage table:
+
+- If any AC is marked `OUT OF SCOPE — [reason]`: emit `ROUTE_AND_RUN_WARNING: MED Deferred AC: [AC bullet] — [reason]` for each. These warnings flow to the checkpoint Risks section via the standard warning channel.
+- **Acceptable reasons:** "backend endpoint not yet implemented", "UI component does not exist yet", "feature is behind a disabled flag". These are logged — they do not block code-reviewer.
+- **Unacceptable reasons:** "already covered by existing test" (unless the engineer cites the exact spec file path AND test name), "out of scope" without explanation, or no reason given. Treat these as engineer materialization failure — re-invoke the engineer per the materialization retry rules above.
+- **50% safeguard:** If 50% or more of the enriched spec's AC bullets are OUT OF SCOPE: play `afplay /System/Library/Sounds/Ping.aiff`, surface to user: "Over half of this issue's acceptance criteria are OUT OF SCOPE. The spec may be misaligned with the codebase. Do not proceed without explicit user decision." This is a HARD STOP — do not proceed to code-reviewer until the user responds.
+
+Record result in Gate Satisfaction Record as:
+`Spec invalidation: CLEAN | PARTIAL(N of M ACs deferred — reasons logged in Risks) | N/A(standalone or no enriched spec)`
+
+**Not applicable to:** standalone ROUTE_AND_RUN invocations (no enriched spec available), Doc-only, or Trivial changes.
+
+---
+
 ## Stage Evidence Contract (Mandatory)
 
 Each stage must produce minimum structured evidence. Missing evidence is a gate failure — the orchestrator must not proceed.
@@ -708,6 +745,7 @@ E2E authoring: DONE | SKIPPED(qa-fast=NO) | SKIPPED(trivial) | SKIPPED(doc-only)
 QA E2E: PASS | SKIPPED(trivial) | SKIPPED(doc-only) | SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)
 E2E coverage relevance: COVERED | GAP(no auth fixture) | GAP(no spec for flow) | N/A(backend-only) | N/A(trivial) | N/A(doc-only)
 Engineer materialization: PASS | FAIL | N/A(doc-only) | N/A(trivial)
+Spec invalidation: CLEAN | PARTIAL(N of M) | BLOCKED(50%+) | N/A(standalone)
 Process-doc review: PASS | N/A
 All gates satisfied: YES
 ```

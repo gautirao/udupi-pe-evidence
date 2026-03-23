@@ -87,6 +87,8 @@ Before the first PR:
 
 **4a. Sprint-level routing cache (homogeneous sprints only — activate after first PR confirms quality gates pass)**
 
+   **Phase 2 activation condition:** Phase 2 features (routing cache, targeted E2E, shortened qa-fast) activate when the first PR's Gate Satisfaction Record (from ROUTE_AND_RUN) contains `All gates satisfied: YES`. If PR 1 is BLOCKED or has any gate failure, Phase 2 does not activate — full-mode gates apply to all subsequent PRs until a PR completes with `All gates satisfied: YES`.
+
    If team-lead confirms that ALL sprint issues share the same triage Type and routing path (e.g. all `test` → `qa-fast → qa → code-reviewer`):
    - Cache the routing decision in the checkpoint preamble as `Cached routing: <Type> → <routing chain>`.
    - Per-PR triage blocks still output verbatim (hard gate compliance) but classification and routing are drawn from cache — no re-derivation needed.
@@ -119,7 +121,8 @@ For each GitHub issue (PR N):
    - Check for a dangling branch: `git branch --list "*pr-<issue-number>*"` (where issue-number is from `Current PR:`)
    - Check for uncommitted changes on main: `git status --short`
    - **Branch exists with commits** → engineer completed but PR lifecycle didn't finish. Surface to user: "RE-XX was in-flight. Branch `<name>` exists with work. Resume from step 5 (git+PR) or restart the PR from scratch?"
-   - **No branch, no uncommitted changes** → engineer hadn't started or produced no output. Clear the in-flight marker and restart the PR from step 1.
+   - **No branch, no uncommitted changes** → check for an already-merged PR: `gh pr list --state merged --search "<issue-title-slug>" --limit 1 --json number,mergedAt`. If a merged PR exists for this issue: the PR lifecycle completed but checkpoint wasn't updated. Skip to step 6 (close issue + update status) and proceed.
+   - **No branch, no merged PR, no uncommitted changes** → engineer hadn't started or produced no output. Clear the in-flight marker and restart the PR from step 1.
    - **Uncommitted changes on main** → surface to user for manual resolution before proceeding.
 
 2. **Mark In Progress** — set GitHub Project item status to "In Progress":
@@ -139,19 +142,13 @@ For each GitHub issue (PR N):
 
    **The E2E gate within ROUTE_AND_RUN is MANDATORY for Normal and High-risk PRs — run unconditionally. "Backend not running" is not a valid skip; if a server fails to start, surface as BLOCKED.**
 
-   **Boundary rule:** `ROUTE_AND_RUN.md` owns change classification, reviewer/security retry loops, process-doc review, post-engineer materialization checks, and E2E gate policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` records the outcomes of those gates in the checkpoint but does not restate, reinterpret, or override them here.
+   **Boundary rule:** `ROUTE_AND_RUN.md` owns change classification, reviewer/security retry loops, process-doc review, post-engineer materialization checks, spec invalidation, and E2E gate policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` records the outcomes of those gates in the checkpoint but does not restate, reinterpret, or override them here.
 
-**4b. Engineer materialization validation** — after ROUTE_AND_RUN returns, validate per the Post-Engineer Materialization Check in ROUTE_AND_RUN.md. If FAIL: re-invoke the engineer agent once with the specific failed check(s) named explicitly, plus the original qa-fast context and full enriched spec. If still FAIL on second run: play `afplay /System/Library/Sounds/Basso.aiff`, emit BLOCKED checkpoint with `Engineer materialization: FAIL` in the Gate Satisfaction Record, and surface to user. Do NOT proceed to step 4c.
+   **Sprint E2E context (for test-type PRs under Phase 2):** When triage Type is `test` and Phase 2 is active, pass `targeted_files: [list of new/modified spec files from this PR]` as sprint context to ROUTE_AND_RUN. ROUTE_AND_RUN uses this to select targeted-first E2E (see its QA verification prompt). If a full-suite trigger applies (3rd PR, last PR, shared fixture change), pass `targeted_files: FULL_SUITE_TRIGGER` instead — ROUTE_AND_RUN falls back to full suite.
 
-**4c. Spec invalidation check (after materialization passes)** — before invoking code-reviewer, examine the engineer's AC coverage table:
+   Note: Engineer materialization validation, spec invalidation checking, and E2E failure attribution (Scenario A/B) are handled inside ROUTE_AND_RUN (Post-Engineer Materialization Check, Spec Invalidation Check, and Failure Routing Protocol sections). SPRINT_EXECUTOR does not re-check these — it reads the Gate Satisfaction Record emitted by ROUTE_AND_RUN. If `Engineer materialization: FAIL` or `Spec invalidation: BLOCKED`, ROUTE_AND_RUN will not return — it will emit BLOCKED and stop. SPRINT_EXECUTOR only sees successful returns.
 
-   - If any AC is marked `OUT OF SCOPE — [reason]`: record each case in the checkpoint `Known temporary exceptions:` field with the reason.
-   - **Acceptable reasons:** "backend endpoint not yet implemented", "UI component does not exist yet", "feature is behind a disabled flag". Log these as `Deferred AC` and **do not auto-close the issue** (see no-auto-close safeguard below).
-   - **Unacceptable reasons:** "already covered by existing test" (unless the engineer cites the exact spec file path AND test name), "out of scope" without explanation, or no reason given. Treat these as BLOCKING — re-invoke the engineer.
-   - **No-auto-close safeguard:** If any AC is marked OUT OF SCOPE, the issue MUST NOT be closed at step 6 unless: (a) the remaining covered ACs still satisfy the issue's minimum contract (the core behavior is testable and tested), OR (b) the user explicitly accepts partial completion. If neither condition is met, surface to user with options: accept partial + create follow-up, or pause and re-scope. Add `partial` label to the issue if partially done.
-   - **50% safeguard:** If 50% or more of the enriched spec's AC bullets are OUT OF SCOPE: play `afplay /System/Library/Sounds/Ping.aiff`, surface to user: "Over half of this issue's acceptance criteria are OUT OF SCOPE. The spec may be misaligned with the codebase. Do not proceed to merge without explicit user decision."
-
-**5a. Post-E2E checks (after ROUTE_AND_RUN completes its E2E gate)**
+**5a. Post-ROUTE_AND_RUN checks (after ROUTE_AND_RUN completes and returns control)**
 
    **Flakiness detection:** After the E2E run passes, check the Playwright report for objective flakiness signals:
    - **Retry signal:** any spec was retried (retry count > 0 in the Playwright JSON/HTML report)
@@ -167,19 +164,9 @@ For each GitHub issue (PR N):
    - Create follow-up: `gh issue create --title "fix: stabilize flaky E2E <spec-name>" --label "bug"`.
    - **Quarantined specs do NOT count as done.** Issue stays open. Sprint progress shows `RE-NNN ⚠️` instead of `✅`. Issue is NOT closed at step 6.
 
-   **E2E failure attribution for test-type PRs (triage Type: `test`):**
+   Note: E2E failure attribution for test-type PRs (Scenario A/B) and targeted-first E2E are handled inside ROUTE_AND_RUN (Failure Routing Protocol and QA verification prompt sections). SPRINT_EXECUTOR passes sprint context (targeted_files, checkpoint touched files) to ROUTE_AND_RUN — see step 4.
 
-   **Scenario A — failing spec was created or modified by THIS PR:** Treat as a test bug. Re-invoke `qa` agent with the exact failure output (one retry). After qa fixes the test, **re-invoke code-reviewer for a delta review** — pass only the diff since the original APPROVE with instruction: "Delta review: these lines changed after your original APPROVE to fix a failing E2E test. Check for: weakened assertions, added hard waits, removed test blocks, suppression (`skip`/`fixme`), or any change that makes the test less rigorous than what you originally approved. Verdict: APPROVE or REQUEST CHANGES." If REQUEST CHANGES: standard fix cycle applies. If still failing after one qa retry: surface to user, do not proceed.
-
-   **Scenario B — failing spec was NOT modified by THIS PR:** This is not the current PR's fault. Do NOT route the failure to the current issue's engineer.
-   1. Check if the failing spec was introduced by an earlier PR in this sprint (compare against `Touched files` in previous checkpoints).
-   2. If yes: classify as `cross-PR regression`. Surface to user: "Spec `<name>` introduced by RE-XX is failing during RE-YY's E2E run. This is not RE-YY's fault. Options: (a) fix the earlier spec now as a detour, (b) quarantine the spec and continue, (c) pause sprint." Log `ROUTE_AND_RUN_WARNING: MED Cross-PR regression: <spec-name>` in Risks.
-   3. If the spec predates this sprint: classify as `pre-existing regression`. Surface to user with the same options.
-
-   **[Phase 2 — targeted-first E2E for test-type sprints — activate after first PR confirms quality gates pass]**
-   For PRs where triage Type is `test`, replace the unconditional full-suite `npm run test:e2e:local` with targeted-first:
-   1. **Targeted run first:** run only new/modified spec files. If targeted run fails, enter Scenario A fix cycle — do NOT run the full suite with a known-failing spec.
-   2. **Full suite — run when any of:** (a) every 3rd PR (PRs 3, 6, 9…), (b) last PR in the sprint, (c) PR modified any shared fixture file (`e2e/fixtures/`, `e2e/pages/`, `global-setup.ts`, `playwright.config.ts`). Otherwise: targeted pass is sufficient. Log `E2E passed: YES (targeted-only)` in checkpoint.
+**5b. Persist post-gate data** — if ROUTE_AND_RUN emitted any `ROUTE_AND_RUN_WARNING:` lines (including deferred AC warnings from spec invalidation) or flakiness detection added Risks entries, update `.claude/SPRINT_CHECKPOINT.md` in-place with the new `Known temporary exceptions:` and `Risks:` entries. This ensures data survives context loss between here and step 9's full checkpoint write.
 
 5. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
@@ -209,7 +196,7 @@ For each GitHub issue (PR N):
    - If automation did not fire or is not configured: `gh project item-edit` is required.
    - Do not leave a non-Done project card after a merged PR.
    **Exception — do NOT close the issue if any of the following apply:**
-   - The spec invalidation check (step 4c) determined the issue cannot be auto-closed (partial AC coverage without user approval). Remove the `in-progress` label but leave the issue open. Surface the reason clearly.
+   - ROUTE_AND_RUN's Gate Satisfaction Record shows `Spec invalidation: PARTIAL` — the issue has deferred ACs. Do NOT auto-close unless: (a) the remaining covered ACs satisfy the issue's minimum contract, OR (b) the user explicitly accepted partial completion during the ROUTE_AND_RUN run. If neither, add `partial` label and leave open.
    - The issue was quarantined (step 5a flakiness protocol) — issue stays open with a `flaky` label. Progress line shows `RE-NNN ⚠️` instead of `✅`.
 
 7. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
