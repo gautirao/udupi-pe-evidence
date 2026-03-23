@@ -30,6 +30,7 @@ import { ListingTransparencyCard, PriceHistoryEntry } from '@/components/listing
 import { RERACard } from '@/components/listing/RERACard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
+import { NearbySchoolsCard } from '@/components/listing/NearbySchoolsCard';
 
 const DIMENSION_LABELS: Record<string, string> = {
   IDENTITY: 'Identity Verified',
@@ -759,6 +760,9 @@ export default function ListingDetail() {
                 )}
               </>
             )}
+
+            {/* Nearby Schools */}
+            <NearbySchoolsCard listingId={listing.id} />
 
             {/* Posted Date */}
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

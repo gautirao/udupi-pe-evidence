@@ -3,6 +3,19 @@ import { supabase } from '@/integrations/supabase/client';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
+/** Haversine distance in km between two lat/lon points. */
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'commercial_building' | 'warehouse' | 'commercial_land' | 'other';
 
 export interface PropertyImage {
@@ -99,6 +112,12 @@ export interface PropertyFilters {
   readyToMove?: boolean;
   /** Draw-on-map polygon: array of [lat, lng] pairs. When set, queries the backend PostGIS endpoint. */
   polygon?: [number, number][];
+  /** School proximity filter: center latitude of the selected school */
+  schoolLat?: number;
+  /** School proximity filter: center longitude of the selected school */
+  schoolLon?: number;
+  /** School proximity filter: radius in km (default 2) */
+  schoolRadiusKm?: number;
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
@@ -303,6 +322,17 @@ export function usePropertyListings(filters?: PropertyFilters) {
       }
       if (filters?.readyToMove) {
         results = results.filter((l) => l.possessionStatus === 'ready_to_move');
+      }
+
+      // School proximity filter: haversine distance from school center
+      if (filters?.schoolLat != null && filters?.schoolLon != null && filters?.schoolRadiusKm) {
+        const schoolLat = filters.schoolLat;
+        const schoolLon = filters.schoolLon;
+        const radiusKm = filters.schoolRadiusKm;
+        results = results.filter((l) => {
+          if (l.latitude == null || l.longitude == null) return false;
+          return haversineKm(schoolLat, schoolLon, l.latitude, l.longitude) <= radiusKm;
+        });
       }
 
       return results;

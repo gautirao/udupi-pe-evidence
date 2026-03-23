@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
@@ -71,6 +71,13 @@ const createMarkerIcon = (propertyType: PropertyType) => {
   });
 };
 
+export interface SchoolCircle {
+  lat: number;
+  lon: number;
+  radiusKm: number;
+  name: string;
+}
+
 interface PropertyMapProps {
   listings: PropertyListingWithImages[];
   selectedListing?: PropertyListingWithImages | null;
@@ -82,6 +89,8 @@ interface PropertyMapProps {
   onPolygonDrawn?: (polygon: [number, number][]) => void;
   /** Called when the user clears the drawn polygon. */
   onPolygonCleared?: () => void;
+  /** When set, displays a circle around the selected school on the map. */
+  schoolCircle?: SchoolCircle;
 }
 
 function MapController({
@@ -182,7 +191,28 @@ function MarkerClusterLayer({
   return null;
 }
 
-export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared }: PropertyMapProps) {
+const schoolMarkerIcon = L.divIcon({
+  className: 'school-marker',
+  html: `
+    <div style="
+      width: 36px;
+      height: 36px;
+      background-color: #2563eb;
+      border: 3px solid white;
+      border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+    ">🎓</div>
+  `,
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+});
+
+export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -207,6 +237,29 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
             onPolygonDrawn={onPolygonDrawn}
             onPolygonCleared={onPolygonCleared}
           />
+        )}
+        {schoolCircle && (
+          <>
+            <Circle
+              center={[schoolCircle.lat, schoolCircle.lon]}
+              radius={schoolCircle.radiusKm * 1000}
+              pathOptions={{
+                color: '#2563eb',
+                fillColor: '#2563eb',
+                fillOpacity: 0.08,
+                weight: 2,
+                dashArray: '6 4',
+              }}
+            />
+            <Marker
+              position={[schoolCircle.lat, schoolCircle.lon]}
+              icon={schoolMarkerIcon}
+            >
+              <Tooltip permanent direction="top" offset={[0, -20]}>
+                <span className="font-medium">{escapeHtml(schoolCircle.name)}</span>
+              </Tooltip>
+            </Marker>
+          </>
         )}
       </MapContainer>
 

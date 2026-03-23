@@ -14,12 +14,18 @@ import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown } from 'lucide-rea
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { SchoolSearchFilter } from '@/components/map/SchoolSearchFilter';
+import { SchoolResult } from '@/hooks/useSchoolSearch';
 
 interface MapFiltersProps {
   filters: PropertyFilters;
   onFiltersChange: (filters: PropertyFilters) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
+  selectedSchool: SchoolResult | null;
+  onSchoolSelect: (school: SchoolResult | null) => void;
+  schoolBoardFilter: string[];
+  onSchoolBoardFilterChange: (boards: string[]) => void;
 }
 
 const propertyTypes: { value: PropertyType; label: string }[] = [
@@ -33,7 +39,16 @@ const propertyTypes: { value: PropertyType; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
-export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChange }: MapFiltersProps) {
+export function MapFilters({
+  filters,
+  onFiltersChange,
+  searchQuery,
+  onSearchChange,
+  selectedSchool,
+  onSchoolSelect,
+  schoolBoardFilter,
+  onSchoolBoardFilterChange,
+}: MapFiltersProps) {
   const { data: localities = [] } = useLocalities();
   const { data: priceRange } = usePriceRange();
   const [localityOpen, setLocalityOpen] = useState(false);
@@ -101,7 +116,8 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
     !!filters.newToMarket ||
     !!filters.reraRegistered ||
     !!filters.readyToMove ||
-    (filters.polygon && filters.polygon.length > 0);
+    (filters.polygon && filters.polygon.length > 0) ||
+    filters.schoolLat !== undefined;
 
   return (
     <Card className="h-full overflow-hidden flex flex-col">
@@ -112,7 +128,7 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
             Filters
           </CardTitle>
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={() => { clearFilters(); onSearchChange(''); }} className="h-8 px-2">
+            <Button variant="ghost" size="sm" onClick={() => { clearFilters(); onSearchChange(''); onSchoolSelect(null); onSchoolBoardFilterChange([]); }} className="h-8 px-2">
               <X className="h-3.5 w-3.5 mr-1" />
               Clear
             </Button>
@@ -141,6 +157,18 @@ export function MapFilters({ filters, onFiltersChange, searchQuery, onSearchChan
             </Button>
           )}
         </div>
+
+        {/* School Search */}
+        <SchoolSearchFilter
+          selectedSchool={selectedSchool}
+          onSchoolSelect={onSchoolSelect}
+          radiusKm={filters.schoolRadiusKm ?? 2}
+          onRadiusChange={(radius) =>
+            onFiltersChange({ ...filters, schoolRadiusKm: radius })
+          }
+          boardFilter={schoolBoardFilter}
+          onBoardFilterChange={onSchoolBoardFilterChange}
+        />
 
         {/* Property Type */}
         <div className="space-y-3">

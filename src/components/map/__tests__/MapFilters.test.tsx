@@ -18,6 +18,10 @@ vi.mock('@/hooks/usePropertyListings', () => ({
   usePriceRange: vi.fn(() => ({ data: { min: 0, max: 10_000_000 } })),
 }));
 
+vi.mock('@/hooks/useSchoolSearch', () => ({
+  useSchoolSearch: vi.fn(() => ({ data: [], isLoading: false })),
+}));
+
 vi.mock('@/lib/formatters', () => ({
   formatPrice: (v: number) => `₹${v}`,
 }));
@@ -29,6 +33,10 @@ const defaultProps = {
   onFiltersChange: vi.fn(),
   searchQuery: '',
   onSearchChange: vi.fn(),
+  selectedSchool: null,
+  onSchoolSelect: vi.fn(),
+  schoolBoardFilter: [] as string[],
+  onSchoolBoardFilterChange: vi.fn(),
 };
 
 function renderFilters(props = defaultProps) {

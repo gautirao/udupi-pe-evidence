@@ -1,22 +1,25 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
 import { useListingSearch } from '@/hooks/useListingSearch';
+import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool } from 'lucide-react';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
+import { NearbySchoolsBadge } from '@/components/listing/NearbySchoolsBadge';
 
 export default function Index() {
   const navigate = useNavigate();
+  const [urlParams, setUrlParams] = useSearchParams();
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [showFilters, setShowFilters] = useState(true);
@@ -24,10 +27,74 @@ export default function Index() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
+  // School search state
+  const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
+  const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
+
+  // Restore school from URL params on mount
+  const urlSchoolId = urlParams.get('schoolId');
+  const urlRadiusKm = urlParams.get('radiusKm');
+  const { data: schoolSearchResults } = useSchoolSearch(urlSchoolId ?? '');
+
+  useEffect(() => {
+    if (urlSchoolId && schoolSearchResults && schoolSearchResults.length > 0 && !selectedSchool) {
+      const match = schoolSearchResults.find((s) => s.id === urlSchoolId);
+      if (match) {
+        const radius = urlRadiusKm ? parseInt(urlRadiusKm, 10) || 2 : 2;
+        setSelectedSchool(match);
+        setFilters((prev) => ({
+          ...prev,
+          schoolLat: match.latitude,
+          schoolLon: match.longitude,
+          schoolRadiusKm: radius,
+        }));
+      }
+    }
+  }, [urlSchoolId, urlRadiusKm, schoolSearchResults, selectedSchool]);
+
+  const handleSchoolSelect = useCallback((school: SchoolResult | null) => {
+    setSelectedSchool(school);
+    if (school) {
+      const radiusKm = filters.schoolRadiusKm ?? 2;
+      setFilters((prev) => ({
+        ...prev,
+        schoolLat: school.latitude,
+        schoolLon: school.longitude,
+        schoolRadiusKm: radiusKm,
+      }));
+      setUrlParams((prev) => {
+        prev.set('schoolId', school.id);
+        prev.set('radiusKm', String(radiusKm));
+        return prev;
+      });
+    } else {
+      setFilters((prev) => {
+        const { schoolLat: _a, schoolLon: _b, schoolRadiusKm: _c, ...rest } = prev;
+        return rest;
+      });
+      setUrlParams((prev) => {
+        prev.delete('schoolId');
+        prev.delete('radiusKm');
+        return prev;
+      });
+    }
+  }, [filters.schoolRadiusKm, setUrlParams]);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  /** Wraps setFilters to keep radiusKm URL param in sync when school filter is active. */
+  const handleFiltersChange = useCallback((next: PropertyFilters) => {
+    setFilters(next);
+    if (next.schoolRadiusKm != null && selectedSchool) {
+      setUrlParams((prev) => {
+        prev.set('radiusKm', String(next.schoolRadiusKm));
+        return prev;
+      });
+    }
+  }, [selectedSchool, setUrlParams]);
 
   const handlePolygonDrawn = useCallback((polygon: [number, number][]) => {
     setFilters((prev) => ({ ...prev, polygon }));
@@ -85,7 +152,16 @@ export default function Index() {
             showFilters ? 'w-72' : 'w-0 overflow-hidden'
           )}
         >
-          <MapFilters filters={filters} onFiltersChange={setFilters} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+          <MapFilters
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedSchool={selectedSchool}
+            onSchoolSelect={handleSchoolSelect}
+            schoolBoardFilter={schoolBoardFilter}
+            onSchoolBoardFilterChange={setSchoolBoardFilter}
+          />
         </div>
 
         {/* Toggle Filters Button — lg+ only */}
@@ -117,7 +193,16 @@ export default function Index() {
             <SheetHeader className="sr-only">
               <SheetTitle>Filters</SheetTitle>
             </SheetHeader>
-            <MapFilters filters={filters} onFiltersChange={setFilters} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+            <MapFilters
+              filters={filters}
+              onFiltersChange={handleFiltersChange}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedSchool={selectedSchool}
+              onSchoolSelect={handleSchoolSelect}
+              schoolBoardFilter={schoolBoardFilter}
+              onSchoolBoardFilterChange={setSchoolBoardFilter}
+            />
           </SheetContent>
         </Sheet>
 
@@ -146,6 +231,12 @@ export default function Index() {
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
               onPolygonCleared={handlePolygonCleared}
+              schoolCircle={selectedSchool ? {
+                lat: selectedSchool.latitude,
+                lon: selectedSchool.longitude,
+                radiusKm: filters.schoolRadiusKm ?? 2,
+                name: selectedSchool.name,
+              } : undefined}
             />
           )}
 
@@ -204,6 +295,16 @@ export default function Index() {
                     <div className="text-muted-foreground">|</div>
                   </>
                 )}
+                {selectedSchool && (
+                  <>
+                    <div className="flex items-center gap-1.5 text-primary">
+                      <GraduationCap className="h-4 w-4" />
+                      <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
+                      <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 2} km)</span>
+                    </div>
+                    <div className="text-muted-foreground">|</div>
+                  </>
+                )}
                 <div className="flex items-center gap-1.5">
                   <MapPin className="h-4 w-4 text-primary" />
                   <span className="font-medium">{listingsWithCoords.length}</span>
@@ -250,9 +351,12 @@ export default function Index() {
               )}
               <CardContent className="p-4">
                 <div className="flex justify-between items-start mb-3">
-                  <Badge variant="secondary" className="capitalize">
-                    {selectedListing.property_type}
-                  </Badge>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="secondary" className="capitalize">
+                      {selectedListing.property_type}
+                    </Badge>
+                    <NearbySchoolsBadge listingId={selectedListing.id} />
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
