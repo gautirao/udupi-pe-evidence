@@ -167,8 +167,11 @@ public class ListingIngestionService {
 
     /**
      * Maps AI PropertyType enum to the DB enum string values.
-     * The DB enum is: 'land', 'house', 'commercial', 'other'.
-     * The AI can return APARTMENT which is not in the DB enum, so we map it to 'house'.
+     * The DB enum includes: 'land', 'house', 'commercial', 'commercial_building',
+     * 'warehouse', 'commercial_land', 'apartment', 'other'.
+     * The AI can return APARTMENT which we map to 'house'.
+     * Legacy COMMERCIAL (from v1 prompts or cached AI responses) maps to 'commercial_building'
+     * to match the V56 migration default.
      */
     private String mapPropertyType(PropertyType propertyType) {
         if (propertyType == null) {
@@ -178,7 +181,10 @@ public class ListingIngestionService {
             case HOUSE -> "house";
             case APARTMENT -> "house"; // DB enum lacks 'apartment'; map to 'house'
             case LAND -> "land";
-            case COMMERCIAL -> "commercial";
+            case COMMERCIAL -> "commercial_building"; // legacy v1 fallback; V56 migrated rows to commercial_building
+            case COMMERCIAL_BUILDING -> "commercial_building";
+            case WAREHOUSE -> "warehouse";
+            case COMMERCIAL_LAND -> "commercial_land";
             case OTHER -> "other";
         };
     }

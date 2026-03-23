@@ -223,7 +223,7 @@ class ListingIngestionServiceTest {
 
         Listing saved = captor.getValue();
         assertThat(saved.getParsedData()).contains("\"model\":\"google/gemini-3-flash-preview\"");
-        assertThat(saved.getParsedData()).contains("\"prompt_version\":\"v1\"");
+        assertThat(saved.getParsedData()).contains("\"prompt_version\":\"v2\"");
     }
 
     // --- All fields mapped correctly ---
@@ -245,7 +245,7 @@ class ListingIngestionServiceTest {
         Listing listing = listingIngestionService.createFrom(post, result, "test-model");
 
         assertThat(listing.getRawPostId()).isEqualTo(post.getId());
-        assertThat(listing.getPropertyType()).isEqualTo("commercial");
+        assertThat(listing.getPropertyType()).isEqualTo("commercial_building");
         assertThat(listing.getPrice()).isEqualByComparingTo("15000000");
         assertThat(listing.getPriceUnit()).isEqualTo("INR"); // price_unit dropped from schema; always INR
         assertThat(listing.getLocality()).isEqualTo("Bangalore");

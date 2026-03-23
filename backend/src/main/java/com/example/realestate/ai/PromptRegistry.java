@@ -5,7 +5,7 @@ public final class PromptRegistry {
     private PromptRegistry() {
     }
 
-    public static final String PROMPT_VERSION = "v1";
+    public static final String PROMPT_VERSION = "v2";
 
     public static final String SYSTEM_PROMPT = """
             You are a real estate listing parser. Your job is to analyze Facebook posts and determine if they are real estate listings.
@@ -29,7 +29,7 @@ public final class PromptRegistry {
             IMPORTANT: For missing or unknown values, use JSON null — never the string "null". Omitting a field is also acceptable.
 
             For valid real estate posts, extract:
-            - property_type: house, apartment, land, commercial, or other
+            - property_type: house, apartment, land, commercial_building, warehouse, commercial_land, or other
             - price: numeric value only (null if not mentioned)
             - price_unit: INR, USD, etc. (default: INR)
             - locality: neighborhood, area, or city name

@@ -9,6 +9,9 @@ public enum PropertyType {
     APARTMENT("apartment"),
     LAND("land"),
     COMMERCIAL("commercial"),
+    COMMERCIAL_BUILDING("commercial_building"),
+    WAREHOUSE("warehouse"),
+    COMMERCIAL_LAND("commercial_land"),
     OTHER("other");
 
     private final String value;
