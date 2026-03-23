@@ -311,4 +311,64 @@ class BadgeInvalidationServiceTest {
         verify(dimensionRepository, never()).save(any());
         verify(badgeService, never()).recalculateAndPersistTier(any());
     }
+
+    // -------------------------------------------------------------------------
+    // Test 10: image add while PHOTOS badge is EARNED → badge invalidated
+    // -------------------------------------------------------------------------
+
+    @Test
+    void image_add_while_photos_earned_invalidates_badge() {
+        ListingVerificationDimension photosBadge = earnedBadge("PHOTOS");
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "PHOTOS"))
+                .thenReturn(Optional.of(photosBadge));
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.invalidateSpecificDimension(listingId, "PHOTOS", "IMAGE_CHANGE");
+
+        assertThat(photosBadge.getBadgeState()).isEqualTo("AVAILABLE");
+        assertThat(photosBadge.getGrantedAt()).isNull();
+        verify(badgeService).recalculateAndPersistTier(listingId);
+        verify(adminAuditService).record(
+                eq(BadgeInvalidationService.SYSTEM_ACTOR),
+                eq("BADGE_INVALIDATED"),
+                eq("listing_verification_dimension"),
+                any(),
+                any(),
+                any());
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 11: image delete while PHOTOS badge is EARNED → badge invalidated
+    // -------------------------------------------------------------------------
+
+    @Test
+    void image_delete_while_photos_earned_invalidates_badge() {
+        ListingVerificationDimension photosBadge = earnedBadge("PHOTOS");
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "PHOTOS"))
+                .thenReturn(Optional.of(photosBadge));
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.invalidateSpecificDimension(listingId, "PHOTOS", "IMAGE_CHANGE");
+
+        assertThat(photosBadge.getBadgeState()).isEqualTo("AVAILABLE");
+        assertThat(photosBadge.getGrantedAt()).isNull();
+        verify(badgeService).recalculateAndPersistTier(listingId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 12: invalidateSpecificDimension with PHOTOS not EARNED → no-op
+    // -------------------------------------------------------------------------
+
+    @Test
+    void invalidateSpecificDimension_photosNotEarned_noOp() {
+        ListingVerificationDimension photosBadge = badgeWithState("PHOTOS", "AVAILABLE");
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "PHOTOS"))
+                .thenReturn(Optional.of(photosBadge));
+
+        service.invalidateSpecificDimension(listingId, "PHOTOS", "IMAGE_CHANGE");
+
+        assertThat(photosBadge.getBadgeState()).isEqualTo("AVAILABLE");  // unchanged
+        verify(dimensionRepository, never()).save(any());
+        verify(badgeService, never()).recalculateAndPersistTier(any());
+    }
 }

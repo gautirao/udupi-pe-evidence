@@ -9,6 +9,7 @@ import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.trust.BadgeInvalidationService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,6 +95,9 @@ class ListingImageControllerTest {
 
     @MockitoBean
     private ListingWorkflowService listingWorkflowService;
+
+    @MockitoBean
+    private BadgeInvalidationService badgeInvalidationService;
 
     private Listing draftListing;
 
@@ -617,6 +621,49 @@ class ListingImageControllerTest {
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
+    }
+
+    // ==================== Test 24: POST register — success triggers PHOTOS badge invalidation ====================
+
+    @Test
+    void register_validImage_triggersBadgeInvalidation() throws Exception {
+        stubDealerWithDraftListing();
+
+        ListingImage saved = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
+        ResponseEntity<?> created201 = ResponseEntity.status(HttpStatus.CREATED)
+                .body(ListingImageController.toResponse(saved));
+        doReturn(created201).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
+        doNothing().when(badgeInvalidationService)
+                .invalidateSpecificDimension(eq(LISTING_ID), eq("PHOTOS"), eq("IMAGE_CHANGE"));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"storagePath":"%s","url":"%s"}
+                                """.formatted(validPath(), validUrl())))
+                .andExpect(status().isCreated());
+
+        verify(badgeInvalidationService).invalidateSpecificDimension(LISTING_ID, "PHOTOS", "IMAGE_CHANGE");
+    }
+
+    // ==================== Test 25: DELETE image — success triggers PHOTOS badge invalidation ====================
+
+    @Test
+    void delete_existingImage_triggersBadgeInvalidation() throws Exception {
+        stubDealerWithDraftListing();
+        ListingImage image = buildImage(IMAGE_ID, LISTING_ID, validPath(), validUrl(), 0);
+        when(imageRepository.findByIdAndListingId(IMAGE_ID, LISTING_ID))
+                .thenReturn(Optional.of(image));
+        doNothing().when(imageService).deleteImage(image);
+        doNothing().when(badgeInvalidationService)
+                .invalidateSpecificDimension(eq(LISTING_ID), eq("PHOTOS"), eq("IMAGE_CHANGE"));
+
+        mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                .andExpect(status().isNoContent());
+
+        verify(badgeInvalidationService).invalidateSpecificDimension(LISTING_ID, "PHOTOS", "IMAGE_CHANGE");
     }
 
     // ==================== Helper ====================

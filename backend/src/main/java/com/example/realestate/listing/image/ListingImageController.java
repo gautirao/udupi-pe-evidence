@@ -7,6 +7,7 @@ import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
+import com.example.realestate.trust.BadgeInvalidationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -47,22 +48,27 @@ public class ListingImageController {
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
     private static final Pattern EXTENSION_PATTERN = Pattern.compile(".*\\.([a-zA-Z]+)$");
 
+    private static final String IMAGE_CHANGE_TRIGGER = "IMAGE_CHANGE";
+
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
     private final ListingImageRegistrar imageRegistrar;
     private final ListingImageService imageService;
     private final ListingWorkflowService listingWorkflowService;
+    private final BadgeInvalidationService badgeInvalidationService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
                                    ListingImageRegistrar imageRegistrar,
                                    ListingImageService imageService,
-                                   ListingWorkflowService listingWorkflowService) {
+                                   ListingWorkflowService listingWorkflowService,
+                                   BadgeInvalidationService badgeInvalidationService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.imageRegistrar = imageRegistrar;
         this.imageService = imageService;
         this.listingWorkflowService = listingWorkflowService;
+        this.badgeInvalidationService = badgeInvalidationService;
     }
 
     // ==================== GET — list images ====================
@@ -125,7 +131,12 @@ public class ListingImageController {
         // the registrar (e.g. thrown during transaction commit), surface 503 here
         // rather than letting the default exception handler return 500.
         try {
-            return imageRegistrar.register(listingId, req, caller.userId());
+            ResponseEntity<?> response = imageRegistrar.register(listingId, req, caller.userId());
+            if (response.getStatusCode().value() == HttpStatus.CREATED.value()) {
+                badgeInvalidationService.invalidateSpecificDimension(
+                        listingId, "PHOTOS", IMAGE_CHANGE_TRIGGER);
+            }
+            return response;
         } catch (PessimisticLockingFailureException e) {
             log.warn("POST /api/listings/{}/images -> 503 lock timeout (controller) userId={}",
                     listingId, caller.userId());
@@ -159,6 +170,9 @@ public class ListingImageController {
 
         ListingImage image = imageOpt.get();
         imageService.deleteImage(image);
+
+        badgeInvalidationService.invalidateSpecificDimension(
+                listingId, "PHOTOS", IMAGE_CHANGE_TRIGGER);
 
         log.info("DELETE /api/listings/{}/images/{} -> 204 storagePath={} userId={}",
                 listingId, imageId, image.getStoragePath(), caller.userId());

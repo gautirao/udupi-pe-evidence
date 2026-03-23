@@ -74,6 +74,31 @@ public class BadgeInvalidationService {
     }
 
     /**
+     * Unconditionally revokes the named badge dimension for a listing if it is currently EARNED.
+     *
+     * <p>Use this method when the trigger is not a field edit but a discrete operation such as
+     * an image add or delete. Unlike {@link #invalidateOnEdit}, this method does not compare
+     * snapshots — the caller is responsible for deciding that revocation is warranted.
+     *
+     * <p>If the dimension row does not exist, or is not in EARNED state, this is a no-op.
+     * After revocation the trust tier is recalculated and persisted via
+     * {@link BadgeService#recalculateAndPersistTier(UUID)}.
+     *
+     * @param listingId     the listing whose badge may be revoked; must not be null
+     * @param dimensionType the badge dimension to revoke (e.g. "PHOTOS")
+     * @param triggerField  a short label written to the audit log (e.g. "IMAGE_CHANGE")
+     */
+    @Transactional
+    public void invalidateSpecificDimension(UUID listingId, String dimensionType, String triggerField) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+
+        boolean revoked = revokeIfEarned(listingId, dimensionType, triggerField);
+        if (revoked) {
+            badgeService.recalculateAndPersistTier(listingId);
+        }
+    }
+
+    /**
      * Inspects the pre-update and post-update field snapshots for a listing edit and
      * revokes any EARNED badges whose trust-relevant fields have changed.
      *
