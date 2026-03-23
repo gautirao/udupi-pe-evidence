@@ -168,6 +168,20 @@ class BrokerSetupControllerTest {
                 .andExpect(jsonPath("$.field").value("phone"));
     }
 
+    // ==================== Test 7b: phone without + prefix (not E.164) -> 400 ====================
+
+    @Test
+    void setup_phoneWithoutPlusPrefix_returns400() throws Exception {
+        mockMvc.perform(post("/api/broker/setup")
+                        .with(jwt().jwt(j -> j.subject(USER_ID.toString())))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"phone":"9876543210","acceptedTerms":true}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("phone"));
+    }
+
     // ==================== Test 8: C-2 TOCTOU concurrent duplicate -> 409 ====================
 
     @Test

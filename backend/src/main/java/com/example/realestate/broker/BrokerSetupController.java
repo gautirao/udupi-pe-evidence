@@ -25,7 +25,7 @@ import java.util.UUID;
  * Security controls (M1-M3):
  *   M1: Role value is a server-side constant — never taken from request body.
  *   M2: Rejects 409 if the user already has 'broker', 'dealer' (legacy), or 'admin' role.
- *   M3: Phone number validated server-side (regex + max 15 chars).
+ *   M3: Phone number validated server-side (strict E.164 regex + max 16 chars).
  *
  * The atomic DB mutations (role insert + phone update) are delegated to
  * {@link BrokerOnboardingService}, which owns the @Transactional boundary.
@@ -67,12 +67,12 @@ public class BrokerSetupController {
         }
         if (phone.length() > PhoneValidator.PHONE_MAX_LENGTH) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("field", "phone", "error", "Phone number must be 15 characters or fewer."));
+                    .body(Map.of("field", "phone", "error", "Phone number must be 16 characters or fewer."));
         }
         if (!PhoneValidator.PHONE_PATTERN.matcher(phone).matches()) {
             return ResponseEntity.badRequest()
                     .body(Map.of("field", "phone", "error",
-                            "Invalid phone number. Use a valid Indian mobile number (e.g. +919876543210 or 9876543210)."));
+                            "Phone number must be in E.164 format (e.g. +919876543210)."));
         }
 
         // --- M2: Reject if user already has 'broker', 'dealer' (legacy), or 'admin' role ---
