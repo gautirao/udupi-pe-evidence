@@ -7,17 +7,21 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
-import { ListingResponse } from '@/hooks/useBrokerListings';
+import { ListingResponse, useArchiveListing, useReopenAsDraftListing } from '@/hooks/useBrokerListings';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck,
-  Layers, ParkingCircle, Armchair, Store, IndianRupee
+  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
@@ -102,6 +106,68 @@ function useTrustBadges(id: string | undefined) {
     enabled: !!id,
     staleTime: 60_000,
   });
+}
+
+function TakeOfflineButton({ listingId }: { listingId: string }) {
+  const archiveMutation = useArchiveListing(listingId);
+  const { toast } = useToast();
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={archiveMutation.isPending}>
+          <Archive className="h-4 w-4 mr-1" />
+          {archiveMutation.isPending ? 'Archiving…' : 'Take Offline'}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Take Listing Offline</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will archive your listing and remove it from public search results.
+            You can reopen it for editing later.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              archiveMutation.mutate(undefined, {
+                onSuccess: () => {
+                  toast({ title: 'Listing archived', description: 'Your listing has been taken offline.' });
+                },
+              });
+            }}
+          >
+            Take Offline
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function ReopenForEditingButton({ listingId }: { listingId: string }) {
+  const reopenMutation = useReopenAsDraftListing(listingId);
+  const { toast } = useToast();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={reopenMutation.isPending}
+      onClick={() => {
+        reopenMutation.mutate(undefined, {
+          onSuccess: () => {
+            toast({ title: 'Listing reopened', description: 'Your listing is now a draft. You can edit and resubmit it.' });
+          },
+        });
+      }}
+    >
+      <RotateCcw className="h-4 w-4 mr-1" />
+      {reopenMutation.isPending ? 'Reopening…' : 'Reopen for Editing'}
+    </Button>
+  );
 }
 
 export default function ListingDetail() {
@@ -195,6 +261,7 @@ export default function ListingDetail() {
             DRAFT: 'Preview mode — this listing is a draft. Only you can see this page.',
             PENDING_REVIEW: 'Preview mode — this listing is under admin review. It will go live once approved.',
             REJECTED: 'Preview mode — this listing was rejected. See the rejection reason below.',
+            ARCHIVED: 'This listing is archived and not visible to the public. You can reopen it for editing.',
           };
           const copy = previewCopy[listing.status ?? ''] ?? 'Preview mode — this listing is not yet live. Only you can see this page.';
           return (
@@ -216,6 +283,17 @@ export default function ListingDetail() {
               <Button variant="outline" size="sm" asChild>
                 <Link to={`/broker/listings/${id}/edit`}>Edit Listing</Link>
               </Button>
+            )}
+            {isPreview && listing.status === 'LIVE' && (
+              <TakeOfflineButton listingId={listing.id} />
+            )}
+            {isPreview && listing.status === 'ARCHIVED' && (
+              <>
+                <ReopenForEditingButton listingId={listing.id} />
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={`/broker/listings/${id}/edit`}>Edit Listing</Link>
+                </Button>
+              </>
             )}
             <Button variant="outline" onClick={handleShare} className="gap-2">
               {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}

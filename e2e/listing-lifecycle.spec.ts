@@ -13,6 +13,7 @@
  *   L3 — "Request Viewing" button visible when listing is LIVE
  *   L4 — duplicate booking is rejected with 409
  *   L5 — notification bell click navigates to /listing/:id (regression: RE-168 URL fix)
+ *   LC1 — LIVE → ARCHIVED → DRAFT re-edit workflow (#586)
  */
 
 import { test, expect } from '@playwright/test';
@@ -51,14 +52,41 @@ function readListingFixture(): ListingFixture | null {
 
 const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? '';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
 
 const brokerEmail    = process.env.BROKER_EMAIL    ?? process.env.DEALER_EMAIL    ?? '';
 const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
+const adminEmail = process.env.ADMIN_EMAIL ?? '';
+const adminPassword = process.env.ADMIN_PASSWORD ?? '';
 const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 
 const hasBrokerCreds = hasRealCredentials(brokerEmail, brokerPassword);
+const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 const hasUserCreds = hasRealCredentials(userEmail, userPassword);
+
+async function getToken(email: string, password: string): Promise<string | null> {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { access_token?: string };
+    return data.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getUserIdFromToken(token: string): string {
+  const payload = token.split('.')[1] ?? '';
+  const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { sub?: string };
+  return decoded.sub ?? '';
+}
 
 /** Log in as broker via the UI and wait for redirect away from /auth. */
 async function loginAsBroker(page: import('@playwright/test').Page): Promise<void> {
@@ -382,4 +410,148 @@ test('L5 — notification bell click navigates to /listing/:id', async ({ page }
   await expect(
     page.locator('text=[E2E Test Listing]').first(),
   ).toBeVisible({ timeout: 10_000 });
+});
+
+// ---------------------------------------------------------------------------
+// LC1 — LIVE → ARCHIVED → DRAFT re-edit workflow (#586)
+//
+// Self-contained: creates its own LIVE listing via API, then tests the full
+// archive → reopen-as-draft → edit lifecycle through the UI.
+//
+// Preconditions:
+//   - BROKER_EMAIL, BROKER_PASSWORD, ADMIN_EMAIL, ADMIN_PASSWORD
+//   - VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY
+// ---------------------------------------------------------------------------
+
+test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
+  let listingId: string | null = null;
+  let brokerToken: string | null = null;
+  let adminToken: string | null = null;
+
+  test.beforeAll(async () => {
+    if (!hasBrokerCreds || !hasAdminCreds) return;
+
+    brokerToken = await getToken(brokerEmail, brokerPassword);
+    adminToken = await getToken(adminEmail, adminPassword);
+    if (!brokerToken || !adminToken) return;
+
+    const brokerUserId = getUserIdFromToken(brokerToken);
+
+    // 1. Create DRAFT listing
+    const createRes = await fetch(`${BACKEND}/api/listings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${brokerToken}` },
+      body: JSON.stringify({ propertyType: 'house', title: '[E2E LC1] Archive/Reopen test', price: 5_000_000, locality: 'Manipal' }),
+    });
+    if (!createRes.ok) { console.log('[LC1] Create failed'); return; }
+    const created = await createRes.json() as { id?: string };
+    listingId = created.id ?? null;
+    if (!listingId) return;
+    console.log(`[LC1] Created listing: ${listingId}`);
+
+    // 2. Set addressConfirmed
+    await fetch(`${BACKEND}/api/listings/${listingId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${brokerToken}` },
+      body: JSON.stringify({ addressConfirmed: true, latitude: 13.35, longitude: 74.79 }),
+    });
+
+    // 3. Register 3 stub images (metadata only — same pattern as global-setup)
+    for (const fn of ['lc1-img1.jpg', 'lc1-img2.jpg', 'lc1-img3.jpg']) {
+      const storagePath = `listings/${brokerUserId}/${listingId}/${fn}`;
+      await fetch(`${BACKEND}/api/listings/${listingId}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${brokerToken}` },
+        body: JSON.stringify({ storagePath, url: `https://placeholder.invalid/${fn}` }),
+      });
+    }
+
+    // 4. Submit for review
+    const submitRes = await fetch(`${BACKEND}/api/listings/${listingId}/submit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${brokerToken}` },
+    });
+    if (!submitRes.ok) {
+      const text = await submitRes.text().catch(() => '');
+      console.log(`[LC1] Submit failed (${submitRes.status}): ${text}`);
+      return;
+    }
+
+    // 5. Admin approve → LIVE
+    const approveRes = await fetch(`${BACKEND}/api/admin/listings/${listingId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    });
+    if (!approveRes.ok) {
+      const text = await approveRes.text().catch(() => '');
+      console.log(`[LC1] Approve failed (${approveRes.status}): ${text}`);
+    } else {
+      console.log(`[LC1] Listing ${listingId} is now LIVE`);
+    }
+  });
+
+  test.afterAll(async () => {
+    if (!listingId || !adminToken) return;
+    // Admin force-delete (works for any status)
+    await fetch(`${BACKEND}/api/admin/listings/${listingId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }).catch(() => {});
+    console.log(`[LC1] Cleaned up listing ${listingId}`);
+  });
+
+  test('LC1 — Take Offline → Reopen for Editing → Edit', async ({ page }) => {
+    test.setTimeout(90_000);
+    test.skip(!hasBrokerCreds || !hasAdminCreds, 'Broker + Admin credentials required');
+    test.skip(listingId === null, 'LIVE listing could not be created');
+
+    const id = listingId!;
+    await loginAsBroker(page);
+
+    // --- Phase 1: LIVE listing — "Take Offline" button visible ---
+    await page.goto(`/listing/${id}?preview=true`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+    const takeOfflineBtn = page.getByRole('button', { name: /take offline/i });
+    await expect(takeOfflineBtn).toBeVisible({ timeout: 10_000 });
+
+    // Click "Take Offline" → confirmation dialog appears
+    await takeOfflineBtn.click();
+    await expect(page.getByText(/remove it from public search/i)).toBeVisible({ timeout: 5_000 });
+
+    // Confirm the dialog
+    const confirmBtn = page.getByRole('button', { name: /take offline/i }).last();
+    await confirmBtn.click();
+
+    // Wait for the toast confirming archive
+    await expect(page.getByText(/listing archived/i)).toBeVisible({ timeout: 10_000 });
+
+    // --- Phase 2: ARCHIVED listing — "Reopen for Editing" button visible ---
+    // Page should update reactively, but reload to ensure fresh state
+    await page.goto(`/listing/${id}?preview=true`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+    // Verify archived banner
+    await expect(page.getByText(/archived and not visible/i)).toBeVisible({ timeout: 10_000 });
+
+    const reopenBtn = page.getByRole('button', { name: /reopen for editing/i });
+    await expect(reopenBtn).toBeVisible({ timeout: 10_000 });
+
+    // Click "Reopen for Editing"
+    await reopenBtn.click();
+    await expect(page.getByText(/listing reopened/i)).toBeVisible({ timeout: 10_000 });
+
+    // --- Phase 3: DRAFT listing — "Edit Listing" link visible ---
+    await page.goto(`/listing/${id}?preview=true`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+    // Verify draft banner
+    await expect(page.getByText(/this listing is a draft/i)).toBeVisible({ timeout: 10_000 });
+
+    // "Edit Listing" link should be visible
+    await expect(page.getByRole('link', { name: /edit listing/i })).toBeVisible({ timeout: 5_000 });
+  });
 });
