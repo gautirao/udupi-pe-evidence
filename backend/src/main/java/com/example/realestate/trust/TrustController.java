@@ -3,10 +3,15 @@ package com.example.realestate.trust;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.profile.Profile;
+import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfo;
+import com.example.realestate.trust.otp.OtpDeliveryException;
+import com.example.realestate.trust.otp.OtpService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -57,14 +62,20 @@ public class TrustController {
     private final BadgeService badgeService;
     private final ListingRepository listingRepository;
     private final PhotoHashService photoHashService;
+    private final ProfileRepository profileRepository;
+    private final OtpService otpService;
 
     public TrustController(
             BadgeService badgeService,
             ListingRepository listingRepository,
-            PhotoHashService photoHashService) {
+            PhotoHashService photoHashService,
+            ProfileRepository profileRepository,
+            OtpService otpService) {
         this.badgeService = badgeService;
         this.listingRepository = listingRepository;
         this.photoHashService = photoHashService;
+        this.profileRepository = profileRepository;
+        this.otpService = otpService;
     }
 
     // -------------------------------------------------------------------------
@@ -303,6 +314,134 @@ public class TrustController {
         } catch (LocationAlreadyVerifiedException e) {
             return ResponseEntity.status(409).body(Map.of("error", "Location already verified"));
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/listings/{id}/trust/identity/request-otp — AUTHENTICATED, owner-only
+    // -------------------------------------------------------------------------
+
+    /**
+     * Triggers an OTP send to the phone number stored on the caller's profile.
+     *
+     * <p>Returns:
+     * <ul>
+     *   <li>200 — OTP sent successfully</li>
+     *   <li>400 — caller profile has no phone number</li>
+     *   <li>403 — caller is not the listing owner</li>
+     *   <li>404 — listing not found</li>
+     *   <li>409 — IDENTITY badge already EARNED</li>
+     *   <li>503 — OTP delivery failed</li>
+     * </ul>
+     */
+    @PostMapping(value = "/{id}/trust/identity/request-otp")
+    public ResponseEntity<?> requestIdentityOtp(CallerInfo caller, @PathVariable UUID id) {
+        // 1. Resolve listing + ownership check
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        }
+
+        boolean isOwner = listing.getCreatedBy() != null
+                && listing.getCreatedBy().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            log.warn("Access denied to identity/request-otp listingId={} callerId={}", id, caller.userId());
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
+        }
+
+        // 2. Resolve caller's profile and phone
+        Profile profile = profileRepository.findByUserId(caller.userId()).orElse(null);
+        String phone = (profile != null) ? profile.getPhone() : null;
+        if (phone == null || phone.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
+        }
+
+        // 3. Check IDENTITY badge not already EARNED
+        List<ListingVerificationDimension> badges = badgeService.getBadges(id);
+        boolean alreadyEarned = badges.stream()
+                .anyMatch(b -> "IDENTITY".equals(b.getDimensionType()) && "EARNED".equals(b.getBadgeState()));
+        if (alreadyEarned) {
+            return ResponseEntity.status(409).body(Map.of("error", "Identity already verified"));
+        }
+
+        // 4. Send OTP — phone is not echoed in the response
+        try {
+            otpService.sendOtp(phone);
+        } catch (OtpDeliveryException e) {
+            log.error("OTP delivery failed listingId={} callerId={}", id, caller.userId(), e);
+            return ResponseEntity.status(503).body(Map.of("error", "OTP delivery failed"));
+        }
+
+        log.info("POST /api/listings/{}/trust/identity/request-otp -> 200 callerId={}", id, caller.userId());
+        return ResponseEntity.ok(Map.of("message", "OTP sent"));
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/listings/{id}/trust/identity/verify-otp — AUTHENTICATED, owner-only
+    // -------------------------------------------------------------------------
+
+    /**
+     * Verifies the OTP code submitted by the caller and, if valid, grants the IDENTITY badge.
+     *
+     * <p>Returns:
+     * <ul>
+     *   <li>200 — OTP verified; IDENTITY badge EARNED</li>
+     *   <li>400 — invalid or expired OTP, or no phone on profile</li>
+     *   <li>403 — caller is not the listing owner</li>
+     *   <li>404 — listing not found</li>
+     * </ul>
+     */
+    @PostMapping(value = "/{id}/trust/identity/verify-otp", consumes = "application/json")
+    public ResponseEntity<?> verifyIdentityOtp(
+            CallerInfo caller,
+            @PathVariable UUID id,
+            @RequestBody OtpVerifyRequest request) {
+
+        // 1. Resolve listing + ownership check
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null) {
+            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        }
+
+        boolean isOwner = listing.getCreatedBy() != null
+                && listing.getCreatedBy().equals(caller.userId());
+        if (!isOwner && !caller.isAdmin()) {
+            log.warn("Access denied to identity/verify-otp listingId={} callerId={}", id, caller.userId());
+            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
+        }
+
+        // 2. Resolve caller's profile and phone
+        Profile profile = profileRepository.findByUserId(caller.userId()).orElse(null);
+        String phone = (profile != null) ? profile.getPhone() : null;
+        if (phone == null || phone.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
+        }
+
+        // 3. Verify OTP
+        boolean valid = otpService.verifyOtp(phone, request.getCode());
+        if (!valid) {
+            return ResponseEntity.status(400).body(Map.of("error", "Invalid or expired OTP"));
+        }
+
+        // 4. Mark phone as verified on profile and grant badge — both in one transaction
+        verifyAndGrantIdentity(profile, id, caller.userId());
+
+        log.info("POST /api/listings/{}/trust/identity/verify-otp -> 200 callerId={}", id, caller.userId());
+        return ResponseEntity.ok(Map.of("message", "Identity verified"));
+    }
+
+    // -------------------------------------------------------------------------
+    // Private: transactional helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Atomically sets profile.phone_verified=true and grants the IDENTITY badge.
+     * Both writes must succeed or both roll back.
+     */
+    @Transactional
+    protected void verifyAndGrantIdentity(Profile profile, UUID listingId, UUID callerId) {
+        profile.setPhoneVerified(true);
+        profileRepository.save(profile);
+        badgeService.grantIdentityBadge(listingId, callerId);
     }
 
     // -------------------------------------------------------------------------

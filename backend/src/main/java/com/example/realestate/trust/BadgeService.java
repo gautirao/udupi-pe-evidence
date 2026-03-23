@@ -414,6 +414,69 @@ public class BadgeService {
     }
 
     // -------------------------------------------------------------------------
+    // grantIdentityBadge
+    // -------------------------------------------------------------------------
+
+    /**
+     * Grants the IDENTITY badge for a listing when the caller has verified their phone number
+     * via OTP.
+     *
+     * <p>If the IDENTITY badge is already EARNED, throws
+     * {@link IdentityAlreadyVerifiedException} — the caller must surface a 409 conflict.
+     *
+     * <p>If the IDENTITY badge does not exist, a new row is created with state EARNED.
+     * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED), it is updated to EARNED.
+     *
+     * @param listingId listing for which identity was verified; must not be null
+     * @param callerId  UUID of the broker or owner who verified their phone; must not be null
+     */
+    @Transactional
+    public ListingVerificationDimension grantIdentityBadge(UUID listingId, UUID callerId) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, "IDENTITY")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType("IDENTITY");
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        if ("EARNED".equals(previousState)) {
+            throw new IdentityAlreadyVerifiedException();
+        }
+
+        dimension.setBadgeState("EARNED");
+        dimension.setGrantedAt(now);
+        dimension.setUpdatedAt(now);
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String afterJson = buildAuditJson("IDENTITY", "EARNED", now.toString(), "IDENTITY_VERIFIED via OTP");
+        String beforeJson = previousState != null ? buildSimpleStateJson("IDENTITY", previousState) : null;
+
+        adminAuditService.record(
+                callerId,
+                "IDENTITY_VERIFIED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Identity badge granted listingId={} callerId={}", listingId, callerId);
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
     // getBadges
     // -------------------------------------------------------------------------
 

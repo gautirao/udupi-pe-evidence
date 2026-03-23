@@ -3,6 +3,8 @@ package com.example.realestate.exception;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.trust.BadgeNotFoundException;
+import com.example.realestate.trust.IdentityAlreadyVerifiedException;
+import com.example.realestate.trust.otp.OtpRateLimitException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.mapping.PropertyReferenceException;
@@ -111,6 +113,23 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .toList();
         return ResponseEntity.unprocessableEntity()
                 .body(Map.of("error", "VALIDATION_FAILED", "fields", fieldErrors));
+    }
+
+    // ===== OtpRateLimitException → 429 =====
+
+    @ExceptionHandler(OtpRateLimitException.class)
+    public ResponseEntity<Map<String, String>> handleOtpRateLimit(OtpRateLimitException ex) {
+        log.warn("OTP rate limit exceeded: {}", ex.getMessage());
+        return ResponseEntity.status(429)
+                .body(Map.of("error", "OTP_RATE_LIMIT_EXCEEDED"));
+    }
+
+    // ===== IdentityAlreadyVerifiedException → 409 =====
+
+    @ExceptionHandler(IdentityAlreadyVerifiedException.class)
+    public ResponseEntity<Map<String, String>> handleIdentityAlreadyVerified(IdentityAlreadyVerifiedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Identity already verified"));
     }
 
     // ===== Fallback Exception → 500 =====

@@ -4,9 +4,11 @@ import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.trust.otp.OtpService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +76,12 @@ class TrustControllerPhotoTest {
 
     @MockitoBean
     private UserRoleService userRoleService;
+
+    @MockitoBean
+    private ProfileRepository profileRepository;
+
+    @MockitoBean
+    private OtpService otpService;
 
     @BeforeEach
     void setUp() {

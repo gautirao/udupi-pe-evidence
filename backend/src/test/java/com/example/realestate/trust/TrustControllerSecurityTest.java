@@ -2,9 +2,11 @@ package com.example.realestate.trust;
 
 import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.profile.ProfileRepository;
 import com.example.realestate.security.CallerInfoResolver;
 import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
+import com.example.realestate.trust.otp.OtpService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -79,6 +81,12 @@ class TrustControllerSecurityTest {
 
     @MockitoBean
     private UserRoleService userRoleService;
+
+    @MockitoBean
+    private ProfileRepository profileRepository;
+
+    @MockitoBean
+    private OtpService otpService;
 
     /**
      * Unauthenticated GET /trust must not be rejected by Spring Security.

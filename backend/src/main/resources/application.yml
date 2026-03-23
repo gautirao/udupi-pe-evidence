@@ -114,9 +114,12 @@ sentry:
   environment: ${RENDER_SERVICE_NAME:local}
   traces-sample-rate: 0
 
-# Trust ranking score configuration (RE-150).
+# Trust configuration (RE-150, RE-158).
+# otp.provider: stub (default, NOT for production) | msg91 (issue #552)
 # tierBase: base score per tier letter. weights: multipliers for each score component.
 trust:
+  otp:
+    provider: stub
   ranking:
     tier-base:
       A: 1000
