@@ -5,6 +5,7 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.pricing.PriceChangeLog;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
+import com.example.realestate.school.SchoolService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -81,9 +82,12 @@ class PublicListingControllerTest {
     @MockitoBean
     private PriceChangeLogRepository priceChangeLogRepository;
 
+    @MockitoBean
+    private SchoolService schoolService;
+
     @BeforeEach
     void setUp() {
-        reset(listingRepository, listingResponseMapper, priceChangeLogRepository, userRoleService);
+        reset(listingRepository, listingResponseMapper, priceChangeLogRepository, userRoleService, schoolService);
         // Delegate public mapper to a minimal implementation.
         // CRITICAL: rejectionReason must always be null (security invariant tested explicitly).
         when(listingResponseMapper.toPublicResponse(any(Listing.class))).thenAnswer(inv -> {

@@ -5,6 +5,8 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.pricing.PriceChangeLog;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
+import com.example.realestate.school.SchoolResponse;
+import com.example.realestate.school.SchoolService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -44,13 +46,16 @@ public class PublicListingController {
     private final ListingRepository listingRepository;
     private final ListingResponseMapper listingResponseMapper;
     private final PriceChangeLogRepository priceChangeLogRepository;
+    private final SchoolService schoolService;
 
     public PublicListingController(ListingRepository listingRepository,
                                    ListingResponseMapper listingResponseMapper,
-                                   PriceChangeLogRepository priceChangeLogRepository) {
+                                   PriceChangeLogRepository priceChangeLogRepository,
+                                   SchoolService schoolService) {
         this.listingRepository = listingRepository;
         this.listingResponseMapper = listingResponseMapper;
         this.priceChangeLogRepository = priceChangeLogRepository;
+        this.schoolService = schoolService;
     }
 
     /**
@@ -127,6 +132,42 @@ public class PublicListingController {
                 "totalPages", results.getTotalPages(),
                 "page", results.getNumber(),
                 "size", results.getSize()
+        ));
+    }
+
+    /**
+     * Returns nearby schools for a LIVE listing.
+     * Looks up the listing's coordinates, then delegates to SchoolService for spatial query.
+     * Returns 404 for non-LIVE or missing listings, 400 if the listing has no coordinates.
+     *
+     * @param id       listing ID
+     * @param radiusKm search radius in kilometres (default 2, clamped to 0.1..50)
+     * @return count + list of nearby schools
+     */
+    @GetMapping("/{id}/nearby-schools")
+    public ResponseEntity<?> getNearbySchools(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "2") double radiusKm) {
+
+        Listing listing = listingRepository.findById(id).orElse(null);
+        if (listing == null || !ListingStatus.LIVE.toDbValue().equals(listing.getStatus())) {
+            return notFound();
+        }
+
+        if (listing.getLatitude() == null || listing.getLongitude() == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Listing has no coordinates"));
+        }
+
+        List<SchoolResponse> schools = schoolService.findNearby(
+                listing.getLatitude(), listing.getLongitude(), radiusKm);
+
+        log.debug("GET /api/public/listings/{}/nearby-schools radiusKm={} count={}",
+                id, radiusKm, schools.size());
+
+        return ResponseEntity.ok(Map.of(
+                "count", schools.size(),
+                "schools", schools
         ));
     }
 
