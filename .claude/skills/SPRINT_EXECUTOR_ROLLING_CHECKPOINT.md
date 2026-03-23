@@ -38,8 +38,8 @@ These IDs are stable project constants. Sprint iteration IDs change per sprint �
 - Always emit checkpoint before stopping
 
 **This skill is a pure orchestrator — it NEVER writes, patches, or edits code itself.**
-All code changes are delegated exclusively to engineer agents (`backend-engineer`, `frontend-engineer`, `supabase-engineer`) via the Task tool.
-When a reviewer (`code-reviewer`, `security-reviewer`) returns REQUEST CHANGES, the orchestrator MUST re-invoke the relevant engineer agent with the reviewer's findings — it must NOT apply the fix inline, interpret the diff, or make edits directly.
+All code changes are delegated exclusively to engineer agents (`backend-engineer`, `frontend-engineer`, `supabase-engineer`) via the Task tool. Exception: for test-only PRs (type `test`), `qa` acts as the implementing engineer — see ROUTE_AND_RUN.md section G.
+When a reviewer (`code-reviewer`, `security-reviewer`) returns REQUEST CHANGES, the orchestrator MUST re-invoke the relevant engineer agent with the reviewer's findings — it must NOT apply the fix inline, interpret the diff, or make edits directly. **There are no exceptions — inline fixes are always a violation.** Even "trivial one-line fixes" must be re-routed through the engineer. One re-run cycle is allowed. If still REQUEST CHANGES after one re-run: play `afplay /System/Library/Sounds/Basso.aiff`, stop, and surface to user.
 If the orchestrator catches itself about to write or edit code, STOP and invoke the engineer agent instead.
 
 ---
@@ -66,6 +66,8 @@ Before the first PR:
    **Mode selection:** If the user says "lightweight" at sprint kickoff, OR if all issue descriptions are 200+ characters with explicit behavioral statements, invoke with:
    > "Mode: lightweight. Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
    Otherwise, use the default (full mode) invocation:
+
+   "Explicit behavioral statement" = at least one sentence describing what a user can do OR what the system does in response (e.g. "Admin can click Approve to transition a badge from PENDING to EARNED"). Descriptions that only state a problem, list TODOs, or reference another issue do not qualify.
    > "Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
    When in doubt, use full mode.
 
@@ -82,6 +84,8 @@ Before the first PR:
    - **Store all dependency findings** in checkpoint preamble as `Dependencies:` (format: `- #NNN depends on #MMM [confirmed|likely|speculative]`)
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
    - If team-lead flags spec gaps, OR if enrichment produced `Key unknowns` for any issue: play `afplay /System/Library/Sounds/Ping.aiff`, surface all gaps/unknowns to the user and **pause for confirmation** before starting execution. Do not proceed until each gap is resolved or explicitly waived by the user.
+**5b. Write initial checkpoint** — before starting the first PR, write the full preamble checkpoint to `.claude/SPRINT_CHECKPOINT.md` using the CHECKPOINT Format below. Include: Sprint name, iteration ID, Project item IDs map, Sprint issues, Execution order, Dependencies, and all Enriched specs. Set `Status: STARTING` and `Next PR: <first issue>`. This protects enriched specs and team-lead output against context compaction before any PR work begins.
+
 5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original GitHub Project iteration order.
 6. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2 and enriched specs from step 3. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
    - The cached issue description is missing or truncated to fewer than 50 characters
@@ -111,7 +115,11 @@ For each GitHub issue (PR N):
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
 
+   **The E2E gate within ROUTE_AND_RUN is MANDATORY for Normal and High-risk PRs — run unconditionally. "Backend not running" is not a valid skip; if a server fails to start, surface as BLOCKED.**
+
    **Boundary rule:** `ROUTE_AND_RUN.md` owns change classification, reviewer/security retry loops, process-doc review, post-engineer materialization checks, and E2E gate policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` records the outcomes of those gates in the checkpoint but does not restate, reinterpret, or override them here.
+
+**4b. Engineer materialization validation** — after ROUTE_AND_RUN returns, validate per the Post-Engineer Materialization Check in ROUTE_AND_RUN.md. If FAIL: re-invoke the engineer agent once with the specific failed check(s) named explicitly, plus the original qa-fast context and full enriched spec. If still FAIL on second run: play `afplay /System/Library/Sounds/Basso.aiff`, emit BLOCKED checkpoint with `Engineer materialization: FAIL` in the Gate Satisfaction Record, and surface to user. Do NOT proceed to step 5.
 
 5. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
@@ -122,7 +130,7 @@ For each GitHub issue (PR N):
    - `git push -u origin <branch>`
    - `gh pr create --title "..." --body "..." --base main`
    - **Workflow invariant:** Every PR body must include `Closes #<issue-number>` for the issue being executed. The issue number comes from the sprint checkpoint's `Sprint issues:` map. Missing closing keyword is a workflow error — this step is not complete until the correct closing keyword is present in the PR body.
-   - **Local E2E is the primary merge gate.** If the pre-push hook ran E2E and it passed (40/0 failures, marker written), proceed to merge immediately — do NOT wait for CI.
+   - **Local E2E is the primary merge gate.** If the pre-push hook ran E2E and it passed (all tests pass / 0 failures, marker written), proceed to merge immediately — do NOT wait for CI.
    - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures (billing limits, runner unavailability, network timeouts) do NOT block merge when local E2E passed.
    - Merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
@@ -156,6 +164,7 @@ For each GitHub issue (PR N):
    - Cross-reference against the enriched spec for the next PR (cached from Sprint Start step 3).
    - Check the `Dependencies:` section: if the next PR depends on any blocked PR, flag it.
    - If the next PR's likely files overlap with files modified by PR N, compare their specs and key decisions: does PR N invalidate PR N+1's spec or scope?
+   - **Shared test infrastructure exception:** File-level overlap in test fixtures, page objects, or helper utilities is NOT a conflict. Only flag if two PRs modify the same exported function with incompatible signatures — state the specific incompatibility.
    - If conflict detected: play `afplay /System/Library/Sounds/Ping.aiff`, surface the conflict to the user with affected issue IDs and specs, and pause.
    - If no conflict: proceed silently to step 9.
 
@@ -167,6 +176,27 @@ For each GitHub issue (PR N):
    - After writing the checkpoint file, invoke `/compact` only if context growth is making responses noticeably slower or the conversation is approaching context limits.
    - After compaction, read `.claude/SPRINT_CHECKPOINT.md` to restore full sprint context before starting the next PR.
    - If context is still lean, skip compaction and continue — the checkpoint file is the fallback on automatic context compression regardless.
+
+---
+
+## Sprint Completion
+
+When all issues in the execution order have been merged and closed:
+
+1. **Write final checkpoint** — update `.claude/SPRINT_CHECKPOINT.md` with `Status: SPRINT COMPLETE` and `Next PR: (none)`.
+2. **Archive** — copy the completed checkpoint to the sprint archives directory:
+   ```bash
+   mkdir -p .claude/sprint-archives
+   cp .claude/SPRINT_CHECKPOINT.md ".claude/sprint-archives/<sprint-label>-complete.md"
+   ```
+   Use the sprint name from the checkpoint preamble as the filename slug (e.g. `sprint-29-trust-gap-remediation-complete.md`). Archive files are never overwritten.
+3. **Output completion summary:**
+   - PRs merged (in execution order with PR numbers)
+   - Execution order deviations, if any (which issues were reordered and why)
+   - Blocked or skipped issues, if any
+   - Key decisions (aggregated from all checkpoint `Key decisions` fields)
+   - Risks carried forward (aggregated from all checkpoint `Risks` fields)
+4. **Play Funk chime:** `afplay /System/Library/Sounds/Funk.aiff`
 
 ---
 
@@ -270,6 +300,9 @@ On resume:
 4. Do NOT re-triage completed PRs.
 5. Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from GitHub Project unless the checkpoint is stale.
 6. Use `Enriched specs:` from the checkpoint as the authoritative AC for remaining issues — do NOT re-derive them.
+
+**6a. Enriched specs absent:** If `Enriched specs:` is absent from the checkpoint preamble (e.g., checkpoint was written before enrichment ran, or this is an older-format checkpoint): treat as a fresh sprint start. Re-run Sprint Start steps 2–5b (fetch issue descriptions, run spec-enricher, run team-lead pre-flight, write initial checkpoint). Do not attempt to resume execution without enriched specs in the checkpoint.
+
 7. Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
 8. Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.
 9. Immediately start on "Next PR".

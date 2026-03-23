@@ -92,12 +92,13 @@ Never create worktrees inside the main project directory.
 Audio notifications apply only when running via Claude CLI **and** an audio command exists (e.g., `afplay` on macOS).
 If unavailable, skip audio without comment.
 
-## Command batching (reduce iterations)
+## Command sequencing
 
-When running tool commands, batch logically related steps into one command block when safe:
-- show diff/status
-- run tests/lint
-- re-run the minimal failing subset
+Run one command at a time. Do not chain unrelated commands with `&&`, `;`, or `|`.
+
+Exception: sequential git lifecycle pairs where the second command depends on the first may use `&&` (e.g. `git checkout main && git pull origin main`). This exception applies to agent-driven git operations only — not to orchestrator-level shell execution.
+
+**Orchestrator delegation note:** `mvn test`, `npm test`, and `npm run build` are auto-approved for engineer and QA agents. The orchestrator does NOT run these directly — it delegates to agents and reads their reported results.
 
 ## E2E test placement rule
 
@@ -108,11 +109,11 @@ covers the same page or workflow. If yes, add the new test there.
 |----------|-----------|
 | Infrastructure, auth redirect, CORS, ingestion | `quick-smoke.spec.ts` |
 | Map filters, BHK, text search, insights page | `map-filters.spec.ts` |
-| Dealer role access (dashboard, listings, bookings) | `dealer-smoke.spec.ts` |
+| Broker role access (dashboard, listings, bookings) | `dealer-smoke.spec.ts` |
 | Admin role access | `admin-smoke.spec.ts` |
 | Nav link visibility by role | `nav-roles.spec.ts` |
 | Listing lifecycle (create → approve → book) | `listing-lifecycle.spec.ts` |
-| Dealer listing form interactions (PriceField, media, wizard) | `dealer-listing-form.spec.ts` |
+| Broker listing form interactions (PriceField, media, wizard) | `dealer-listing-form.spec.ts` |
 | User journeys (saved areas, bookings, insights, listing detail) | `user-journeys.spec.ts` |
 
 Rules:

@@ -9,6 +9,11 @@
 
 ---
 
+## Shell Commands
+- Run one command at a time — never chain with `&&`, `;`, or `|` unless the pipe is purely for formatting (e.g. `| tail -20`).
+
+---
+
 ## 1) Task Routing (Default)
 
 All feature, bugfix, refactor, perf, security, and UI tasks MUST run via:
@@ -25,7 +30,7 @@ Rules:
 Before writing any code, output this block verbatim:
 ```
 Summary: <1 line>
-Type: {bugfix|feature|refactor|perf|security|ui}
+Type: {bugfix|small-change|feature|refactor|perf|security|incident|ui|test}  ← see ROUTE_AND_RUN.md Step 1
 Scope: {single-service|multi-service|cross-cutting}
 Risk: {low|med|high} — <reason>
 Routing: <agent chain, e.g. qa-fast → backend-engineer → code-reviewer>
@@ -47,7 +52,7 @@ Use:
 Rules:
 - 1 PR at a time.
 - Diff/snippets only.
-- No auto-advance.
+- Auto-advance after each PR merge (SPRINT_EXECUTOR auto-advances; this overrides the generic "no auto-advance" default for standalone tasks).
 - Emit rolling checkpoint after each PR.
 - Resume only from checkpoint.
 
@@ -120,6 +125,8 @@ CHECKPOINT
 Then stop.
 
 Resume from checkpoint only.
+
+Note: Sprint-specific checkpoint format (with PR tracking, project item IDs, enriched specs, etc.) lives in SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md. Section 8 is for non-sprint emergency checkpoints only.
 
 ---
 

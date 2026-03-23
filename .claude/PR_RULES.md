@@ -113,6 +113,10 @@ If a task requires changes to more than 3 files:
 No opportunistic refactors.
 No unrelated file changes.
 
+**Exemptions:**
+- Tasks running via `ROUTE_AND_RUN`: the 3-file limit does not apply — agents own their scope, and ROUTE_AND_RUN's pre-flight and code-reviewer gates provide the quality check.
+- Test-only PRs (type `test`): exempt from the 3-file limit — test suites frequently span many files by design.
+
 ---
 
 ## Analysis-only / No-code tasks

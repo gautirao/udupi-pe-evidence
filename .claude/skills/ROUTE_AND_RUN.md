@@ -10,6 +10,8 @@ Process: triage → route → sequential agent execution → STOP.
 <!-- Line budget: ~700 lines. If adding sections, consider extracting routing tables (A–H) to a referenced file. -->
 **Authority:** `ROUTE_AND_RUN` is the single source of truth for per-PR execution policy: change classification, routing logic, agent invocation rules, reviewer/security retry loops, process-doc review requirements, post-engineer materialization checks, and E2E validation policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` supplies sprint context and records gate outcomes, but must not redefine or override these per-PR rules.
 
+**Return protocol (when invoked from SPRINT_EXECUTOR):** After the final routed agent completes and the E2E gate is satisfied, return control to SPRINT_EXECUTOR — do NOT emit STOP or play Hero chime. SPRINT_EXECUTOR owns the git lifecycle, merge, post-merge steps, chime, and checkpoint. In standalone use (not invoked from SPRINT_EXECUTOR), ROUTE_AND_RUN owns the full lifecycle: play Hero chime and STOP.
+
 ## Agents
 qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
 
@@ -207,7 +209,22 @@ The distinction: architect reviews schema design and reversibility. security-rev
 
 ---
 
-### G) Doc-only / read-only changes
+### G) Test-only PRs
+
+If the task adds or modifies automated tests only (unit tests, integration tests, E2E specs) with no changes to production code:
+
+Routing: qa-fast → qa → code-reviewer
+
+Rules:
+- `qa` acts as the implementing engineer for test-only PRs — it writes, updates, and runs tests.
+- Exempt from the 3-file scope limit in PR_RULES.md (test suites frequently span many files).
+- Test-only PRs classify as Normal tier regardless of file count.
+- Code-reviewer reviews test quality, coverage completeness, and fixture correctness.
+- E2E applicability: if the PR adds or modifies E2E specs, run the full suite to confirm the authored tests pass.
+
+---
+
+### H) Doc-only / read-only changes
 
 If the task touches only documentation, comments, or non-code config:
 
@@ -219,7 +236,7 @@ Routing: (none — but process-doc self-review with structured evidence required
 
 ---
 
-### H) Heavy Multi-Stream Work
+### I) Heavy Multi-Stream Work
 
 If the task genuinely requires multiple parallel workstreams that cannot be safely handled by a single agent pass (e.g. new backend endpoint + Flyway migration + frontend wiring, or supabase schema change + RLS + Spring Boot service changes):
 
@@ -437,9 +454,16 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 
 **When in doubt, do not skip.** If any condition is unconfirmed or uncertain, E2E must run. The skip reason in the Gate Satisfaction Record must be recorded as `SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)` — using the shortened form `SKIPPED(no FE consumer)` is no longer valid for backend skips; all five conditions must be named.
 
+**Invalid skip reasons (never accepted):**
+- `SKIPPED(no E2E infra)` — not applicable; this project has full E2E infrastructure.
+- `SKIPPED(no FE consumer)` — only valid as part of the full five-condition check above, not standalone.
+- `SKIPPED(server not running)` — servers must be started before invoking QA; "server not running" is not a skip reason, it is a BLOCKED condition. Surface the failure to the user.
+
 ### Gate sequence (Normal and High-risk only)
 
 After code-reviewer (and security-reviewer if applicable) APPROVE:
+
+**Mandatory server check:** Before invoking QA, both frontend (Vite dev server) and backend (Spring Boot) must be running. If either is not running, start it. Do NOT pre-check and skip — "server not running" is not a valid skip reason. If a server fails to start, surface as BLOCKED.
 
 1. **E2E authoring check** — if qa-fast output includes `E2E authoring recommended: YES` AND skip conditions are not met, invoke `qa` in **E2E authoring mode**.
 2. **E2E applicability check** — if the PR matches a SKIP row in the applicability table above, record the skip reason and proceed to commit/push/PR. Do NOT invoke QA verification mode.
@@ -547,7 +571,7 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 
 - Agents execute sequentially.
 - Do NOT merge agent outputs.
-- After final routed agent completes, run Step 3 (QA E2E Gate). If gate PASS (or skipped for Trivial/Doc-only), play `afplay /System/Library/Sounds/Hero.aiff` and STOP.
+- After final routed agent completes, run Step 3 (QA E2E Gate). If gate PASS (or skipped for Trivial/Doc-only), play `afplay /System/Library/Sounds/Hero.aiff` and STOP (standalone only — see Return protocol when invoked from SPRINT_EXECUTOR).
 - Do NOT suggest improvements beyond scope.
 - Single forward pass by default.
 - Re-runs are allowed only through the defined retry paths: engineer materialization failure (Post-Engineer Materialization Check), reviewer REQUEST CHANGES, ADVISORY-FIX remediation, and QA failure routing (Step 3).
@@ -564,7 +588,7 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 3. **Run build commands** — not `npm run build`, not `mvn compile`.
 4. **Interpret test failures as acceptable** — if a test fails, route to agent. Never skip.
 5. **Apply reviewer findings directly** — always re-invoke the responsible engineer.
-6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run (or be explicitly satisfied by a valid skip reason per the E2E applicability rules). No exceptions. Run `npm run test:e2e:local` unconditionally; do not pre-check server availability. "Backend not running" is not a valid skip reason — if a server fails to start, surface as BLOCKED.
+6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run (or be explicitly satisfied by a valid skip reason per the E2E applicability rules). No exceptions. Run `npm run test:e2e:local` unconditionally; do not pre-check server availability. "Backend not running" is not a valid skip reason — if a server fails to start, surface as BLOCKED. `SKIPPED(no E2E infra)` and `SKIPPED(server not running)` are never valid — see the "Invalid skip reasons" section in Step 3.
 7. **Reclassify to dodge gates** — if triage says risk=med or the change has logic, it cannot be Trivial.
 
 ### MUST
