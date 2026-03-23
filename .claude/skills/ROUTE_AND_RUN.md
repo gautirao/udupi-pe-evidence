@@ -350,6 +350,16 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 
 - When invoked by `SPRINT_EXECUTOR` on a bug-fix task, bug reproduction is already confirmed upstream. Proceed directly to implementation — do not re-run reproduction.
 
+- **Test-type PR rules (required when triage Type is `test` and `qa` is the engineer) — include verbatim in every qa engineer Task prompt:**
+
+  > **Assertion quality (mandatory):** Every `test()` block must include at least one business-meaningful assertion — an assertion that would FAIL if the feature under test were broken. Navigation-only checks (goto + URL assertion) do not satisfy this requirement unless the AC explicitly asks for page reachability only. Ask yourself: "If the feature I'm testing stopped working, would this assertion catch it?" If not, the assertion is not meaningful.
+  >
+  > **Hard waits are banned:** Do not use `waitForTimeout()` or `page.waitForTimeout()`. Use Playwright's built-in auto-waiting, `waitForSelector`, `waitForResponse`, or network-idle strategies. If a specific timing constraint genuinely requires a hard wait, document it with an inline comment explaining why, and log it in Key decisions — this is the only exception, and it must be explicit.
+  >
+  > **Test suppression is banned:** Do not use `test.skip()`, `test.fixme()`, or empty test bodies. If an AC cannot be tested because the underlying feature or backend endpoint does not yet exist, mark it `OUT OF SCOPE — [reason]` in the AC coverage table and explain in Key decisions. The issue remains open.
+  >
+  > **Production code changes — testability hooks only:** The only permitted production code changes in a test-type PR are additive testability hooks such as `data-testid` attributes. No behavioral, business-logic, styling, or refactor changes are permitted. Any added `data-testid` attributes must be listed in Changed files and noted in Key decisions. Prefer `data-testid` over CSS classes, `nth-child`, or DOM structure for selectors.
+
 - After `qa-fast` completes, include its key findings (Critical Paths, Edge Cases, Risks) in the engineer's Task prompt as `qa-fast context:`. These findings must feed into pre-flight steps 2–5, not just the implementation step. This lets the engineer skip redundant codebase exploration and address flagged risks proactively.
 - If the routing includes `security-reviewer`, add this note to the engineer's Task prompt: `Security review will follow — pay attention to: input validation, RLS alignment, no secrets in code, @Transactional boundaries.`
 - If previous PRs in the same sprint had reviewer BLOCKING findings, include those patterns as warnings in the engineer's Task prompt (e.g., "Prior sprint finding: use List<> not Optional<> for non-UNIQUE FK queries").
@@ -361,14 +371,14 @@ Do NOT simulate agents inline. Do NOT merge outputs.
   - **ADVISORY-FIX** — Low-effort, high-value fix that the engineer should address before merge. Criteria: can be fixed in < 15 min AND reduces real risk. Examples: missing test cases for covered logic, extract-method for duplicated code, constants extraction for magic values, off-by-one in boundary checks.
   - **ADVISORY-DEFER** — Tracked for follow-up but does not block the current PR. Examples: architecture concerns requiring design decisions, integration test infra that doesn't exist yet, cross-cutting refactors spanning multiple modules.
   - After code-reviewer completes, the orchestrator MUST re-invoke the engineer for ALL **ADVISORY-FIX** items (same cycle as BLOCKING, just lower priority). ADVISORY-DEFER items are logged in the checkpoint Risks section AND appended to `.claude/TECH_DEBT.md` (grouped by backend/frontend/database/infra). The tech debt log is reviewed at sprint end.
-  - If the code-reviewer does not tag advisories, the orchestrator classifies them: if effort < 15 min and reduces test coverage gaps or code duplication → FIX; otherwise → DEFER.
+  - If the code-reviewer does not tag advisories, the orchestrator classifies them: default to FIX unless effort > 30 min or the fix requires design decisions spanning multiple modules. Log the classification and reason in the checkpoint Risks section.
 - `qa` in **E2E authoring mode** runs AFTER code-reviewer (and security-reviewer if applicable) APPROVE, BEFORE `qa` verification mode, for Normal and High-risk changes only. Conditional — triggered only when qa-fast recommended `E2E authoring recommended: YES`.
   When invoking E2E authoring mode, use this exact Task prompt:
   > "Mode: e2e-authoring. Write E2E tests for the new/modified user flow introduced by this change. Follow TOOLING.md E2E test placement rules. qa-fast context: [paste qa-fast E2E justification]. Changed files: [list files]. Implementation summary: [1-2 line summary of what the engineer built]. Run the new/updated spec file(s) using a targeted Playwright command to confirm the authored tests pass. Only run the full suite (`npm run test:e2e:local`) if targeted validation is not feasible. Do NOT modify implementation code."
 
   **Skip conditions** (orchestrator skips E2E authoring even when qa-fast says YES):
   - Triage Type is `refactor` AND ALL of: no new UI route, no new API endpoint, no changed user-visible workflow step, AND qa-fast did not signal missing E2E coverage for this path
-  - An existing E2E spec file that explicitly covers this specific user flow is identified — either qa-fast cited it by name, or the orchestrator located it via Grep — AND qa-fast recommended NO
+  - An existing E2E spec file that explicitly covers this specific user flow is identified — the orchestrator MUST cite the spec file path AND the specific test name (e.g. `dealer-listing-form.spec.ts → "should submit listing form"`) — either qa-fast cited it by name, or the orchestrator located it via Grep — AND qa-fast recommended NO
 
   **Uncertainty tie-breaker:** If it is unclear whether the change introduces or modifies a cross-layer flow requiring E2E authoring, default to YES. The skip conditions above are the only valid escape hatches.
 - `qa` in **verification mode** runs AFTER all reviewers APPROVE (and after E2E authoring if applicable), BEFORE commit/push/PR, for Normal and High-risk changes only.
@@ -407,6 +417,17 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 - Leaflet `invalidateSize()` before `flyTo()` in hidden containers
 - `house` type for E2E tests (avoids type-specific required fields)
 - Radix Slider `role="slider"` is on Thumb, not Root
+
+**Test-type PR focus areas (required when triage Type is `test`) — add to review brief:**
+
+Include the following `focus_areas` when reviewing test-only PRs. These are BLOCKING-eligible — the reviewer may classify any finding as BLOCKING if the test would pass even if the feature under test were broken.
+
+- `assertion_meaningfulness`: Flag any test block whose assertions would still pass if the feature under test were removed or broken. Navigation-only checks (page load + URL match) do not count as meaningful assertions unless the AC is explicitly about page reachability. Trace each assertion to a specific behavior the AC requires.
+- `no_op_and_suppression`: Flag empty test bodies, TODO/FIXME placeholders, `test.skip()`, `test.fixme()`, `test.describe.skip()`, or any equivalent suppression. These are BLOCKING — a suppressed test is not a merged test.
+- `hard_waits`: Flag `waitForTimeout()` or `page.waitForTimeout()`. Any hard wait without an accompanying inline comment explaining why Playwright's built-in waiting is insufficient is BLOCKING.
+- `selector_fragility`: Flag selectors using CSS class names, `nth-child`, positional DOM traversal, or other implementation-coupled selectors. `data-testid`, `getByRole`, `getByLabel`, and `getByText` are preferred. ADVISORY-FIX unless the fragile selector is on a frequently-changing path, in which case BLOCKING.
+- `seed_and_mock_leakage`: Flag assertions that verify hard-coded seed data literals (specific IDs, specific strings from the test database) rather than testing business behavior. ADVISORY-FIX.
+- `testability_hook_scope`: If the PR adds `data-testid` attributes to production code, verify that (a) each attribute is listed in Changed files, (b) the attribute name is stable and does not expose implementation internals, (c) no other production code was changed.
 
 **Step 4 — Summarize results back to user/checkpoint:**
 - Preserve severity (BLOCKING/ADVISORY/SUGGESTION)

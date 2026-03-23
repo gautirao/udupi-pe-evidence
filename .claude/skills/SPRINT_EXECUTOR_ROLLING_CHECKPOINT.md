@@ -66,10 +66,10 @@ Before the first PR:
    **Mode selection:** If the user says "lightweight" at sprint kickoff, OR if all issue descriptions are 200+ characters with explicit behavioral statements, invoke with:
    > "Mode: lightweight. Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
    Otherwise, use the default (full mode) invocation:
+   > "Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
+   When in doubt, use full mode. **Exception for test-type sprints** (all sprint issues have triage Type: `test`): default to lightweight mode unless the user explicitly requests full mode at kickoff. Issue descriptions that already contain explicit behavioral statements are testable as-is — opus enrichment adds structure but not information. If any individual issue description is fewer than 100 characters or lacks behavioral statements, fall back to full mode for that issue only.
 
    "Explicit behavioral statement" = at least one sentence describing what a user can do OR what the system does in response (e.g. "Admin can click Approve to transition a badge from PENDING to EARNED"). Descriptions that only state a problem, list TODOs, or reference another issue do not qualify.
-   > "Enrich specs for the following sprint issues: [paste all issue IDs + titles + descriptions]."
-   When in doubt, use full mode.
 
    `spec-enricher` runs on `opus` regardless of your current model — consistent quality is the reason it is a dedicated agent.
 
@@ -84,6 +84,15 @@ Before the first PR:
    - **Store all dependency findings** in checkpoint preamble as `Dependencies:` (format: `- #NNN depends on #MMM [confirmed|likely|speculative]`)
    - If team-lead flags pre-review requirements (architect/security), add them to the routing for the affected issues.
    - If team-lead flags spec gaps, OR if enrichment produced `Key unknowns` for any issue: play `afplay /System/Library/Sounds/Ping.aiff`, surface all gaps/unknowns to the user and **pause for confirmation** before starting execution. Do not proceed until each gap is resolved or explicitly waived by the user.
+
+**4a. Sprint-level routing cache (homogeneous sprints only — activate after first PR confirms quality gates pass)**
+
+   If team-lead confirms that ALL sprint issues share the same triage Type and routing path (e.g. all `test` → `qa-fast → qa → code-reviewer`):
+   - Cache the routing decision in the checkpoint preamble as `Cached routing: <Type> → <routing chain>`.
+   - Per-PR triage blocks still output verbatim (hard gate compliance) but classification and routing are drawn from cache — no re-derivation needed.
+   - After the first PR: use a shortened qa-fast prompt: "Sprint qa-fast context: codebase was scanned during the first sprint PR. Focus on: selector fragility, auth fixture reuse, data isolation, and any files or flows NOT yet reviewed for [current issue title]. Do not re-scan shared config already surveyed this sprint. Issue-specific risks must still be surfaced."
+   - If any PR's enriched spec reveals a non-homogeneous concern (e.g., a production code change beyond testability hooks), invalidate the cache for that PR only — full triage re-derivation applies.
+
 **5b. Write initial checkpoint** — before starting the first PR, write the full preamble checkpoint to `.claude/SPRINT_CHECKPOINT.md` using the CHECKPOINT Format below. Include: Sprint name, iteration ID, Project item IDs map, Sprint issues, Execution order, Dependencies, and all Enriched specs. Set `Status: STARTING` and `Next PR: <first issue>`. This protects enriched specs and team-lead output against context compaction before any PR work begins.
 
 5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original GitHub Project iteration order.
@@ -100,6 +109,19 @@ Before the first PR:
 For each GitHub issue (PR N):
 
 1. **Use cached spec** — use the description cached during Sprint Start step 2 and the enriched spec from step 3. Only call `gh issue view <number> --json title,body` again if the checkpoint is stale (see Sprint Start step 6). State issue number + title (1 line); copy AC from enriched spec into the checkpoint `Acceptance criteria` field for this PR.
+
+**1b. Write in-flight marker** — immediately after step 1, before any agent runs, update `.claude/SPRINT_CHECKPOINT.md` in-place:
+   - Set `Status: IN_PROGRESS`
+   - Add `Current PR: #NNN RE-XX title` (the issue being started)
+   - Preserve all other checkpoint fields unchanged.
+
+   **On resume, if `Status: IN_PROGRESS` is found** — a PR was in-flight when context was lost. Before proceeding to any new work:
+   - Check for a dangling branch: `git branch --list "*pr-<issue-number>*"` (where issue-number is from `Current PR:`)
+   - Check for uncommitted changes on main: `git status --short`
+   - **Branch exists with commits** → engineer completed but PR lifecycle didn't finish. Surface to user: "RE-XX was in-flight. Branch `<name>` exists with work. Resume from step 5 (git+PR) or restart the PR from scratch?"
+   - **No branch, no uncommitted changes** → engineer hadn't started or produced no output. Clear the in-flight marker and restart the PR from step 1.
+   - **Uncommitted changes on main** → surface to user for manual resolution before proceeding.
+
 2. **Mark In Progress** — set GitHub Project item status to "In Progress":
    ```bash
    gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 1a1777ea
@@ -119,7 +141,45 @@ For each GitHub issue (PR N):
 
    **Boundary rule:** `ROUTE_AND_RUN.md` owns change classification, reviewer/security retry loops, process-doc review, post-engineer materialization checks, and E2E gate policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` records the outcomes of those gates in the checkpoint but does not restate, reinterpret, or override them here.
 
-**4b. Engineer materialization validation** — after ROUTE_AND_RUN returns, validate per the Post-Engineer Materialization Check in ROUTE_AND_RUN.md. If FAIL: re-invoke the engineer agent once with the specific failed check(s) named explicitly, plus the original qa-fast context and full enriched spec. If still FAIL on second run: play `afplay /System/Library/Sounds/Basso.aiff`, emit BLOCKED checkpoint with `Engineer materialization: FAIL` in the Gate Satisfaction Record, and surface to user. Do NOT proceed to step 5.
+**4b. Engineer materialization validation** — after ROUTE_AND_RUN returns, validate per the Post-Engineer Materialization Check in ROUTE_AND_RUN.md. If FAIL: re-invoke the engineer agent once with the specific failed check(s) named explicitly, plus the original qa-fast context and full enriched spec. If still FAIL on second run: play `afplay /System/Library/Sounds/Basso.aiff`, emit BLOCKED checkpoint with `Engineer materialization: FAIL` in the Gate Satisfaction Record, and surface to user. Do NOT proceed to step 4c.
+
+**4c. Spec invalidation check (after materialization passes)** — before invoking code-reviewer, examine the engineer's AC coverage table:
+
+   - If any AC is marked `OUT OF SCOPE — [reason]`: record each case in the checkpoint `Known temporary exceptions:` field with the reason.
+   - **Acceptable reasons:** "backend endpoint not yet implemented", "UI component does not exist yet", "feature is behind a disabled flag". Log these as `Deferred AC` and **do not auto-close the issue** (see no-auto-close safeguard below).
+   - **Unacceptable reasons:** "already covered by existing test" (unless the engineer cites the exact spec file path AND test name), "out of scope" without explanation, or no reason given. Treat these as BLOCKING — re-invoke the engineer.
+   - **No-auto-close safeguard:** If any AC is marked OUT OF SCOPE, the issue MUST NOT be closed at step 6 unless: (a) the remaining covered ACs still satisfy the issue's minimum contract (the core behavior is testable and tested), OR (b) the user explicitly accepts partial completion. If neither condition is met, surface to user with options: accept partial + create follow-up, or pause and re-scope. Add `partial` label to the issue if partially done.
+   - **50% safeguard:** If 50% or more of the enriched spec's AC bullets are OUT OF SCOPE: play `afplay /System/Library/Sounds/Ping.aiff`, surface to user: "Over half of this issue's acceptance criteria are OUT OF SCOPE. The spec may be misaligned with the codebase. Do not proceed to merge without explicit user decision."
+
+**5a. Post-E2E checks (after ROUTE_AND_RUN completes its E2E gate)**
+
+   **Flakiness detection:** After the E2E run passes, check the Playwright report for objective flakiness signals:
+   - **Retry signal:** any spec was retried (retry count > 0 in the Playwright JSON/HTML report)
+   - **Duration signal:** any spec took longer than 45 seconds (indicates timing dependency or race condition)
+   Console warnings are advisory evidence only — they do not by themselves trigger flaky-suspect classification.
+
+   If any objective signal is detected: log `ROUTE_AND_RUN_WARNING: MED Flaky-suspect: <spec-name> — <signal>` in checkpoint Risks. Does NOT block merge. If 3 or more flaky-suspect warnings accumulate across the sprint (same or different specs): play `afplay /System/Library/Sounds/Ping.aiff` and surface to user.
+
+   **Quarantine protocol (user-invoked only — never automatic):** If the user decides to quarantine a flaky spec:
+   - `qa` agent adds a scoped retry mechanism per the repo's Playwright conventions (`playwright.config.ts`).
+   - The spec must remain enabled — quarantined tests run with retries, not silenced.
+   - Add comment at top of quarantined spec block: `// QUARANTINED: flaky since RE-NNN — tracked in #<follow-up-issue-number>`.
+   - Create follow-up: `gh issue create --title "fix: stabilize flaky E2E <spec-name>" --label "bug"`.
+   - **Quarantined specs do NOT count as done.** Issue stays open. Sprint progress shows `RE-NNN ⚠️` instead of `✅`. Issue is NOT closed at step 6.
+
+   **E2E failure attribution for test-type PRs (triage Type: `test`):**
+
+   **Scenario A — failing spec was created or modified by THIS PR:** Treat as a test bug. Re-invoke `qa` agent with the exact failure output (one retry). After qa fixes the test, **re-invoke code-reviewer for a delta review** — pass only the diff since the original APPROVE with instruction: "Delta review: these lines changed after your original APPROVE to fix a failing E2E test. Check for: weakened assertions, added hard waits, removed test blocks, suppression (`skip`/`fixme`), or any change that makes the test less rigorous than what you originally approved. Verdict: APPROVE or REQUEST CHANGES." If REQUEST CHANGES: standard fix cycle applies. If still failing after one qa retry: surface to user, do not proceed.
+
+   **Scenario B — failing spec was NOT modified by THIS PR:** This is not the current PR's fault. Do NOT route the failure to the current issue's engineer.
+   1. Check if the failing spec was introduced by an earlier PR in this sprint (compare against `Touched files` in previous checkpoints).
+   2. If yes: classify as `cross-PR regression`. Surface to user: "Spec `<name>` introduced by RE-XX is failing during RE-YY's E2E run. This is not RE-YY's fault. Options: (a) fix the earlier spec now as a detour, (b) quarantine the spec and continue, (c) pause sprint." Log `ROUTE_AND_RUN_WARNING: MED Cross-PR regression: <spec-name>` in Risks.
+   3. If the spec predates this sprint: classify as `pre-existing regression`. Surface to user with the same options.
+
+   **[Phase 2 — targeted-first E2E for test-type sprints — activate after first PR confirms quality gates pass]**
+   For PRs where triage Type is `test`, replace the unconditional full-suite `npm run test:e2e:local` with targeted-first:
+   1. **Targeted run first:** run only new/modified spec files. If targeted run fails, enter Scenario A fix cycle — do NOT run the full suite with a known-failing spec.
+   2. **Full suite — run when any of:** (a) every 3rd PR (PRs 3, 6, 9…), (b) last PR in the sprint, (c) PR modified any shared fixture file (`e2e/fixtures/`, `e2e/pages/`, `global-setup.ts`, `playwright.config.ts`). Otherwise: targeted pass is sufficient. Log `E2E passed: YES (targeted-only)` in checkpoint.
 
 5. **Git + PR**
    - `git pull origin main` (sync if not already on fresh branch)
@@ -131,7 +191,7 @@ For each GitHub issue (PR N):
    - `gh pr create --title "..." --body "..." --base main`
    - **Workflow invariant:** Every PR body must include `Closes #<issue-number>` for the issue being executed. The issue number comes from the sprint checkpoint's `Sprint issues:` map. Missing closing keyword is a workflow error — this step is not complete until the correct closing keyword is present in the PR body.
    - **Local E2E is the primary merge gate.** If the pre-push hook ran E2E and it passed (all tests pass / 0 failures, marker written), proceed to merge immediately — do NOT wait for CI.
-   - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures (billing limits, runner unavailability, network timeouts) do NOT block merge when local E2E passed.
+   - CI green is a bonus signal, not a merge blocker. Only block on CI if the failure is clearly a **code failure** (test failures, compile errors, linting errors, type errors, missing dependencies): play `afplay /System/Library/Sounds/Basso.aiff`, stop, surface failure log to user, emit BLOCKED checkpoint. Infrastructure failures do NOT block merge when local E2E passed. Infrastructure failures are exclusively: runner timeout, billing/quota error, network error, Docker pull failure, runner unavailability. Everything else is a code failure and blocks merge.
    - Merge PR via `gh pr merge <number> --merge --delete-branch`
    - `git checkout main && git pull origin main`
 6. **Close issue + update project status**
@@ -148,6 +208,10 @@ For each GitHub issue (PR N):
    - If GitHub Project automation moved the item to Done automatically (triggered by issue close): verify the item status, then skip — `gh project item-edit` is optional.
    - If automation did not fire or is not configured: `gh project item-edit` is required.
    - Do not leave a non-Done project card after a merged PR.
+   **Exception — do NOT close the issue if any of the following apply:**
+   - The spec invalidation check (step 4c) determined the issue cannot be auto-closed (partial AC coverage without user approval). Remove the `in-progress` label but leave the issue open. Surface the reason clearly.
+   - The issue was quarantined (step 5a flakiness protocol) — issue stays open with a `flaky` label. Progress line shows `RE-NNN ⚠️` instead of `✅`.
+
 7. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
 
    Immediately after the chime, output a single progress line using the execution order from the checkpoint preamble:
@@ -168,9 +232,21 @@ For each GitHub issue (PR N):
    - If conflict detected: play `afplay /System/Library/Sounds/Ping.aiff`, surface the conflict to the user with affected issue IDs and specs, and pause.
    - If no conflict: proceed silently to step 9.
 
+**8a. Periodic CI check (every 3rd PR — advisory, not hard gate)**
+
+   After every 3rd PR merges (PRs 3, 6, 9 in a sprint), before starting the next PR:
+   - Check CI status: `gh pr view <number> --json statusCheckRollup` for the last 3 merged PRs.
+   - **CI green or pending:** proceed normally.
+   - **CI red — infrastructure failure** (runner timeout, billing/quota error, network error, Docker pull failure, runner unavailability): log `CI: infra failure on #NNN — non-blocking` in Risks, proceed.
+   - **CI red — code failure** (test failures, compile errors, lint errors, type errors, missing dependencies): play `afplay /System/Library/Sounds/Ping.aiff`, surface to user: "CI code failure on PR #NNN: [failure detail]. This passed local E2E but fails in CI. Investigate before continuing?" This is advisory — the user decides whether to continue or pause.
+
 9. **Emit checkpoint + persist to file**
    - **Conversation output:** use the slim checkpoint format (omitting Sprint issues, Execution order, Dependencies, Enriched specs — already established in preamble). Full format only for the first checkpoint of a sprint.
    - **File output:** always write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — preamble format with Sprint issues, Execution order, Dependencies, and ALL enriched specs for remaining issues. This file is the authoritative resume source and must be self-contained (readable by a fresh conversation with no prior history).
+   - **Propagate sprint memory fields:** After recording Key decisions for the completed PR:
+     - If a decision establishes a pattern for remaining PRs (selector strategy, auth fixture approach, page object location, wait strategy): copy it to `Sprint-level conventions:` in the preamble. Do not add one-off facts here.
+     - If a decision is a one-off state (quarantined spec, deferred AC, partial completion, temporary workaround): copy it to `Known temporary exceptions:` in the preamble.
+   - Include both fields in the qa engineer Task prompt for the **next PR** — add verbatim after the enriched spec: "Sprint-level conventions from completed PRs: [paste]. Known temporary exceptions: [paste]. Follow conventions. If deviating, state why in Key decisions."
 
 **9a. Compact before next PR (conditional)**
    - After writing the checkpoint file, invoke `/compact` only if context growth is making responses noticeably slower or the conversation is approaching context limits.
@@ -213,17 +289,24 @@ Sprint issues: <#NNN Title | #NNN Title | ...> (all issues, one line, GitHub iss
 Execution order: <#NNN | #NNN | ...> (team-lead recommended order, or ORIGINAL if no reorder)
 Dependencies: <RE-XX depends on RE-YY [confirmed|likely|speculative] | NONE>
 Last completed PR: <id + title>
-Status: <DONE|BLOCKED>
+Current PR: <#NNN RE-XX title | NONE> (set to NONE when step completes; set to issue being started at step 1b)
+Status: <DONE|IN_PROGRESS|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
 Engineer materialization: <PASS|FAIL|N/A>
-E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
+E2E passed: <YES|YES (targeted-only)|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
 E2E coverage relevance: <COVERED|GAP(no auth fixture)|GAP(no spec for flow)|N/A>
 Touched files:
 - <file1>
 - <file2>
 Key decisions:
 - <decision or NONE>
+Sprint-level conventions:
+- <convention or NONE>
+  (Durable patterns established across completed PRs: e.g. "Auth: storageState pattern" | "Selectors: data-testid preferred" | "Hard waits: banned")
+Known temporary exceptions:
+- <exception or NONE>
+  (Quarantined specs, deferred ACs, partial completions: e.g. "RE-NNN bullet 3 deferred — endpoint not implemented" | "spec.ts quarantined — flaky, tracked in #NNN")
 Risks (includes agent warnings):
 - <risk or agent warning or NONE>
 Open blockers:
@@ -239,17 +322,22 @@ Next routing guess:
 === ROLLING CHECKPOINT START ===
 Sprint: <name/id>
 Last completed PR: <id + title>
-Status: <DONE|BLOCKED>
+Current PR: <#NNN RE-XX title | NONE>
+Status: <DONE|IN_PROGRESS|BLOCKED>
 Routing used: <agent chain>
 Tests passed: <YES|NO|N/A>
 Engineer materialization: <PASS|FAIL|N/A>
-E2E passed: <YES|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
+E2E passed: <YES|YES (targeted-only)|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
 E2E coverage relevance: <COVERED|GAP(no auth fixture)|GAP(no spec for flow)|N/A>
 Touched files:
 - <file1>
 - <file2>
 Key decisions:
 - <decision or NONE>
+Sprint-level conventions:
+- <convention or NONE> (carry forward from preamble; update if this PR added new ones)
+Known temporary exceptions:
+- <exception or NONE> (carry forward from preamble; update if this PR added new ones)
 Risks (includes agent warnings):
 - <risk or agent warning or NONE>
 Open blockers:
@@ -260,7 +348,7 @@ Next routing guess:
 - <agent chain or NONE>
 === ROLLING CHECKPOINT END ===
 
-Note: Subsequent checkpoints omit `Sprint issues`, `Execution order`, `Dependencies` (already in preamble). On resume, use the preamble checkpoint for full sprint context.
+Note: Subsequent checkpoints omit `Sprint issues`, `Execution order`, `Dependencies` (already in preamble). `Sprint-level conventions` and `Known temporary exceptions` accumulate across PRs and are carried forward in every checkpoint. On resume, use the preamble checkpoint for full sprint context.
 
 User instruction:
 "To resume, say: Resume sprint execution. The checkpoint file at .claude/SPRINT_CHECKPOINT.md will be read automatically."
@@ -295,6 +383,7 @@ Resume is triggered by any of:
 On resume:
 
 1. **Read `.claude/SPRINT_CHECKPOINT.md`** — this is the authoritative sprint state. If the user also pastes a checkpoint in conversation, prefer the file version (it uses full preamble format with enriched specs).
+   **If `Status: IN_PROGRESS`** — a PR was in-flight when context was lost. Follow the in-flight recovery protocol in Execution Loop step 1b before proceeding to any new work.
 2. Treat checkpoint as authoritative state (it overrides conversational memory).
 3. Do NOT infer prior context outside checkpoint.
 4. Do NOT re-triage completed PRs.
