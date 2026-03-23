@@ -91,6 +91,9 @@ class TrustControllerTest {
     @MockitoBean
     private SupabaseStorageService supabaseStorageService;
 
+    @MockitoBean
+    private ListingVerificationDimensionRepository dimensionRepository;
+
     @BeforeEach
     void setUp() {
         reset(badgeService, listingRepository, userRoleService, supabaseStorageService);

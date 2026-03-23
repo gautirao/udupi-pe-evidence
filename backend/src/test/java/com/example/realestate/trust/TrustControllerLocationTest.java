@@ -24,6 +24,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -104,11 +105,18 @@ class TrustControllerLocationTest {
     @MockitoBean
     private SupabaseStorageService supabaseStorageService;
 
+    @MockitoBean
+    private ListingVerificationDimensionRepository dimensionRepository;
+
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, photoHashService, userRoleService, supabaseStorageService);
+        reset(badgeService, listingRepository, photoHashService, userRoleService,
+                supabaseStorageService, dimensionRepository);
         when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
         when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
+        // Default: no existing LOCATION dimension row — controller creates a fresh one (0 attempts).
+        when(dimensionRepository.findByListingIdAndDimensionType(any(), any()))
+                .thenReturn(Optional.empty());
     }
 
     // -------------------------------------------------------------------------
@@ -247,5 +255,65 @@ class TrustControllerLocationTest {
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Location already verified"));
+    }
+
+    /**
+     * Caller has already made 5 attempts within the current 24-hour window.
+     * The 6th attempt must be rejected with 429.
+     */
+    @Test
+    void verifyLocation_6thAttemptInWindow_returns429() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listingWithCoords()));
+
+        // Dimension already has 5 attempts recorded within a fresh window.
+        ListingVerificationDimension rateLimitedDimension = new ListingVerificationDimension();
+        rateLimitedDimension.setListingId(LISTING_ID);
+        rateLimitedDimension.setDimensionType("LOCATION");
+        rateLimitedDimension.setBadgeState("AVAILABLE");
+        rateLimitedDimension.setLocationVerifyAttempts(5);
+        rateLimitedDimension.setLocationVerifyWindowStart(OffsetDateTime.now().minusHours(1));
+        when(dimensionRepository.findByListingIdAndDimensionType(LISTING_ID, "LOCATION"))
+                .thenReturn(Optional.of(rateLimitedDimension));
+
+        mockMvc.perform(post("/api/listings/{id}/trust/location/verify", LISTING_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(NEAR_LAT, NEAR_LON))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.error").value(
+                        "Too many location verification attempts. Try again tomorrow."));
+    }
+
+    /**
+     * The previous window started 25 hours ago (expired).
+     * The attempt must succeed — the window resets and the 429 gate is not triggered.
+     */
+    @Test
+    void verifyLocation_windowResetAfter24h_allowsAttempt() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listingWithCoords()));
+
+        // Window opened 25h ago with 5 attempts — but the window has expired.
+        ListingVerificationDimension expiredWindowDimension = new ListingVerificationDimension();
+        expiredWindowDimension.setListingId(LISTING_ID);
+        expiredWindowDimension.setDimensionType("LOCATION");
+        expiredWindowDimension.setBadgeState("AVAILABLE");
+        expiredWindowDimension.setLocationVerifyAttempts(5);
+        expiredWindowDimension.setLocationVerifyWindowStart(OffsetDateTime.now().minusHours(25));
+        when(dimensionRepository.findByListingIdAndDimensionType(LISTING_ID, "LOCATION"))
+                .thenReturn(Optional.of(expiredWindowDimension));
+
+        ListingVerificationDimension earned = new ListingVerificationDimension();
+        earned.setListingId(LISTING_ID);
+        earned.setDimensionType("LOCATION");
+        earned.setBadgeState("EARNED");
+        when(badgeService.grantLocationBadge(any(), any(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(earned);
+
+        mockMvc.perform(post("/api/listings/{id}/trust/location/verify", LISTING_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody(NEAR_LAT, NEAR_LON))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Location verified"));
     }
 }

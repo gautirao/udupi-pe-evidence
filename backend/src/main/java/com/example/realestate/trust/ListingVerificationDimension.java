@@ -90,6 +90,22 @@ public class ListingVerificationDimension {
     @Column(name = "otp_locked_until")
     private OffsetDateTime otpLockedUntil;
 
+    /**
+     * Number of location-verify attempts made within the current 24-hour sliding window.
+     * Reset to 0 when {@link #locationVerifyWindowStart} is older than 24 hours.
+     * Added in V54 (CU-9 location rate limit).
+     */
+    @Column(name = "location_verify_attempts", nullable = false)
+    private int locationVerifyAttempts = 0;
+
+    /**
+     * Timestamp of the first attempt in the current 24-hour window.
+     * Null means no window is open (first-ever attempt will open one).
+     * Added in V54 (CU-9 location rate limit).
+     */
+    @Column(name = "location_verify_window_start")
+    private OffsetDateTime locationVerifyWindowStart;
+
     // Getters and setters
 
     public UUID getId() {
@@ -178,5 +194,21 @@ public class ListingVerificationDimension {
 
     public void setOtpLockedUntil(OffsetDateTime otpLockedUntil) {
         this.otpLockedUntil = otpLockedUntil;
+    }
+
+    public int getLocationVerifyAttempts() {
+        return locationVerifyAttempts;
+    }
+
+    public void setLocationVerifyAttempts(int locationVerifyAttempts) {
+        this.locationVerifyAttempts = locationVerifyAttempts;
+    }
+
+    public OffsetDateTime getLocationVerifyWindowStart() {
+        return locationVerifyWindowStart;
+    }
+
+    public void setLocationVerifyWindowStart(OffsetDateTime locationVerifyWindowStart) {
+        this.locationVerifyWindowStart = locationVerifyWindowStart;
     }
 }

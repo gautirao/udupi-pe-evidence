@@ -92,6 +92,9 @@ class TrustControllerSecurityTest {
     @MockitoBean
     private SupabaseStorageService supabaseStorageService;
 
+    @MockitoBean
+    private ListingVerificationDimensionRepository dimensionRepository;
+
     /**
      * Unauthenticated GET /trust must not be rejected by Spring Security.
      * The controller is reached and returns 404 (listing not found), not 401 or 403.

@@ -67,8 +67,12 @@ public class TrustController {
      */
     private static final int OTP_MAX_ATTEMPTS = 5;
 
+    /** Maximum location-verify attempts allowed within a single 24-hour sliding window. */
+    private static final int LOCATION_VERIFY_MAX_ATTEMPTS = 5;
+
     private final BadgeService badgeService;
     private final ListingRepository listingRepository;
+    private final ListingVerificationDimensionRepository dimensionRepository;
     private final PhotoHashService photoHashService;
     private final ProfileRepository profileRepository;
     private final OtpService otpService;
@@ -77,12 +81,14 @@ public class TrustController {
     public TrustController(
             BadgeService badgeService,
             ListingRepository listingRepository,
+            ListingVerificationDimensionRepository dimensionRepository,
             PhotoHashService photoHashService,
             ProfileRepository profileRepository,
             OtpService otpService,
             SupabaseStorageService supabaseStorageService) {
         this.badgeService = badgeService;
         this.listingRepository = listingRepository;
+        this.dimensionRepository = dimensionRepository;
         this.photoHashService = photoHashService;
         this.profileRepository = profileRepository;
         this.otpService = otpService;
@@ -274,6 +280,7 @@ public class TrustController {
      *   <li>404 — listing not found</li>
      *   <li>409 — LOCATION badge already EARNED</li>
      *   <li>422 — submitted coordinates are more than 200m from the listing location</li>
+     *   <li>429 — caller has exceeded 5 location-verify attempts within the current 24-hour window</li>
      * </ul>
      */
     @PostMapping(value = "/{id}/trust/location/verify", consumes = "application/json")
@@ -306,6 +313,36 @@ public class TrustController {
             return ResponseEntity.status(400).body(
                     Map.of("error", "Listing has no stored location to compare against"));
         }
+
+        // 3a. Rate limit: max 5 attempts per 24-hour sliding window per listing.
+        // Load (or create an in-memory stub for) the LOCATION dimension to track attempts.
+        ListingVerificationDimension locationDimension = dimensionRepository
+                .findByListingIdAndDimensionType(id, "LOCATION")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(id);
+                    d.setDimensionType("LOCATION");
+                    d.setBadgeState("AVAILABLE");
+                    d.setUpdatedAt(OffsetDateTime.now());
+                    return d;
+                });
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (locationDimension.getLocationVerifyWindowStart() == null
+                || locationDimension.getLocationVerifyWindowStart().isBefore(now.minusHours(24))) {
+            // No active window, or the previous window has expired — open a fresh one.
+            locationDimension.setLocationVerifyAttempts(0);
+            locationDimension.setLocationVerifyWindowStart(now);
+        }
+        if (locationDimension.getLocationVerifyAttempts() >= LOCATION_VERIFY_MAX_ATTEMPTS) {
+            log.warn("Location verify rate limit exceeded listingId={} callerId={} attempts={}",
+                    id, caller.userId(), locationDimension.getLocationVerifyAttempts());
+            return ResponseEntity.status(429).body(
+                    Map.of("error", "Too many location verification attempts. Try again tomorrow."));
+        }
+        locationDimension.setLocationVerifyAttempts(locationDimension.getLocationVerifyAttempts() + 1);
+        locationDimension.setUpdatedAt(now);
+        dimensionRepository.save(locationDimension);
 
         // 4. Compute Haversine distance
         double distanceMeters = haversineMeters(
