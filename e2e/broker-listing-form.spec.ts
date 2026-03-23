@@ -244,3 +244,128 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Completeness guard failure tests (#585 — GF1–GF3)
+// Validates that POST /api/listings/{id}/submit returns 422 with field-level
+// errors when the listing is incomplete.
+// ---------------------------------------------------------------------------
+
+test.describe('Completeness guard failures (GF1–GF3)', () => {
+  let brokerToken: string | null = null;
+  const createdIds: string[] = [];
+
+  async function createDraft(body: Record<string, unknown>): Promise<string | null> {
+    if (!brokerToken) return null;
+    const res = await fetch(`${BACKEND}/api/listings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${brokerToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { id?: string };
+    const id = data.id ?? null;
+    if (id) createdIds.push(id);
+    return id;
+  }
+
+  async function updateDraft(id: string, body: Record<string, unknown>): Promise<boolean> {
+    if (!brokerToken) return false;
+    const res = await fetch(`${BACKEND}/api/listings/${id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${brokerToken}`,
+      },
+      body: JSON.stringify(body),
+    });
+    return res.ok;
+  }
+
+  async function submitDraft(id: string): Promise<{ status: number; body: unknown }> {
+    const res = await fetch(`${BACKEND}/api/listings/${id}/submit`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${brokerToken!}` },
+    });
+    const body = await res.json().catch(() => null);
+    return { status: res.status, body };
+  }
+
+  test.beforeAll(async () => {
+    if (!hasBrokerCreds) return;
+    brokerToken = await getToken(brokerEmail, brokerPassword);
+  });
+
+  test.afterAll(async () => {
+    if (!brokerToken) return;
+    for (const id of createdIds) {
+      await fetch(`${BACKEND}/api/listings/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${brokerToken}` },
+      }).catch(() => {});
+    }
+  });
+
+  test('GF1 — submission without price returns 422 with field-level error', async () => {
+    test.skip(!hasBrokerCreds, 'Broker credentials not set');
+
+    const id = await createDraft({ propertyType: 'house', title: '[E2E GF1] No price' });
+    expect(id).not.toBeNull();
+
+    const { status, body } = await submitDraft(id!);
+    expect(status).toBe(422);
+
+    const errors = (body as { errors?: Array<{ field: string; message: string }> })?.errors ?? [];
+    const priceError = errors.find((e) => e.field === 'price');
+    expect(priceError).toBeDefined();
+    expect(priceError!.message).toContain('greater than 0');
+  });
+
+  test('GF2 — submission with <3 images returns 422 with media error', async () => {
+    test.skip(!hasBrokerCreds, 'Broker credentials not set');
+
+    // Create listing with all required fields except images
+    const id = await createDraft({
+      propertyType: 'house',
+      title: '[E2E GF2] No images',
+      price: 5_000_000,
+      locality: 'Manipal',
+    });
+    expect(id).not.toBeNull();
+
+    await updateDraft(id!, { addressConfirmed: true, latitude: 13.35, longitude: 74.79 });
+
+    const { status, body } = await submitDraft(id!);
+    expect(status).toBe(422);
+
+    const errors = (body as { errors?: Array<{ field: string; message: string }> })?.errors ?? [];
+    const imageError = errors.find((e) => e.field === 'images');
+    expect(imageError).toBeDefined();
+    expect(imageError!.message).toMatch(/at least 3 images/i);
+  });
+
+  test('GF3 — submission without confirmed address returns 422', async () => {
+    test.skip(!hasBrokerCreds, 'Broker credentials not set');
+
+    const id = await createDraft({
+      propertyType: 'house',
+      title: '[E2E GF3] No address',
+      price: 5_000_000,
+      locality: 'Manipal',
+    });
+    expect(id).not.toBeNull();
+
+    // Do NOT set addressConfirmed — it defaults to false
+
+    const { status, body } = await submitDraft(id!);
+    expect(status).toBe(422);
+
+    const errors = (body as { errors?: Array<{ field: string; message: string }> })?.errors ?? [];
+    const addrError = errors.find((e) => e.field === 'address_confirmed');
+    expect(addrError).toBeDefined();
+    expect(addrError!.message).toContain('confirmed');
+  });
+});
