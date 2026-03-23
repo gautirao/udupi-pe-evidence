@@ -108,6 +108,12 @@ function BookingCard({
             </div>
           </div>
 
+          {booking.status === 'NEEDS_RESOLUTION' && (
+            <p className="text-sm text-amber-700 mt-1">
+              Your appointment is on hold while this listing is temporarily unavailable.
+              We&apos;ll notify you when it&apos;s restored.
+            </p>
+          )}
           {booking.status === 'DECLINED' && booking.declineReason && (
             <p className="text-sm text-muted-foreground">
               Declined: {booking.declineReason}
