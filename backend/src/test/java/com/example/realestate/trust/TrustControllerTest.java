@@ -144,6 +144,13 @@ class TrustControllerTest {
         return d;
     }
 
+    private ListingVerificationDimension stateRowWithRejectionReason(
+            String type, String state, String rejectionReason) {
+        ListingVerificationDimension d = stateRow(type, state);
+        d.setRejectionReason(rejectionReason);
+        return d;
+    }
+
     // =========================================================================
     // AC1 — GET /api/listings/{id}/trust  (PUBLIC)
     // =========================================================================
@@ -296,5 +303,29 @@ class TrustControllerTest {
                 .andExpect(status().isOk())
                 // cta is null when all badges are EARNED
                 .andExpect(jsonPath("$.cta", Matchers.nullValue()));
+    }
+
+    /**
+     * PHOTOS badge in AVAILABLE state with a rejectionReason set → rejectionReason appears in response.
+     * IDENTITY and LOCATION have no rejectionReason → field is null.
+     */
+    @Test
+    void getTrustProgress_rejectedDimension_rejectionReasonPresent() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(brokerListing()));
+        when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of(
+                earnedRow("IDENTITY"),
+                earnedRow("LOCATION"),
+                stateRowWithRejectionReason("PHOTOS", "AVAILABLE", "Document appears expired"),
+                earnedRow("AUTHORITY")
+        ));
+
+        mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.badges[2].dimensionType").value("PHOTOS"))
+                .andExpect(jsonPath("$.badges[2].badgeState").value("AVAILABLE"))
+                .andExpect(jsonPath("$.badges[2].rejectionReason").value("Document appears expired"))
+                // Badges without a reason must serialize rejectionReason as null
+                .andExpect(jsonPath("$.badges[0].rejectionReason", Matchers.nullValue()));
     }
 }

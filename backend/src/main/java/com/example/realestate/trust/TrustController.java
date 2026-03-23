@@ -161,12 +161,13 @@ public class TrustController {
             ListingVerificationDimension row = byType.get(type);
             String badgeState = (row != null) ? row.getBadgeState() : "AVAILABLE";
             OffsetDateTime grantedAt = (row != null) ? row.getGrantedAt() : null;
+            String rejectionReason = (row != null) ? row.getRejectionReason() : null;
             boolean needsCta = (cta == null)
                     && ("AVAILABLE".equals(badgeState) || "PENDING".equals(badgeState));
             if (needsCta) {
                 cta = type;
             }
-            badges.add(new TrustProgressBadgeDto(type, badgeState, grantedAt, null));
+            badges.add(new TrustProgressBadgeDto(type, badgeState, grantedAt, null, rejectionReason));
         }
 
         // For owner listings, AUTHORITY is appended as auto-granted (outside the canonical loop).
@@ -174,12 +175,14 @@ public class TrustController {
             ListingVerificationDimension authorityRow = byType.get(AUTHORITY_TYPE);
             String authorityState = (authorityRow != null) ? authorityRow.getBadgeState() : "AVAILABLE";
             OffsetDateTime authorityGrantedAt = (authorityRow != null) ? authorityRow.getGrantedAt() : null;
+            String authorityRejectionReason = (authorityRow != null) ? authorityRow.getRejectionReason() : null;
             boolean needsCta = (cta == null)
                     && ("AVAILABLE".equals(authorityState) || "PENDING".equals(authorityState));
             if (needsCta) {
                 cta = AUTHORITY_TYPE;
             }
-            badges.add(new TrustProgressBadgeDto(AUTHORITY_TYPE, authorityState, authorityGrantedAt, true));
+            badges.add(new TrustProgressBadgeDto(AUTHORITY_TYPE, authorityState, authorityGrantedAt, true,
+                    authorityRejectionReason));
         }
 
         log.debug("GET /api/listings/{}/trust-progress callerId={} badges={} cta={}",

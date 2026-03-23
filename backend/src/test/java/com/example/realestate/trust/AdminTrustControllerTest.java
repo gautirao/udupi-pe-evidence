@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -25,6 +26,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -241,10 +243,28 @@ class AdminTrustControllerTest {
     }
 
     /**
-     * Dimension is PENDING and admin rejects -> 200, badgeService.rejectBadgeSubmission called.
+     * Dimension is PENDING and admin rejects with a reason body -> 200, reason forwarded to service.
      */
     @Test
     void reject_success_returns200() throws Exception {
+        ListingVerificationDimension dim = pendingDimension(DIMENSION_ID, LISTING_ID, "PHOTOS");
+        when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.of(dim));
+
+        mockMvc.perform(post("/api/admin/trust/{id}/reject", DIMENSION_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"Document appears expired\"}")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Badge submission rejected"));
+
+        verify(badgeService).rejectBadgeSubmission(DIMENSION_ID, ADMIN_ID, "Document appears expired");
+    }
+
+    /**
+     * Dimension is PENDING and admin rejects without a body -> 200, null reason forwarded to service.
+     */
+    @Test
+    void reject_withoutBody_returns200() throws Exception {
         ListingVerificationDimension dim = pendingDimension(DIMENSION_ID, LISTING_ID, "PHOTOS");
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.of(dim));
 
@@ -253,7 +273,7 @@ class AdminTrustControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Badge submission rejected"));
 
-        verify(badgeService).rejectBadgeSubmission(DIMENSION_ID, ADMIN_ID);
+        verify(badgeService).rejectBadgeSubmission(eq(DIMENSION_ID), eq(ADMIN_ID), isNull());
     }
 
     // =========================================================================

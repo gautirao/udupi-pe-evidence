@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -128,12 +129,17 @@ public class AdminTrustController {
     /**
      * Rejects a pending badge submission: PENDING → AVAILABLE.
      *
+     * <p>Accepts an optional JSON body {@code {"reason": "..."}} to record a human-readable
+     * rejection reason. The body may be absent entirely, or the {@code reason} key may be omitted
+     * or null — in all cases the rejection proceeds without a reason.
+     *
      * @return 200 on success; 403 if not admin; 404 if dimension not found; 409 if not PENDING
      */
     @PostMapping("/{dimensionId}/reject")
     public ResponseEntity<?> rejectBadge(
             CallerInfo caller,
-            @PathVariable UUID dimensionId) {
+            @PathVariable UUID dimensionId,
+            @RequestBody(required = false) Map<String, String> body) {
 
         if (!caller.isAdmin()) {
             return ResponseEntity.status(403).body(Map.of("error", "Admin access required"));
@@ -148,8 +154,10 @@ public class AdminTrustController {
                     Map.of("error", "Badge is not in PENDING state — current state: " + dimension.getBadgeState()));
         }
 
+        String reason = (body != null) ? body.get("reason") : null;
+
         // Delegate to BadgeService — handles state transition + audit record
-        badgeService.rejectBadgeSubmission(dimensionId, caller.userId());
+        badgeService.rejectBadgeSubmission(dimensionId, caller.userId(), reason);
 
         log.info("POST /api/admin/trust/{}/reject -> 200 adminId={} dimension={} listingId={}",
                 dimensionId, caller.userId(), dimension.getDimensionType(), dimension.getListingId());

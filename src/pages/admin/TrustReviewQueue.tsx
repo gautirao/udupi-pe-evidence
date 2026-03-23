@@ -7,6 +7,8 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -69,6 +71,7 @@ export default function TrustReviewQueue() {
   const queryClient = useQueryClient();
 
   const [rejectTarget, setRejectTarget] = useState<PendingTrustReview | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const {
     data: reviews = [],
@@ -96,15 +99,17 @@ export default function TrustReviewQueue() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (dimensionId: string) =>
-      api.post<ApproveRejectResponse>(`/api/admin/trust/${dimensionId}/reject`),
+    mutationFn: ({ dimensionId, reason }: { dimensionId: string; reason: string }) =>
+      api.post<ApproveRejectResponse>(`/api/admin/trust/${dimensionId}/reject`, reason.trim() ? { reason: reason.trim() } : undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...QUERY_KEY] });
       setRejectTarget(null);
+      setRejectReason('');
       toast({ title: 'Badge submission rejected' });
     },
     onError: (err: Error) => {
       setRejectTarget(null);
+      setRejectReason('');
       toast({ title: 'Rejection failed', description: err.message, variant: 'destructive' });
     },
   });
@@ -252,21 +257,38 @@ export default function TrustReviewQueue() {
         <Dialog
           open={!!rejectTarget}
           onOpenChange={(open) => {
-            if (!open) setRejectTarget(null);
+            if (!open) {
+              setRejectTarget(null);
+              setRejectReason('');
+            }
           }}
         >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Reject Submission</DialogTitle>
               <DialogDescription>
-                Are you sure you want to reject this submission? This will return the badge to
-                Available state.
+                This will return the badge to Available state. You may optionally add a reason
+                visible to the broker.
               </DialogDescription>
             </DialogHeader>
+            <div className="py-2">
+              <Label htmlFor="reject-reason" className="text-sm mb-1.5 block">
+                Reason <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="reject-reason"
+                placeholder="e.g. Document appears to be expired"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                maxLength={500}
+                rows={3}
+                disabled={rejectMutation.isPending}
+              />
+            </div>
             <DialogFooter>
               <Button
                 variant="outline"
-                onClick={() => setRejectTarget(null)}
+                onClick={() => { setRejectTarget(null); setRejectReason(''); }}
                 disabled={rejectMutation.isPending}
               >
                 Cancel
@@ -275,7 +297,7 @@ export default function TrustReviewQueue() {
                 variant="destructive"
                 disabled={rejectMutation.isPending}
                 onClick={() => {
-                  if (rejectTarget) rejectMutation.mutate(rejectTarget.dimensionId);
+                  if (rejectTarget) rejectMutation.mutate({ dimensionId: rejectTarget.dimensionId, reason: rejectReason });
                 }}
               >
                 {rejectMutation.isPending && (

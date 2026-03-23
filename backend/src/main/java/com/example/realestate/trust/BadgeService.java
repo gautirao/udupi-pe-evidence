@@ -647,11 +647,12 @@ public class BadgeService {
      * Throws {@link IllegalStateException} if the dimension is not in PENDING state —
      * callers must guard with a 409 before calling this method.
      *
-     * @param dimensionId UUID of the {@link ListingVerificationDimension} row to reject
-     * @param adminId     UUID of the admin performing the rejection
+     * @param dimensionId     UUID of the {@link ListingVerificationDimension} row to reject
+     * @param adminId         UUID of the admin performing the rejection
+     * @param rejectionReason optional human-readable reason for the rejection; may be null
      */
     @Transactional
-    public void rejectBadgeSubmission(UUID dimensionId, UUID adminId) {
+    public void rejectBadgeSubmission(UUID dimensionId, UUID adminId, String rejectionReason) {
         Objects.requireNonNull(dimensionId, "dimensionId must not be null");
         Objects.requireNonNull(adminId, "adminId must not be null");
 
@@ -669,6 +670,7 @@ public class BadgeService {
         String beforeJson = buildSimpleStateJson(dimensionType, "PENDING");
 
         dimension.setBadgeState("AVAILABLE");
+        dimension.setRejectionReason(rejectionReason);
         dimension.setUpdatedAt(now);
         ListingVerificationDimension saved = dimensionRepository.save(dimension);
 
@@ -688,7 +690,7 @@ public class BadgeService {
 
         recalculateAndPersistTier(listingId);
 
-        String afterJson = buildSimpleStateJson(dimensionType, "AVAILABLE");
+        String afterJson = buildRejectAuditJson(dimensionType, "AVAILABLE", rejectionReason);
 
         adminAuditService.record(
                 adminId,
@@ -908,6 +910,21 @@ public class BadgeService {
         payload.put("grantedAt", grantedAt);
         if (evidenceNote != null) {
             payload.put("evidenceNote", evidenceNote);
+        }
+        return toJsonOrNull(payload);
+    }
+
+    /**
+     * Serializes the reject audit payload to a JSON string via Jackson.
+     * Includes rejectionReason when non-null.
+     * Returns null on serialization failure (audit silently skipped; main transaction still commits).
+     */
+    private String buildRejectAuditJson(String dimensionType, String badgeState, String rejectionReason) {
+        Map<String, String> payload = new LinkedHashMap<>();
+        payload.put("dimensionType", dimensionType);
+        payload.put("badgeState", badgeState);
+        if (rejectionReason != null) {
+            payload.put("rejectionReason", rejectionReason);
         }
         return toJsonOrNull(payload);
     }

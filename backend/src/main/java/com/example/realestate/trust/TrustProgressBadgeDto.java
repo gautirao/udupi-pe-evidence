@@ -11,10 +11,14 @@ import java.time.OffsetDateTime;
  *   <li>{@code null} for all other badges</li>
  * </ul>
  *
+ * <p>{@code rejectionReason} is the admin-supplied reason when a badge submission was rejected;
+ * null when the dimension has never been rejected or was rejected without a reason.
+ *
  * <p>Never includes trustTier or rankingScore.
  */
 public record TrustProgressBadgeDto(
         String dimensionType,
         String badgeState,
         OffsetDateTime grantedAt,
-        Boolean autoGranted) {}
+        Boolean autoGranted,
+        String rejectionReason) {}

@@ -11,13 +11,14 @@ import { supabase } from '@/integrations/supabase/client';
 // ─── API types ────────────────────────────────────────────────────────────────
 
 type DimensionType = 'IDENTITY' | 'LOCATION' | 'PHOTOS' | 'AUTHORITY';
-type BadgeState = 'AVAILABLE' | 'EARNED' | 'PENDING' | 'EXPIRED' | 'SUSPENDED';
+type BadgeState = 'AVAILABLE' | 'EARNED' | 'PENDING' | 'EXPIRED' | 'SUSPENDED' | 'FAILED';
 
 interface TrustProgressBadgeDto {
   dimensionType: DimensionType;
   badgeState: BadgeState;
   grantedAt: string | null;
   autoGranted: boolean | null;
+  rejectionReason: string | null;
 }
 
 interface TrustProgressResponse {
@@ -70,6 +71,10 @@ const STATE_DISPLAY: Record<BadgeState, StateDisplay> = {
   EXPIRED: {
     label: 'Expired',
     className: 'text-muted-foreground border-muted',
+  },
+  FAILED: {
+    label: 'Failed',
+    className: 'text-red-600 border-red-400 bg-red-50',
   },
 };
 
@@ -219,18 +224,28 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
         : 'Verification coming soon'
       : null;
 
+  const showRejectionReason =
+    badge.badgeState === 'AVAILABLE' && badge.rejectionReason;
+
   return (
-    <div className="flex items-center gap-3">
-      <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-      <span className="text-sm flex-1">{dimensionLabel}</span>
-      <Badge variant="outline" className={stateClassName}>
-        {stateLabel}
-      </Badge>
-      {isPhotosAvailable && (
-        <PhotoUploadButton listingId={listingId} onSuccess={onPhotoSubmitted} />
-      )}
-      {ctaText && (
-        <span className="text-xs text-muted-foreground">{ctaText}</span>
+    <div className="space-y-1">
+      <div className="flex items-center gap-3">
+        <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
+        <span className="text-sm flex-1">{dimensionLabel}</span>
+        <Badge variant="outline" className={stateClassName}>
+          {stateLabel}
+        </Badge>
+        {isPhotosAvailable && (
+          <PhotoUploadButton listingId={listingId} onSuccess={onPhotoSubmitted} />
+        )}
+        {ctaText && (
+          <span className="text-xs text-muted-foreground">{ctaText}</span>
+        )}
+      </div>
+      {showRejectionReason && (
+        <p className="text-xs text-amber-700 pl-7">
+          Rejected: {badge.rejectionReason}
+        </p>
       )}
     </div>
   );

@@ -106,6 +106,14 @@ public class ListingVerificationDimension {
     @Column(name = "location_verify_window_start")
     private OffsetDateTime locationVerifyWindowStart;
 
+    /**
+     * Human-readable reason provided by the admin when rejecting a badge submission.
+     * Null when the dimension has never been rejected or was rejected without a reason.
+     * Added in V55 (CU-13 rejection reason).
+     */
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
     // Getters and setters
 
     public UUID getId() {
@@ -210,5 +218,13 @@ public class ListingVerificationDimension {
 
     public void setLocationVerifyWindowStart(OffsetDateTime locationVerifyWindowStart) {
         this.locationVerifyWindowStart = locationVerifyWindowStart;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
     }
 }

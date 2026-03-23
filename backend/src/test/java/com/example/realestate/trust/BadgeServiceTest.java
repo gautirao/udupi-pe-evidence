@@ -603,7 +603,7 @@ class BadgeServiceTest {
                 .thenReturn(List.of(pendingEvidence));
         when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        badgeService.rejectBadgeSubmission(dimensionId, actorId);
+        badgeService.rejectBadgeSubmission(dimensionId, actorId, null);
 
         ArgumentCaptor<AuthorityEvidence> captor = ArgumentCaptor.forClass(AuthorityEvidence.class);
         verify(authorityEvidenceRepository).save(captor.capture());
@@ -633,7 +633,7 @@ class BadgeServiceTest {
         when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
         when(listingRepository.save(any())).thenReturn(stubListing);
 
-        badgeService.rejectBadgeSubmission(dimensionId, actorId);
+        badgeService.rejectBadgeSubmission(dimensionId, actorId, null);
 
         verify(authorityEvidenceRepository, never()).findAllByListingIdAndReviewState(any(), any());
         verify(authorityEvidenceRepository, never()).save(any());
