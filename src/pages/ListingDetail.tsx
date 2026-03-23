@@ -604,26 +604,68 @@ export default function ListingDetail() {
             />
 
             {/* Trust badges (RE-156) */}
-            {trustData && trustData.badges.length > 0 && (
-              <Card>
-                <CardContent className="p-4">
-                  <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
-                    Verified by Udupi Properties
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {trustData.badges.map((badge) => (
+            {trustData && trustData.badges.length > 0 && (() => {
+              const DIMENSION_TOOLTIPS: Record<string, string> = {
+                IDENTITY: 'The person marketing this property has verified their phone number with us.',
+                LOCATION: 'The listing agent visited this property and confirmed its location within 200m.',
+                PHOTOS: 'Photos of this property were captured on-site and checked for duplicates.',
+                AUTHORITY: 'The agent has confirmed their authorisation to market this property.',
+              };
+              const REALNESS_TYPES = new Set(['LOCATION', 'PHOTOS']);
+              const AUTHORISATION_TYPES = new Set(['IDENTITY', 'AUTHORITY']);
+              const realnessBadges = trustData.badges.filter((b) => REALNESS_TYPES.has(b.dimensionType));
+              const authorisationBadges = trustData.badges.filter((b) => AUTHORISATION_TYPES.has(b.dimensionType));
+
+              const BadgeChip = ({ badge }: { badge: typeof trustData.badges[0] }) => (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
                       <span
-                        key={badge.dimensionType}
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 cursor-default"
                       >
                         {DIMENSION_LABELS[badge.dimensionType] ?? badge.dimensionType}
                       </span>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="max-w-xs">
+                        {DIMENSION_TOOLTIPS[badge.dimensionType] ?? 'This aspect of the listing has been verified.'}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              );
+
+              return (
+                <Card>
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
+                      Verified by Udupi Properties
+                    </h3>
+                    {realnessBadges.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Is this listing real?</p>
+                        <div className="flex flex-wrap gap-2">
+                          {realnessBadges.map((badge) => (
+                            <BadgeChip key={badge.dimensionType} badge={badge} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {authorisationBadges.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Is the agent authorised?</p>
+                        <div className="flex flex-wrap gap-2">
+                          {authorisationBadges.map((badge) => (
+                            <BadgeChip key={badge.dimensionType} badge={badge} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* Land listings show location panel above photos — skip here */}
             {listing.propertyType !== 'land' && (
