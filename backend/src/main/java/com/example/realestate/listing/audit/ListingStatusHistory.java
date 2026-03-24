@@ -10,8 +10,6 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.ColumnTransformer;
-
 import java.time.Instant;
 import java.util.UUID;
 
@@ -38,12 +36,10 @@ public class ListingStatusHistory {
     private UUID listingId;
 
     /** NULL on first insert (initial state has no prior status). */
-    @Column(name = "from_status", columnDefinition = "public.listing_status")
-    @ColumnTransformer(write = "?::public.listing_status")
+    @Column(name = "from_status", length = 30)
     private String fromStatus;
 
-    @Column(name = "to_status", nullable = false, columnDefinition = "public.listing_status")
-    @ColumnTransformer(write = "?::public.listing_status")
+    @Column(name = "to_status", nullable = false, length = 30)
     private String toStatus;
 
     @Enumerated(EnumType.STRING)

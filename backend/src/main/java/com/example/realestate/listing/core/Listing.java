@@ -37,8 +37,7 @@ public class Listing {
     @ColumnTransformer(write = "?::public.property_type")
     private String propertyType = "other";
 
-    @Column(name = "status", nullable = false, columnDefinition = "public.listing_status")
-    @ColumnTransformer(write = "?::public.listing_status")
+    @Column(name = "status", nullable = false, length = 30)
     private String status = ListingStatus.SCRAPED.toDbValue();
 
     @Column(name = "title")
