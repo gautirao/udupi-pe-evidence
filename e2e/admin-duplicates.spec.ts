@@ -113,6 +113,7 @@ async function insertDuplicateCandidate(
       listing_id_b: listingIdB,
       status: 'PENDING',
       similarity_score: similarityScore,
+      distance_meters: 150,
     }),
   });
   if (!res.ok) {

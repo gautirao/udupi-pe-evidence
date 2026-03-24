@@ -256,6 +256,10 @@ test('L4 — duplicate booking request is rejected with 409', async ({ page }) =
   await page.goto(`/listing/${listingId}`);
   await page.waitForLoadState('domcontentloaded');
 
+  // Wait for ProtectedRoute auth check to settle before reading localStorage token.
+  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
   // First booking — must succeed (201) or already exist (409 from a prior run)
   const firstResult = await page.evaluate(
     async ({ backendUrl, lid }: { backendUrl: string; lid: string }) => {
