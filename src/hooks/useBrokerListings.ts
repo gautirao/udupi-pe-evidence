@@ -402,12 +402,20 @@ export function useArchiveListing(listingId: string | undefined) {
       if (!listingId) throw new Error('No listing ID');
       return api.post<ListingResponse>(`/api/listings/${listingId}/archive`);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
       if (listingId) {
         queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+        // Directly patch cached listing status from the mutation response so the
+        // UI reflects the new status immediately, even if a subsequent GET returns
+        // stale data (backend transaction commit timing).
+        for (const key of [['listing-public', listingId], ['listing-detail', listingId]] as const) {
+          queryClient.setQueryData(key, (old: Record<string, unknown> | undefined) =>
+            old ? { ...old, status: data.status } : undefined,
+          );
+        }
       }
     },
     onError: (error: Error) => {
@@ -493,12 +501,20 @@ export function useReopenAsDraftListing(listingId: string | undefined) {
       if (!listingId) throw new Error('No listing ID');
       return api.post<ListingResponse>(`/api/listings/${listingId}/reopen-as-draft`);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['dealer-listings'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listings-infinite'] });
       queryClient.invalidateQueries({ queryKey: ['dealer-listing-stats'] });
       if (listingId) {
         queryClient.invalidateQueries({ queryKey: ['listing-broker', listingId] });
+        // Directly patch cached listing status from the mutation response so the
+        // UI reflects the new status immediately, even if a subsequent GET returns
+        // stale data (backend transaction commit timing).
+        for (const key of [['listing-public', listingId], ['listing-detail', listingId]] as const) {
+          queryClient.setQueryData(key, (old: Record<string, unknown> | undefined) =>
+            old ? { ...old, status: data.status } : undefined,
+          );
+        }
       }
     },
     onError: (error: Error) => {

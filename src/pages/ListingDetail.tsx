@@ -78,11 +78,13 @@ interface PublicListingDetail extends ListingResponse {
   reraValid?: boolean;
 }
 
-function useListingById(id: string | undefined) {
+function useListingById(id: string | undefined, isPreview: boolean) {
   return useQuery({
-    queryKey: ['listing-public', id],
+    queryKey: isPreview ? ['listing-detail', id] : ['listing-public', id],
     queryFn: () =>
-      api.get<PublicListingDetail>(`/api/public/listings/${id}`),
+      isPreview
+        ? api.get<PublicListingDetail>(`/api/listings/${id}`)
+        : api.get<PublicListingDetail>(`/api/public/listings/${id}`),
     enabled: !!id,
   });
 }
@@ -177,7 +179,7 @@ export default function ListingDetail() {
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === 'true';
   const { toast } = useToast();
-  const { data: listing, isLoading, error } = useListingById(id);
+  const { data: listing, isLoading, error } = useListingById(id, isPreview);
   const { data: priceHistory = [] } = useListingPriceHistory(id);
   const { data: trustData } = useTrustBadges(id);
 
