@@ -255,7 +255,9 @@ public class ListingWorkflowService {
         listing.setStatusChangedByActorType(ActorType.ADMIN);
         listing.setStatusChangedByActorId(adminUserId);
 
-        Listing saved = listingRepository.save(listing);
+        // Flush listing + history BEFORE booking cascade — the cascade's @Modifying
+        // queries use clearAutomatically=true which evicts the persistence context.
+        Listing saved = listingRepository.saveAndFlush(listing);
 
         ListingStatusHistory history = new ListingStatusHistory();
         history.setListingId(listing.getId());
@@ -265,7 +267,7 @@ public class ListingWorkflowService {
         history.setActorId(adminUserId);
         history.setReasonCode(rejectionReason);
         history.setNote(rejectionReason);
-        statusHistoryRepository.save(history);
+        statusHistoryRepository.saveAndFlush(history);
 
         if (bookingCascadeEnabled && currentStatus == ListingStatus.LIVE) {
             bookingCascadeService.cancelPendingBookings(listingId, CANCELLATION_REASON_LISTING_REJECTED);
@@ -394,7 +396,9 @@ public class ListingWorkflowService {
         }
         listing.setUpdatedAt(nowOdt);
 
-        Listing saved = listingRepository.save(listing);
+        // Flush listing + history BEFORE booking cascade — the cascade's @Modifying
+        // queries use clearAutomatically=true which evicts the persistence context.
+        Listing saved = listingRepository.saveAndFlush(listing);
 
         ListingStatusHistory history = new ListingStatusHistory();
         history.setListingId(listing.getId());
@@ -405,7 +409,7 @@ public class ListingWorkflowService {
         if (reasonNote != null && !reasonNote.isBlank()) {
             history.setNote(reasonNote);
         }
-        statusHistoryRepository.save(history);
+        statusHistoryRepository.saveAndFlush(history);
 
         if (bookingCascadeEnabled) {
             bookingCascadeService.cancelPendingBookings(listingId, CANCELLATION_REASON_LISTING_ARCHIVED);

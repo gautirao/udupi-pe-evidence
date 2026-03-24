@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -78,6 +79,10 @@ class ListingWorkflowServiceTest {
 
     @BeforeEach
     void setUp() {
+        // saveAndFlush delegates to identity in mocks — needed because archiveListing/rejectListing
+        // use saveAndFlush to flush before @Modifying(clearAutomatically=true) cascade queries.
+        lenient().when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
+        lenient().when(statusHistoryRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
         workflowService = new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
@@ -132,13 +137,13 @@ class ListingWorkflowServiceTest {
         listing.setTitle("Test Property");
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.save(any())).thenReturn(listing);
+        when(listingRepository.saveAndFlush(any())).thenReturn(listing);
 
         workflowService.rejectListing(listingId, adminId, "Poor quality images");
 
         // Listing must be saved with REJECTED status
         ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
-        verify(listingRepository).save(captor.capture());
+        verify(listingRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
 
         // Event must be published (notification is now async/decoupled)
@@ -245,12 +250,12 @@ class ListingWorkflowServiceTest {
         listing.setTitle("Test");
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.rejectListing(listingId, adminId, "Poor quality images");
 
         ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
-        verify(statusHistoryRepository).save(captor.capture());
+        verify(statusHistoryRepository).saveAndFlush(captor.capture());
         ListingStatusHistory history = captor.getValue();
 
         assertThat(history.getListingId()).isEqualTo(listingId);
@@ -274,12 +279,12 @@ class ListingWorkflowServiceTest {
         listing.setTitle("Test");
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.rejectListing(listingId, adminId, "Incomplete info");
 
         ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
-        verify(listingRepository).save(captor.capture());
+        verify(listingRepository).saveAndFlush(captor.capture());
         Listing saved = captor.getValue();
 
         assertThat(saved.getRejectedAt()).isNotNull();
@@ -308,8 +313,8 @@ class ListingWorkflowServiceTest {
                 .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
                         .isEqualTo(ListingErrorCode.REASON_CODE_REQUIRED));
 
-        verify(listingRepository, never()).save(any());
-        verify(statusHistoryRepository, never()).save(any());
+        verify(listingRepository, never()).saveAndFlush(any());
+        verify(statusHistoryRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -324,14 +329,14 @@ class ListingWorkflowServiceTest {
         listing.setTitle("Test");
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.rejectListing(listingId, adminId, "Policy violation");
 
         verify(policy).validate(ListingStatus.LIVE, ListingStatus.REJECTED, ActorType.ADMIN);
 
         ArgumentCaptor<ListingStatusHistory> captor = ArgumentCaptor.forClass(ListingStatusHistory.class);
-        verify(statusHistoryRepository).save(captor.capture());
+        verify(statusHistoryRepository).saveAndFlush(captor.capture());
         ListingStatusHistory history = captor.getValue();
 
         assertThat(history.getFromStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
@@ -708,21 +713,21 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.archiveListing(listingId, actorId, null);
 
         verify(policy).validate(ListingStatus.LIVE, ListingStatus.ARCHIVED, ActorType.BROKER);
 
         ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
-        verify(listingRepository).save(listingCaptor.capture());
+        verify(listingRepository).saveAndFlush(listingCaptor.capture());
         Listing saved = listingCaptor.getValue();
         assertThat(saved.getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
         assertThat(saved.getArchivedAt()).isNotNull();
         assertThat(saved.getUpdatedAt()).isNotNull();
 
         ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
-        verify(statusHistoryRepository).save(historyCaptor.capture());
+        verify(statusHistoryRepository).saveAndFlush(historyCaptor.capture());
         ListingStatusHistory history = historyCaptor.getValue();
         assertThat(history.getListingId()).isEqualTo(listingId);
         assertThat(history.getFromStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
@@ -739,14 +744,14 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.archiveListing(listingId, actorId, null);
 
         verify(policy).validate(ListingStatus.DRAFT, ListingStatus.ARCHIVED, ActorType.BROKER);
 
         ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
-        verify(listingRepository).save(captor.capture());
+        verify(listingRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
         assertThat(captor.getValue().getArchivedAt()).isNotNull();
     }
@@ -758,20 +763,20 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.REJECTED.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.archiveListing(listingId, actorId, "No longer selling");
 
         verify(policy).validate(ListingStatus.REJECTED, ListingStatus.ARCHIVED, ActorType.BROKER);
 
         ArgumentCaptor<Listing> listingCaptor = ArgumentCaptor.forClass(Listing.class);
-        verify(listingRepository).save(listingCaptor.capture());
+        verify(listingRepository).saveAndFlush(listingCaptor.capture());
         Listing saved = listingCaptor.getValue();
         assertThat(saved.getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
         assertThat(saved.getStatusReasonNote()).isEqualTo("No longer selling");
 
         ArgumentCaptor<ListingStatusHistory> historyCaptor = ArgumentCaptor.forClass(ListingStatusHistory.class);
-        verify(statusHistoryRepository).save(historyCaptor.capture());
+        verify(statusHistoryRepository).saveAndFlush(historyCaptor.capture());
         ListingStatusHistory history = historyCaptor.getValue();
         assertThat(history.getFromStatus()).isEqualTo(ListingStatus.REJECTED.toDbValue());
         assertThat(history.getToStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
@@ -792,8 +797,8 @@ class ListingWorkflowServiceTest {
         assertThatThrownBy(() -> workflowService.archiveListing(listingId, actorId, null))
                 .isInstanceOf(ListingStatusException.class);
 
-        verify(listingRepository, never()).save(any());
-        verify(statusHistoryRepository, never()).save(any());
+        verify(listingRepository, never()).saveAndFlush(any());
+        verify(statusHistoryRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -803,12 +808,12 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(listingRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
         workflowService.archiveListing(listingId, actorId, null);
 
         ArgumentCaptor<Listing> captor = ArgumentCaptor.forClass(Listing.class);
-        verify(listingRepository).save(captor.capture());
+        verify(listingRepository).saveAndFlush(captor.capture());
         Listing saved = captor.getValue();
         assertThat(saved.getStatusChangedAt()).isNotNull();
         assertThat(saved.getStatusChangedByActorType()).isEqualTo(ActorType.BROKER);
@@ -2270,7 +2275,7 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenReturn(listing);
+        when(listingRepository.saveAndFlush(any())).thenReturn(listing);
 
         workflowServiceCascadeEnabled().archiveListing(listingId, actorId, null);
 
@@ -2285,7 +2290,7 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.LIVE.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenReturn(listing);
+        when(listingRepository.saveAndFlush(any())).thenReturn(listing);
 
         workflowService.archiveListing(listingId, actorId, null);
 
@@ -2304,7 +2309,7 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.LIVE.toDbValue());
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.save(any())).thenReturn(listing);
+        when(listingRepository.saveAndFlush(any())).thenReturn(listing);
 
         workflowServiceCascadeEnabled().rejectListing(listingId, adminId, "Reason");
 
@@ -2323,7 +2328,7 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
-        when(listingRepository.save(any())).thenReturn(listing);
+        when(listingRepository.saveAndFlush(any())).thenReturn(listing);
 
         workflowServiceCascadeEnabled().rejectListing(listingId, adminId, "Reason");
 
@@ -2408,7 +2413,7 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, actorId, false)).thenReturn(listing);
-        when(listingRepository.save(any())).thenReturn(listing);
+        when(listingRepository.saveAndFlush(any())).thenReturn(listing);
 
         workflowServiceCascadeEnabled().archiveListing(listingId, actorId, null);
 
