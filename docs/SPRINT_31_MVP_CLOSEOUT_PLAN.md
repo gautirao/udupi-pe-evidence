@@ -30,8 +30,10 @@ Follow-up fixes: #596 (E2E selectors), #599 (RLS policy + test data), #601 (Hibe
 | # | Item | Why | Effort |
 |---|------|-----|--------|
 | LB-1 | `property_type` enum to VARCHAR (V61) | Same class of latent persistence risk as #601. Not broken today but a time bomb. | 1h |
-| LB-2 | MSG91 OTP provider | Trust verification sends no real SMS in production. Stub-only. Issue #552. | 3h |
+| LB-2 | Enable Google Sign-In as primary auth | Current auth is email+password only. Google Sign-In is the MVP primary auth per AUTH_STRATEGY_DECISION.md. | 2h |
 | LB-3 | Badge expiry scheduled job | Trust spec requires expiry (Location/Photos=18mo, Authority=12mo). Badges are currently permanent. | 2h |
+
+> **Auth direction change (2026-03-25):** MSG91 OTP provider (#552) was previously LB-2. Reclassified to post-MVP per `docs/AUTH_STRATEGY_DECISION.md`. Google Sign-In replaces it as the launch-critical auth item. Trust OTP stub is acceptable for soft launch.
 
 ### Must-finish before MVP signoff (Sprint 32)
 
@@ -51,6 +53,8 @@ Follow-up fixes: #596 (E2E selectors), #599 (RLS policy + test data), #601 (Hibe
 
 ### Post-MVP / defer
 
+- MSG91 OTP provider — WhatsApp OTP for trust verification (Phase 1.5, issue #552)
+- SMS OTP for login (Phase 2, requires DLT registration)
 - Draw-on-map URL state persistence
 - School search E2E tests
 - Broker reputation model (Phase 2/3)
@@ -63,7 +67,7 @@ Follow-up fixes: #596 (E2E selectors), #599 (RLS policy + test data), #601 (Hibe
 ## Recommended implementation order
 
 1. V61 property_type enum to VARCHAR (same pattern as V60, zero functional change)
-2. MSG91 OTP provider adapter (OtpProvider interface exists, clean adapter)
+2. Enable Google Sign-In (Supabase config + frontend login page update)
 3. Badge expiry scheduled job (new @Scheduled job, no migration)
 4. Trust badges on search cards (trust_tier column exists, render in popup)
 5. Wire guard stubs (connect policy stubs to inline validation)
@@ -72,11 +76,13 @@ Follow-up fixes: #596 (E2E selectors), #599 (RLS policy + test data), #601 (Hibe
 8. Testcontainers integration tests (ListingLifecycleIT)
 9. Commercial spec alignment (doc update)
 
+> MSG91 OTP provider (#552) moved to post-MVP. See `docs/AUTH_STRATEGY_DECISION.md`.
+
 ## Sprint assignment
 
 ### Sprint 31 — Launch blockers
 - V61 property_type enum to VARCHAR
-- MSG91 OTP provider (#552)
+- Enable Google Sign-In as primary auth (new issue)
 - Badge expiry scheduled job
 
 ### Sprint 32 — MVP signoff essentials
