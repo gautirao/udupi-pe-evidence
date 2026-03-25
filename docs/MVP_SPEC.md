@@ -1,7 +1,7 @@
 # MVP Product Specification
 
 **Status**: Draft
-**Last updated**: 2026-02-10
+**Last updated**: 2026-03-25
 **Owner**: Product / Engineering
 
 This is the authoritative MVP spec. All implementation decisions must reference this document.
@@ -14,26 +14,30 @@ This is the authoritative MVP spec. All implementation decisions must reference 
 
 | Role | Description |
 |------|-------------|
-| `user` | Authenticated end-user. Can browse listings, view insights, save areas. |
+| `anonymous` | Unauthenticated visitor. Can see teaser discovery experience only. |
+| `user` | Authenticated end-user. Can browse full listings, view insights, save areas. |
 | `dealer` | Property dealer/agent. Can create and manage own listings. |
 | `admin` | Full system access. Approves listings, manages users, runs ingestion. |
 
 ### 1.2 Permission matrix
 
-| Action | USER | DEALER | ADMIN |
-|--------|:----:|:------:|:-----:|
-| Browse live listings | Y | Y | Y |
-| View listing detail | Y | Y | Y |
-| View insights dashboard | Y | Y | Y |
-| Create listing | - | Y | Y |
-| Edit own listing | - | Y | Y |
-| Delete own draft listing | - | Y | Y |
-| Submit listing for review | - | Y | Y |
-| Approve / reject listing | - | - | Y |
-| View all listings (any status) | - | - | Y |
-| Manage users & roles | - | - | Y |
-| Run ingestion pipeline | - | - | Y |
-| Access dev cleanup tools | - | - | Y |
+| Action | ANONYMOUS | USER | DEALER | ADMIN |
+|--------|:---------:|:----:|:------:|:-----:|
+| View teaser discovery (cards, counts) | Y | Y | Y | Y |
+| Browse full map with markers | - | Y | Y | Y |
+| View listing detail page | - | Y | Y | Y |
+| View insights dashboard | - | Y | Y | Y |
+| Request viewing / book | - | Y | Y | Y |
+| Save areas | - | Y | Y | Y |
+| Create listing | - | - | Y | Y |
+| Edit own listing | - | - | Y | Y |
+| Delete own draft listing | - | - | Y | Y |
+| Submit listing for review | - | - | Y | Y |
+| Approve / reject listing | - | - | - | Y |
+| View all listings (any status) | - | - | - | Y |
+| Manage users & roles | - | - | - | Y |
+| Run ingestion pipeline | - | - | - | Y |
+| Access dev cleanup tools | - | - | - | Y |
 
 ### 1.3 Role storage
 
@@ -43,6 +47,89 @@ This is the authoritative MVP spec. All implementation decisions must reference 
 - A user may have exactly one role
 - Default role on signup: `user`
 - Role promotion (user -> dealer) is admin-only
+
+### 1.4 Authentication
+
+- **Primary auth**: Google Sign-In (see `docs/AUTH_STRATEGY_DECISION.md`)
+- **Fallback auth**: Email + password, email OTP
+- **Phone number**: Collected optionally in profile completion, not required for auth
+- **SMS/WhatsApp OTP**: Post-MVP (deferred due to India DLT regulatory overhead)
+
+### 1.5 Anonymous discovery gating
+
+Anonymous (unauthenticated) visitors see a **teaser discovery experience** designed to demonstrate value and prompt sign-up. Login is required to unlock full property discovery.
+
+#### 1.5.1 What anonymous users CAN see
+
+- **Teaser property cards** in a sidebar or card grid, showing:
+  - Primary photo (thumbnail)
+  - Price
+  - Property type (land, house, apartment, etc.)
+  - City or coarse locality (e.g., "Udupi" or "Manipal")
+- **Aggregate counts**: Total property count for the city, counts by property type
+- **Disabled map**: A grayed-out / visually disabled map background (no interactivity)
+- **Sign-up / login prompt**: Clear CTA to register for full access
+
+#### 1.5.2 What anonymous users CANNOT see
+
+- Exact address or pin location
+- Map markers or coordinate data
+- Full listing detail pages
+- Seller / dealer contact details
+- Full property description
+- Interactive map (polygon draw, search, zoom-to-pin)
+- Insights dashboard
+- Booking / viewing request flows
+- Saved areas
+
+#### 1.5.3 Login-gated actions
+
+The following actions require authentication. If an anonymous user attempts them, they should be redirected to the login page and returned to the intended destination after successful auth.
+
+| Action | Gate behaviour |
+|--------|---------------|
+| Open listing detail page | Redirect to login, return to `/listing/:id` after auth |
+| Click map marker | Prompt login |
+| Use map search / draw / filter tools | Prompt login |
+| Request viewing | Redirect to login |
+| Save an area | Redirect to login |
+| View insights | Redirect to login |
+
+#### 1.5.4 Public teaser data contract
+
+The anonymous teaser endpoint returns a **redacted** listing response. This is intentional to prevent scraping of full property data by unauthenticated clients.
+
+**Allowed teaser fields:**
+
+| Field | Included | Notes |
+|-------|:--------:|-------|
+| `id` | Y | Listing identifier |
+| `primaryImageUrl` | Y | First image only |
+| `price` | Y | Numeric price |
+| `propertyType` | Y | e.g., "house", "apartment" |
+| `city` | Y | Coarse locality only |
+| `listingPurpose` | Y | "sale" or "rent" |
+
+**Explicitly excluded from teaser:**
+
+| Field | Reason |
+|-------|--------|
+| `latitude` / `longitude` | Prevents pin placement on external maps |
+| `locality` (exact) | Coarse city only |
+| `address` / `description` | Prevents address discovery |
+| `contactPhone` / `contactInfo` | Prevents direct seller contact |
+| `sellerType` / `createdBy` | Prevents seller identification |
+| `images` (full array) | Only primary image exposed |
+| `reraNumber` | Detail-level data |
+| `bedrooms` / `builtArea` / `landArea` | Detail-level data |
+
+#### 1.5.5 Map behaviour before login
+
+- The map area is **visually present but disabled**: grayed-out background, no tile interactivity
+- **No markers** are rendered
+- Polygon draw, school search, and filter tools are **not active**
+- The map serves as a visual anchor showing the general region, not as a functional tool
+- A prominent overlay or banner prompts the user to sign in for full map access
 
 ---
 
@@ -94,6 +181,7 @@ Scraped listings (ingestion pipeline):
 - For `SCRAPED` listings, visibility continues to be governed by `is_valid = true`
 - For dealer-created listings, visibility is governed by `status = 'LIVE'`
 - Public listing queries: `WHERE status = 'LIVE' OR (status = 'SCRAPED' AND is_valid = true)`
+- **Anonymous access**: Public listing endpoints serving anonymous users return redacted teaser data only (see section 1.5.4). Full listing data requires authentication.
 
 ---
 
@@ -312,6 +400,8 @@ These guarantees are **non-negotiable**. Any PR that violates them must be rever
 | Video upload | Complexity + storage cost. Images only. |
 | Google Maps API | Using OSM/Leaflet (free). No paid map services. |
 | Email / SMS notifications | In-app only for MVP. Email can be Phase 2. |
+| SMS / WhatsApp OTP for login | Google Sign-In + email for MVP. Phone OTP deferred (see `docs/AUTH_STRATEGY_DECISION.md`). |
+| Anonymous full property access | Anonymous users see teaser only. Full access requires login (see section 1.5). |
 | ML-based recommendations | Deterministic heuristic only. No model training/inference. |
 | Payment / subscription | Free for MVP. Monetization is post-MVP. |
 | Multi-language UI | English only. Content may be in Kannada (from scraping). |
