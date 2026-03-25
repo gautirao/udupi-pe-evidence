@@ -16,37 +16,37 @@ This is the authoritative MVP spec. All implementation decisions must reference 
 |------|-------------|
 | `anonymous` | Unauthenticated visitor. Can see teaser discovery experience only. |
 | `user` | Authenticated end-user. Can browse full listings, view insights, save areas. |
-| `dealer` | Property dealer/agent. Can create and manage own listings. |
+| `broker` | Property broker/agent. Can create and manage own listings. |
 | `admin` | Full system access. Approves listings, manages users, runs ingestion. |
 
 ### 1.2 Permission matrix
 
-| Action | ANONYMOUS | USER | DEALER | ADMIN |
+| Action | ANONYMOUS | USER | BROKER | ADMIN |
 |--------|:---------:|:----:|:------:|:-----:|
-| View teaser discovery (cards, counts) | Y | Y | Y | Y |
-| Browse full map with markers | - | Y | Y | Y |
-| View listing detail page | - | Y | Y | Y |
-| View insights dashboard | - | Y | Y | Y |
-| Request viewing / book | - | Y | Y | Y |
-| Save areas | - | Y | Y | Y |
-| Create listing | - | - | Y | Y |
-| Edit own listing | - | - | Y | Y |
-| Delete own draft listing | - | - | Y | Y |
-| Submit listing for review | - | - | Y | Y |
-| Approve / reject listing | - | - | - | Y |
-| View all listings (any status) | - | - | - | Y |
-| Manage users & roles | - | - | - | Y |
-| Run ingestion pipeline | - | - | - | Y |
-| Access dev cleanup tools | - | - | - | Y |
+| View teaser discovery (cards, counts) | Y | Y |   Y    | Y |
+| Browse full map with markers | - | Y |   Y    | Y |
+| View listing detail page | - | Y |   Y    | Y |
+| View insights dashboard | - | Y |   Y    | Y |
+| Request viewing / book | - | Y |   Y    | Y |
+| Save areas | - | Y |   Y    | Y |
+| Create listing | - | - |   Y    | Y |
+| Edit own listing | - | - |   Y    | Y |
+| Delete own draft listing | - | - |   Y    | Y |
+| Submit listing for review | - | - |   Y    | Y |
+| Approve / reject listing | - | - |   -    | Y |
+| View all listings (any status) | - | - |   -    | Y |
+| Manage users & roles | - | - |   -    | Y |
+| Run ingestion pipeline | - | - |   -    | Y |
+| Access dev cleanup tools | - | - |   -    | Y |
 
 ### 1.3 Role storage
 
 - Roles stored in `user_roles` table (existing)
 - Current enum: `app_role = ('admin', 'user')`
-- **MVP change**: Add `'dealer'` to the `app_role` enum
+- **MVP change**: Add `'broker'` to the `app_role` enum
 - A user may have exactly one role
 - Default role on signup: `user`
-- Role promotion (user -> dealer) is admin-only
+- Role promotion (user -> broker) is admin-only
 
 ### 1.4 Authentication
 
@@ -75,7 +75,7 @@ Anonymous (unauthenticated) visitors see a **teaser discovery experience** desig
 - Exact address or pin location
 - Map markers or coordinate data
 - Full listing detail pages
-- Seller / dealer contact details
+- Seller / broker contact details
 - Full property description
 - Interactive map (polygon draw, search, zoom-to-pin)
 - Insights dashboard
@@ -139,18 +139,18 @@ The anonymous teaser endpoint returns a **redacted** listing response. This is i
 
 New enum: `listing_status`
 
-| Status | Description |
-|--------|-------------|
-| `DRAFT` | Created by dealer, not yet submitted. Can be edited freely. |
-| `PENDING_REVIEW` | Submitted by dealer. Waiting for admin approval. Locked from edits. |
-| `LIVE` | Approved by admin. Visible to all users. |
-| `REJECTED` | Rejected by admin with reason. Dealer can edit and resubmit. |
-| `SCRAPED` | Created by ingestion pipeline. Not subject to dealer validation rules. |
+| Status | Description                                                            |
+|--------|------------------------------------------------------------------------|
+| `DRAFT` | Created by broker, not yet submitted. Can be edited freely.            |
+| `PENDING_REVIEW` | Submitted by broker. Waiting for admin approval. Locked from edits.    |
+| `LIVE` | Approved by admin. Visible to all users.                               |
+| `REJECTED` | Rejected by admin with reason. Broker can edit and resubmit.           |
+| `SCRAPED` | Created by ingestion pipeline. Not subject to broker validation rules. |
 
 ### 2.2 Status transitions
 
 ```
-Dealer-created listings:
+Broker-created listings:
 
   DRAFT ──submit──> PENDING_REVIEW ──approve──> LIVE
                          │
@@ -165,21 +165,21 @@ Scraped listings (ingestion pipeline):
 
 ### 2.3 Transition rules
 
-| From | To | Actor | Conditions |
-|------|----|-------|------------|
-| DRAFT | PENDING_REVIEW | Dealer | All validation rules pass (see section 3) |
-| PENDING_REVIEW | LIVE | Admin | Admin approves |
-| PENDING_REVIEW | REJECTED | Admin | Admin rejects with reason (required) |
-| REJECTED | PENDING_REVIEW | Dealer | Dealer edits and resubmits; validation rules must pass |
-| DRAFT | (deleted) | Dealer | Dealer deletes own draft |
-| SCRAPED | LIVE | Admin | Admin manually approves (existing flow) |
+| From | To | Actor  | Conditions |
+|------|----|--------|------------|
+| DRAFT | PENDING_REVIEW | Broker | All validation rules pass (see section 3) |
+| PENDING_REVIEW | LIVE | Admin  | Admin approves |
+| PENDING_REVIEW | REJECTED | Admin  | Admin rejects with reason (required) |
+| REJECTED | PENDING_REVIEW | Broker | Broker edits and resubmits; validation rules must pass |
+| DRAFT | (deleted) | Broker | Broker deletes own draft |
+| SCRAPED | LIVE | Admin  | Admin manually approves (existing flow) |
 
 ### 2.4 Backward compatibility
 
 - Existing listings created by the ingestion pipeline get status `SCRAPED`
 - The `is_valid` and `confidence_score` fields are **retained** for scraped listings
 - For `SCRAPED` listings, visibility continues to be governed by `is_valid = true`
-- For dealer-created listings, visibility is governed by `status = 'LIVE'`
+- For broker-created listings, visibility is governed by `status = 'LIVE'`
 - Public listing queries: `WHERE status = 'LIVE' OR (status = 'SCRAPED' AND is_valid = true)`
 - **Anonymous access**: Public listing endpoints serving anonymous users return redacted teaser data only (see section 1.5.4). Full listing data requires authentication.
 
@@ -187,7 +187,7 @@ Scraped listings (ingestion pipeline):
 
 ## 3. Listing Validation Rules
 
-### 3.1 Always required (all property types, dealer-created only)
+### 3.1 Always required (all property types, broker-created only)
 
 | Field | Rule |
 |-------|------|
@@ -197,7 +197,7 @@ Scraped listings (ingestion pipeline):
 | Address | Must be geocoded + pin confirmed (see section 5) |
 | Images | Minimum 3 uploaded images (see section 6) |
 
-### 3.2 Required by property type (dealer-created only)
+### 3.2 Required by property type (broker-created only)
 
 | Property Type | Additional Required Fields |
 |---------------|--------------------------|
@@ -208,7 +208,7 @@ Scraped listings (ingestion pipeline):
 
 ### 3.3 Scraped listing exemptions
 
-Scraped listings (from ingestion pipeline) are **exempt** from all dealer validation rules:
+Scraped listings (from ingestion pipeline) are **exempt** from all broker validation rules:
 - No minimum image count
 - No address pin confirmation
 - No required fields beyond what the AI extracts
@@ -228,8 +228,8 @@ No email, SMS, or push notifications in MVP. All notifications are stored in a `
 
 | Event | Recipient | Message |
 |-------|-----------|---------|
-| Listing approved (PENDING_REVIEW -> LIVE) | Dealer (listing owner) | "Your listing '{title}' has been approved and is now live." |
-| Listing rejected (PENDING_REVIEW -> REJECTED) | Dealer (listing owner) | "Your listing '{title}' was rejected. Reason: {reason}" |
+| Listing approved (PENDING_REVIEW -> LIVE) | Broker (listing owner) | "Your listing '{title}' has been approved and is now live." |
+| Listing rejected (PENDING_REVIEW -> REJECTED) | Broker (listing owner) | "Your listing '{title}' was rejected. Reason: {reason}" |
 | New listing pending review | All admins | "New listing '{title}' is pending review." |
 
 ### 4.3 Notification data model
@@ -250,13 +250,13 @@ notifications table:
 
 ## 5. Address Validation (Geocode + Pin Confirmation)
 
-### 5.1 Flow for dealer-created listings
+### 5.1 Flow for broker-created listings
 
-1. Dealer enters address text (locality / area name)
+1. broker enters address text (locality / area name)
 2. Frontend geocodes via Nominatim OSM API (same as existing `geocode-missing` logic)
 3. Map shows pin at geocoded location
-4. Dealer can drag pin to correct position
-5. Dealer clicks "Confirm location"
+4. Broker can drag pin to correct position
+5. Broker clicks "Confirm location"
 6. Both geocoded coordinates and `address_confirmed = true` are saved
 
 ### 5.2 Data fields
@@ -265,7 +265,7 @@ notifications table:
 |-------|------|-------------|
 | `latitude` | DOUBLE | Existing field |
 | `longitude` | DOUBLE | Existing field |
-| `address_confirmed` | BOOLEAN | New field. True = dealer confirmed pin position. |
+| `address_confirmed` | BOOLEAN | New field. True = broker confirmed pin position. |
 
 ### 5.3 Rules
 
@@ -305,7 +305,7 @@ listing_images table:
 
 ### 6.4 Rules
 
-- Only listing owner (dealer) or admin can upload/delete images
+- Only listing owner (broker) or admin can upload/delete images
 - Images uploaded during DRAFT or REJECTED status only
 - Accepted formats: JPEG, PNG, WebP
 - Max file size: 5 MB per image
@@ -383,7 +383,7 @@ These guarantees are **non-negotiable**. Any PR that violates them must be rever
 
 - New columns on `property_listings` must have `DEFAULT` values (e.g., `status DEFAULT 'SCRAPED'`)
 - New tables (notifications, listing_images, user_saved_areas) do not affect existing tables
-- New enum values (`dealer` role, `listing_status`) are additive only
+- New enum values (`broker` role, `listing_status`) are additive only
 
 ### 8.3 Migration safety
 
@@ -408,7 +408,7 @@ These guarantees are **non-negotiable**. Any PR that violates them must be rever
 | Mobile app | Web-only (responsive). |
 | Real-time updates (WebSocket) | Polling / manual refresh for MVP. |
 | Listing expiry / auto-archive | Manual management only. |
-| Dealer verification / KYC | Admin manually promotes users to dealer role. |
+| Broker verification / KYC | Admin manually promotes users to broker role. |
 | Public API | Internal use only. No third-party API access. |
 | Image moderation | Manual review by admin only. |
 
@@ -425,10 +425,10 @@ These guarantees are **non-negotiable**. Any PR that violates them must be rever
 - `submitted_at` TIMESTAMPTZ
 - `reviewed_at` TIMESTAMPTZ
 - `reviewed_by` UUID FK -> auth.users
-- `created_by` UUID FK -> auth.users (dealer who created; NULL for scraped)
+- `created_by` UUID FK -> auth.users (broker who created; NULL for scraped)
 - `title` TEXT (explicit column; currently only in frontend interface)
 
-**`app_role` enum**: Add `'dealer'` value
+**`app_role` enum**: Add `'broker'` value
 
 ### 10.2 New tables
 
@@ -447,8 +447,8 @@ These guarantees are **non-negotiable**. Any PR that violates them must be rever
 | Term | Meaning |
 |------|---------|
 | Scraped listing | A listing created by the Chrome extension + AI pipeline |
-| Dealer listing | A listing manually created by a dealer through the UI |
-| Pin confirmation | Dealer visually confirms geocoded map pin is correct |
+| Broker listing | A listing manually created by a broker through the UI |
+| Pin confirmation | Broker visually confirms geocoded map pin is correct |
 | area_key | Canonical area identifier: `country\|region\|city\|locality` |
 | price_paise | Price in 1/100 of a rupee (canonical price field) |
 | cent | Land area unit: 1 cent = 435.6 sq ft |
