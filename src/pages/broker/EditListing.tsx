@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X, Link } from 'lucide-react';
+import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X, Link, AlertTriangle } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/broker/ImageUploader';
@@ -28,6 +28,7 @@ import { AddressPicker } from '@/components/broker/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/broker/StepIndicator';
 import { ApiError } from '@/lib/api';
+import { formatListingId } from '@/lib/listing-id';
 
 const VIDEO_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
@@ -400,19 +401,38 @@ export default function EditListing() {
         {/* Page header */}
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-bold">Edit Listing</h1>
+            <h1 className="text-2xl font-bold">
+              {listing.status === 'REJECTED' ? 'Fix & Resubmit Listing' : 'Edit Listing'}
+            </h1>
             <Badge variant={statusBadgeVariant}>{listing.status}</Badge>
+            {listing.listingNumber != null && (
+              <span className="text-xs text-muted-foreground font-mono">
+                {formatListingId(listing.listingNumber)}
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             Complete all sections below before submitting for review.
           </p>
         </div>
 
+        {/* Rejection reason alert — only shown for REJECTED listings with a reason */}
+        {listing.status === 'REJECTED' && listing.rejectionReason && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <span className="font-medium">Rejection reason: </span>
+              {listing.rejectionReason}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Step indicator */}
         <StepIndicator
           steps={steps}
           currentStep={currentStep}
           onStepClick={handleStepClick}
+          helperText="Complete each step, then submit for admin review."
         />
 
         {/* ── Step 1: Describe ── */}
@@ -772,9 +792,10 @@ export default function EditListing() {
                 {/* Video link section */}
                 <Separator className="my-4" />
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Property Video (optional)</Label>
+                  <Label htmlFor="videoUrl" className="text-sm font-medium">Property Video (optional)</Label>
                   <p className="text-xs text-muted-foreground">YouTube or Instagram Reel link</p>
                   <Input
+                    id="videoUrl"
                     type="url"
                     inputMode="url"
                     autoComplete="off"
@@ -851,10 +872,19 @@ export default function EditListing() {
                     }
                   }}
                 />
-                <div className="flex justify-end pt-4 border-t">
-                  <Button type="button" onClick={handleStep3Continue}>
+                <div className="flex flex-col items-end pt-4 border-t gap-1">
+                  <Button
+                    type="button"
+                    onClick={handleStep3Continue}
+                    disabled={!listing.addressConfirmed}
+                  >
                     Save & Continue
                   </Button>
+                  {!listing.addressConfirmed && (
+                    <p className="text-sm text-muted-foreground">
+                      Confirm your pin location on the map to continue.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

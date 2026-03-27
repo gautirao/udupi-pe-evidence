@@ -51,6 +51,8 @@ export default function NewListing() {
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
   const [title, setTitle] = useState('');
   const [priceRupees, setPriceRupees] = useState<number | null>(null);
+  // Tracks whether the user has attempted to submit — gates inline field errors
+  const [hasAttempted, setHasAttempted] = useState(false);
   const [description, setDescription] = useState('');
 
   // Listing purpose: sale (default) or rent
@@ -106,23 +108,15 @@ export default function NewListing() {
   const canSubmit = propertyType !== '' && priceValid;
 
   const handleSaveDraft = async () => {
+    setHasAttempted(true);
+
     if (!propertyType) return;
 
     if (!isRent && (!priceRupees || priceRupees <= 0)) {
-      toast({
-        title: 'Invalid price',
-        description: 'Please enter a valid price greater than 0.',
-        variant: 'destructive',
-      });
       return;
     }
 
     if (isRent && (!monthlyRent || parseInt(monthlyRent, 10) <= 0)) {
-      toast({
-        title: 'Invalid rent',
-        description: 'Please enter a valid monthly rent greater than 0.',
-        variant: 'destructive',
-      });
       return;
     }
 
@@ -191,6 +185,7 @@ export default function NewListing() {
             ]}
             currentStep={1}
             onStepClick={(n) => { if (n <= 1) { /* no-op: only step 1 available */ } }}
+            helperText="Complete step 1 to unlock the remaining steps."
           />
           <CardContent className="space-y-6">
             {/* Property Type */}
@@ -211,6 +206,9 @@ export default function NewListing() {
                   ))}
                 </SelectContent>
               </Select>
+              {hasAttempted && !propertyType && (
+                <p className="text-sm text-destructive">Property type is required.</p>
+              )}
             </div>
 
             {/* Listing Purpose (Sale / Rent) */}
@@ -433,12 +431,17 @@ export default function NewListing() {
 
                 {/* Price — for sale listings */}
                 {!isRent && (
-                  <PriceField
-                    id="price"
-                    initialRupees={null}
-                    onChange={setPriceRupees}
-                    required
-                  />
+                  <div>
+                    <PriceField
+                      id="price"
+                      initialRupees={null}
+                      onChange={setPriceRupees}
+                      required
+                    />
+                    {hasAttempted && (priceRupees == null || priceRupees <= 0) && (
+                      <p className="text-sm text-destructive mt-1">A valid price greater than 0 is required.</p>
+                    )}
+                  </div>
                 )}
 
                 {/* Rent fields */}
@@ -455,6 +458,9 @@ export default function NewListing() {
                         value={monthlyRent}
                         onChange={(e) => setMonthlyRent(e.target.value)}
                       />
+                      {hasAttempted && (!monthlyRent || parseInt(monthlyRent, 10) <= 0) && (
+                        <p className="text-sm text-destructive">Monthly rent must be greater than 0.</p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">

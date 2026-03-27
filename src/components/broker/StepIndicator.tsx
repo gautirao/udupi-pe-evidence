@@ -9,11 +9,14 @@ interface StepIndicatorProps {
   steps: Step[];
   currentStep: number; // 1-based
   onStepClick: (stepNumber: number) => void;
+  /** Optional helper text rendered below the step row */
+  helperText?: string;
 }
 
-export function StepIndicator({ steps, currentStep, onStepClick }: StepIndicatorProps) {
+export function StepIndicator({ steps, currentStep, onStepClick, helperText }: StepIndicatorProps) {
   return (
-    <div className="flex items-center justify-center gap-0 px-6 pb-4" role="list">
+    <div className="flex flex-col items-center px-6 pb-4">
+    <div className="flex items-center justify-center gap-0 w-full" role="list">
       {steps.map((step, i) => {
         const stepNumber = i + 1;
         const isActive = stepNumber === currentStep;
@@ -55,6 +58,10 @@ export function StepIndicator({ steps, currentStep, onStepClick }: StepIndicator
           </div>
         );
       })}
+    </div>
+    {helperText && (
+      <p className="text-xs text-muted-foreground mt-1">{helperText}</p>
+    )}
     </div>
   );
 }

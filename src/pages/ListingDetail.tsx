@@ -4,6 +4,7 @@ import { api } from '@/lib/api';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
@@ -275,6 +276,17 @@ export default function ListingDetail() {
           );
         })()}
 
+        {/* Rejection reason — shown in preview mode for REJECTED listings */}
+        {isPreview && listing.status === 'REJECTED' && listing.rejectionReason && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <span className="font-medium">Rejection reason: </span>
+              {listing.rejectionReason}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <Button variant="ghost" onClick={() => navigate(isPreview ? '/broker/listings' : '/')}>
@@ -379,14 +391,28 @@ export default function ListingDetail() {
 
           {/* Thumbnail strip */}
           {images.length > 1 && (
-            <div className="flex gap-2 p-3 overflow-x-auto bg-muted/30">
+            <div
+              className="flex gap-2 p-3 overflow-x-auto bg-muted/30"
+              role="tablist"
+              aria-label="Image thumbnails"
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight') {
+                  setCurrentImageIndex((prev) => (prev + 1) % images.length);
+                } else if (e.key === 'ArrowLeft') {
+                  setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
+                }
+              }}
+            >
               {images.map((img, idx) => (
                 <button
                   key={idx}
+                  role="tab"
+                  aria-selected={idx === currentImageIndex}
+                  aria-label={`Image ${idx + 1}`}
                   onClick={() => setCurrentImageIndex(idx)}
                   className={`flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-colors ${
-                    idx === currentImageIndex 
-                      ? 'border-primary' 
+                    idx === currentImageIndex
+                      ? 'border-primary'
                       : 'border-transparent hover:border-muted-foreground/30'
                   }`}
                 >
