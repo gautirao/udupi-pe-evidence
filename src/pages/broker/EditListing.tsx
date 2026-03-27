@@ -29,6 +29,9 @@ import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/broker/StepIndicator';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
+import { PROPERTY_TYPES, COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
+import type { PropertyType } from '@/lib/listing-constants';
+import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 
 const VIDEO_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
@@ -43,26 +46,6 @@ function extractYouTubeId(url: string): string | null {
 function isInstagramUrl(url: string): boolean {
   return /instagram\.com\/(reel|p)\//.test(url);
 }
-
-const PROPERTY_TYPES = [
-  { value: 'land', label: 'Land' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'house', label: 'House' },
-  { value: 'commercial', label: 'Commercial Shop/Office' },
-  { value: 'commercial_building', label: 'Commercial Building' },
-  { value: 'warehouse', label: 'Warehouse / Godown' },
-  { value: 'commercial_land', label: 'Commercial Land' },
-] as const;
-
-type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
-
-const COMMERCIAL_TYPES = new Set(['commercial', 'commercial_building', 'warehouse', 'commercial_land']);
-
-const FURNISHING_OPTIONS = [
-  { value: 'unfurnished', label: 'Unfurnished' },
-  { value: 'semi_furnished', label: 'Semi Furnished' },
-  { value: 'furnished', label: 'Furnished' },
-];
 
 const LOCKED_STATUSES = ['PENDING_REVIEW', 'LIVE'];
 const SUBMITTABLE_STATUSES = ['DRAFT', 'REJECTED'];
@@ -282,8 +265,6 @@ export default function EditListing() {
     setBuiltAreaUnitError('');
 
     const carpetAreaVal = carpetArea != null && carpetArea > 0 ? carpetArea : undefined;
-    const intOrUndef = (v: string) => { const n = parseInt(v, 10); return !isNaN(n) && n > 0 ? n : undefined; };
-    const floatOrUndef = (v: string) => { const n = parseFloat(v); return !isNaN(n) && n > 0 ? n : undefined; };
 
     updateListing.mutate(
       {

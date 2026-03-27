@@ -75,11 +75,11 @@ Project item IDs:
 #617 → PVTI_lAHOAAVnaM4BSWI7zgofiOY
 #618 → PVTI_lAHOAAVnaM4BSWI7zgofiOc
 
-Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624 | #609 ✅ PR #625
+Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624 | #609 ✅ PR #625 | #378 ✅ PR #626
 
-Remaining execution order: #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
+Remaining execution order: #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
 
-Status: IN_PROGRESS · 7/16 complete
+Status: IN_PROGRESS · 8/16 complete
 
-Next PR: #378 — [RE-82] Dealer UX: Mobile-First Responsive Design for Listing Management
+Next PR: #488 — [RE-180] Extract shared listing form constants from NewListing/EditListing (F-6)
 === ROLLING CHECKPOINT END ===

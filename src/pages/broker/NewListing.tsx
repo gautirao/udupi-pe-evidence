@@ -21,26 +21,9 @@ import {
 // Alert removed — commercial types are now fully supported
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-const PROPERTY_TYPES = [
-  { value: 'land', label: 'Land' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'house', label: 'House' },
-  { value: 'commercial', label: 'Commercial Shop/Office' },
-  { value: 'commercial_building', label: 'Commercial Building' },
-  { value: 'warehouse', label: 'Warehouse / Godown' },
-  { value: 'commercial_land', label: 'Commercial Land' },
-] as const;
-
-type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
-
-const COMMERCIAL_TYPES = new Set(['commercial', 'commercial_building', 'warehouse', 'commercial_land']);
-
-const FURNISHING_OPTIONS = [
-  { value: 'unfurnished', label: 'Unfurnished' },
-  { value: 'semi_furnished', label: 'Semi Furnished' },
-  { value: 'furnished', label: 'Furnished' },
-];
+import { PROPERTY_TYPES, COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
+import type { PropertyType } from '@/lib/listing-constants';
+import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 
 export default function NewListing() {
   const { userRole, isLoading: authLoading } = useAuth();
@@ -124,8 +107,6 @@ export default function NewListing() {
     const resolvedLandArea = landArea != null && landArea > 0 ? landArea : undefined;
     const resolvedBuiltArea = builtArea != null && builtArea > 0 ? builtArea : undefined;
     const resolvedCarpetArea = carpetArea != null && carpetArea > 0 ? carpetArea : undefined;
-    const intOrUndef = (v: string) => { const n = parseInt(v, 10); return !isNaN(n) && n > 0 ? n : undefined; };
-    const floatOrUndef = (v: string) => { const n = parseFloat(v); return !isNaN(n) && n > 0 ? n : undefined; };
 
     createListing.mutate(
       {
