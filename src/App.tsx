@@ -11,6 +11,7 @@ import { Loader2 } from "lucide-react";
 // Eagerly loaded — these are on the critical path for first paint
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 import ListingDetail from "./pages/ListingDetail";
 
@@ -83,6 +84,7 @@ const App = () => (
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route
                 path="/"
                 element={
