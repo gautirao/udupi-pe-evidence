@@ -8,7 +8,7 @@ Use this when a new issue needs to be inserted into an already-running sprint.
 Add RE-XX to the current sprint.
 
 Use SPRINT_EXECUTOR_ROLLING_CHECKPOINT mid-sprint addition protocol:
-1. Fetch RE-XX from Linear
+1. Fetch RE-XX from GitHub Issues
 2. Run spec-enricher — show full output before proceeding
 3. Run lightweight team-lead conflict check against completed/in-progress work
 4. Update checkpoint with new enriched spec and revised execution order

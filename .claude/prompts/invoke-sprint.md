@@ -1,6 +1,6 @@
 # Sprint Execution Prompt
 
-Use this when you have a set of Linear issues to execute as a sprint.
+Use this when you have a set of GitHub issues to execute as a sprint.
 
 ## Prompt
 

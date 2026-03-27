@@ -74,8 +74,9 @@ Before the first PR:
    `spec-enricher` runs on `opus` regardless of your current model — consistent quality is the reason it is a dedicated agent.
 
    - `spec-enricher` prints its full output to the conversation (all spec blocks + summary + any spec gaps). **Do not suppress or paraphrase this output** — the user must be able to read every enriched spec before team-lead runs.
-   - Store all enriched spec blocks in the checkpoint preamble as `Enriched specs:` — one block per issue.
+   - Write all enriched spec blocks to `.claude/sprint-enriched-specs.md` (one section per issue, format: `## [RE-XX] Title\nAC:\n- [ ] ...\nOut of scope: ...\nKey unknowns: ...`). In the checkpoint preamble, write: `Enriched specs: SEE .claude/sprint-enriched-specs.md`.
    - These specs are the authoritative input to team-lead, qa-fast, and engineers for the rest of the sprint. Do NOT re-derive them per-PR.
+   - When passing enriched spec context to any agent, read only the relevant issue's section from `sprint-enriched-specs.md` — do NOT load all specs.
 
 4. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, descriptions, AND enriched specs as context:
    > "Sprint issues: [paste all issue IDs + titles + descriptions + enriched specs]. Run Mode 1: Sprint Kickoff Analysis."
@@ -95,7 +96,7 @@ Before the first PR:
    - After the first PR: use a shortened qa-fast prompt: "Sprint qa-fast context: codebase was scanned during the first sprint PR. Focus on: selector fragility, auth fixture reuse, data isolation, and any files or flows NOT yet reviewed for [current issue title]. Do not re-scan shared config already surveyed this sprint. Issue-specific risks must still be surfaced."
    - If any PR's enriched spec reveals a non-homogeneous concern (e.g., a production code change beyond testability hooks), invalidate the cache for that PR only — full triage re-derivation applies.
 
-**5b. Write initial checkpoint** — before starting the first PR, write the full preamble checkpoint to `.claude/SPRINT_CHECKPOINT.md` using the CHECKPOINT Format below. Include: Sprint name, iteration ID, Project item IDs map, Sprint issues, Execution order, Dependencies, and all Enriched specs. Set `Status: STARTING` and `Next PR: <first issue>`. This protects enriched specs and team-lead output against context compaction before any PR work begins.
+**5b. Write initial checkpoint** — before starting the first PR, write the full preamble checkpoint to `.claude/SPRINT_CHECKPOINT.md` using the CHECKPOINT Format below. Include: Sprint name, iteration ID, Project item IDs map, Sprint issues, Execution order, Dependencies. Set `Enriched specs: SEE .claude/sprint-enriched-specs.md`. Set `Status: STARTING` and `Next PR: <first issue>`. Also update `.claude/STATE.md`: set "Active sprint" and "Sprint status: IN_PROGRESS · 0/N complete".
 
 5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original GitHub Project iteration order.
 6. Do NOT re-fetch individual issues each PR. Use cached descriptions from step 2 and enriched specs from step 3. Re-fetch only if the checkpoint is stale. A checkpoint is stale when any of the following are true:
@@ -228,17 +229,34 @@ For each GitHub issue (PR N):
    - **CI red — code failure** (test failures, compile errors, lint errors, type errors, missing dependencies): play `afplay /System/Library/Sounds/Ping.aiff`, surface to user: "CI code failure on PR #NNN: [failure detail]. This passed local E2E but fails in CI. Investigate before continuing?" This is advisory — the user decides whether to continue or pause.
 
 9. **Emit checkpoint + persist to file**
-   - **Conversation output:** use the slim checkpoint format (omitting Sprint issues, Execution order, Dependencies, Enriched specs — already established in preamble). Full format only for the first checkpoint of a sprint.
-   - **File output:** always write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — preamble format with Sprint issues, Execution order, Dependencies, and ALL enriched specs for remaining issues. This file is the authoritative resume source and must be self-contained (readable by a fresh conversation with no prior history).
+   - **Conversation output:** use the slim checkpoint format (omitting Sprint issues, Execution order, Dependencies — already established in preamble). Full format only for the first checkpoint of a sprint.
+   - **File output:** always write the FULL checkpoint to `.claude/SPRINT_CHECKPOINT.md` — preamble format with Sprint issues, Execution order, Dependencies. Enriched specs stay in `sprint-enriched-specs.md` — do NOT inline them in the checkpoint. The checkpoint is self-contained for execution state; the spec file is the source of truth for AC content.
    - **Propagate sprint memory fields:** After recording Key decisions for the completed PR:
      - If a decision establishes a pattern for remaining PRs (selector strategy, auth fixture approach, page object location, wait strategy): copy it to `Sprint-level conventions:` in the preamble. Do not add one-off facts here.
      - If a decision is a one-off state (quarantined spec, deferred AC, partial completion, temporary workaround): copy it to `Known temporary exceptions:` in the preamble.
    - Include both fields in the qa engineer Task prompt for the **next PR** — add verbatim after the enriched spec: "Sprint-level conventions from completed PRs: [paste]. Known temporary exceptions: [paste]. Follow conventions. If deviating, state why in Key decisions."
 
-**9a. Compact before next PR (conditional)**
-   - After writing the checkpoint file, invoke `/compact` only if context growth is making responses noticeably slower or the conversation is approaching context limits.
-   - After compaction, read `.claude/SPRINT_CHECKPOINT.md` to restore full sprint context before starting the next PR.
-   - If context is still lean, skip compaction and continue — the checkpoint file is the fallback on automatic context compression regardless.
+**9b. Append ship log entry** — after the checkpoint write, append a brief entry to `.claude/SHIP_LOG.md`:
+   ```
+   ## PR #NNN — Issue title
+   Date: YYYY-MM-DD | Sprint: <sprint name> | Route: <agent chain from checkpoint>
+   - What: <1–3 bullets from Touched files + Key decisions>
+   - Why: <1 sentence from issue title/spec>
+   - Deviations: <OUT OF SCOPE ACs from Spec invalidation field, or NONE>
+   - Risks: <items from Risks field, or NONE>
+   ---
+   ```
+   Source fields directly from the checkpoint just written — do NOT re-derive.
+
+**9c. Update STATE.md** — update `.claude/STATE.md`:
+   - Increment "Sprint status" count (e.g. `IN_PROGRESS · 3/8 complete`)
+   - Add this PR to "Recent Completions" (keep last 5)
+
+**9d. Compact before next PR (conditional)**
+   - **Default threshold:** after writing the checkpoint, count tool calls since last `/compact`. If >50, invoke `/compact`.
+   - **Compact earlier** if context is obviously bloated (large reviewer findings, multiple engineer re-invocations this PR) or if task shape changed significantly (e.g. switching from backend to frontend domain).
+   - After compaction, read in this order: `.claude/STATE.md`, `.claude/SPRINT_CHECKPOINT.md`, and only the next issue's section from `.claude/sprint-enriched-specs.md`. Do NOT re-read all enriched specs or prior PR evidence.
+   - If below threshold and context is lean, skip compaction and continue — the checkpoint file is the fallback on automatic context compression regardless.
 
 ---
 
@@ -339,6 +357,7 @@ Project item IDs: #NNN → <item-id> | #NNN → <item-id> | ... (all sprint issu
 Sprint issues: <#NNN Title | #NNN Title | ...> (all issues, one line, GitHub issue numbers)
 Execution order: <#NNN | #NNN | ...> (team-lead recommended order, or ORIGINAL if no reorder)
 Dependencies: <RE-XX depends on RE-YY [confirmed|likely|speculative] | NONE>
+Enriched specs: SEE .claude/sprint-enriched-specs.md
 Last completed PR: <id + title>
 Current PR: <#NNN RE-XX title | NONE> (set to NONE when step completes; set to issue being started at step 1b)
 Status: <DONE|IN_PROGRESS|BLOCKED|NEEDS FOLLOW-UP|SPRINT COMPLETE>
@@ -439,15 +458,17 @@ Resume is triggered by any of:
 
 On resume:
 
-1. **Read `.claude/SPRINT_CHECKPOINT.md`** — this is the authoritative sprint state. If the user also pastes a checkpoint in conversation, prefer the file version (it uses full preamble format with enriched specs).
+1. **Read `.claude/STATE.md`** — project/session context (active sprint, blockers, recent completions, resume action). ~25 lines.
+2. **Read `.claude/SPRINT_CHECKPOINT.md`** — authoritative sprint execution state. If the user also pastes a checkpoint in conversation, prefer the file version.
    **If `Status: IN_PROGRESS`** — a PR was in-flight when context was lost. Follow the in-flight recovery protocol in Execution Loop step 1b before proceeding to any new work.
-2. Treat checkpoint as authoritative state (it overrides conversational memory).
-3. Do NOT infer prior context outside checkpoint.
-4. Do NOT re-triage completed PRs.
-5. Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from GitHub Project unless the checkpoint is stale.
-6. Use `Enriched specs:` from the checkpoint as the authoritative AC for remaining issues — do NOT re-derive them.
+3. **Read the next issue's spec from `.claude/sprint-enriched-specs.md`** — read only the section for the Next PR. Do NOT load all specs. Total resume context: ~85 lines.
+4. Treat checkpoint as authoritative state (it overrides conversational memory).
+5. Do NOT infer prior context outside checkpoint.
+6. Do NOT re-triage completed PRs.
+7. Use `Sprint issues:` list to know remaining work — do NOT re-fetch the full sprint from GitHub Project unless the checkpoint is stale.
+8. Use `sprint-enriched-specs.md` as the authoritative AC for remaining issues — do NOT re-derive them.
 
-**6a. Enriched specs absent:** If `Enriched specs:` is absent from the checkpoint preamble (e.g., checkpoint was written before enrichment ran, or this is an older-format checkpoint): treat as a fresh sprint start. Re-run Sprint Start steps 2–5b (fetch issue descriptions, run spec-enricher, run team-lead pre-flight, write initial checkpoint). Do not attempt to resume execution without enriched specs in the checkpoint.
+**Enriched specs absent:** If `sprint-enriched-specs.md` does not exist or is empty (e.g., checkpoint was written before enrichment ran, or this is an older-format sprint): treat as a fresh sprint start. Re-run Sprint Start steps 2–5b (fetch issue descriptions, run spec-enricher, run team-lead pre-flight, write initial checkpoint + specs file). Do not attempt to resume execution without enriched specs.
 
 7. Use `Key files read` to know which files carry relevant context — re-read them before the engineer runs if they are likely modified by the next PR.
 8. Use `Routing used` from the last completed PR as a reference signal — re-derive routing for the next PR but compare against the stored chain to catch inconsistencies.

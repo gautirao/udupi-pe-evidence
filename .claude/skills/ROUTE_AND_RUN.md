@@ -199,6 +199,18 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 
 ### Invocation Rules
 
+#### Agent Context Loading Rule
+
+When constructing a Task prompt for any agent, the orchestrator MUST:
+1. Include only the enriched spec for the **current issue** (read the relevant section from `.claude/sprint-enriched-specs.md` — do NOT load all specs).
+2. Include `qa-fast` findings for the current issue only.
+3. Include `Sprint-level conventions` and `Known temporary exceptions` from the checkpoint (if in sprint).
+4. Do NOT include: enriched specs for other issues, previous PRs' evidence blocks, or accumulated conversational history.
+
+Rationale: each agent runs in a fresh context window. Loading all sprint specs and prior-PR evidence wastes ~30% of agent context on information irrelevant to the current task.
+
+---
+
 - **Agent permission mode**: ALL agents MUST be launched with `mode: "dontAsk"`. Do NOT use `mode: "bypassPermissions"` — it skips PreToolUse hooks (e.g. the combined-commands blocker). `dontAsk` auto-approves tool calls while still enforcing hooks.
 
 - `qa-fast` runs BEFORE the engineer writes any code.
@@ -494,7 +506,7 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 
 - Agents execute sequentially.
 - Do NOT merge agent outputs.
-- After final routed agent completes, run Step 3 (QA E2E Gate). If gate PASS (or skipped for Trivial/Doc-only), play `afplay /System/Library/Sounds/Hero.aiff` and STOP (standalone only — see Return protocol when invoked from SPRINT_EXECUTOR).
+- After final routed agent completes, run Step 3 (QA E2E Gate). If gate PASS (or skipped for Trivial/Doc-only): play `afplay /System/Library/Sounds/Hero.aiff`, append a brief entry to `.claude/SHIP_LOG.md` and update `.claude/STATE.md` "Recent Completions" and "Session Continuity", then STOP (standalone only — see Return protocol when invoked from SPRINT_EXECUTOR). When invoked from SPRINT_EXECUTOR, skip the chime/ship-log/state steps — SPRINT_EXECUTOR owns those via steps 7, 9b, 9c.
 - Do NOT suggest improvements beyond scope.
 - Single forward pass by default.
 - Re-runs are allowed only through the defined retry paths: engineer materialization failure (Post-Engineer Materialization Check), reviewer REQUEST CHANGES, ADVISORY-FIX remediation, and QA failure routing (Step 3).

@@ -192,19 +192,22 @@ Scraped listings (ingestion pipeline):
 | Field | Rule |
 |-------|------|
 | `price` | Must be > 0 |
-| `property_type` | Must be one of: `land`, `house`, `apartment`, `commercial` |
+| `property_type` | Must be one of: `land`, `house`, `apartment`, `commercial`, `commercial_building`, `warehouse`, `commercial_land` |
 | `locality` | Must be non-empty |
 | Address | Must be geocoded + pin confirmed (see section 5) |
 | Images | Minimum 3 uploaded images (see section 6) |
 
 ### 3.2 Required by property type (broker-created only)
 
-| Property Type | Additional Required Fields |
-|---------------|--------------------------|
-| `land` | `land_area` + `land_area_unit` |
-| `apartment` | `bedrooms` + `built_area` + `built_area_unit` |
-| `commercial` | `total_area` + `total_area_unit` + `floors` |
-| `house` | (no additional beyond always-required) |
+| Property Type | Additional Required Fields | Notes |
+|---------------|--------------------------|-------|
+| `land` | `land_area` + `land_area_unit` | |
+| `apartment` | `bedrooms` + `built_area` + `built_area_unit` | |
+| `house` | (none beyond always-required) | |
+| `commercial` | `carpet_area` + `floor_number` | Legacy type — retained for backward compatibility. New listings should use `commercial_building`, `warehouse`, or `commercial_land`. |
+| `commercial_building` | `land_area` + `built_area` + `total_floors` | Office blocks, retail complexes, mixed-use buildings |
+| `warehouse` | `built_area` OR `land_area` (at least one) | Industrial/storage use |
+| `commercial_land` | `land_area` + `land_area_unit` | Bare commercial plots |
 
 ### 3.3 Scraped listing exemptions
 

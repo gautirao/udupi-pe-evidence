@@ -20,6 +20,8 @@ All feature, bugfix, refactor, perf, security, and UI tasks MUST run via:
 
 .claude/skills/ROUTE_AND_RUN.md
 
+**Quick-task lane:** For single, non-sprint tasks that are not high-risk, security, schema, auth, RLS, or cross-cutting: use `/quick`. Runs ROUTE_AND_RUN directly without spec enrichment or team-lead pre-flight. See `.claude/commands/quick.md` for eligibility rules and blocked categories.
+
 Rules:
 - Select smallest effective agent set.
 - 1 pass only unless BLOCKING.
