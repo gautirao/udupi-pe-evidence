@@ -193,15 +193,14 @@ class DuplicateCandidateServiceTest {
     @Test
     void getPage_sizeExceedsMax_clampsTo100() {
         Page<DuplicateCandidate> emptyPage = new PageImpl<>(Collections.emptyList());
-        when(candidateRepository.findByStatusOrderBySimilarityScoreDesc(
-                eq(DuplicateCandidateStatus.PENDING), any(Pageable.class)))
+        when(candidateRepository.findAllByOrderByStatusAscSimilarityScoreDesc(any(Pageable.class)))
                 .thenReturn(emptyPage);
 
         service.getPage(0, 200);
 
         ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(candidateRepository).findByStatusOrderBySimilarityScoreDesc(
-                eq(DuplicateCandidateStatus.PENDING), pageableCaptor.capture());
+        verify(candidateRepository).findAllByOrderByStatusAscSimilarityScoreDesc(
+                pageableCaptor.capture());
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
     }
 

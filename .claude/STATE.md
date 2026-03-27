@@ -6,19 +6,19 @@
 Last updated: 2026-03-27
 
 ## Current Position
-- Active sprint: None (Sprint 28 complete; Sprint 29/31 in queue per docs/SPRINT_31_MVP_CLOSEOUT_PLAN.md)
-- Non-sprint work: Workflow refinement (plan at ~/.claude/plans/soft-crunching-zephyr.md)
+- Active sprint: Sprint 30 — Search UX & Data Quality
+- Sprint status: IN_PROGRESS · 0/16 complete
 
 ## Blockers
 - NONE
 
 ## Recent Completions (last 5)
 - Sprint 28 complete — 10 PRs (#547–#558), Trust UX + Photo Verification (2026-03-22)
-- Sprint 29 setup — 13 issues filed for Trust & Badge Gap Remediation (2026-03-23)
 - Workflow hardening — 24 fixes ported from autochakra audit (2026-03-23)
-- MVP spec updated — anonymous teaser discovery + auth gating model (2026-03-25)
+- Workflow refinement Phase 1A+1B — hygiene cleanup + STATE/SHIP_LOG/quick lane (2026-03-27)
+- Workflow refinement Phase 2 — enriched spec separation + compaction rule + agent context rule (2026-03-27)
 - Broker terminology — replaced "dealer" in all human-readable contexts (2026-03-27)
 
 ## Session Continuity
-- Last session: 2026-03-27 — workflow refinement, implementing Phase 1A + 1B
-- Resume action: Phase 2 next — separate enriched specs from checkpoint, update SPRINT_EXECUTOR and ROUTE_AND_RUN
+- Last session: 2026-03-27 — workflow refinement phases 1A+1B+2 implemented and committed
+- Resume action: Phase 3 is deferred (sprint archive, optional evidence contract extraction). Next work: start Sprint 29 or sprint 31 MVP closeout per docs/SPRINT_31_MVP_CLOSEOUT_PLAN.md

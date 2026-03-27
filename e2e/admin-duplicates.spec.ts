@@ -311,8 +311,8 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 
-    // Wait for the seeded row to appear by locating it via the candidateId prefix
-    const row = page.locator('tr').filter({ hasText: fixture!.candidateId.slice(0, 8) });
+    // Wait for the seeded row to appear by its data-testid (candidateId)
+    const row = page.locator(`tr[data-testid="${fixture!.candidateId}"]`);
     await expect(row).toBeVisible({ timeout: 15_000 });
     await expect(row.getByText('PENDING')).toBeVisible({ timeout: 5_000 });
 
@@ -349,8 +349,8 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 
-    // Locate the seeded row by candidateId prefix
-    const row = page.locator('tr').filter({ hasText: fixture!.candidateId.slice(0, 8) });
+    // Locate the seeded row by its data-testid (candidateId)
+    const row = page.locator(`tr[data-testid="${fixture!.candidateId}"]`);
     await expect(row).toBeVisible({ timeout: 15_000 });
 
     // Row should be CONFIRMED after AD2
@@ -381,8 +381,8 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 
-    // Locate the seeded row by candidateId prefix
-    const row = page.locator('tr').filter({ hasText: fixture!.candidateId.slice(0, 8) });
+    // Locate the seeded row by its data-testid (candidateId)
+    const row = page.locator(`tr[data-testid="${fixture!.candidateId}"]`);
     await expect(row).toBeVisible({ timeout: 15_000 });
 
     // Row should be PENDING after AD4

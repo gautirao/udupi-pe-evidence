@@ -13,7 +13,6 @@ import jakarta.persistence.Table;
 
 import com.example.realestate.listing.pricing.PriceParser;
 import com.example.realestate.listing.workflow.ActorType;
-import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -33,8 +32,7 @@ public class Listing {
     @Column(name = "raw_post_id")
     private UUID rawPostId;
 
-    @Column(name = "property_type", nullable = false, columnDefinition = "public.property_type")
-    @ColumnTransformer(write = "?::public.property_type")
+    @Column(name = "property_type", nullable = false, length = 30)
     private String propertyType = "other";
 
     @Column(name = "status", nullable = false, length = 30)

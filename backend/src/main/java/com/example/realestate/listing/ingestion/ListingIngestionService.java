@@ -166,10 +166,10 @@ public class ListingIngestionService {
     }
 
     /**
-     * Maps AI PropertyType enum to the DB enum string values.
-     * The DB enum includes: 'land', 'house', 'commercial', 'commercial_building',
-     * 'warehouse', 'commercial_land', 'apartment', 'other'.
-     * The AI can return APARTMENT which we map to 'house'.
+     * Maps AI PropertyType enum to the DB VARCHAR values accepted by the property_type
+     * CHECK constraint (V61). Valid values: 'land', 'house', 'commercial',
+     * 'commercial_building', 'warehouse', 'commercial_land', 'apartment', 'other'.
+     * The AI can return APARTMENT which we map to 'house' for display grouping.
      * Legacy COMMERCIAL (from v1 prompts or cached AI responses) maps to 'commercial_building'
      * to match the V56 migration default.
      */
@@ -179,7 +179,7 @@ public class ListingIngestionService {
         }
         return switch (propertyType) {
             case HOUSE -> "house";
-            case APARTMENT -> "house"; // DB enum lacks 'apartment'; map to 'house'
+            case APARTMENT -> "house"; // AI maps APARTMENT -> "house" for display grouping; 'apartment' is a valid DB value (per CHECK constraint) but not used by the ingestion path.
             case LAND -> "land";
             case COMMERCIAL -> "commercial_building"; // legacy v1 fallback; V56 migrated rows to commercial_building
             case COMMERCIAL_BUILDING -> "commercial_building";

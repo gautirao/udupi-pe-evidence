@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,16 +43,16 @@ public class DuplicateCandidateService {
     // ===== Query =====
 
     /**
-     * Returns a page of PENDING duplicate candidates ordered by similarity score DESC.
+     * Returns all duplicate candidates (all statuses) ordered by status ASC then
+     * similarity score DESC. PENDING items appear last alphabetically (after CONFIRMED
+     * and DISMISSED) but within each status group are ranked by confidence.
      * {@code size} is silently clamped to {@value #MAX_PAGE_SIZE} if exceeded.
      */
     @Transactional(readOnly = true)
     public Page<DuplicateCandidate> getPage(int page, int size) {
         int clampedSize = Math.min(size, MAX_PAGE_SIZE);
-        PageRequest pageable = PageRequest.of(page, clampedSize,
-                Sort.by(Sort.Direction.DESC, "similarityScore"));
-        return candidateRepository.findByStatusOrderBySimilarityScoreDesc(
-                DuplicateCandidateStatus.PENDING, pageable);
+        PageRequest pageable = PageRequest.of(page, clampedSize);
+        return candidateRepository.findAllByOrderByStatusAscSimilarityScoreDesc(pageable);
     }
 
     // ===== Mutations =====

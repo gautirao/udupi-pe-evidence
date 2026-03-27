@@ -16,10 +16,16 @@ public interface DuplicateCandidateRepository extends JpaRepository<DuplicateCan
     /**
      * Returns paginated duplicate candidate pairs filtered by status,
      * ordered by similarity score descending (highest confidence first).
-     * Primary query for the admin review queue: {@code DuplicateCandidateStatus.PENDING}.
      */
     Page<DuplicateCandidate> findByStatusOrderBySimilarityScoreDesc(
             DuplicateCandidateStatus status, Pageable pageable);
+
+    /**
+     * Returns all paginated duplicate candidate pairs across all statuses,
+     * ordered by status ascending (CONFIRMED, DISMISSED, PENDING) then similarity score
+     * descending. Used by the admin review queue to keep reviewed rows visible.
+     */
+    Page<DuplicateCandidate> findAllByOrderByStatusAscSimilarityScoreDesc(Pageable pageable);
 
     /**
      * Idempotency check used by the detection service before inserting a new pair.

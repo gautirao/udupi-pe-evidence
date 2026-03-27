@@ -205,7 +205,7 @@ export default function SuspectedDuplicates() {
                   </TableRow>
                 ) : (
                   rows.map((candidate) => (
-                    <TableRow key={candidate.id}>
+                    <TableRow key={candidate.id} data-testid={candidate.id}>
                       <TableCell>
                         <ListingLink id={candidate.listingIdA} />
                       </TableCell>
