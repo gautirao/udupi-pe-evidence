@@ -1,28 +1,57 @@
 package com.example.realestate.listing.workflow;
 
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.exception.ListingErrorCode;
+import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
+import com.example.realestate.listing.exception.ListingValidationException;
+import com.example.realestate.listing.image.ListingImage;
+import com.example.realestate.listing.image.ListingImageRepository;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class ListingTransitionPolicyTest {
+
+    @Mock
+    private ListingRepository listingRepository;
+
+    @Mock
+    private ListingImageRepository imageRepository;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private ListingTransitionPolicy policy;
 
     @BeforeEach
     void setUp() {
-        policy = new ListingTransitionPolicy();
+        policy = new ListingTransitionPolicy(listingRepository, imageRepository, objectMapper, 10);
     }
 
     // -----------------------------------------------------------------------
@@ -366,6 +395,275 @@ class ListingTransitionPolicyTest {
             assertThatThrownBy(() -> policy.validate(ListingStatus.LIVE, ListingStatus.LIVE, ActorType.ADMIN))
                     .isInstanceOf(ListingStatusException.class)
                     .hasMessageContaining("Self-transition not allowed");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Guard: guardReasonCodeRequired
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("guardReasonCodeRequired")
+    class GuardReasonCodeRequired {
+
+        @Test
+        void nullReason_throwsReasonCodeRequired() {
+            assertThatThrownBy(() -> policy.guardReasonCodeRequired(null))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                            .isEqualTo(ListingErrorCode.REASON_CODE_REQUIRED));
+        }
+
+        @Test
+        void blankReason_throwsReasonCodeRequired() {
+            assertThatThrownBy(() -> policy.guardReasonCodeRequired("   "))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                            .isEqualTo(ListingErrorCode.REASON_CODE_REQUIRED));
+        }
+
+        @Test
+        void nonBlankReason_doesNotThrow() {
+            assertThatCode(() -> policy.guardReasonCodeRequired("Low quality images"))
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Guard: guardSubmissionCount
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("guardSubmissionCount")
+    class GuardSubmissionCount {
+
+        @Test
+        void belowLimit_doesNotThrow() {
+            Listing listing = new Listing();
+            listing.setSubmissionCount(9); // max is 10
+
+            assertThatCode(() -> policy.guardSubmissionCount(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void atLimit_throwsSubmissionLimitExceeded() {
+            Listing listing = new Listing();
+            listing.setSubmissionCount(10); // exactly at the limit
+
+            assertThatThrownBy(() -> policy.guardSubmissionCount(listing))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                            .isEqualTo(ListingErrorCode.SUBMISSION_LIMIT_EXCEEDED));
+        }
+
+        @Test
+        void aboveLimit_throwsSubmissionLimitExceeded() {
+            Listing listing = new Listing();
+            listing.setSubmissionCount(15);
+
+            assertThatThrownBy(() -> policy.guardSubmissionCount(listing))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                            .isEqualTo(ListingErrorCode.SUBMISSION_LIMIT_EXCEEDED));
+        }
+
+        @Test
+        void zeroCount_doesNotThrow() {
+            Listing listing = new Listing();
+            listing.setSubmissionCount(0);
+
+            assertThatCode(() -> policy.guardSubmissionCount(listing))
+                    .doesNotThrowAnyException();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Guard: guardCompleteness
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("guardCompleteness")
+    class GuardCompleteness {
+
+        @Test
+        void validHouseListing_doesNotThrow() {
+            Listing listing = completeHouseListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void missingPrice_throwsValidationException() {
+            Listing listing = completeHouseListing(UUID.randomUUID());
+            listing.setPrice(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class);
+        }
+
+        @Test
+        void tooFewImages_throwsValidationException() {
+            Listing listing = completeHouseListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(1L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class);
+        }
+
+        @Test
+        void missingLocality_throwsValidationException() {
+            Listing listing = completeHouseListing(UUID.randomUUID());
+            listing.setLocality(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class);
+        }
+
+        private Listing completeHouseListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("house");
+            l.setPrice(new BigDecimal("5000000"));
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            return l;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Guard: guardFastRestore
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("guardFastRestore")
+    class GuardFastRestore {
+
+        @Test
+        void nullSnapshot_throwsFastRestoreNotEligible() {
+            Listing listing = new Listing();
+            listing.setId(UUID.randomUUID());
+            listing.setLastApprovedSnapshot(null);
+
+            assertThatThrownBy(() -> policy.guardFastRestore(listing))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                            .isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE));
+        }
+
+        @Test
+        void snapshotMatches_doesNotThrow() throws Exception {
+            UUID listingId = UUID.randomUUID();
+            Listing listing = buildListingWithMatchingSnapshot(listingId, List.of());
+
+            when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
+
+            assertThatCode(() -> policy.guardFastRestore(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void titleChanged_throwsWithChangedFields() throws Exception {
+            UUID listingId = UUID.randomUUID();
+            Listing listing = buildListingWithMatchingSnapshot(listingId, List.of());
+            listing.setTitle("Changed Title");
+
+            when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
+
+            assertThatThrownBy(() -> policy.guardFastRestore(listing))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> {
+                        ListingLifecycleException life = (ListingLifecycleException) ex;
+                        assertThat(life.getCode()).isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE);
+                        assertThat(life.getChangedFields()).contains("title");
+                    });
+        }
+
+        @Test
+        void imageAdded_throwsWithChangedFields() throws Exception {
+            UUID listingId = UUID.randomUUID();
+            UUID imageId1 = UUID.randomUUID();
+            UUID imageId2 = UUID.randomUUID();
+            UUID imageId3 = UUID.randomUUID();
+
+            // Snapshot has 2 images; listing now has 3
+            Listing listing = buildListingWithMatchingSnapshot(listingId, List.of(imageId1, imageId2));
+
+            ListingImage img1 = new ListingImage(); img1.setId(imageId1);
+            ListingImage img2 = new ListingImage(); img2.setId(imageId2);
+            ListingImage img3 = new ListingImage(); img3.setId(imageId3);
+            when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                    .thenReturn(List.of(img1, img2, img3));
+
+            assertThatThrownBy(() -> policy.guardFastRestore(listing))
+                    .isInstanceOf(ListingLifecycleException.class)
+                    .satisfies(ex -> {
+                        ListingLifecycleException life = (ListingLifecycleException) ex;
+                        assertThat(life.getCode()).isEqualTo(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE);
+                        assertThat(life.getChangedFields()).contains("imageIds");
+                    });
+        }
+
+        @Test
+        void imageReordered_doesNotThrow() throws Exception {
+            UUID listingId = UUID.randomUUID();
+            UUID imageId1 = UUID.randomUUID();
+            UUID imageId2 = UUID.randomUUID();
+
+            Listing listing = buildListingWithMatchingSnapshot(listingId, List.of(imageId1, imageId2));
+
+            // Return images in reversed order — should not count as a material change
+            ListingImage img2 = new ListingImage(); img2.setId(imageId2);
+            ListingImage img1 = new ListingImage(); img1.setId(imageId1);
+            when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
+                    .thenReturn(List.of(img2, img1));
+
+            assertThatCode(() -> policy.guardFastRestore(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        /**
+         * Builds a listing whose lastApprovedSnapshot JSON matches its current field state
+         * for the given image IDs. Mirrors the structure of ListingTransitionPolicy.buildSnapshotMap.
+         */
+        private Listing buildListingWithMatchingSnapshot(UUID listingId, List<UUID> imageIds)
+                throws Exception {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setTitle("Test Property");
+            l.setDescription("A test property");
+            l.setPricePaise(50_000_00L);
+            l.setLocality("Udupi");
+            l.setPropertyType("house");
+
+            Map<String, Object> snap = new LinkedHashMap<>();
+            snap.put("title", l.getTitle());
+            snap.put("description", l.getDescription());
+            snap.put("pricePaise", l.getPricePaise());
+            snap.put("sellerType", l.getSellerType());
+            snap.put("locality", l.getLocality());
+            snap.put("latitude", l.getLatitude());
+            snap.put("longitude", l.getLongitude());
+            snap.put("areaKey", l.getAreaKey());
+            snap.put("areaLabel", l.getAreaLabel());
+            snap.put("areaSqft", l.getAreaSqft());
+            snap.put("bedrooms", l.getBedrooms());
+            snap.put("bathrooms", l.getBathrooms());
+            snap.put("landArea", l.getLandArea());
+            snap.put("propertyType", l.getPropertyType());
+            snap.put("videoUrl", l.getVideoUrl());
+            snap.put("imageIds", imageIds.stream().map(UUID::toString).collect(Collectors.toList()));
+
+            String snapshotJson = new ObjectMapper()
+                    .copy()
+                    .setSerializationInclusion(JsonInclude.Include.ALWAYS)
+                    .writeValueAsString(snap);
+            l.setLastApprovedSnapshot(snapshotJson);
+            return l;
         }
     }
 }

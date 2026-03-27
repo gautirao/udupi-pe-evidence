@@ -75,11 +75,11 @@ Project item IDs:
 #617 → PVTI_lAHOAAVnaM4BSWI7zgofiOY
 #618 → PVTI_lAHOAAVnaM4BSWI7zgofiOc
 
-Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623
+Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624
 
-Remaining execution order: #607 → #609 → #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
+Remaining execution order: #609 → #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
 
-Status: IN_PROGRESS · 5/16 complete
+Status: IN_PROGRESS · 6/16 complete
 
-Next PR: #607 — feat(trust): scheduled job to revoke expired trust badges
+Next PR: #609 — refactor(workflow): wire ListingTransitionPolicy guard stubs to existing validation
 === ROLLING CHECKPOINT END ===

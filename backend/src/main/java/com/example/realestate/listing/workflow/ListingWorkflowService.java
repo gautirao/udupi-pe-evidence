@@ -107,9 +107,10 @@ public class ListingWorkflowService {
      * Submit a listing for review. Validates all required fields and transitions
      * status from DRAFT/REJECTED to PENDING_REVIEW.
      *
-     * @throws ListingNotFoundException  if listing not found or not owned
-     * @throws ListingStatusException    if current status does not allow submission
-     * @throws ListingValidationException if validation rules fail (422)
+     * @throws ListingNotFoundException   if listing not found or not owned
+     * @throws ListingStatusException     if current status does not allow submission
+     * @throws ListingValidationException if completeness validation fails (via policy guard, 422)
+     * @throws ListingLifecycleException  if submission count limit is reached (via policy guard, 422)
      */
     @Transactional
     public Listing submitListing(UUID listingId, UUID userId, boolean isAdmin) {
@@ -118,10 +119,8 @@ public class ListingWorkflowService {
         ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
         policy.validate(previousStatus, ListingStatus.PENDING_REVIEW, ActorType.BROKER);
 
-        List<Map<String, String>> errors = validateForSubmission(listing, true);
-        if (!errors.isEmpty()) {
-            throw new ListingValidationException(errors);
-        }
+        policy.guardSubmissionCount(listing);
+        policy.guardCompleteness(listing);
 
         Instant now = Instant.now();
         OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
@@ -234,11 +233,8 @@ public class ListingWorkflowService {
         ListingStatus currentStatus = ListingStatus.fromDbValue(listing.getStatus());
         policy.validate(currentStatus, ListingStatus.REJECTED, ActorType.ADMIN);
 
-        // Defense-in-depth: controller also checks, but service enforces independently
-        if (rejectionReason == null || rejectionReason.isBlank()) {
-            throw new ListingLifecycleException(
-                    ListingErrorCode.REASON_CODE_REQUIRED, "Rejection reason is required");
-        }
+        // Defense-in-depth: controller also checks, but service enforces via policy guard
+        policy.guardReasonCodeRequired(rejectionReason);
 
         Instant now = Instant.now();
         OffsetDateTime nowOdt = now.atOffset(ZoneOffset.UTC);
@@ -600,7 +596,7 @@ public class ListingWorkflowService {
         }
 
         // Fast-restore eligibility: snapshot must exist and match current state
-        checkSnapshotEligibility(listing);
+        policy.guardFastRestore(listing);
 
         ListingStatus previousStatus = ListingStatus.fromDbValue(listing.getStatus());
         policy.validate(previousStatus, ListingStatus.LIVE, ActorType.BROKER);

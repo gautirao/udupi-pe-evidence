@@ -307,6 +307,9 @@ class ListingWorkflowServiceTest {
         listing.setStatus(ListingStatus.PENDING_REVIEW.toDbValue());
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardReasonCodeRequired is now implemented in the policy; stub the mock to throw
+        doThrow(new ListingLifecycleException(ListingErrorCode.REASON_CODE_REQUIRED, "Rejection reason is required"))
+                .when(policy).guardReasonCodeRequired(null);
 
         assertThatThrownBy(() -> workflowService.rejectListing(listingId, adminId, null))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -536,7 +539,8 @@ class ListingWorkflowServiceTest {
 
     private void stubForSubmit(UUID listingId, UUID userId, Listing listing) {
         when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(listing);
-        when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
+        // countImagesByListingId is now called inside policy.guardCompleteness (mocked); stub lenient to avoid UnnecessaryStubbingException
+        lenient().when(listingRepository.countImagesByListingId(listingId)).thenReturn(3L);
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(statusHistoryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
     }
@@ -989,8 +993,8 @@ class ListingWorkflowServiceTest {
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
         java.time.OffsetDateTime originalFirstPublished = listing.getFirstPublishedAt();
         listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1013,9 +1017,13 @@ class ListingWorkflowServiceTest {
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setArchivedAt(java.time.Instant.now());
-        // firstPublishedAt is null — never published
+        // firstPublishedAt is null — never published; guard rejects it
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardFastRestore now owns eligibility; stub the mock to throw (real behaviour tested in ListingTransitionPolicyTest)
+        doThrow(new ListingLifecycleException(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                "No approved snapshot on record — fast restore requires a prior approved snapshot"))
+                .when(policy).guardFastRestore(listing);
 
         assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -1032,10 +1040,10 @@ class ListingWorkflowServiceTest {
         UUID actorId = UUID.randomUUID();
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.DRAFT.toDbValue());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(10)); // was published
-        // Provide a matching snapshot so checkSnapshotEligibility passes — we want to test the policy check
+        // guardFastRestore is mocked (no-op); we want to test the policy transition-matrix check
         listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
 
         doThrow(new ListingStatusException("Transition not allowed: from=DRAFT to=LIVE actor=BROKER"))
@@ -1074,8 +1082,8 @@ class ListingWorkflowServiceTest {
         listing.setArchivedAt(java.time.Instant.now());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
         listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1099,8 +1107,8 @@ class ListingWorkflowServiceTest {
         listing.setArchivedAt(java.time.Instant.now());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
         listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -1773,8 +1781,10 @@ class ListingWorkflowServiceTest {
         Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
 
         when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(listing);
-        // 2 images — below the required minimum of 3.
-        when(listingRepository.countImagesByListingId(listingId)).thenReturn(2L);
+        // guardCompleteness now owns image-count validation; stub the mock to throw (real behaviour tested in ListingTransitionPolicyTest)
+        doThrow(new ListingValidationException(List.of(Map.of("field", "images",
+                "message", "At least 3 images required (found 2)"))))
+                .when(policy).guardCompleteness(listing);
 
         assertThatThrownBy(() -> workflowService.submitListing(listingId, userId, false))
                 .isInstanceOf(ListingValidationException.class);
@@ -2343,8 +2353,8 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
         listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
 
@@ -2378,8 +2388,8 @@ class ListingWorkflowServiceTest {
         Listing listing = createOwnedListing(listingId, actorId, ListingStatus.ARCHIVED.toDbValue());
         listing.setFirstPublishedAt(java.time.OffsetDateTime.now().minusDays(30));
         listing.setLastApprovedSnapshot(buildSnapshotJson(listing, List.of()));
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenReturn(listing);
 
@@ -2432,11 +2442,8 @@ class ListingWorkflowServiceTest {
         List<UUID> imageIds = List.of(imageId1, imageId2);
 
         Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, imageIds);
+        // imageRepository stub removed — guardFastRestore is mocked; image fetch is now in the policy
 
-        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
-        ListingImage img2 = new ListingImage(); img2.setId(imageId2);
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
-                .thenReturn(List.of(img1, img2));
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
@@ -2454,6 +2461,10 @@ class ListingWorkflowServiceTest {
         listing.setLastApprovedSnapshot(null); // override to null
 
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardFastRestore now owns eligibility; stub the mock to throw (real behaviour tested in ListingTransitionPolicyTest)
+        doThrow(new ListingLifecycleException(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                "No approved snapshot on record — fast restore requires a prior approved snapshot"))
+                .when(policy).guardFastRestore(listing);
 
         assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -2469,11 +2480,14 @@ class ListingWorkflowServiceTest {
         UUID actorId = UUID.randomUUID();
 
         Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, List.of());
-        // Mutate title after snapshot was built
         listing.setTitle("Changed Title");
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardFastRestore now owns eligibility; stub the mock to throw with the expected field diff
+        doThrow(new ListingLifecycleException(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                "Listing has material changes since last approval — use submit-for-review instead",
+                List.of("title")))
+                .when(policy).guardFastRestore(listing);
 
         assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -2492,11 +2506,14 @@ class ListingWorkflowServiceTest {
         UUID actorId = UUID.randomUUID();
 
         Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId, List.of());
-        // Mutate price after snapshot was built
         listing.setPricePaise(99_999_00L);
 
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId)).thenReturn(List.of());
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardFastRestore now owns eligibility; stub the mock to throw with the expected field diff
+        doThrow(new ListingLifecycleException(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                "Listing has material changes since last approval — use submit-for-review instead",
+                List.of("pricePaise")))
+                .when(policy).guardFastRestore(listing);
 
         assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -2521,12 +2538,12 @@ class ListingWorkflowServiceTest {
         Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId,
                 List.of(imageId1, imageId2));
 
-        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
-        ListingImage img2 = new ListingImage(); img2.setId(imageId2);
-        ListingImage img3 = new ListingImage(); img3.setId(imageId3);
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
-                .thenReturn(List.of(img1, img2, img3));
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardFastRestore now owns eligibility; stub the mock to throw with the expected field diff
+        doThrow(new ListingLifecycleException(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                "Listing has material changes since last approval — use submit-for-review instead",
+                List.of("imageIds")))
+                .when(policy).guardFastRestore(listing);
 
         assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -2550,10 +2567,12 @@ class ListingWorkflowServiceTest {
         Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId,
                 List.of(imageId1, imageId2));
 
-        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
-                .thenReturn(List.of(img1));
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        // guardFastRestore now owns eligibility; stub the mock to throw with the expected field diff
+        doThrow(new ListingLifecycleException(ListingErrorCode.FAST_RESTORE_NOT_ELIGIBLE,
+                "Listing has material changes since last approval — use submit-for-review instead",
+                List.of("imageIds")))
+                .when(policy).guardFastRestore(listing);
 
         assertThatThrownBy(() -> workflowService.restoreArchivedListing(listingId, actorId))
                 .isInstanceOf(ListingLifecycleException.class)
@@ -2576,16 +2595,12 @@ class ListingWorkflowServiceTest {
         // Snapshot has [imageId1, imageId2]; current order is [imageId2, imageId1]
         Listing listing = archivedListingWithMatchingSnapshot(listingId, actorId,
                 List.of(imageId1, imageId2));
+        // imageRepository stub removed — guardFastRestore is mocked (reorder-tolerance is tested in ListingTransitionPolicyTest)
 
-        ListingImage img2 = new ListingImage(); img2.setId(imageId2);
-        ListingImage img1 = new ListingImage(); img1.setId(imageId1);
-        // Reversed order returned from repository
-        when(imageRepository.findByListingIdOrderByPositionAsc(listingId))
-                .thenReturn(List.of(img2, img1));
         when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
         when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // Must not throw — reordering is not a material change
+        // Must not throw — guardFastRestore mock is a no-op (passes)
         workflowService.restoreArchivedListing(listingId, actorId);
 
         verify(listingRepository).save(any());
