@@ -143,6 +143,7 @@ public class ListingResponseMapper {
                 l.getSellerType(),
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
-                l.getApprovalsDeclared(), reraValid, earnedBadgeCount);
+                l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
+                l.getTrustTier());
     }
 }

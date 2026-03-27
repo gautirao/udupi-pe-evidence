@@ -59,7 +59,9 @@ public record ListingResponse(
         /** true when reraNumber matches Karnataka RERA format; computed at read time, not stored. */
         boolean reraValid,
         /** Number of EARNED (Verified) trust badges for this listing. Never negative. */
-        int earnedBadgeCount
+        int earnedBadgeCount,
+        /** Computed trust tier: A, B, C, or D. Null only for legacy rows before V46. */
+        String trustTier
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

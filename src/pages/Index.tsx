@@ -368,9 +368,21 @@ export default function Index() {
                 </div>
 
                 {selectedListing.price && (
-                  <p className="text-xl font-bold text-primary mb-2">
-                    {formatPrice(selectedListing.price, selectedListing.price_unit)}
-                  </p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-xl font-bold text-primary">
+                      {formatPrice(selectedListing.price, selectedListing.price_unit)}
+                    </p>
+                    {(selectedListing.trustTier === 'A' || selectedListing.trustTier === 'B') && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-green-100 text-green-800">
+                        {selectedListing.trustTier}
+                      </span>
+                    )}
+                    {selectedListing.trustTier === 'C' && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
+                        C
+                      </span>
+                    )}
+                  </div>
                 )}
                 {(() => {
                   const signal = getMarketSignal(selectedListing, areaMedians);

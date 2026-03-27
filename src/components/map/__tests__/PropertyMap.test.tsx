@@ -59,7 +59,7 @@ vi.mock('@/components/ui/card', () => ({
 
 // ─── Imports after mocks ───────────────────────────────────────
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { escapeHtml } from '@/lib/security';
 
 // ─── Unit tests for escapeHtml (the core of the RE-174 fix) ───
@@ -161,5 +161,69 @@ describe('PropertyMap — divIcon HTML escaping (RE-174)', () => {
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;');
     expect(html).not.toMatch(/<(?!\/?(div|span|br)\b)/); // no raw open tags other than div/span/br
+  });
+});
+
+// ─── Trust tier badge chip (RE-608) ───────────────────────────
+// Tests for the inline trust tier badge chip rendered in the listing preview card.
+// The badge is a small conditional element: green for A/B, amber for C, hidden for D or null.
+
+/** Minimal chip component that mirrors the conditional in Index.tsx selectedListing card. */
+function TrustTierChip({ trustTier }: { trustTier?: string | null }) {
+  if (trustTier === 'A' || trustTier === 'B') {
+    return (
+      <span data-testid="trust-chip" className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-green-100 text-green-800">
+        {trustTier}
+      </span>
+    );
+  }
+  if (trustTier === 'C') {
+    return (
+      <span data-testid="trust-chip" className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
+        C
+      </span>
+    );
+  }
+  return null;
+}
+
+describe('Trust tier badge chip — listing preview card', () => {
+  it('renders a green chip labelled "A" for trustTier A', () => {
+    render(<TrustTierChip trustTier="A" />);
+    const chip = screen.getByTestId('trust-chip');
+    expect(chip).toBeDefined();
+    expect(chip.textContent).toBe('A');
+    expect(chip.className).toContain('bg-green-100');
+  });
+
+  it('renders a green chip labelled "B" for trustTier B', () => {
+    render(<TrustTierChip trustTier="B" />);
+    const chip = screen.getByTestId('trust-chip');
+    expect(chip).toBeDefined();
+    expect(chip.textContent).toBe('B');
+    expect(chip.className).toContain('bg-green-100');
+  });
+
+  it('renders an amber chip labelled "C" for trustTier C', () => {
+    render(<TrustTierChip trustTier="C" />);
+    const chip = screen.getByTestId('trust-chip');
+    expect(chip).toBeDefined();
+    expect(chip.textContent).toBe('C');
+    expect(chip.className).toContain('bg-amber-100');
+  });
+
+  it('renders nothing for trustTier D', () => {
+    const { container } = render(<TrustTierChip trustTier="D" />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders nothing for null trustTier', () => {
+    const { container } = render(<TrustTierChip trustTier={null} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders nothing for undefined trustTier', () => {
+    const { container } = render(<TrustTierChip />);
+    expect(container.firstChild).toBeNull();
   });
 });

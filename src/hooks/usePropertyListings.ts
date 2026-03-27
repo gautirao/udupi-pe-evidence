@@ -83,6 +83,8 @@ export interface PropertyListing {
   approvalsDeclared?: string | null;
   /** Computed by backend: true when reraNumber is present and matches the expected format */
   reraValid?: boolean;
+  /** Trust tier computed by backend: A, B, C, or D. Null for legacy rows pre-V46. */
+  trustTier?: string | null;
 }
 
 export interface PropertyFilters {
@@ -158,6 +160,7 @@ interface PolygonListingResponse {
   firstPublishedAt: string | null;
   possessionStatus: string | null;
   reraValid: boolean;
+  trustTier: string | null;
 }
 
 interface PolygonPageResponse {
@@ -221,6 +224,7 @@ function polygonResponseToListing(r: PolygonListingResponse): PropertyListing & 
     backOnMarket: r.backOnMarket,
     possessionStatus: r.possessionStatus,
     reraValid: r.reraValid,
+    trustTier: r.trustTier,
     images,
   };
 }

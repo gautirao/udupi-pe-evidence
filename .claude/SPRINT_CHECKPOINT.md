@@ -75,11 +75,11 @@ Project item IDs:
 #617 → PVTI_lAHOAAVnaM4BSWI7zgofiOY
 #618 → PVTI_lAHOAAVnaM4BSWI7zgofiOc
 
-Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624 | #609 ✅ PR #625 | #378 ✅ PR #626
+Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624 | #609 ✅ PR #625 | #378 ✅ PR #626 | #488 ✅ PR #627
 
-Remaining execution order: #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
+Remaining execution order: #608 → #613 → #614 → #615 → #616 → #617 → #618
 
-Status: IN_PROGRESS · 8/16 complete
+Status: IN_PROGRESS · 9/16 complete
 
-Next PR: #488 — [RE-180] Extract shared listing form constants from NewListing/EditListing (F-6)
+Next PR: #608 — feat(ui): show trust badges on search cards / map results
 === ROLLING CHECKPOINT END ===

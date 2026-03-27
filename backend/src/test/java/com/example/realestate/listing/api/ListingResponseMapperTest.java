@@ -292,6 +292,28 @@ class ListingResponseMapperTest {
         assertThat(response.firstImageUrl()).isEqualTo("https://example.com/single.jpg");
     }
 
+    // ==================== trustTier is propagated ====================
+
+    @Test
+    void toResponse_trustTier_propagatedFromEntity() {
+        Listing l = buildListing("LIVE");
+        l.setTrustTier("A");
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.trustTier()).isEqualTo("A");
+    }
+
+    @Test
+    void toResponse_trustTier_nullWhenEntityHasNoTier() {
+        Listing l = buildListing("DRAFT");
+        l.setTrustTier(null);
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.trustTier()).isNull();
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(String status) {
