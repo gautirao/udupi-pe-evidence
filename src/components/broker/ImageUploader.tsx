@@ -1,10 +1,13 @@
 import { useRef, useState, useCallback, type DragEvent } from 'react';
 import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Upload, X, GripVertical, ImageOff, Loader2, RotateCw, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 interface ImageUploaderProps {
   listingId: string;
@@ -13,6 +16,7 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderProps) {
+  const { toast } = useToast();
   const {
     images,
     isLoading,
@@ -52,10 +56,18 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
       const fileArray = Array.from(files);
       const toUpload = fileArray.slice(0, remainingSlots);
       for (const file of toUpload) {
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+          toast({
+            variant: 'destructive',
+            title: 'File too large',
+            description: `"${file.name}" exceeds the 5 MB limit`,
+          });
+          continue;
+        }
         uploadImage(file);
       }
     },
-    [uploadImage, remainingSlots],
+    [uploadImage, remainingSlots, toast],
   );
 
   const handleFileInput = useCallback(

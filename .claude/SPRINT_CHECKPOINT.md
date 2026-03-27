@@ -75,11 +75,11 @@ Project item IDs:
 #617 → PVTI_lAHOAAVnaM4BSWI7zgofiOY
 #618 → PVTI_lAHOAAVnaM4BSWI7zgofiOc
 
-Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620
+Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621
 
-Remaining execution order: #611 → #610 → #605 → #607 → #609 → #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
+Remaining execution order: #610 → #605 → #607 → #609 → #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
 
-Status: IN_PROGRESS · 2/16 complete
+Status: IN_PROGRESS · 3/16 complete
 
-Next PR: #611 — chore(frontend): remove legacy src/pages/dealer/ duplication
+Next PR: #610 — fix(ui): enforce 5MB file size limit in ImageUploader
 === ROLLING CHECKPOINT END ===
