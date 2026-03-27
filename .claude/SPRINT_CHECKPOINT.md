@@ -75,11 +75,11 @@ Project item IDs:
 #617 → PVTI_lAHOAAVnaM4BSWI7zgofiOY
 #618 → PVTI_lAHOAAVnaM4BSWI7zgofiOc
 
-Previously completed: (none)
+Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620
 
-Remaining execution order: #612 → #606 → #611 → #610 → #605 → #607 → #609 → #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
+Remaining execution order: #611 → #610 → #605 → #607 → #609 → #378 → #488 → #608 → #613 → #614 → #615 → #616 → #617 → #618
 
-Status: IN_PROGRESS · 0/16 complete
+Status: IN_PROGRESS · 2/16 complete
 
-Next PR: #612 — docs(spec): align commercial property spec with implemented granular types
+Next PR: #611 — chore(frontend): remove legacy src/pages/dealer/ duplication
 === ROLLING CHECKPOINT END ===
