@@ -69,6 +69,47 @@ public class ListingResponseMapper {
         return toBatchResponseList(listings, false);
     }
 
+    /**
+     * Anonymous teaser — single listing variant.
+     * Loads only the first image URL; all sensitive fields are absent.
+     */
+    public ListingTeaserResponse toTeaserResponse(Listing l) {
+        var images = listingImageRepository.findByListingIdOrderByPositionAsc(l.getId());
+        String primaryImageUrl = images.stream().findFirst()
+                .map(ListingImage::getUrl)
+                .orElse(null);
+        return new ListingTeaserResponse(
+                l.getId(), primaryImageUrl, l.getPrice(),
+                l.getPropertyType(), l.getLocality(), l.getListingPurpose());
+    }
+
+    /**
+     * Anonymous teaser — batch variant.
+     * Fires a single image query for all listings; all sensitive fields are absent.
+     */
+    public List<ListingTeaserResponse> toTeaserResponseList(List<Listing> listings) {
+        if (listings.isEmpty()) return List.of();
+
+        List<UUID> ids = listings.stream().map(Listing::getId).toList();
+        Map<UUID, String> firstImageByListing = listingImageRepository
+                .findByListingIdInOrderByListingIdAscPositionAsc(ids)
+                .stream()
+                .collect(Collectors.toMap(
+                        ListingImage::getListingId,
+                        ListingImage::getUrl,
+                        (existing, replacement) -> existing)); // keep first (lowest position)
+
+        return listings.stream()
+                .map(l -> new ListingTeaserResponse(
+                        l.getId(),
+                        firstImageByListing.get(l.getId()),
+                        l.getPrice(),
+                        l.getPropertyType(),
+                        l.getLocality(),
+                        l.getListingPurpose()))
+                .toList();
+    }
+
     private List<ListingResponse> toBatchResponseList(List<Listing> listings, boolean includeRejectionReason) {
         if (listings.isEmpty()) return List.of();
 

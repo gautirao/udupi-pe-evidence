@@ -314,6 +314,45 @@ class ListingResponseMapperTest {
         assertThat(response.trustTier()).isNull();
     }
 
+    // ==================== toTeaserResponse — exactly 6 fields, correct values ====================
+
+    @Test
+    void toTeaserResponse_includesOnly6Fields() {
+        Listing l = buildListing("LIVE");
+        l.setListingPurpose("SALE");
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.id()).isEqualTo(l.getId());
+        assertThat(teaser.primaryImageUrl()).isNull(); // no images set up
+        assertThat(teaser.price()).isEqualTo(l.getPrice());
+        assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
+        assertThat(teaser.locality()).isEqualTo(l.getLocality());
+        assertThat(teaser.listingPurpose()).isEqualTo("SALE");
+        // record has exactly 6 components — verify at compile time via record definition
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(6);
+    }
+
+    @Test
+    void toTeaserResponse_excludesSensitiveFields() {
+        Listing l = buildListing("LIVE");
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        // The teaser record must have exactly 6 components — no address, lat/lon, description, etc.
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(6);
+        var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName)
+                .toList();
+        assertThat(componentNames).containsExactly(
+                "id", "primaryImageUrl", "price", "propertyType", "locality", "listingPurpose");
+        // Sensitive names must not appear
+        assertThat(componentNames).doesNotContain(
+                "latitude", "longitude", "address", "description",
+                "sellerType", "bedrooms", "builtArea", "landArea",
+                "reraNumber", "contactPhone", "createdBy");
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(String status) {

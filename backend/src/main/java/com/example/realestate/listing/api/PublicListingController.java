@@ -14,6 +14,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -61,6 +64,11 @@ public class PublicListingController {
     /**
      * Returns a LIVE listing by ID.
      * Returns 404 for any non-LIVE status (DRAFT, PENDING_REVIEW, REJECTED, ARCHIVED) or unknown ID.
+     *
+     * <p>JWT-aware: callers presenting a valid JWT receive the full {@link ListingResponse};
+     * anonymous callers receive the teaser {@link ListingTeaserResponse} (no location, no PII).
+     * Invalid/expired JWTs are rejected by {@code BearerTokenAuthenticationFilter} before this
+     * method runs — the controller does not need to handle that case.
      */
     @GetMapping("/{id}")
     public ResponseEntity<?> getById(@PathVariable UUID id) {
@@ -69,8 +77,17 @@ public class PublicListingController {
             return notFound();
         }
 
-        log.debug("GET /api/public/listings/{} -> 200", id);
-        return ResponseEntity.ok(listingResponseMapper.toPublicResponse(listing));
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isAuthenticated = auth != null
+                && auth.isAuthenticated()
+                && !(auth instanceof AnonymousAuthenticationToken);
+
+        log.debug("GET /api/public/listings/{} authenticated={} -> 200", id, isAuthenticated);
+        if (isAuthenticated) {
+            return ResponseEntity.ok(listingResponseMapper.toPublicResponse(listing));
+        } else {
+            return ResponseEntity.ok(listingResponseMapper.toTeaserResponse(listing));
+        }
     }
 
     /**
@@ -125,7 +142,35 @@ public class PublicListingController {
         Page<Listing> results = listingRepository.findLiveListingsWithinPolygon(
                 wkt, PageRequest.of(page, clampedSize));
 
-        List<ListingResponse> content = listingResponseMapper.toPublicResponseList(results.getContent());
+        List<ListingTeaserResponse> content = listingResponseMapper.toTeaserResponseList(results.getContent());
+        return ResponseEntity.ok(Map.of(
+                "content", content,
+                "totalElements", results.getTotalElements(),
+                "totalPages", results.getTotalPages(),
+                "page", results.getNumber(),
+                "size", results.getSize()
+        ));
+    }
+
+    /**
+     * Returns a paginated feed of all LIVE listings as anonymous teasers.
+     * No auth required. Ordered by creation date descending.
+     *
+     * @param page page number (0-based, default 0)
+     * @param size page size (default 50, max 200)
+     */
+    @GetMapping("/discovery")
+    public ResponseEntity<?> getDiscovery(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        int clampedSize = Math.max(1, Math.min(200, size));
+
+        log.debug("GET /api/public/listings/discovery page={}, size={}", page, clampedSize);
+
+        Page<Listing> results = listingRepository.findAllLiveListings(PageRequest.of(page, clampedSize));
+        List<ListingTeaserResponse> content = listingResponseMapper.toTeaserResponseList(results.getContent());
+
         return ResponseEntity.ok(Map.of(
                 "content", content,
                 "totalElements", results.getTotalElements(),

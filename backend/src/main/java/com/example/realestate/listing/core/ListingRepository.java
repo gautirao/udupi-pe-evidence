@@ -393,6 +393,28 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             @Param("polygonWkt") String polygonWkt,
             Pageable pageable);
 
+    // ===== Discovery feed =====
+
+    /**
+     * Returns all LIVE, non-archived, non-duplicate listings ordered by creation date descending.
+     * Used by the anonymous discovery endpoint (GET /api/public/listings/discovery).
+     */
+    @Query(value = """
+            SELECT * FROM property_listings
+            WHERE status = 'LIVE'
+              AND archived_at IS NULL
+              AND is_duplicate = false
+            ORDER BY created_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM property_listings
+            WHERE status = 'LIVE'
+              AND archived_at IS NULL
+              AND is_duplicate = false
+            """,
+            nativeQuery = true)
+    Page<Listing> findAllLiveListings(Pageable pageable);
+
     // ===== Locality normalizer queries =====
 
     @Query(value = """

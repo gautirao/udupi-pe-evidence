@@ -6,14 +6,18 @@ import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.pricing.PriceChangeLog;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.school.SchoolService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
 import com.example.realestate.security.UserRoleService;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -32,6 +36,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
@@ -88,6 +93,8 @@ class PublicListingControllerTest {
     @BeforeEach
     void setUp() {
         reset(listingRepository, listingResponseMapper, priceChangeLogRepository, userRoleService, schoolService);
+        SecurityContextHolder.clearContext();
+
         // Delegate public mapper to a minimal implementation.
         // CRITICAL: rejectionReason must always be null (security invariant tested explicitly).
         when(listingResponseMapper.toPublicResponse(any(Listing.class))).thenAnswer(inv -> {
@@ -124,17 +131,73 @@ class PublicListingControllerTest {
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     l.getTrustTier());
         });
+
+        // Teaser mapper — single listing
+        when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenAnswer(inv -> {
+            Listing l = inv.getArgument(0);
+            return new ListingTeaserResponse(
+                    l.getId(), null, l.getPrice(),
+                    l.getPropertyType(), l.getLocality(), l.getListingPurpose());
+        });
+
+        // Teaser mapper — batch
+        when(listingResponseMapper.toTeaserResponseList(anyList())).thenAnswer(inv -> {
+            List<Listing> listings = inv.getArgument(0);
+            return listings.stream()
+                    .map(l -> new ListingTeaserResponse(
+                            l.getId(), null, l.getPrice(),
+                            l.getPropertyType(), l.getLocality(), l.getListingPurpose()))
+                    .toList();
+        });
     }
 
-    // ==================== GET /{id} — happy path (LIVE listing) ====================
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
+
+    // ==================== GET /{id} — anonymous caller → teaser response ====================
 
     @Test
-    void getById_liveListing_returns200WithFields() throws Exception {
+    void getById_anonymous_returnsTeaserWith200() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setListingPurpose("SALE");
+        listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(5));
+
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // No authentication in SecurityContext → teaser path
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.price").value(15000000))
+                .andExpect(jsonPath("$.propertyType").value("house"))
+                .andExpect(jsonPath("$.locality").value("Udupi"))
+                .andExpect(jsonPath("$.listingPurpose").value("SALE"))
+                // sensitive fields absent from teaser
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.title").doesNotExist())
+                .andExpect(jsonPath("$.latitude").doesNotExist())
+                .andExpect(jsonPath("$.longitude").doesNotExist())
+                .andExpect(jsonPath("$.description").doesNotExist());
+    }
+
+    // ==================== GET /{id} — authenticated caller → full ListingResponse ====================
+
+    @Test
+    void getById_authenticated_returnsFullResponseWith200() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
         listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(5));
 
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Populate security context with an authenticated principal (not AnonymousAuthenticationToken)
+        var authToken = new UsernamePasswordAuthenticationToken(
+                "user@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
@@ -287,7 +350,6 @@ class PublicListingControllerTest {
         Page<Listing> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 50), 0);
         when(listingRepository.findLiveListingsWithinPolygon(anyString(), any(PageRequest.class)))
                 .thenReturn(emptyPage);
-        when(listingResponseMapper.toPublicResponseList(any())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/public/listings/within-polygon")
                         .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
@@ -300,26 +362,74 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.size").value(50));
     }
 
-    // ==================== GET /within-polygon — with results ====================
+    // ==================== GET /within-polygon — with results (teaser fields) ====================
 
     @Test
-    void withinPolygon_withResults_returns200WithContent() throws Exception {
+    void withinPolygon_withResults_returns200WithTeaserContent() throws Exception {
         Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
                 "Polygon Villa", "Udupi", new BigDecimal("15000000"), "Inside polygon");
+        listing.setListingPurpose("SALE");
         Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
         when(listingRepository.findLiveListingsWithinPolygon(anyString(), any(PageRequest.class)))
                 .thenReturn(page);
-        when(listingResponseMapper.toPublicResponseList(any())).thenAnswer(inv -> {
-            List<Listing> listings = inv.getArgument(0);
-            return listings.stream().map(l -> listingResponseMapper.toPublicResponse(l)).toList();
-        });
 
         mockMvc.perform(get("/api/public/listings/within-polygon")
                         .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.totalElements").value(1))
-                .andExpect(jsonPath("$.totalPages").value(1));
+                .andExpect(jsonPath("$.totalPages").value(1))
+                // teaser fields present
+                .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.content[0].locality").value("Udupi"))
+                .andExpect(jsonPath("$.content[0].propertyType").value("house"))
+                .andExpect(jsonPath("$.content[0].listingPurpose").value("SALE"))
+                // sensitive fields absent
+                .andExpect(jsonPath("$.content[0].latitude").doesNotExist())
+                .andExpect(jsonPath("$.content[0].title").doesNotExist());
+    }
+
+    // ==================== GET /discovery — empty result ====================
+
+    @Test
+    void discovery_noListings_returns200WithEmptyContent() throws Exception {
+        Page<Listing> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 50), 0);
+        when(listingRepository.findAllLiveListings(any(PageRequest.class))).thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/public/listings/discovery"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(50));
+    }
+
+    // ==================== GET /discovery — with results (teaser fields) ====================
+
+    @Test
+    void discovery_withListings_returnsTeaserContent() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "land",
+                "Discovery Plot", "Manipal", new BigDecimal("3000000"), "A plot");
+        listing.setListingPurpose("SALE");
+        Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
+        when(listingRepository.findAllLiveListings(any(PageRequest.class))).thenReturn(page);
+
+        mockMvc.perform(get("/api/public/listings/discovery"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                // teaser fields present
+                .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.content[0].locality").value("Manipal"))
+                .andExpect(jsonPath("$.content[0].propertyType").value("land"))
+                .andExpect(jsonPath("$.content[0].listingPurpose").value("SALE"))
+                .andExpect(jsonPath("$.content[0].price").value(3000000))
+                // sensitive fields absent
+                .andExpect(jsonPath("$.content[0].latitude").doesNotExist())
+                .andExpect(jsonPath("$.content[0].title").doesNotExist())
+                .andExpect(jsonPath("$.content[0].description").doesNotExist());
     }
 
     // ==================== GET /within-polygon — invalid JSON -> 400 ====================
