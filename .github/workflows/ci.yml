@@ -74,6 +74,32 @@ jobs:
           SUPABASE_PROJECT_REF: ci-placeholder
           AI_API_KEY: ci-placeholder
 
+  # ── Backend Integration ──────────────────────────────────────────────────────
+  # Runs @Tag("integration") tests (Testcontainers, requires Docker).
+  # Docker is available on ubuntu-latest by default — no extra service setup needed.
+  backend-integration:
+    name: Backend (integration tests)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run integration tests
+        working-directory: backend
+        run: mvn test -Dgroups=integration -B --no-transfer-progress
+        env:
+          SUPABASE_DB_HOST: localhost
+          SUPABASE_DB_USER: postgres
+          SUPABASE_DB_PASSWORD: postgres
+          SUPABASE_PROJECT_REF: ci-placeholder
+          AI_API_KEY: ci-placeholder
+
   # ── E2E ─────────────────────────────────────────────────────────────────────
   # E2E tests are NOT run in CI because the deployment URLs (Cloudflare Pages,
   # Render) are only live after the merge completes — running e2e here would
