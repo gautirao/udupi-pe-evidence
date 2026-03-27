@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 /** Haversine distance in km between two lat/lon points. */
@@ -428,7 +428,7 @@ export function usePropertyImages(rawPostId: string | null) {
     queryKey: ['property-images', rawPostId],
     queryFn: async () => {
       if (!rawPostId) return [];
-      
+
       const { data, error } = await supabase
         .from('raw_posts')
         .select('images')
@@ -436,11 +436,52 @@ export function usePropertyImages(rawPostId: string | null) {
         .single();
 
       if (error) throw error;
-      
+
       // Parse images from JSONB - need to cast through unknown due to Json type
       const images = (data?.images as unknown) as PropertyImage[] | null;
       return Array.isArray(images) ? images : [];
     },
     enabled: !!rawPostId,
+  });
+}
+
+// ---- Anonymous teaser discovery ----
+
+/** Minimal listing shape returned by GET /api/public/listings/discovery.
+ *  Deliberately omits sensitive fields (lat/lon, address, contact). */
+export interface TeaserListing {
+  id: string;
+  primaryImageUrl: string | null;
+  /** Price in rupees (backend serialises BigDecimal as number). */
+  price: number | null;
+  propertyType: string | null;
+  locality: string | null;
+  listingPurpose: string | null;
+}
+
+interface TeaserPageResponse {
+  content: TeaserListing[];
+}
+
+async function fetchTeaserListings(page = 0, size = 50): Promise<TeaserListing[]> {
+  try {
+    const data = await api.get<TeaserPageResponse>(
+      `/api/public/listings/discovery?page=${page}&size=${size}`,
+      { skipAuth: true },
+    );
+    return data.content ?? [];
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return [];
+    }
+    throw err;
+  }
+}
+
+export function useTeaserListings() {
+  return useQuery({
+    queryKey: ['teaser-listings'] as const,
+    queryFn: () => fetchTeaserListings(),
+    staleTime: 60_000,
   });
 }

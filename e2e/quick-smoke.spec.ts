@@ -203,9 +203,9 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
   await expect(page.getByRole('link', { name: /feed runs/i })).toHaveCount(0);
   await expect(page.getByRole('link', { name: /facebook groups/i })).toHaveCount(0);
 
-  // All routes are protected — unauthenticated users land on /auth.
-  // Confirm the sign-in form is present (auth page loaded correctly).
-  await expect(page.getByRole('tab', { name: /sign in/i })).toBeVisible();
+  // Since #615, / is no longer protected — unauthenticated users see the teaser home page.
+  // Confirm the login CTA is present (anonymous home loaded correctly).
+  await expect(page.getByRole('link', { name: /sign in/i })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

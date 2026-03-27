@@ -1,23 +1,25 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useTeaserListings, TeaserListing } from '@/hooks/usePropertyListings';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap } from 'lucide-react';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap, LogIn } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
 import { NearbySchoolsBadge } from '@/components/listing/NearbySchoolsBadge';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Index() {
+  const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [urlParams, setUrlParams] = useSearchParams();
   const [filters, setFilters] = useState<PropertyFilters>({});
@@ -107,7 +109,10 @@ export default function Index() {
     });
   }, []);
 
+  // Both hooks are called unconditionally (Rules of Hooks). Data is selected
+  // based on auth state below.
   const { data: listings = [], isLoading: listingsLoading, error: listingsError } = usePropertyListings(filters);
+  const { data: teaserListings = [], isLoading: teaserLoading, error: teaserError } = useTeaserListings();
 
   const singleLocality = filters.localities?.length === 1 ? filters.localities[0] : undefined;
   const singlePropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
@@ -120,11 +125,22 @@ export default function Index() {
     bedrooms: singleBedrooms,
   });
 
-  const isLoading = debouncedSearch ? searchLoading : listingsLoading;
-  const error = debouncedSearch ? searchError : listingsError;
-  const filteredListings = debouncedSearch ? (searchResults ?? []) : listings;
+  const isAuthenticated = !authLoading && user !== null;
 
-  const listingsWithCoords = filteredListings.filter((l) => l.latitude && l.longitude);
+  const isLoading = isAuthenticated
+    ? (debouncedSearch ? searchLoading : listingsLoading)
+    : teaserLoading;
+  const error = isAuthenticated
+    ? (debouncedSearch ? searchError : listingsError)
+    : teaserError;
+  const filteredListings = isAuthenticated
+    ? (debouncedSearch ? (searchResults ?? []) : listings)
+    : [];
+
+  // Anonymous users: no lat/lon in teaser response — pass empty array so no pins render
+  const listingsWithCoords = isAuthenticated
+    ? filteredListings.filter((l) => l.latitude && l.longitude)
+    : [];
 
   const areaMedians = useMemo(() => computeAreaMedians(filteredListings), [filteredListings]);
 
@@ -145,54 +161,14 @@ export default function Index() {
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex relative">
-        {/* Filters Panel — lg+ inline sidebar */}
-        <div
-          className={cn(
-            'hidden lg:block h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
-            showFilters ? 'w-72' : 'w-0 overflow-hidden'
-          )}
-        >
-          <MapFilters
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedSchool={selectedSchool}
-            onSchoolSelect={handleSchoolSelect}
-            schoolBoardFilter={schoolBoardFilter}
-            onSchoolBoardFilterChange={setSchoolBoardFilter}
-          />
-        </div>
-
-        {/* Toggle Filters Button — lg+ only */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
-            showFilters ? 'left-72' : 'left-0'
-          )}
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          {showFilters ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-
-        {/* Mobile Filters Sheet — below lg only */}
-        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="lg:hidden absolute top-3 left-3 z-10 gap-1.5 shadow-sm"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
-            <SheetHeader className="sr-only">
-              <SheetTitle>Filters</SheetTitle>
-            </SheetHeader>
+        {/* Filters Panel — lg+ inline sidebar (authenticated only) */}
+        {isAuthenticated && (
+          <div
+            className={cn(
+              'hidden lg:block h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
+              showFilters ? 'w-72' : 'w-0 overflow-hidden'
+            )}
+          >
             <MapFilters
               filters={filters}
               onFiltersChange={handleFiltersChange}
@@ -203,8 +179,54 @@ export default function Index() {
               schoolBoardFilter={schoolBoardFilter}
               onSchoolBoardFilterChange={setSchoolBoardFilter}
             />
-          </SheetContent>
-        </Sheet>
+          </div>
+        )}
+
+        {/* Toggle Filters Button — lg+ only (authenticated only) */}
+        {isAuthenticated && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
+              showFilters ? 'left-72' : 'left-0'
+            )}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            {showFilters ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </Button>
+        )}
+
+        {/* Mobile Filters Sheet — below lg only (authenticated only) */}
+        {isAuthenticated && (
+          <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+            <SheetTrigger asChild>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="lg:hidden absolute top-3 left-3 z-10 gap-1.5 shadow-sm"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Filters</SheetTitle>
+              </SheetHeader>
+              <MapFilters
+                filters={filters}
+                onFiltersChange={handleFiltersChange}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                selectedSchool={selectedSchool}
+                onSchoolSelect={handleSchoolSelect}
+                schoolBoardFilter={schoolBoardFilter}
+                onSchoolBoardFilterChange={setSchoolBoardFilter}
+              />
+            </SheetContent>
+          </Sheet>
+        )}
 
         {/* Map Area */}
         <div className="flex-1 relative">
@@ -240,8 +262,23 @@ export default function Index() {
             />
           )}
 
-          {/* Locality Quick-Chips */}
-          {!isLoading && topLocalities.length > 0 && (
+          {/* Anonymous login CTA — overlaid above map */}
+          {!isAuthenticated && !authLoading && (
+            <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-center">
+              <div className="flex items-center gap-3 px-5 py-3 bg-card/95 backdrop-blur border border-border rounded-lg shadow-md">
+                <LogIn className="h-5 w-5 text-primary flex-shrink-0" />
+                <p className="text-sm text-foreground">
+                  Sign in to see full details and contact brokers
+                </p>
+                <Button asChild size="sm" className="flex-shrink-0">
+                  <Link to="/auth">Sign in</Link>
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Locality Quick-Chips (authenticated only) */}
+          {isAuthenticated && !isLoading && topLocalities.length > 0 && (
             <div className="absolute top-3 left-16 right-36 z-[1000] lg:left-3 overflow-x-auto scrollbar-none">
               <div className="flex gap-1.5 flex-nowrap pb-1">
                 {topLocalities.map(({ locality, count }) => {
@@ -282,66 +319,68 @@ export default function Index() {
             </div>
           )}
 
-          {/* Stats Bar */}
-          <div className="absolute top-4 right-4 z-[1000]">
-            <Card className="px-3 py-2 bg-card/95 backdrop-blur">
-              <div className="flex items-center gap-4 text-sm">
-                {filters.polygon && (
-                  <>
-                    <div className="flex items-center gap-1.5 text-primary">
-                      <PenTool className="h-4 w-4" />
-                      <span className="font-medium">Area search</span>
-                    </div>
-                    <div className="text-muted-foreground">|</div>
-                  </>
-                )}
-                {selectedSchool && (
-                  <>
-                    <div className="flex items-center gap-1.5 text-primary">
-                      <GraduationCap className="h-4 w-4" />
-                      <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
-                      <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 2} km)</span>
-                    </div>
-                    <div className="text-muted-foreground">|</div>
-                  </>
-                )}
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="h-4 w-4 text-primary" />
-                  <span className="font-medium">{listingsWithCoords.length}</span>
-                  <span className="text-muted-foreground">on map</span>
+          {/* Stats Bar (authenticated only) */}
+          {isAuthenticated && (
+            <div className="absolute top-4 right-4 z-[1000]">
+              <Card className="px-3 py-2 bg-card/95 backdrop-blur">
+                <div className="flex items-center gap-4 text-sm">
+                  {filters.polygon && (
+                    <>
+                      <div className="flex items-center gap-1.5 text-primary">
+                        <PenTool className="h-4 w-4" />
+                        <span className="font-medium">Area search</span>
+                      </div>
+                      <div className="text-muted-foreground">|</div>
+                    </>
+                  )}
+                  {selectedSchool && (
+                    <>
+                      <div className="flex items-center gap-1.5 text-primary">
+                        <GraduationCap className="h-4 w-4" />
+                        <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
+                        <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 2} km)</span>
+                      </div>
+                      <div className="text-muted-foreground">|</div>
+                    </>
+                  )}
+                  <div className="flex items-center gap-1.5">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    <span className="font-medium">{listingsWithCoords.length}</span>
+                    <span className="text-muted-foreground">on map</span>
+                  </div>
+                  <div className="text-muted-foreground">|</div>
+                  <div className="text-muted-foreground">
+                    {filteredListings.length} total listings
+                  </div>
+                  {filters.polygon && (
+                    <>
+                      <div className="text-muted-foreground">|</div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                        onClick={handlePolygonCleared}
+                        aria-label="Clear polygon search"
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" />
+                        Clear area
+                      </Button>
+                    </>
+                  )}
                 </div>
-                <div className="text-muted-foreground">|</div>
-                <div className="text-muted-foreground">
-                  {filteredListings.length} total listings
-                </div>
-                {filters.polygon && (
-                  <>
-                    <div className="text-muted-foreground">|</div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-destructive hover:text-destructive"
-                      onClick={handlePolygonCleared}
-                      aria-label="Clear polygon search"
-                    >
-                      <X className="h-3.5 w-3.5 mr-1" />
-                      Clear area
-                    </Button>
-                  </>
-                )}
-              </div>
-            </Card>
-          </div>
+              </Card>
+            </div>
+          )}
 
-          {/* Selected Listing Preview Card */}
-          {selectedListing && (
+          {/* Selected Listing Preview Card (authenticated only) */}
+          {isAuthenticated && selectedListing && (
             <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg overflow-hidden">
               {/* Thumbnail image */}
               {selectedListing.images && selectedListing.images.length > 0 && (
                 <div className="h-32 bg-muted">
-                  <img 
-                    src={selectedListing.images[0].url} 
-                    alt="Property" 
+                  <img
+                    src={selectedListing.images[0].url}
+                    alt="Property"
                     className="w-full h-full object-cover"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
@@ -419,8 +458,8 @@ export default function Index() {
                   <p className="text-xs text-muted-foreground">
                     Posted {formatRelativeDate(selectedListing.created_at)}
                   </p>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     onClick={() => handleViewDetails(selectedListing)}
                     className="gap-1.5"
                   >
@@ -430,6 +469,67 @@ export default function Index() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* Teaser listing cards — anonymous only */}
+          {!isAuthenticated && !isLoading && !error && teaserListings.length > 0 && (
+            <div className="absolute bottom-4 left-4 right-4 z-[1000]">
+              <div className="overflow-x-auto scrollbar-none">
+                <div className="flex gap-3 flex-nowrap pb-1">
+                  {teaserListings.slice(0, 12).map((listing: TeaserListing) => (
+                    <Card
+                      key={listing.id}
+                      className="flex-shrink-0 w-52 bg-card/95 backdrop-blur shadow-md overflow-hidden"
+                    >
+                      <div className="h-28 bg-muted">
+                        {listing.primaryImageUrl ? (
+                          <img
+                            src={listing.primaryImageUrl}
+                            alt="Property"
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <MapPin className="h-8 w-8 text-muted-foreground/40" />
+                          </div>
+                        )}
+                      </div>
+                      <CardContent className="p-3">
+                        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                          {listing.propertyType && (
+                            <Badge variant="secondary" className="capitalize text-xs">
+                              {listing.propertyType}
+                            </Badge>
+                          )}
+                          {listing.listingPurpose && (
+                            <Badge variant="outline" className="capitalize text-xs">
+                              {listing.listingPurpose.toLowerCase()}
+                            </Badge>
+                          )}
+                        </div>
+                        {listing.price !== null && (
+                          <p className="text-base font-bold text-primary leading-tight">
+                            {formatPrice(listing.price, 'INR')}
+                          </p>
+                        )}
+                        {listing.locality && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                            <MapPin className="h-3 w-3 flex-shrink-0" />
+                            {listing.locality}
+                          </p>
+                        )}
+                        <Button asChild size="sm" variant="outline" className="w-full mt-2 text-xs h-7">
+                          <Link to="/auth">Sign in to view</Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
