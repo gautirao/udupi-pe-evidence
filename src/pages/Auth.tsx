@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/contexts/AuthContext';
@@ -27,9 +27,22 @@ export default function Auth() {
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const from = location.state?.from?.pathname || '/';
+  // Sanitise returnTo: allow only relative paths starting with / but not //
+  // (// would be interpreted as protocol-relative URLs by the browser)
+  const rawReturnTo = searchParams.get('returnTo');
+  const safeReturnTo =
+    rawReturnTo &&
+    rawReturnTo.startsWith('/') &&
+    !rawReturnTo.startsWith('//') &&
+    !rawReturnTo.startsWith('/http')
+      ? rawReturnTo
+      : null;
+
+  // Priority: returnTo query param → state.from.pathname → /
+  const from = safeReturnTo ?? location.state?.from?.pathname ?? '/';
 
   const signInWithGoogle = async () => {
     setIsGoogleLoading(true);

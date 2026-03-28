@@ -86,14 +86,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/" element={<Index />} />
-              <Route
-                path="/listing/:id"
-                element={
-                  <ProtectedRoute>
-                    <ListingDetail />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/listing/:id" element={<ListingDetail />} />
               <Route
                 path="/insights"
                 element={

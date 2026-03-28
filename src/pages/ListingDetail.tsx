@@ -14,10 +14,11 @@ import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck,
-  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw
+  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw, Lock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -180,6 +181,7 @@ export default function ListingDetail() {
   const [searchParams] = useSearchParams();
   const isPreview = searchParams.get('preview') === 'true';
   const { toast } = useToast();
+  const { user } = useAuth();
   const { data: listing, isLoading, error } = useListingById(id, isPreview);
   const { data: priceHistory = [] } = useListingPriceHistory(id);
   const { data: trustData } = useTrustBadges(id);
@@ -811,24 +813,36 @@ export default function ListingDetail() {
           {/* Sidebar - Contact */}
           <div className="space-y-4">
             {/* Request Viewing — primary CTA, always first */}
-            <Card>
-              <CardContent className="p-4">
-                <Button
-                  className="w-full"
-                  onClick={() => setBookingModalOpen(true)}
-                >
-                  <Calendar className="h-4 w-4 mr-2" />
-                  Request Viewing
-                </Button>
-              </CardContent>
-            </Card>
+            {user ? (
+              <Card>
+                <CardContent className="p-4">
+                  <Button
+                    className="w-full"
+                    onClick={() => setBookingModalOpen(true)}
+                  >
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Request Viewing
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="p-4 text-center">
+                  <Lock className="h-6 w-6 mx-auto mb-2 text-primary/60" aria-hidden="true" />
+                  <p className="text-sm text-muted-foreground mb-3">Sign in to view full details</p>
+                  <Button className="w-full" asChild>
+                    <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view full details</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             {/* AreaMarketWidget still expects the snake_case PropertyListing shape;
                 the cast is safe here because the widget degrades gracefully when
                 snake_case fields are absent — it renders "Not enough data". */}
             <AreaMarketWidget listing={listing as unknown as import('@/hooks/usePropertyListings').PropertyListing} />
 
-            {listing.contact_phone && (
+            {user && listing.contact_phone && (
               <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/20">
                 <CardContent className="p-4">
                   <h3 className="font-semibold mb-3 flex items-center gap-2">
@@ -851,7 +865,7 @@ export default function ListingDetail() {
               </Card>
             )}
 
-            {listing.contact_info && (
+            {user && listing.contact_info && (
               <Card>
                 <CardContent className="p-4">
                   <h3 className="font-semibold mb-2">Additional Contact Info</h3>
@@ -885,11 +899,13 @@ export default function ListingDetail() {
         </div>
       </div>
 
-      <RequestViewingModal
-        listingId={listing.id}
-        open={bookingModalOpen}
-        onClose={() => setBookingModalOpen(false)}
-      />
+      {user && (
+        <RequestViewingModal
+          listingId={listing.id}
+          open={bookingModalOpen}
+          onClose={() => setBookingModalOpen(false)}
+        />
+      )}
     </AppLayout>
   );
 }
