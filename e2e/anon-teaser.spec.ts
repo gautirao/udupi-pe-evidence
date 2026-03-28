@@ -117,6 +117,7 @@ test('AT3 — returnTo deep-link: login redirects back to listing', async ({ pag
   await page.waitForLoadState('domcontentloaded');
 
   // Fill credentials and submit — same pattern as user-journeys.spec.ts
+  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#signin-email').fill(userEmail);
   await page.locator('#signin-password').fill(userPassword);
   await page
@@ -141,6 +142,7 @@ test('AT4 — full unlock after login: map markers present, anon CTA absent', as
   // Log in
   await page.goto('/auth');
   await page.waitForLoadState('domcontentloaded');
+  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#signin-email').fill(userEmail);
   await page.locator('#signin-password').fill(userPassword);
   await page
