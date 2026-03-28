@@ -24,6 +24,7 @@ const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 async function loginAsAdmin(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/auth');
   await page.waitForLoadState('domcontentloaded');
+  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#signin-email').fill(adminEmail);
   await page.locator('#signin-password').fill(adminPassword);
   await page

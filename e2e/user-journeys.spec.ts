@@ -39,6 +39,7 @@ function readListingFixture(): { id: string; isLive: boolean } | null {
 async function loginAsUser(page: import('@playwright/test').Page): Promise<void> {
   await page.goto('/auth');
   await page.waitForLoadState('domcontentloaded');
+  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#signin-email').fill(userEmail);
   await page.locator('#signin-password').fill(userPassword);
   await page

@@ -29,6 +29,7 @@ export function hasRealCredentials(...values: string[]): boolean {
 export async function loginAsAdmin(page: Page, email: string, password: string): Promise<void> {
   await page.goto('/auth');
   await page.waitForLoadState('domcontentloaded');
+  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#signin-email').fill(email);
   await page.locator('#signin-password').fill(password);
   await page
