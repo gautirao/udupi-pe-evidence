@@ -48,6 +48,9 @@ async function getToken(email: string, password: string): Promise<string | null>
     return null;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5_000);
+
   try {
     const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
       method: 'POST',
@@ -56,7 +59,9 @@ async function getToken(email: string, password: string): Promise<string | null>
         apikey: SUPABASE_KEY,
       },
       body: JSON.stringify({ email, password }),
+      signal: controller.signal,
     });
+    clearTimeout(timer);
 
     if (!res.ok) {
       const text = await res.text().catch(() => '<unreadable>');
@@ -67,6 +72,7 @@ async function getToken(email: string, password: string): Promise<string | null>
     const data = await res.json() as { access_token?: string };
     return data.access_token ?? null;
   } catch (err) {
+    clearTimeout(timer);
     console.log(`[DL1] Supabase auth request threw: ${String(err)}`);
     return null;
   }
@@ -100,13 +106,15 @@ test.beforeEach(() => {
 });
 
 test.afterEach(async () => {
-    if (!createdListingId) {
-      console.log('[DL1 teardown] No listing ID captured — nothing to clean up.');
-      return;
-    }
+  if (!createdListingId) {
+    console.log('[DL1 teardown] No listing ID captured — nothing to clean up.');
+    return;
+  }
 
-    const id = createdListingId;
+  const id = createdListingId;
+  const CLEANUP_TIMEOUT_MS = 10_000;
 
+  const doCleanup = async (): Promise<void> => {
     // Attempt admin reject so the broker can delete
     let rejected = false;
     const adminToken = await getToken(ADMIN_EMAIL, ADMIN_PASSWORD).catch(() => null);
@@ -158,6 +166,17 @@ test.afterEach(async () => {
     } else {
       console.log('[DL1 teardown] Reject did not succeed — skipping delete to avoid orphan cleanup failure.');
     }
+  };
+
+  await Promise.race([
+    doCleanup(),
+    new Promise<void>(resolve => {
+      setTimeout(() => {
+        console.warn('[DL1 teardown] Cleanup timed out after 10 s — moving on.');
+        resolve();
+      }, CLEANUP_TIMEOUT_MS);
+    }),
+  ]);
 });
 
 test('DL1 — full broker listing creation journey', async ({ page }) => {
