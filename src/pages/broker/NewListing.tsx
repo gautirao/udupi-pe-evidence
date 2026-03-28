@@ -37,6 +37,7 @@ export default function NewListing() {
   // Tracks whether the user has attempted to submit — gates inline field errors
   const [hasAttempted, setHasAttempted] = useState(false);
   const [description, setDescription] = useState('');
+  const [locality, setLocality] = useState('');
 
   // Listing purpose: sale (default) or rent
   const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>('sale');
@@ -114,6 +115,7 @@ export default function NewListing() {
         title: title.trim() || undefined,
         price: isRent ? undefined : priceRupees ?? undefined,
         description: description.trim() || undefined,
+        locality: locality.trim() || undefined,
         landArea: resolvedLandArea,
         landAreaUnit: resolvedLandArea !== undefined ? landAreaUnit : undefined,
         bedrooms: bedroomsNum && !isNaN(bedroomsNum) ? bedroomsNum : undefined,
@@ -407,6 +409,17 @@ export default function NewListing() {
                       : 'e.g. 3 BHK Apartment in Manipal'}
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+
+                {/* Locality */}
+                <div className="space-y-2">
+                  <Label htmlFor="locality">Locality</Label>
+                  <Input
+                    id="locality"
+                    placeholder="e.g. Manipal, Udupi"
+                    value={locality}
+                    onChange={(e) => setLocality(e.target.value)}
                   />
                 </div>
 

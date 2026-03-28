@@ -221,8 +221,11 @@ export default function EditListing() {
     );
   }
 
-  // Step 1 is complete when property type and a valid price are set
-  const step1Complete = listing.propertyType !== '' && (listing.price ?? 0) > 0;
+  // Step 1 is complete when required fields match the submit gate (requiredFieldsComplete).
+  // For rent listings: propertyType + monthlyRent + locality. For sale: propertyType + price + locality.
+  const step1Complete = listingPurpose === 'rent'
+    ? (!!propertyType && monthlyRent !== '' && parseInt(monthlyRent, 10) > 0 && !!locality)
+    : (!!propertyType && (listing.price ?? 0) > 0 && !!locality);
   // Step 2 is complete when >= 3 images have been uploaded (tracked by canSubmitImages)
   const step2Complete = canSubmitImages;
   // Step 3 is complete when address has been confirmed
@@ -873,7 +876,8 @@ export default function EditListing() {
         </div>
 
         {/* ── Step 4: Review & Submit ── */}
-        <div data-testid="step-4-panel" style={{ display: currentStep === 4 ? 'block' : 'none' }}>
+        {currentStep === 4 && (
+        <div data-testid="step-4-panel">
           {/* Review summary */}
           <Card className="mb-4">
             <CardHeader>
@@ -1077,6 +1081,7 @@ export default function EditListing() {
             </Card>
           )}
         </div>
+        )}
 
       </div>
     </AppLayout>
