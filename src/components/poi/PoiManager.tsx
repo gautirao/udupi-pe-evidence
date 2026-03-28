@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Pin, Trash2, PinOff, MapPin, Loader2, Search, X, Building2, Route, Home } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 import {
   CATEGORY_LABELS,
   CATEGORY_ICONS,
@@ -342,6 +343,7 @@ interface PoiManagerProps {
 
 export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('nearby');
 
   const {
@@ -356,8 +358,12 @@ export function PoiManager({ listingId, propertyType }: PoiManagerProps) {
   const approveMutation = useMutation({
     mutationFn: (poiId: string) =>
       api.patch(`/api/listings/${listingId}/pois/${poiId}/approve`),
-    onSettled: () => {
+    onError: () => {
+      toast({ title: 'Approval failed', description: 'Failed to approve POI. Please try again.', variant: 'destructive' });
+    },
+    onSettled: (_data, error) => {
       queryClient.invalidateQueries({ queryKey: ['pois', 'suggestions', listingId] });
+      if (!error) setActiveTab('approved');
     },
   });
 
