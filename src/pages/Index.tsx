@@ -522,7 +522,7 @@ export default function Index() {
                           </p>
                         )}
                         <Button asChild size="sm" variant="outline" className="w-full mt-2 text-xs h-7">
-                          <Link to="/auth">Sign in to view</Link>
+                          <Link to={`/auth?returnTo=/listing/${listing.id}`}>Sign in to view</Link>
                         </Button>
                       </CardContent>
                     </Card>
