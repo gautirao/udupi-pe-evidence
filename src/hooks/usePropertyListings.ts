@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 /** Haversine distance in km between two lat/lon points. */
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -240,8 +241,10 @@ async function fetchPolygonListings(polygon: [number, number][]): Promise<(Prope
 }
 
 export function usePropertyListings(filters?: PropertyFilters) {
+  const { user } = useAuth();
   return useQuery({
-    queryKey: ['property-listings', filters],
+    queryKey: ['property-listings', user?.id ?? null, filters],
+    enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
       // When a polygon is drawn, use the backend PostGIS endpoint
