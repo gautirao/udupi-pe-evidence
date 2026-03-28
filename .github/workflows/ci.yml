@@ -101,11 +101,39 @@ jobs:
           AI_API_KEY: ci-placeholder
 
   # ── E2E ─────────────────────────────────────────────────────────────────────
-  # E2E tests are NOT run in CI because the deployment URLs (Cloudflare Pages,
-  # Render) are only live after the merge completes — running e2e here would
-  # test the previous deployed version, not the new code.
+  # Runs auth-free smoke tests against the deployed Cloudflare Pages site.
+  # Tests run against the previously-deployed version (before PR merges) —
+  # this validates the gate infrastructure and catches regressions in auth-free flows.
   #
-  # E2E gate: the pre-push hook (.githooks/pre-push) runs Playwright locally
-  # against a locally-started backend + frontend before each push.
-  # Setup: npm run prepare  (sets hooksPath once per clone)
-  # Run:   npm run test:e2e:local  (or just git push — hook triggers automatically)
+  # TODO: Switch test command to `--project=smoke` after #650 merges (smoke/full split).
+  playwright-pr:
+    name: E2E smoke (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run auth-free smoke tests
+        run: npx playwright test e2e/quick-smoke.spec.ts
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || 'https://udupi-property-explorer.pages.dev' }}
+
+      - name: Upload Playwright report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-pr-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: playwright-report/
+          retention-days: 14
