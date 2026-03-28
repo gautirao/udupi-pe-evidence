@@ -75,11 +75,9 @@ Project item IDs:
 #617 → PVTI_lAHOAAVnaM4BSWI7zgofiOY
 #618 → PVTI_lAHOAAVnaM4BSWI7zgofiOc
 
-Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624 | #609 ✅ PR #625 | #378 ✅ PR #626 | #488 ✅ PR #627
+Previously completed: #612 ✅ PR #619 | #606 ✅ PR #620 | #611 ✅ PR #621 | #610 ✅ PR #622 | #605 ✅ PR #623 | #607 ✅ PR #624 | #609 ✅ PR #625 | #378 ✅ PR #626 | #488 ✅ PR #627 | #608 ✅ PR #628 | #613 ✅ PR #629 | #614 ✅ PR #630 | #615 ✅ PR #631 | #616 ✅ PR #632 | #617 ✅ PR #633 | #618 ✅ PR #634
 
-Remaining execution order: #608 → #613 → #614 → #615 → #616 → #617 → #618
+Remaining execution order: (none)
 
-Status: IN_PROGRESS · 9/16 complete
-
-Next PR: #608 — feat(ui): show trust badges on search cards / map results
+Status: COMPLETE · 16/16 complete
 === ROLLING CHECKPOINT END ===
