@@ -14,6 +14,20 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
+    {
+      name: 'smoke',
+      use: { browserName: 'chromium' },
+      testMatch: [
+        '**/quick-smoke.spec.ts',
+        '**/nav-roles.spec.ts',
+        '**/broker-listing-form.spec.ts',
+        '**/listing-lifecycle.spec.ts',
+      ],
+    },
+    {
+      name: 'full',
+      // Intentionally includes the same files as smoke — full suite runs everything.
+      use: { browserName: 'chromium' },
+    },
   ],
 });

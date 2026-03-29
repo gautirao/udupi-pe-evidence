@@ -121,4 +121,4 @@ fi
 echo "[e2e] Frontend ready."
 echo ""
 
-npx playwright test "$@"
+npx playwright test "$@" --project=smoke
