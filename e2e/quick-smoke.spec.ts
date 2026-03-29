@@ -213,7 +213,10 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
 // Q7 — Booking duplicate: second request to same listing returns error
 //      Skipped if SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set
 // ---------------------------------------------------------------------------
-test('Q7 — duplicate booking request is rejected', async ({ page }) => {
+test.describe('Q7 — user-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+
+  test('Q7 — duplicate booking request is rejected', async ({ page }) => {
   test.skip(!hasUserCreds || !smokListingId, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set or placeholder, or SMOKE_LISTING_ID missing — skipping Q7');
   test.skip(
     smokeListingStatus !== 'LIVE',
@@ -226,19 +229,6 @@ test('Q7 — duplicate booking request is rejected', async ({ page }) => {
     !process.env.SMOKE_LISTING_ID,
     'Auto-fixture present — L4 in listing-lifecycle.spec.ts covers this; skipping Q7',
   );
-
-  // Log in
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(userEmail);
-  await page.locator('#signin-password').fill(userPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
 
   // Navigate to the listing detail page
   await page.goto(`/listing/${smokListingId}`);
@@ -350,4 +340,5 @@ test('Q7 — duplicate booking request is rejected', async ({ page }) => {
     secondResult.status,
     `Expected 409 (duplicate active booking) from second request, got ${secondResult.status}`,
   ).toBe(409);
+  });
 });

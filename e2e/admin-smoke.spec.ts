@@ -21,85 +21,75 @@ const adminEmail = process.env.ADMIN_EMAIL ?? '';
 const adminPassword = process.env.ADMIN_PASSWORD ?? '';
 const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 
-async function loginAsAdmin(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(adminEmail);
-  await page.locator('#signin-password').fill(adminPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
 // ---------------------------------------------------------------------------
-// A1 — Admin can access /admin/listings/pending
+// A1–A3 — Admin-authenticated tests
 // ---------------------------------------------------------------------------
-test('A1 — admin can access /admin/listings/pending (Pending Approval queue)', async ({ page }) => {
-  test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping A1');
+test.describe('admin-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
 
-  await loginAsAdmin(page);
-  await page.goto('/admin/listings/pending');
-  await page.waitForLoadState('domcontentloaded');
+  // ---------------------------------------------------------------------------
+  // A1 — Admin can access /admin/listings/pending
+  // ---------------------------------------------------------------------------
+  test('A1 — admin can access /admin/listings/pending (Pending Approval queue)', async ({ page }) => {
+    test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping A1');
 
-  // Must stay on the admin route (not redirect to /auth)
-  await expect(page).toHaveURL(/\/admin\/listings\/pending/, { timeout: 8_000 });
+    await page.goto('/admin/listings/pending');
+    await page.waitForLoadState('domcontentloaded');
 
-  // No error boundary
-  await expect(
-    page.locator('text=Something went wrong. Please refresh the page.'),
-  ).toHaveCount(0);
+    // Must stay on the admin route (not redirect to /auth)
+    await expect(page).toHaveURL(/\/admin\/listings\/pending/, { timeout: 8_000 });
 
-  // "Pending Approval" heading must appear
-  await expect(
-    page.getByText(/pending approval/i).first(),
-  ).toBeVisible({ timeout: 10_000 });
-});
+    // No error boundary
+    await expect(
+      page.locator('text=Something went wrong. Please refresh the page.'),
+    ).toHaveCount(0);
 
-// ---------------------------------------------------------------------------
-// A2 — Admin can access /admin/localities (Locality Normalizer)
-// ---------------------------------------------------------------------------
-test('A2 — admin can access /admin/localities (Locality Normalizer)', async ({ page }) => {
-  test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping A2');
+    // "Pending Approval" heading must appear
+    await expect(
+      page.getByText(/pending approval/i).first(),
+    ).toBeVisible({ timeout: 10_000 });
+  });
 
-  await loginAsAdmin(page);
-  await page.goto('/admin/localities');
-  await page.waitForLoadState('domcontentloaded');
+  // ---------------------------------------------------------------------------
+  // A2 — Admin can access /admin/localities (Locality Normalizer)
+  // ---------------------------------------------------------------------------
+  test('A2 — admin can access /admin/localities (Locality Normalizer)', async ({ page }) => {
+    test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping A2');
 
-  await expect(page).toHaveURL(/\/admin\/localities/, { timeout: 8_000 });
+    await page.goto('/admin/localities');
+    await page.waitForLoadState('domcontentloaded');
 
-  await expect(
-    page.locator('text=Something went wrong. Please refresh the page.'),
-  ).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/localities/, { timeout: 8_000 });
 
-  await expect(
-    page.getByText(/locality normalizer/i).first(),
-  ).toBeVisible({ timeout: 10_000 });
-});
+    await expect(
+      page.locator('text=Something went wrong. Please refresh the page.'),
+    ).toHaveCount(0);
 
-// ---------------------------------------------------------------------------
-// A3 — Admin can access /admin/listings (all listings view)
-// ---------------------------------------------------------------------------
-test('A3 — admin can access /admin/listings (all listings view)', async ({ page }) => {
-  test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping A3');
+    await expect(
+      page.getByText(/locality normalizer/i).first(),
+    ).toBeVisible({ timeout: 10_000 });
+  });
 
-  await loginAsAdmin(page);
-  await page.goto('/admin/listings');
-  await page.waitForLoadState('domcontentloaded');
+  // ---------------------------------------------------------------------------
+  // A3 — Admin can access /admin/listings (all listings view)
+  // ---------------------------------------------------------------------------
+  test('A3 — admin can access /admin/listings (all listings view)', async ({ page }) => {
+    test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping A3');
 
-  await expect(page).toHaveURL(/\/admin\/listings$/, { timeout: 8_000 });
+    await page.goto('/admin/listings');
+    await page.waitForLoadState('domcontentloaded');
 
-  await expect(
-    page.locator('text=Something went wrong. Please refresh the page.'),
-  ).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/listings$/, { timeout: 8_000 });
 
-  // Page must render some content — either a listings table or an empty state message
-  // (either is valid; what is NOT valid is a crash or blank page)
-  const bodyText = await page.locator('body').textContent();
-  expect(bodyText?.trim().length, 'admin/listings body appears blank').toBeGreaterThan(0);
+    await expect(
+      page.locator('text=Something went wrong. Please refresh the page.'),
+    ).toHaveCount(0);
+
+    // Page must render some content — either a listings table or an empty state message
+    // (either is valid; what is NOT valid is a crash or blank page)
+    const bodyText = await page.locator('body').textContent();
+    expect(bodyText?.trim().length, 'admin/listings body appears blank').toBeGreaterThan(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

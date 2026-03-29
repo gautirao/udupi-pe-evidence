@@ -79,26 +79,10 @@ async function getToken(email: string, password: string): Promise<string | null>
 }
 
 // ---------------------------------------------------------------------------
-// Login helper
-// ---------------------------------------------------------------------------
-
-async function loginAsBroker(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(BROKER_EMAIL);
-  await page.locator('#signin-password').fill(BROKER_PASSWORD);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
-// ---------------------------------------------------------------------------
 // DL1 — Full listing creation journey
 // ---------------------------------------------------------------------------
+
+test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
 let createdListingId: string | null = null;
 
@@ -208,7 +192,6 @@ test('DL1 — full broker listing creation journey', async ({ page }) => {
     }
   });
 
-  await loginAsBroker(page);
   await page.goto('/broker/listings/new');
   await page.waitForLoadState('domcontentloaded');
 

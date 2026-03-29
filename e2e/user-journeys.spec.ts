@@ -10,6 +10,9 @@
  * All tests require SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD.
  * U4 additionally requires e2e/.test-listing-id (written by global-setup) with a LIVE listing.
  *
+ * Auth: tests use storageState from e2e/fixtures/user-auth.json (written by global-setup).
+ * The page starts already authenticated — no per-test UI login required.
+ *
  * Run locally:
  *   SMOKE_USER_EMAIL=user@example.com SMOKE_USER_PASSWORD=... npm run test:e2e -- e2e/user-journeys.spec.ts
  */
@@ -36,19 +39,8 @@ function readListingFixture(): { id: string; isLive: boolean } | null {
   return { id, isLive: lines[1]?.trim() === 'LIVE' };
 }
 
-async function loginAsUser(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(userEmail);
-  await page.locator('#signin-password').fill(userPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
+// All tests in this file need user auth — start with pre-authenticated session.
+test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
 // ---------------------------------------------------------------------------
 // U1 — /saved-areas loads
@@ -56,7 +48,6 @@ async function loginAsUser(page: import('@playwright/test').Page): Promise<void>
 test('U1 — /saved-areas loads with My Saved Areas heading', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping U1');
 
-  await loginAsUser(page);
   await page.goto('/saved-areas');
   await page.waitForLoadState('domcontentloaded');
   await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
@@ -77,7 +68,6 @@ test('U1 — /saved-areas loads with My Saved Areas heading', async ({ page }) =
 test('U2 — /my-bookings loads with My Bookings heading', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping U2');
 
-  await loginAsUser(page);
   await page.goto('/my-bookings');
   await page.waitForLoadState('domcontentloaded');
   await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
@@ -100,7 +90,6 @@ test('U2 — /my-bookings loads with My Bookings heading', async ({ page }) => {
 test('U3 — /insights renders correctly (paywall or content — no crash)', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping U3');
 
-  await loginAsUser(page);
   await page.goto('/insights');
   await page.waitForLoadState('domcontentloaded');
   await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
@@ -146,7 +135,6 @@ test('U4 — listing detail: AreaMarketWidget renders without crash', async ({ p
 
   const { id } = fixture!;
 
-  await loginAsUser(page);
   await page.goto(`/listing/${id}`);
   await page.waitForLoadState('domcontentloaded');
   await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});

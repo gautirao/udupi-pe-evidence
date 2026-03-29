@@ -11,6 +11,7 @@
  *   SMOKE_USER_EMAIL=you@example.com SMOKE_USER_PASSWORD=secret npm run test:e2e
  *
  * All tests skip gracefully when SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD are not set.
+ * Auth: tests use storageState from e2e/fixtures/user-auth.json (written by global-setup).
  */
 
 import { test, expect } from '@playwright/test';
@@ -20,19 +21,8 @@ const userEmail = process.env.SMOKE_USER_EMAIL ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
-async function loginAsUser(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(userEmail);
-  await page.locator('#signin-password').fill(userPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
+// All tests in this file need user auth — start with pre-authenticated session.
+test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
 // ---------------------------------------------------------------------------
 // M1 — Map page loads; filter panel and search input visible
@@ -40,7 +30,6 @@ async function loginAsUser(page: import('@playwright/test').Page): Promise<void>
 test('M1 — map page loads with filter panel and search input', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M1');
 
-  await loginAsUser(page);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page
@@ -66,7 +55,6 @@ test('M1 — map page loads with filter panel and search input', async ({ page }
 test('M2 — BHK filter toggle activates Clear button, Clear resets state', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M2');
 
-  await loginAsUser(page);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page
@@ -99,7 +87,6 @@ test('M2 — BHK filter toggle activates Clear button, Clear resets state', asyn
 test('M3 — text search accepts query and Clear resets it', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M3');
 
-  await loginAsUser(page);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page
@@ -191,7 +178,6 @@ test('M5 — Leaflet map renders at least one custom-marker pin when listings ha
     });
   });
 
-  await loginAsUser(page);
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
   await page
@@ -215,7 +201,6 @@ test('M5 — Leaflet map renders at least one custom-marker pin when listings ha
 test('M4 — Insights page loads with Market Insights heading and no error', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M4');
 
-  await loginAsUser(page);
   await page.goto('/insights');
   await page.waitForLoadState('domcontentloaded');
   await page

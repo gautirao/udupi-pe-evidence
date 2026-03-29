@@ -136,36 +136,27 @@ test('AT3 — returnTo deep-link: login redirects back to listing', async ({ pag
 // ---------------------------------------------------------------------------
 // AT4 — full unlock after login: map markers present, anon CTA absent
 // ---------------------------------------------------------------------------
-test('AT4 — full unlock after login: map markers present, anon CTA absent', async ({ page }) => {
-  test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping AT4');
+test.describe('AT4 — user-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  // Log in
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(userEmail);
-  await page.locator('#signin-password').fill(userPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
+  test('AT4 — full unlock after login: map markers present, anon CTA absent', async ({ page }) => {
+    test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping AT4');
 
-  // Navigate to home
-  await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
+    // Navigate to home
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
 
-  // Authenticated users get full listings with coordinates — map markers appear when data has coords.
-  // In local environments the test listing has no lat/lon, so markers may not appear; don't fail.
-  try {
-    await page.waitForSelector('.leaflet-marker-icon', { timeout: 5_000 });
-  } catch {
-    // No markers — local DB listings lack coordinates. Anon CTA check below is the primary assertion.
-  }
+    // Authenticated users get full listings with coordinates — map markers appear when data has coords.
+    // In local environments the test listing has no lat/lon, so markers may not appear; don't fail.
+    try {
+      await page.waitForSelector('.leaflet-marker-icon', { timeout: 5_000 });
+    } catch {
+      // No markers — local DB listings lack coordinates. Anon CTA check below is the primary assertion.
+    }
 
-  // The anonymous-only CTA must not be present for an authenticated user
-  await expect(
-    page.locator('text=Sign in to see full details and contact brokers'),
-  ).toHaveCount(0);
+    // The anonymous-only CTA must not be present for an authenticated user
+    await expect(
+      page.locator('text=Sign in to see full details and contact brokers'),
+    ).toHaveCount(0);
+  });
 });

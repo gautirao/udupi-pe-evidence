@@ -21,89 +21,75 @@ const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWOR
 
 const hasBrokerCreds = hasRealCredentials(brokerEmail, brokerPassword);
 
-/** Log in as the test broker and wait for redirect away from /auth. */
-async function loginAsBroker(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(brokerEmail);
-  await page.locator('#signin-password').fill(brokerPassword);
-
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
 // ---------------------------------------------------------------------------
-// D1 — Broker can access /broker/dashboard
+// D1–D3 — Broker-authenticated tests
 // ---------------------------------------------------------------------------
-test('D1 — broker can access /broker/dashboard', async ({ page }) => {
-  test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping D1');
+test.describe('broker-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
-  await loginAsBroker(page);
-  await page.goto('/broker/dashboard');
-  await page.waitForLoadState('domcontentloaded');
+  // ---------------------------------------------------------------------------
+  // D1 — Broker can access /broker/dashboard
+  // ---------------------------------------------------------------------------
+  test('D1 — broker can access /broker/dashboard', async ({ page }) => {
+    test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping D1');
 
-  // Must not redirect away from the broker dashboard
-  await expect(page).toHaveURL(/\/broker\/dashboard/, { timeout: 8_000 });
+    await page.goto('/broker/dashboard');
+    await page.waitForLoadState('domcontentloaded');
 
-  // Page heading must be present
-  await expect(
-    page.getByRole('heading', { name: /broker dashboard/i }),
-  ).toBeVisible({ timeout: 8_000 });
+    // Must not redirect away from the broker dashboard
+    await expect(page).toHaveURL(/\/broker\/dashboard/, { timeout: 8_000 });
 
-  // Quick action buttons must be present
-  await expect(page.getByRole('link', { name: /create new listing/i })).toBeVisible();
-  await expect(page.getByRole('link', { name: /view all listings/i })).toBeVisible();
-});
+    // Page heading must be present
+    await expect(
+      page.getByRole('heading', { name: /broker dashboard/i }),
+    ).toBeVisible({ timeout: 8_000 });
 
-// ---------------------------------------------------------------------------
-// D2 — Broker can access /broker/listings
-// ---------------------------------------------------------------------------
-test('D2 — broker can access /broker/listings', async ({ page }) => {
-  test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping D2');
+    // Quick action buttons must be present
+    await expect(page.getByRole('link', { name: /create new listing/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /view all listings/i })).toBeVisible();
+  });
 
-  await loginAsBroker(page);
-  await page.goto('/broker/listings');
-  await page.waitForLoadState('domcontentloaded');
+  // ---------------------------------------------------------------------------
+  // D2 — Broker can access /broker/listings
+  // ---------------------------------------------------------------------------
+  test('D2 — broker can access /broker/listings', async ({ page }) => {
+    test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping D2');
 
-  await expect(page).toHaveURL(/\/broker\/listings$/, { timeout: 8_000 });
+    await page.goto('/broker/listings');
+    await page.waitForLoadState('domcontentloaded');
 
-  // "My Listings" heading must be present
-  await expect(
-    page.getByRole('heading', { name: /my listings/i }),
-  ).toBeVisible({ timeout: 8_000 });
-});
+    await expect(page).toHaveURL(/\/broker\/listings$/, { timeout: 8_000 });
 
-// ---------------------------------------------------------------------------
-// D3 — Broker can access /broker/bookings
-// ---------------------------------------------------------------------------
-test('D3 — broker can access /broker/bookings', async ({ page }) => {
-  test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping D3');
+    // "My Listings" heading must be present
+    await expect(
+      page.getByRole('heading', { name: /my listings/i }),
+    ).toBeVisible({ timeout: 8_000 });
+  });
 
-  await loginAsBroker(page);
-  await page.goto('/broker/bookings');
-  await page.waitForLoadState('domcontentloaded');
+  // ---------------------------------------------------------------------------
+  // D3 — Broker can access /broker/bookings
+  // ---------------------------------------------------------------------------
+  test('D3 — broker can access /broker/bookings', async ({ page }) => {
+    test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping D3');
 
-  await expect(page).toHaveURL(/\/broker\/bookings/, { timeout: 8_000 });
+    await page.goto('/broker/bookings');
+    await page.waitForLoadState('domcontentloaded');
 
-  // "Booking Requests" heading must be present
-  await expect(
-    page.getByRole('heading', { name: /booking requests/i }),
-  ).toBeVisible({ timeout: 8_000 });
+    await expect(page).toHaveURL(/\/broker\/bookings/, { timeout: 8_000 });
 
-  // Both sections must render (even if empty)
-  await expect(
-    page.getByRole('heading', { name: /pending requests/i }),
-  ).toBeVisible({ timeout: 8_000 });
-  await expect(
-    page.getByRole('heading', { name: /confirmed bookings/i }),
-  ).toBeVisible({ timeout: 8_000 });
+    // "Booking Requests" heading must be present
+    await expect(
+      page.getByRole('heading', { name: /booking requests/i }),
+    ).toBeVisible({ timeout: 8_000 });
+
+    // Both sections must render (even if empty)
+    await expect(
+      page.getByRole('heading', { name: /pending requests/i }),
+    ).toBeVisible({ timeout: 8_000 });
+    await expect(
+      page.getByRole('heading', { name: /confirmed bookings/i }),
+    ).toBeVisible({ timeout: 8_000 });
+  });
 });
 
 // ---------------------------------------------------------------------------

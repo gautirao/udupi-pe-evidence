@@ -24,8 +24,8 @@
  *   npm run test:e2e:local -- e2e/admin-duplicates.spec.ts
  */
 
-import { test, expect, Page } from '@playwright/test';
-import { hasRealCredentials, loginAsAdmin } from './helpers';
+import { test, expect } from '@playwright/test';
+import { hasRealCredentials } from './helpers';
 
 // ---------------------------------------------------------------------------
 // Env
@@ -198,6 +198,7 @@ interface SuiteFixture {
 
 test.describe('Admin duplicates (/admin/duplicates)', () => {
   test.describe.configure({ mode: 'serial' });
+  test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
 
   // Skip guard: all tests in this block require admin + dealer credentials.
   // AD6 lives outside this block (does not need credentials).
@@ -280,7 +281,6 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
   }) => {
     test.skip(!hasRequiredCreds, 'Admin/dealer credentials not set — skipping AD1');
 
-    await loginAsAdmin(page, adminEmail, adminPassword);
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 
@@ -307,7 +307,6 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     test.skip(!hasRequiredCreds, 'Admin/dealer credentials not set — skipping AD2');
     test.skip(fixture === null, 'Seed fixture not available — skipping AD2');
 
-    await loginAsAdmin(page, adminEmail, adminPassword);
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 
@@ -345,7 +344,6 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     test.skip(!hasRequiredCreds, 'Admin/dealer credentials not set — skipping AD4');
     test.skip(fixture === null, 'Seed fixture not available — skipping AD4');
 
-    await loginAsAdmin(page, adminEmail, adminPassword);
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 
@@ -377,7 +375,6 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
     test.skip(!hasRequiredCreds, 'Admin/dealer credentials not set — skipping AD3');
     test.skip(fixture === null, 'Seed fixture not available — skipping AD3');
 
-    await loginAsAdmin(page, adminEmail, adminPassword);
     await page.goto('/admin/duplicates');
     await page.waitForLoadState('domcontentloaded');
 

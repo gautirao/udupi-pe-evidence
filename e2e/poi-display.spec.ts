@@ -27,6 +27,8 @@ const userEmail    = process.env.SMOKE_USER_EMAIL    ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 
+test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+
 const FIXTURE_LISTING_ID = 'e2e-poi-listing-fixture';
 
 /** Fixture listing with coordinates so NearbyPois can attempt to display. */
@@ -85,20 +87,6 @@ const POI_FIXTURES = [
   { id: 'poi-2', name: "St. Mary's School",  category: 'SCHOOL',    distanceMeters: 300, latitude: 13.342, longitude: 74.744, pinned: false, approved: true },
 ];
 
-async function loginAsUser(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(userEmail);
-  await page.locator('#signin-password').fill(userPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
 /** Intercept Spring backend public listing endpoint to return a deterministic listing fixture. */
 async function stubListing(page: import('@playwright/test').Page): Promise<void> {
   await page.route(`**/api/public/listings/${FIXTURE_LISTING_ID}`, async (route) => {
@@ -131,7 +119,6 @@ test('P1 — NearbyPois section renders with approved POIs from backend', async 
     });
   });
 
-  await loginAsUser(page);
   await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
   await page.waitForLoadState('domcontentloaded');
 
@@ -163,7 +150,6 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
     });
   });
 
-  await loginAsUser(page);
   await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
   await page.waitForLoadState('domcontentloaded');
 

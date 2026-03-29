@@ -24,84 +24,73 @@ const adminPassword = process.env.ADMIN_PASSWORD ?? '';
 const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 
-async function loginAs(
-  page: import('@playwright/test').Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(email);
-  await page.locator('#signin-password').fill(password);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
 // ---------------------------------------------------------------------------
 // N1 — User role: correct nav links after login
 // ---------------------------------------------------------------------------
-test('N1 — user role (owner): Insights, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {
-  test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping N1');
+test.describe('N1 — user-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  await loginAs(page, userEmail, userPassword);
+  test('N1 — user role (owner): Insights, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {
+    test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping N1');
 
-  // Wait for auth context to settle so nav renders with the correct role
-  await page.waitForTimeout(2_000);
+    await page.goto('/');
+    // Wait for auth context to settle so nav renders with the correct role
+    await page.waitForTimeout(2_000);
 
-  // Owner nav items must be visible (superset of old user nav + listing management)
-  await expect(page.getByRole('link', { name: /^insights$/i }).first()).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByRole('link', { name: /my saved areas/i })).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByRole('link', { name: /^my listings$/i })).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByRole('link', { name: /new listing/i })).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByRole('link', { name: /my bookings/i })).toBeVisible({ timeout: 8_000 });
+    // Owner nav items must be visible (superset of old user nav + listing management)
+    await expect(page.getByRole('link', { name: /^insights$/i }).first()).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('link', { name: /my saved areas/i })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('link', { name: /^my listings$/i })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('link', { name: /new listing/i })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('link', { name: /my bookings/i })).toBeVisible({ timeout: 8_000 });
 
-  // Dealer-only "Bookings" (not "My Bookings") must NOT appear
-  await expect(page.getByRole('link', { name: /^bookings$/i })).toHaveCount(0);
+    // Dealer-only "Bookings" (not "My Bookings") must NOT appear
+    await expect(page.getByRole('link', { name: /^bookings$/i })).toHaveCount(0);
 
-  // Admin-only links must NOT appear
-  await expect(page.getByRole('link', { name: /pending approval/i })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /feed runs/i })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /locality normalizer/i })).toHaveCount(0);
+    // Admin-only links must NOT appear
+    await expect(page.getByRole('link', { name: /pending approval/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /feed runs/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /locality normalizer/i })).toHaveCount(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // N2 — Admin role: "Admin" dropdown trigger visible; dropdown reveals admin links; no dealer links
 // ---------------------------------------------------------------------------
-test('N2 — admin role: Admin dropdown visible; admin nav links present; no dealer links', async ({ page }) => {
-  test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping N2');
+test.describe('N2 — admin-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
 
-  await loginAs(page, adminEmail, adminPassword);
-  await page.waitForTimeout(2_000);
+  test('N2 — admin role: Admin dropdown visible; admin nav links present; no dealer links', async ({ page }) => {
+    test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping N2');
 
-  // On desktop, admin nav renders as a dropdown behind an "Admin" button trigger.
-  // The trigger itself must be visible for admin users.
-  const adminTrigger = page.getByRole('button', { name: /^admin$/i }).first();
-  await expect(adminTrigger).toBeVisible({ timeout: 8_000 });
+    await page.goto('/');
+    await page.waitForTimeout(2_000);
 
-  // Open the dropdown to reveal admin nav links
-  await adminTrigger.click();
+    // On desktop, admin nav renders as a dropdown behind an "Admin" button trigger.
+    // The trigger itself must be visible for admin users.
+    const adminTrigger = page.getByRole('button', { name: /^admin$/i }).first();
+    await expect(adminTrigger).toBeVisible({ timeout: 8_000 });
 
-  await expect(
-    page.getByRole('menuitem', { name: /pending approval/i }).first(),
-  ).toBeVisible({ timeout: 5_000 });
-  await expect(
-    page.getByRole('menuitem', { name: /locality normalizer/i }).first(),
-  ).toBeVisible({ timeout: 5_000 });
-  await expect(
-    page.getByRole('menuitem', { name: /feed runs/i }).first(),
-  ).toBeVisible({ timeout: 5_000 });
+    // Open the dropdown to reveal admin nav links
+    await adminTrigger.click();
 
-  // Close dropdown by pressing Escape
-  await page.keyboard.press('Escape');
+    await expect(
+      page.getByRole('menuitem', { name: /pending approval/i }).first(),
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page.getByRole('menuitem', { name: /locality normalizer/i }).first(),
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page.getByRole('menuitem', { name: /feed runs/i }).first(),
+    ).toBeVisible({ timeout: 5_000 });
 
-  // Dealer-only links must NOT appear anywhere on the page
-  await expect(page.getByRole('link', { name: /^my listings$/i })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: /new listing/i })).toHaveCount(0);
+    // Close dropdown by pressing Escape
+    await page.keyboard.press('Escape');
+
+    // Dealer-only links must NOT appear anywhere on the page
+    await expect(page.getByRole('link', { name: /^my listings$/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /new listing/i })).toHaveCount(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

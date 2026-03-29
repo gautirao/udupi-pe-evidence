@@ -88,171 +88,149 @@ function getUserIdFromToken(token: string): string {
   return decoded.sub ?? '';
 }
 
-/** Log in as broker via the UI and wait for redirect away from /auth. */
-async function loginAsBroker(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(brokerEmail);
-  await page.locator('#signin-password').fill(brokerPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
-/** Log in as the smoke-test user via the UI and wait for redirect away from /auth. */
-async function loginAsUser(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(userEmail);
-  await page.locator('#signin-password').fill(userPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
 // ---------------------------------------------------------------------------
-// L1 — Created listing appears in broker /broker/listings page
+// L1, L2, L5 — Broker-authenticated tests
 // ---------------------------------------------------------------------------
-test('L1 — created listing appears in broker /broker/listings', async ({ page }) => {
-  test.skip(
-    !hasBrokerCreds,
-    'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — skipping L1',
-  );
+test.describe('broker-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
-  const fixture = readListingFixture();
-  test.skip(
-    fixture === null,
-    'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
-  );
-
-  // TypeScript narrowing: fixture is non-null after the skip above
-  const { id } = fixture!;
-
-  await loginAsBroker(page);
-  await page.goto('/dealer/listings');
-  await page.waitForLoadState('domcontentloaded');
-
-  await expect(page).toHaveURL(/\/broker\/listings/, { timeout: 8_000 });
-
-  // ProtectedRoute shows a "Loading..." paragraph while Supabase auth resolves.
-  // Wait for it to disappear before asserting listing content.
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
-  // Then wait for the listings API fetch to settle.
-  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-
-  // The listing card must contain either the UUID or the test title substring.
-  // Try the UUID first (most reliable), fall back to the title text.
-  const byId = page.locator(`text=${id}`);
-  const byTitle = page.locator('text=[E2E Test Listing]');
-
-  const idVisible = await byId.isVisible().catch(() => false);
-  const titleVisible = await byTitle.first().isVisible().catch(() => false);
-
-  if (!idVisible && !titleVisible) {
-    throw new Error(
-      `L1: Neither the listing ID (${id}) nor the test title was visible on /broker/listings`,
+  // ---------------------------------------------------------------------------
+  // L1 — Created listing appears in broker /broker/listings page
+  // ---------------------------------------------------------------------------
+  test('L1 — created listing appears in broker /broker/listings', async ({ page }) => {
+    test.skip(
+      !hasBrokerCreds,
+      'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — skipping L1',
     );
-  }
+
+    const fixture = readListingFixture();
+    test.skip(
+      fixture === null,
+      'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
+    );
+
+    // TypeScript narrowing: fixture is non-null after the skip above
+    const { id } = fixture!;
+
+    await page.goto('/dealer/listings');
+    await page.waitForLoadState('domcontentloaded');
+
+    await expect(page).toHaveURL(/\/broker\/listings/, { timeout: 8_000 });
+
+    // ProtectedRoute shows a "Loading..." paragraph while Supabase auth resolves.
+    // Wait for it to disappear before asserting listing content.
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+    // Then wait for the listings API fetch to settle.
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+    // The listing card must contain either the UUID or the test title substring.
+    // Try the UUID first (most reliable), fall back to the title text.
+    const byId = page.locator(`text=${id}`);
+    const byTitle = page.locator('text=[E2E Test Listing]');
+
+    const idVisible = await byId.isVisible().catch(() => false);
+    const titleVisible = await byTitle.first().isVisible().catch(() => false);
+
+    if (!idVisible && !titleVisible) {
+      throw new Error(
+        `L1: Neither the listing ID (${id}) nor the test title was visible on /broker/listings`,
+      );
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // L2 — Listing detail page loads without an error banner
+  // ---------------------------------------------------------------------------
+  test('L2 — listing detail page loads without error', async ({ page }) => {
+    const fixture = readListingFixture();
+    test.skip(
+      fixture === null,
+      'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
+    );
+    test.skip(
+      !hasBrokerCreds,
+      'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — /listing/:id requires auth; skipping L2',
+    );
+
+    const { id } = fixture!;
+
+    // /listing/:id is a ProtectedRoute — must be logged in before navigating.
+    await page.goto(`/listing/${id}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for ProtectedRoute auth check and page data to load.
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+    // No Sentry/error boundary banner
+    await expect(
+      page.locator('text=Something went wrong. Please refresh the page.'),
+    ).toHaveCount(0);
+
+    // The listing title substring must appear somewhere in the page
+    await expect(
+      page.locator('text=[E2E Test Listing]').first(),
+    ).toBeVisible({ timeout: 10_000 });
+  });
+
 });
 
 // ---------------------------------------------------------------------------
-// L2 — Listing detail page loads without an error banner
+// L3, L4 — User-authenticated tests
 // ---------------------------------------------------------------------------
-test('L2 — listing detail page loads without error', async ({ page }) => {
-  const fixture = readListingFixture();
-  test.skip(
-    fixture === null,
-    'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
-  );
-  test.skip(
-    !hasBrokerCreds,
-    'BROKER_EMAIL / DEALER_EMAIL / DEALER_PASSWORD not set — /listing/:id requires auth; skipping L2',
-  );
+test.describe('user-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  const { id } = fixture!;
+  // ---------------------------------------------------------------------------
+  // L3 — "Request Viewing" button visible when listing is LIVE
+  // ---------------------------------------------------------------------------
+  test('L3 — Request Viewing button visible for a LIVE listing', async ({ page }) => {
+    const fixture = readListingFixture();
+    test.skip(
+      fixture === null,
+      'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
+    );
+    test.skip(
+      !fixture!.isLive,
+      'Listing is not LIVE (admin creds absent or approve failed) — skipping L3',
+    );
 
-  // /listing/:id is a ProtectedRoute — must be logged in before navigating.
-  await loginAsBroker(page);
-  await page.goto(`/listing/${id}`);
-  await page.waitForLoadState('domcontentloaded');
+    test.skip(
+      !hasUserCreds,
+      'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — /listing/:id requires auth; skipping L3',
+    );
 
-  // Wait for ProtectedRoute auth check and page data to load.
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+    const { id } = fixture!;
 
-  // No Sentry/error boundary banner
-  await expect(
-    page.locator('text=Something went wrong. Please refresh the page.'),
-  ).toHaveCount(0);
+    // /listing/:id is a ProtectedRoute — must be logged in before navigating.
+    // Log in as user (not broker — "Request Viewing" is for non-broker users).
+    await page.goto(`/listing/${id}`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
 
-  // The listing title substring must appear somewhere in the page
-  await expect(
-    page.locator('text=[E2E Test Listing]').first(),
-  ).toBeVisible({ timeout: 10_000 });
-});
+    await expect(
+      page.getByRole('button', { name: /request viewing/i }),
+    ).toBeVisible({ timeout: 10_000 });
+  });
 
-// ---------------------------------------------------------------------------
-// L3 — "Request Viewing" button visible when listing is LIVE
-// ---------------------------------------------------------------------------
-test('L3 — Request Viewing button visible for a LIVE listing', async ({ page }) => {
-  const fixture = readListingFixture();
-  test.skip(
-    fixture === null,
-    'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
-  );
-  test.skip(
-    !fixture!.isLive,
-    'Listing is not LIVE (admin creds absent or approve failed) — skipping L3',
-  );
+  // ---------------------------------------------------------------------------
+  // L4 — Duplicate booking is rejected (replaces Q7's dependency on SMOKE_LISTING_ID)
+  // ---------------------------------------------------------------------------
+  test('L4 — duplicate booking request is rejected with 409', async ({ page }) => {
+    const fixture = readListingFixture();
+    test.skip(
+      fixture === null,
+      'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
+    );
+    test.skip(
+      !fixture!.isLive,
+      'Listing is not LIVE — bookings require an approved listing; skipping L4',
+    );
+    test.skip(
+      !hasUserCreds,
+      'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping L4',
+    );
 
-  test.skip(
-    !hasUserCreds,
-    'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — /listing/:id requires auth; skipping L3',
-  );
-
-  const { id } = fixture!;
-
-  // /listing/:id is a ProtectedRoute — must be logged in before navigating.
-  // Log in as user (not broker — "Request Viewing" is for non-broker users).
-  await loginAsUser(page);
-  await page.goto(`/listing/${id}`);
-  await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
-
-  await expect(
-    page.getByRole('button', { name: /request viewing/i }),
-  ).toBeVisible({ timeout: 10_000 });
-});
-
-// ---------------------------------------------------------------------------
-// L4 — Duplicate booking is rejected (replaces Q7's dependency on SMOKE_LISTING_ID)
-// ---------------------------------------------------------------------------
-test('L4 — duplicate booking request is rejected with 409', async ({ page }) => {
-  const fixture = readListingFixture();
-  test.skip(
-    fixture === null,
-    'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
-  );
-  test.skip(
-    !fixture!.isLive,
-    'Listing is not LIVE — bookings require an approved listing; skipping L4',
-  );
-  test.skip(
-    !hasUserCreds,
-    'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping L4',
-  );
-
-  const { id: listingId } = fixture!;
-
-  // Log in as user (bookings are made by regular users, not brokers)
-  await loginAsUser(page);
+    const { id: listingId } = fixture!;
 
   // Navigate to the listing so the browser context is on the same origin
   await page.goto(`/listing/${listingId}`);
@@ -352,71 +330,77 @@ test('L4 — duplicate booking request is rejected with 409', async ({ page }) =
     [409, 429],
     `L4: Expected 409 (duplicate booking) or 429 (rate-limited) from second request, got ${secondResult.status}`,
   ).toContain(secondResult.status);
+  });
 });
 
 // ---------------------------------------------------------------------------
 // L5 — Notification bell click navigates to /listing/:id (RE-168 regression guard)
-//
-// Preconditions:
-//   - Listing fixture must be LIVE (admin approved it in global-setup).
-//   - Admin approval fires NotificationEventListener.onListingApproved (@Async,
-//     AFTER_COMMIT), which inserts a "listing_approved" notification for the broker.
-//   - Broker creds required to log in and see the notification bell.
-//
-// This test guards against the URL typo fixed in RE-168:
-//   /listings/${listingId}  →  /listing/${listingId}
 // ---------------------------------------------------------------------------
-test('L5 — notification bell click navigates to /listing/:id', async ({ page }) => {
-  const fixture = readListingFixture();
-  test.skip(
-    fixture === null,
-    'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
-  );
-  test.skip(
-    !fixture!.isLive,
-    'Listing is not LIVE — listing_approved notification requires admin approval; skipping L5',
-  );
-  test.skip(
-    !hasBrokerCreds,
-    'BROKER_EMAIL / BROKER_PASSWORD not set — cannot log in to see notification bell; skipping L5',
-  );
+test.describe('L5 — broker-authenticated', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
-  const { id: listingId } = fixture!;
+  // ---------------------------------------------------------------------------
+  // L5 — Notification bell click navigates to /listing/:id (RE-168 regression guard)
+  //
+  // Preconditions:
+  //   - Listing fixture must be LIVE (admin approved it in global-setup).
+  //   - Admin approval fires NotificationEventListener.onListingApproved (@Async,
+  //     AFTER_COMMIT), which inserts a "listing_approved" notification for the broker.
+  //   - Broker creds required to log in and see the notification bell.
+  //
+  // This test guards against the URL typo fixed in RE-168:
+  //   /listings/${listingId}  →  /listing/${listingId}
+  // ---------------------------------------------------------------------------
+  test('L5 — notification bell click navigates to /listing/:id', async ({ page }) => {
+    const fixture = readListingFixture();
+    test.skip(
+      fixture === null,
+      'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
+    );
+    test.skip(
+      !fixture!.isLive,
+      'Listing is not LIVE — listing_approved notification requires admin approval; skipping L5',
+    );
+    test.skip(
+      !hasBrokerCreds,
+      'BROKER_EMAIL / BROKER_PASSWORD not set — cannot log in to see notification bell; skipping L5',
+    );
 
-  await loginAsBroker(page);
+    const { id: listingId } = fixture!;
 
-  // Navigate to broker dashboard so the AppLayout (and NotificationBell) renders.
-  await page.goto('/broker/dashboard');
-  await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+    // Navigate to broker dashboard so the AppLayout (and NotificationBell) renders.
+    await page.goto('/broker/dashboard');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
 
-  // Open the notification bell popover.
-  // lucide-react 0.462 renders SVG with class "lucide-bell" (no data-lucide attr).
-  const bellButton = page.locator('button').filter({ has: page.locator('svg.lucide-bell') });
-  await expect(bellButton).toBeVisible({ timeout: 8_000 });
-  await bellButton.click();
+    // Open the notification bell popover.
+    // lucide-react 0.462 renders SVG with class "lucide-bell" (no data-lucide attr).
+    const bellButton = page.locator('button').filter({ has: page.locator('svg.lucide-bell') });
+    await expect(bellButton).toBeVisible({ timeout: 8_000 });
+    await bellButton.click();
 
-  // The "listing_approved" notification for this listing must appear in the popover.
-  // The async event listener (@Async + AFTER_COMMIT) may still be landing — poll
-  // by waiting for the notification item to become visible within 15 s.
-  const notificationItem = page.locator(
-    `button:has-text("Listing approved")`,
-  ).first();
+    // The "listing_approved" notification for this listing must appear in the popover.
+    // The async event listener (@Async + AFTER_COMMIT) may still be landing — poll
+    // by waiting for the notification item to become visible within 15 s.
+    const notificationItem = page.locator(
+      `button:has-text("Listing approved")`,
+    ).first();
 
-  await expect(notificationItem).toBeVisible({ timeout: 15_000 });
+    await expect(notificationItem).toBeVisible({ timeout: 15_000 });
 
-  // Click the notification — this calls handleClick → navigate(`/listing/${listingId}`)
-  await notificationItem.click();
+    // Click the notification — this calls handleClick → navigate(`/listing/${listingId}`)
+    await notificationItem.click();
 
-  // Assert we landed on the correct listing detail route.
-  // Prior to RE-168 fix this navigated to /listings/:id (404). Now it must be /listing/:id.
-  await expect(page).toHaveURL(new RegExp(`/listing/${listingId}`), { timeout: 10_000 });
+    // Assert we landed on the correct listing detail route.
+    // Prior to RE-168 fix this navigated to /listings/:id (404). Now it must be /listing/:id.
+    await expect(page).toHaveURL(new RegExp(`/listing/${listingId}`), { timeout: 10_000 });
 
-  // Confirm the listing title is rendered (not an error page).
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
-  await expect(
-    page.locator('text=[E2E Test Listing]').first(),
-  ).toBeVisible({ timeout: 10_000 });
+    // Confirm the listing title is rendered (not an error page).
+    await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+    await expect(
+      page.locator('text=[E2E Test Listing]').first(),
+    ).toBeVisible({ timeout: 10_000 });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -431,6 +415,8 @@ test('L5 — notification bell click navigates to /listing/:id', async ({ page }
 // ---------------------------------------------------------------------------
 
 test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
+
   let listingId: string | null = null;
   let brokerToken: string | null = null;
   let adminToken: string | null = null;
@@ -513,7 +499,6 @@ test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
     test.skip(listingId === null, 'LIVE listing could not be created');
 
     const id = listingId!;
-    await loginAsBroker(page);
 
     // --- Phase 1: LIVE listing — "Take Offline" button visible ---
     await page.goto(`/listing/${id}?preview=true`);
@@ -580,6 +565,8 @@ test.describe('LIVE → ARCHIVED → DRAFT lifecycle (LC1)', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Booking cascade on rejection (BC1)', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
+
   let listingId: string | null = null;
   let brokerToken: string | null = null;
   let adminToken: string | null = null;

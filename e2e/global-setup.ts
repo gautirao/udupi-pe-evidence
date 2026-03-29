@@ -10,6 +10,9 @@
  *        c. Submit for review (DRAFT → PENDING_REVIEW)
  *        d. Admin approve (PENDING_REVIEW → LIVE)
  *   4. Write the result to e2e/.test-listing-id so individual specs can consume it.
+ *   5. For each role (broker, admin, user): log in via the UI and save storageState
+ *      to e2e/fixtures/<role>-auth.json. Missing creds → empty storageState written
+ *      so test.use({ storageState }) never throws ENOENT.
  *
  * This function MUST NOT throw for missing credentials. It WILL throw if admin
  * credentials are set but the approve endpoint fails — that is a hard failure,
@@ -20,15 +23,19 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
+import { chromium } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BACKEND =
   process.env.BACKEND_BASE_URL ?? 'https://udupi-property-explorer.onrender.com';
+const FRONTEND =
+  process.env.PLAYWRIGHT_BASE_URL ?? 'https://udupi-property-explorer.pages.dev';
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? '';
 const SUPABASE_KEY = process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '';
 
 const ID_FILE = path.join(__dirname, '.test-listing-id');
+const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 
 /**
  * Obtain a Supabase access token via the password grant.
@@ -335,4 +342,84 @@ export default async function globalSetup(): Promise<void> {
   } catch (err) {
     console.log(`[global-setup] Could not write ${ID_FILE}: ${String(err)}`);
   }
+
+  // ------------------------------------------------------------------
+  // Step 5: Save storageState for each role
+  // ------------------------------------------------------------------
+  await saveStorageStates();
+}
+
+/**
+ * Log in via the UI for each role and save storageState to e2e/fixtures/.
+ * Tests use test.use({ storageState }) to start already authenticated.
+ *
+ * If credentials are absent for a role, writes an empty storageState
+ * ({ cookies: [], origins: [] }) so test.use({ storageState }) never throws ENOENT.
+ * Tests that require real auth still skip gracefully via their test.skip(!hasCreds) guards.
+ *
+ * Auth failure for a configured role is logged as a warning (not a hard throw) —
+ * the corresponding tests will skip or fail with a clear "not authenticated" message
+ * rather than N individual storageState errors.
+ */
+async function saveStorageStates(): Promise<void> {
+  if (!fs.existsSync(FIXTURES_DIR)) {
+    fs.mkdirSync(FIXTURES_DIR, { recursive: true });
+  }
+
+  const emptyState = JSON.stringify({ cookies: [], origins: [] });
+
+  const roles = [
+    {
+      name: 'broker',
+      email: process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '',
+      password: process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '',
+    },
+    {
+      name: 'admin',
+      email: process.env.ADMIN_EMAIL ?? '',
+      password: process.env.ADMIN_PASSWORD ?? '',
+    },
+    {
+      name: 'user',
+      email: process.env.SMOKE_USER_EMAIL ?? '',
+      password: process.env.SMOKE_USER_PASSWORD ?? '',
+    },
+  ];
+
+  const browser = await chromium.launch();
+
+  for (const role of roles) {
+    const filePath = path.join(FIXTURES_DIR, `${role.name}-auth.json`);
+
+    if (!role.email || !role.password) {
+      console.log(`[global-setup] ${role.name} creds absent — writing empty storageState`);
+      fs.writeFileSync(filePath, emptyState, 'utf-8');
+      continue;
+    }
+
+    const context = await browser.newContext({ baseURL: FRONTEND });
+    const page = await context.newPage();
+    try {
+      await page.goto('/auth');
+      await page.waitForLoadState('domcontentloaded');
+      await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
+      await page.locator('#signin-email').fill(role.email);
+      await page.locator('#signin-password').fill(role.password);
+      await page
+        .locator('button[type="submit"]')
+        .filter({ hasText: /sign in/i })
+        .first()
+        .click();
+      await page.waitForURL((url) => !url.pathname.startsWith('/auth'), { timeout: 15_000 });
+      await context.storageState({ path: filePath });
+      console.log(`[global-setup] Saved storageState for ${role.name}: ${filePath}`);
+    } catch (err) {
+      console.warn(`[global-setup] storageState for ${role.name} failed: ${String(err)} — writing empty state`);
+      fs.writeFileSync(filePath, emptyState, 'utf-8');
+    } finally {
+      await context.close();
+    }
+  }
+
+  await browser.close();
 }

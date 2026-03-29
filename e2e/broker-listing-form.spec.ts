@@ -47,20 +47,6 @@ async function getToken(email: string, password: string): Promise<string | null>
   }
 }
 
-async function loginAsBroker(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/auth');
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('#signin-email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#signin-email').fill(brokerEmail);
-  await page.locator('#signin-password').fill(brokerPassword);
-  await page
-    .locator('button[type="submit"]')
-    .filter({ hasText: /sign in/i })
-    .first()
-    .click();
-  await expect(page).not.toHaveURL(/\/auth/, { timeout: 10_000 });
-}
-
 async function openEditListing(
   page: import('@playwright/test').Page,
   id: string,
@@ -79,6 +65,8 @@ async function openEditListing(
 // ---------------------------------------------------------------------------
 
 test.describe('PriceField / EditListing (P1–P5)', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
+
   let draftId: string | null = null;
   let brokerToken: string | null = null;
 
@@ -128,7 +116,6 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping P1');
     test.skip(draftId === null, 'Draft listing could not be created — skipping P1');
 
-    await loginAsBroker(page);
     await openEditListing(page, draftId!);
 
     await expect(page.locator('[role="slider"]')).toBeVisible({
@@ -140,7 +127,6 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping P2');
     test.skip(draftId === null, 'Draft listing could not be created — skipping P2');
 
-    await loginAsBroker(page);
     await openEditListing(page, draftId!);
 
     const priceInput = page.locator('input#price');
@@ -153,7 +139,6 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping P3');
     test.skip(draftId === null, 'Draft listing could not be created — skipping P3');
 
-    await loginAsBroker(page);
     await openEditListing(page, draftId!);
 
     const slider = page.locator('[role="slider"]');
@@ -175,7 +160,6 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping P4');
     test.skip(draftId === null, 'Draft listing could not be created — skipping P4');
 
-    await loginAsBroker(page);
     await openEditListing(page, draftId!);
 
     const slider = page.locator('[role="slider"]');
@@ -194,7 +178,6 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
     test.skip(draftId === null, 'Draft listing could not be created — skipping P5');
 
     const id = draftId!;
-    await loginAsBroker(page);
     await openEditListing(page, id);
     await expect(page.locator('input#price')).toBeVisible({ timeout: 8_000 });
 
@@ -253,6 +236,8 @@ test.describe('PriceField / EditListing (P1–P5)', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Completeness guard failures (GF1–GF3)', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
+
   let brokerToken: string | null = null;
   const createdIds: string[] = [];
 
