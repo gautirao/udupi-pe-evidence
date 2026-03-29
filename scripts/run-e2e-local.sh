@@ -21,35 +21,25 @@ echo "e2e target: $PLAYWRIGHT_BASE_URL"
 echo "backend:    $BACKEND_BASE_URL"
 echo ""
 
-# Abort if required ports are already in use — running e2e against the wrong
-# server produces confusing failures (e.g. redirects to /login from Spring Boot).
 port_of() { echo "${1##*:}"; }  # extract port from URL like http://localhost:8080
 FRONTEND_PORT="$(port_of "$PLAYWRIGHT_BASE_URL")"
 BACKEND_PORT="$(port_of "$BACKEND_BASE_URL")"
 
 port_in_use() { lsof -ti:"$1" >/dev/null 2>&1; }
-service_healthy() { curl -sf "$1" > /dev/null 2>&1; }
 
-BACKEND_ALREADY_RUNNING=false
-FRONTEND_ALREADY_RUNNING=false
-
+# Always kill any existing process on the port before starting.
+# Reusing a running server risks running against stale/wrong code
+# (e.g. a different project's Vite server on the same port).
 if port_in_use "$FRONTEND_PORT"; then
-  if service_healthy "$PLAYWRIGHT_BASE_URL"; then
-    echo "[e2e] Frontend already running on $FRONTEND_PORT — reusing."
-    FRONTEND_ALREADY_RUNNING=true
-  else
-    echo "ERROR: Port $FRONTEND_PORT is in use but not responding. Stop it and retry."
-    exit 1
-  fi
+  echo "[e2e] Frontend running on $FRONTEND_PORT — stopping to restart with latest code."
+  lsof -ti:"$FRONTEND_PORT" | xargs kill 2>/dev/null || true
+  sleep 1
 fi
+
 if port_in_use "$BACKEND_PORT"; then
-  if service_healthy "$BACKEND_BASE_URL/actuator/health"; then
-    echo "[e2e] Backend already running on $BACKEND_PORT — reusing."
-    BACKEND_ALREADY_RUNNING=true
-  else
-    echo "ERROR: Port $BACKEND_PORT is in use but not healthy. Stop it and retry."
-    exit 1
-  fi
+  echo "[e2e] Backend running on $BACKEND_PORT — stopping to restart with latest code."
+  lsof -ti:"$BACKEND_PORT" | xargs kill 2>/dev/null || true
+  sleep 2
 fi
 
 # Warn if .env.e2e still has placeholder credentials
@@ -63,25 +53,18 @@ if [[ "${SMOKE_USER_EMAIL:-}" == *"@example.com"* ]] || \
   echo ""
 fi
 
-
 BACKEND_PID=""
 FRONTEND_PID=""
 
-# Start backend via run-local.sh (skip if already running)
-if [ "$BACKEND_ALREADY_RUNNING" = false ]; then
-  echo "[e2e] Starting backend..."
-  "$SCRIPT_DIR/../backend/run-local.sh" > /tmp/backend-e2e.log 2>&1 &
-  BACKEND_PID=$!
-fi
+echo "[e2e] Starting backend..."
+"$SCRIPT_DIR/../backend/run-local.sh" > /tmp/backend-e2e.log 2>&1 &
+BACKEND_PID=$!
 
-# Start frontend (Vite dev server, skip if already running)
-if [ "$FRONTEND_ALREADY_RUNNING" = false ]; then
-  echo "[e2e] Starting frontend..."
-  npm --prefix "$SCRIPT_DIR/.." run dev > /tmp/frontend-e2e.log 2>&1 &
-  FRONTEND_PID=$!
-fi
+echo "[e2e] Starting frontend..."
+npm --prefix "$SCRIPT_DIR/.." run dev > /tmp/frontend-e2e.log 2>&1 &
+FRONTEND_PID=$!
 
-# Cleanup on exit — only stop services we started
+# Cleanup on exit — stop services we started
 cleanup() {
   [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
   [ -n "$FRONTEND_PID" ] && kill "$FRONTEND_PID" 2>/dev/null || true
@@ -89,35 +72,31 @@ cleanup() {
 trap cleanup EXIT
 
 # Wait for backend
-if [ "$BACKEND_ALREADY_RUNNING" = false ]; then
-  echo "[e2e] Waiting for backend on $BACKEND_BASE_URL..."
-  TIMEOUT=60
-  ELAPSED=0
-  until curl -sf "$BACKEND_BASE_URL/actuator/health" > /dev/null 2>&1; do
-    sleep 2; ELAPSED=$((ELAPSED + 2))
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-      echo "[e2e] Backend did not start in ${TIMEOUT}s. Log:"
-      tail -30 /tmp/backend-e2e.log
-      exit 1
-    fi
-  done
-fi
+echo "[e2e] Waiting for backend on $BACKEND_BASE_URL..."
+TIMEOUT=60
+ELAPSED=0
+until curl -sf "$BACKEND_BASE_URL/actuator/health" > /dev/null 2>&1; do
+  sleep 2; ELAPSED=$((ELAPSED + 2))
+  if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo "[e2e] Backend did not start in ${TIMEOUT}s. Log:"
+    tail -30 /tmp/backend-e2e.log
+    exit 1
+  fi
+done
 echo "[e2e] Backend ready."
 
 # Wait for frontend
-if [ "$FRONTEND_ALREADY_RUNNING" = false ]; then
-  echo "[e2e] Waiting for frontend on $PLAYWRIGHT_BASE_URL..."
-  TIMEOUT=60
-  ELAPSED=0
-  until curl -sf "$PLAYWRIGHT_BASE_URL" > /dev/null 2>&1; do
-    sleep 2; ELAPSED=$((ELAPSED + 2))
-    if [ $ELAPSED -ge $TIMEOUT ]; then
-      echo "[e2e] Frontend did not start in ${TIMEOUT}s. Log:"
-      tail -30 /tmp/frontend-e2e.log
-      exit 1
-    fi
-  done
-fi
+echo "[e2e] Waiting for frontend on $PLAYWRIGHT_BASE_URL..."
+TIMEOUT=60
+ELAPSED=0
+until curl -sf "$PLAYWRIGHT_BASE_URL" > /dev/null 2>&1; do
+  sleep 2; ELAPSED=$((ELAPSED + 2))
+  if [ $ELAPSED -ge $TIMEOUT ]; then
+    echo "[e2e] Frontend did not start in ${TIMEOUT}s. Log:"
+    tail -30 /tmp/frontend-e2e.log
+    exit 1
+  fi
+done
 echo "[e2e] Frontend ready."
 echo ""
 
