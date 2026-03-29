@@ -391,21 +391,8 @@ After code-reviewer (and security-reviewer if applicable) APPROVE:
 2. **E2E applicability check** — if the PR matches a SKIP row in the applicability table above, record the skip reason and proceed to commit/push/PR. Do NOT invoke QA verification mode.
 3. Invoke `qa` agent in **verification mode** (see Invocation Rules above for exact prompt).
 4. QA reports structured result: pass count, fail count, exact failure details.
-5. **If PASS** — write the E2E marker, then proceed to commit/push/PR.
+5. **If PASS** — proceed to commit/push/PR.
 6. **If FAIL** — enter Failure Routing Protocol below.
-
-### E2E marker (deduplication with pre-push hook)
-
-After E2E passes (either via QA verification mode or manual `npm run test:e2e:local`), the orchestrator MUST write the marker file:
-
-```bash
-echo "$(git rev-parse HEAD)" > .e2e-passed
-echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> .e2e-passed
-```
-
-The pre-push hook checks this marker: if the SHA matches HEAD, it skips the redundant E2E run. This prevents double-running E2E (once in QA gate, once on push) and avoids flaky failures from auth rate limiting.
-
-The marker is gitignored and ephemeral — it exists only in the local working tree. See `.claude/E2E_GATE.md` for the full design.
 
 ### PR creation is a gated state transition
 
