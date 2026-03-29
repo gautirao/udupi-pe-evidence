@@ -146,6 +146,14 @@ async function registerImage(
 }
 
 export default async function globalSetup(): Promise<void> {
+  // ------------------------------------------------------------------
+  // Step 5 (hoisted): Save storageState for each role.
+  // Must run unconditionally — spec files always reference the fixture
+  // files via test.use({ storageState }), so ENOENT must never happen.
+  // saveStorageStates() writes an empty state when creds are absent.
+  // ------------------------------------------------------------------
+  await saveStorageStates();
+
   const brokerEmail = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
   const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
 
@@ -343,10 +351,6 @@ export default async function globalSetup(): Promise<void> {
     console.log(`[global-setup] Could not write ${ID_FILE}: ${String(err)}`);
   }
 
-  // ------------------------------------------------------------------
-  // Step 5: Save storageState for each role
-  // ------------------------------------------------------------------
-  await saveStorageStates();
 }
 
 /**
@@ -387,7 +391,7 @@ async function saveStorageStates(): Promise<void> {
   ];
 
   const browser = await chromium.launch();
-
+  try {
   for (const role of roles) {
     const filePath = path.join(FIXTURES_DIR, `${role.name}-auth.json`);
 
@@ -420,6 +424,7 @@ async function saveStorageStates(): Promise<void> {
       await context.close();
     }
   }
-
-  await browser.close();
+  } finally {
+    await browser.close();
+  }
 }

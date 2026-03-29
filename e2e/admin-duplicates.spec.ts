@@ -433,7 +433,7 @@ test.describe('Admin duplicates (/admin/duplicates)', () => {
       test.skip(fixture === null, 'Seed fixture not available — skipping AD5');
       test.skip(extraCandidateId === null, 'Extra candidate not created — skipping AD5');
 
-      await loginAsAdmin(page, adminEmail, adminPassword);
+      // Page is pre-authenticated via test.use({ storageState: 'admin-auth.json' }).
       // Pass size=1 to force pagination with 2 candidates; the hook reads page from
       // its internal useState but the backend controller accepts the size query param.
       // Navigate directly so the initial query uses size=1.
