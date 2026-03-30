@@ -157,7 +157,14 @@ test('U4 — listing detail: AreaMarketWidget renders without crash', async ({ p
   //
   // We check that at least one of the non-loading states is visible after settling,
   // OR that the widget is simply absent (locality not set on test listing).
-  await page.waitForTimeout(3_000); // allow RPC call to complete
+  // Wait for AreaMarketWidget Supabase RPC — fires against live Supabase directly.
+  // URL pattern: https://<project>.supabase.co/rest/v1/rpc/get_listing_market_context
+  await page.waitForResponse(
+    (resp) => resp.url().includes('/rpc/get_listing_market_context'),
+    { timeout: 8_000 },
+  ).catch(() => {
+    // RPC not fired if test listing has no locality — widget renders null, acceptable.
+  });
 
   const areaMarket = page.locator('text=Area Market');
   const notEnough = page.locator('text=Not enough data for this area yet.');

@@ -150,11 +150,16 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
     });
   });
 
+  // Set up response capture before navigating — response arrives during page load.
+  // waitForResponse works with page.route stubs: it resolves when the stub returns.
+  const poisResponse = page.waitForResponse(
+    `**/api/listings/${FIXTURE_LISTING_ID}/pois`,
+    { timeout: 10_000 },
+  );
+
   await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
   await page.waitForLoadState('domcontentloaded');
-
-  // Give NearbyPois time to settle (it renders null on empty list)
-  await page.waitForTimeout(2_000);
+  await poisResponse;
 
   // NearbyPois card must not be present (use exact match to avoid matching "Nearby Schools" etc.)
   await expect(page.getByText('Nearby', { exact: true })).toHaveCount(0);
