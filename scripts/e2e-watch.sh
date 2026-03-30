@@ -30,7 +30,7 @@ set -a
 eval "$(sed 's/^[[:space:]]*//' "$ENV_FILE" | grep -v '^#' | grep -v '^[[:space:]]*$')"
 set +a
 
-FRONTEND_URL="${PLAYWRIGHT_BASE_URL:-http://localhost:5173}"
+FRONTEND_URL="${PLAYWRIGHT_BASE_URL:-http://localhost:5174}"
 BACKEND_URL="${BACKEND_BASE_URL:-http://localhost:8085}"
 FRONTEND_PORT="${FRONTEND_URL##*:}"
 BACKEND_PORT="${BACKEND_URL##*:}"

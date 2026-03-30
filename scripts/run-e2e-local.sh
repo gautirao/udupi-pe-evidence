@@ -61,7 +61,7 @@ echo "[e2e] Starting backend..."
 BACKEND_PID=$!
 
 echo "[e2e] Starting frontend..."
-npm --prefix "$SCRIPT_DIR/.." run dev > /tmp/frontend-e2e.log 2>&1 &
+npm --prefix "$SCRIPT_DIR/.." run dev -- --port "$FRONTEND_PORT" > /tmp/frontend-e2e.log 2>&1 &
 FRONTEND_PID=$!
 
 # Cleanup on exit — stop services we started

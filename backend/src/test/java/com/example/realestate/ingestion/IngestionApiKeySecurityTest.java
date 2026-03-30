@@ -48,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({IngestionApiKeySecurityTest.TestConfig.class, IngestionApiKeyFilter.class})
 @TestPropertySource(properties = {
         "app.ingestion.api-key=test-key-abc123",
-        "cors.allowed-origins=http://localhost:5173"
+        "cors.allowed-origins=http://localhost:5174"
 })
 class IngestionApiKeySecurityTest {
 

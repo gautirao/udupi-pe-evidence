@@ -206,7 +206,7 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
 
   // Since #615, / is no longer protected — unauthenticated users see the teaser home page.
   // Confirm the login CTA is present (anonymous home loaded correctly).
-  await expect(page.getByRole('link', { name: /sign in/i })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Sign in', exact: true })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
