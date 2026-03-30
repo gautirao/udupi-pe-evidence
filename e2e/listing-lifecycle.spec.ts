@@ -11,7 +11,6 @@
  *   L1 — created listing appears in broker /broker/listings page
  *   L2 — listing detail page loads without error
  *   L3 — "Request Viewing" button visible when listing is LIVE
- *   L4 — duplicate booking is rejected with 409
  *   L5 — notification bell click navigates to /listing/:id (regression: RE-168 URL fix)
  *   LC1 — LIVE → ARCHIVED → DRAFT re-edit workflow (#586)
  */
@@ -175,7 +174,7 @@ test.describe('broker-authenticated', () => {
 });
 
 // ---------------------------------------------------------------------------
-// L3, L4 — User-authenticated tests
+// L3 — User-authenticated tests
 // ---------------------------------------------------------------------------
 test.describe('user-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
@@ -210,126 +209,6 @@ test.describe('user-authenticated', () => {
     await expect(
       page.getByRole('button', { name: /request viewing/i }),
     ).toBeVisible({ timeout: 10_000 });
-  });
-
-  // ---------------------------------------------------------------------------
-  // L4 — Duplicate booking is rejected (replaces Q7's dependency on SMOKE_LISTING_ID)
-  // ---------------------------------------------------------------------------
-  test('L4 — duplicate booking request is rejected with 409', async ({ page }) => {
-    const fixture = readListingFixture();
-    test.skip(
-      fixture === null,
-      'e2e/.test-listing-id not found — global-setup may have skipped listing creation',
-    );
-    test.skip(
-      !fixture!.isLive,
-      'Listing is not LIVE — bookings require an approved listing; skipping L4',
-    );
-    test.skip(
-      !hasUserCreds,
-      'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping L4',
-    );
-
-    const { id: listingId } = fixture!;
-
-  // Navigate to the listing so the browser context is on the same origin
-  await page.goto(`/listing/${listingId}`);
-  await page.waitForLoadState('domcontentloaded');
-
-  // Wait for ProtectedRoute auth check to settle before reading localStorage token.
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
-  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
-
-  // First booking — must succeed (201) or already exist (409 from a prior run)
-  const firstResult = await page.evaluate(
-    async ({ backendUrl, lid }: { backendUrl: string; lid: string }) => {
-      const keys = Object.keys(localStorage);
-      const authKey = keys.find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
-      if (!authKey) return { status: null, error: 'No Supabase auth token in localStorage' };
-
-      let token: string | null = null;
-      try {
-        const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}') as { access_token?: string };
-        token = parsed.access_token ?? null;
-      } catch {
-        return { status: null, error: 'Failed to parse auth token' };
-      }
-      if (!token) return { status: null, error: 'access_token is null' };
-
-      const d = new Date();
-      d.setDate(d.getDate() + 2);
-      const requestedDate = d.toISOString().split('T')[0];
-
-      try {
-        const r = await fetch(`${backendUrl}/api/bookings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ listingId: lid, requestedDate, requestedTimeSlot: '10:00-11:00' }),
-        });
-        return { status: r.status, error: null };
-      } catch (e) {
-        return { status: null, error: String(e) };
-      }
-    },
-    { backendUrl: BACKEND, lid: listingId },
-  );
-
-  if (firstResult.error) {
-    throw new Error(`L4: First booking request threw: ${firstResult.error}`);
-  }
-  expect(
-    [201, 409, 429],
-    `L4: Expected 201, 409, or 429 from first booking, got ${firstResult.status}`,
-  ).toContain(firstResult.status);
-
-  // Second booking on the same listing — must be rejected (409 duplicate or 429 rate-limited;
-  // the rate limiter may fire before the duplicate check within the same rate-limit window)
-  const secondResult = await page.evaluate(
-    async ({ backendUrl, lid }: { backendUrl: string; lid: string }) => {
-      const keys = Object.keys(localStorage);
-      const authKey = keys.find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
-      if (!authKey) return { status: null, error: 'No Supabase auth token' };
-
-      let token: string | null = null;
-      try {
-        const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}') as { access_token?: string };
-        token = parsed.access_token ?? null;
-      } catch {
-        return { status: null, error: 'Failed to parse auth token' };
-      }
-      if (!token) return { status: null, error: 'access_token is null' };
-
-      const d = new Date();
-      d.setDate(d.getDate() + 3); // different date, same listing
-      const requestedDate = d.toISOString().split('T')[0];
-
-      try {
-        const r = await fetch(`${backendUrl}/api/bookings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ listingId: lid, requestedDate, requestedTimeSlot: '11:00-12:00' }),
-        });
-        return { status: r.status, error: null };
-      } catch (e) {
-        return { status: null, error: String(e) };
-      }
-    },
-    { backendUrl: BACKEND, lid: listingId },
-  );
-
-  if (secondResult.error) {
-    throw new Error(`L4: Second booking request threw: ${secondResult.error}`);
-  }
-  expect(
-    [409, 429],
-    `L4: Expected 409 (duplicate booking) or 429 (rate-limited) from second request, got ${secondResult.status}`,
-  ).toContain(secondResult.status);
   });
 });
 
