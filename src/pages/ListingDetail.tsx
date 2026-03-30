@@ -794,13 +794,15 @@ export default function ListingDetail() {
             {/* Nearby Schools */}
             <NearbySchoolsCard listingId={listing.id} />
 
-            {/* Posted Date */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              <span>Posted {format(new Date(listing.createdAt), 'MMMM d, yyyy')}</span>
-              <span className="text-muted-foreground/50">•</span>
-              <span>{formatRelativeDate(listing.createdAt)}</span>
-            </div>
+            {/* Posted Date — absent in anonymous teaser response */}
+            {listing.createdAt && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                <span>Posted {format(new Date(listing.createdAt), 'MMMM d, yyyy')}</span>
+                <span className="text-muted-foreground/50">•</span>
+                <span>{formatRelativeDate(listing.createdAt)}</span>
+              </div>
+            )}
 
             {/* Similar listings */}
             <SimilarListings

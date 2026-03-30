@@ -15,6 +15,7 @@ globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserv
 // ─── Hoisted mocks ────────────────────────────────────────────
 const mockNavigate = vi.hoisted(() => vi.fn());
 const mockUseParams = vi.hoisted(() => vi.fn(() => ({ id: 'listing-123' })));
+const mockUser = vi.hoisted(() => ({ current: null as { id: string } | null }));
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -56,8 +57,35 @@ vi.mock('@/components/listing/RequestViewingModal', () => ({
   RequestViewingModal: () => React.createElement('div', { 'data-testid': 'request-viewing-modal' }),
 }));
 
+vi.mock('@/components/listing/NearbySchoolsCard', () => ({
+  NearbySchoolsCard: () => React.createElement('div', { 'data-testid': 'nearby-schools' }),
+}));
+
+vi.mock('@/components/listing/RERACard', () => ({
+  RERACard: () => React.createElement('div', { 'data-testid': 'rera-card' }),
+}));
+
+vi.mock('@/components/poi/PoiMiniMap', () => ({
+  PoiMiniMap: () => React.createElement('div', { 'data-testid': 'poi-mini-map' }),
+}));
+
 vi.mock('@/hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    user: mockUser.current,
+    session: null,
+    isLoading: false,
+    isAdmin: false,
+    isDealer: false,
+    userRole: null,
+    insightsAccessUntil: null,
+    refreshRole: vi.fn(),
+    refreshAuth: vi.fn(),
+    signOut: vi.fn(),
+  }),
 }));
 
 // Mock api — useListingById and useListingPriceHistory now call api.get;
@@ -131,9 +159,12 @@ function renderWithListing(listing: ReturnType<typeof makeListing> | null, loadi
     defaultOptions: { queries: { retry: false } },
   });
 
-  // Pre-populate TanStack Query cache to avoid network call
+  // Pre-populate TanStack Query cache to avoid network call.
+  // Query key: ['listing-public', id, userId ?? null] — with mockUser.current
+  // the third element is either the user id or null.
   if (listing !== null) {
-    queryClient.setQueryData(['listing-public', 'listing-123'], listing);
+    const userId = mockUser.current?.id ?? null;
+    queryClient.setQueryData(['listing-public', 'listing-123', userId], listing);
   }
   // Pre-populate price history cache with empty array (no price changes by default)
   queryClient.setQueryData(['listing-price-history', 'listing-123'], []);
@@ -260,7 +291,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(['listing-public', 'listing-123'], null);
+    queryClient.setQueryData(['listing-public', 'listing-123', null], null);
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
@@ -275,7 +306,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(['listing-public', 'listing-123'], null);
+    queryClient.setQueryData(['listing-public', 'listing-123', null], null);
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
@@ -327,5 +358,43 @@ describe('ListingDetail — ListingTransparencyCard (RE-94)', () => {
     renderWithListing(makeListing({ isSuspectedDuplicate: true }));
     const card = screen.getByTestId('listing-transparency-card');
     expect(card.getAttribute('data-duplicate')).toBe('true');
+  });
+});
+
+// ── G. Anonymous teaser view — RE-189 regression ──────────────
+
+describe('ListingDetail — anonymous teaser (RE-189)', () => {
+  /**
+   * The backend returns a teaser response with only 6 fields for anonymous users:
+   * id, primaryImageUrl, price, propertyType, locality, listingPurpose.
+   * Fields like createdAt, title, images, status are absent.
+   * The component must not crash on this minimal shape.
+   */
+  function makeTeaserListing() {
+    return {
+      id: 'listing-123',
+      primaryImageUrl: null,
+      price: 500000,
+      propertyType: 'land',
+      locality: 'Udupi',
+      listingPurpose: 'SALE',
+    };
+  }
+
+  it('renders without crashing when backend returns teaser-only fields (no createdAt)', () => {
+    // This is the regression test for RE-189: format(new Date(undefined)) threw RangeError
+    renderWithListing(makeTeaserListing());
+    // The page renders — no error boundary. Title falls back to "Land in Udupi".
+    expect(screen.getByRole('heading', { level: 1, name: /Land in Udupi/ })).toBeInTheDocument();
+  });
+
+  it('shows "Sign in to view full details" CTA for anonymous users', () => {
+    renderWithListing(makeTeaserListing());
+    expect(screen.getByText('Sign in to view full details', { selector: 'p' })).toBeInTheDocument();
+  });
+
+  it('does not render the Posted Date section when createdAt is absent', () => {
+    renderWithListing(makeTeaserListing());
+    expect(screen.queryByText(/Posted/)).not.toBeInTheDocument();
   });
 });

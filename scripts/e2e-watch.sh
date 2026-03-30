@@ -5,10 +5,18 @@
 # Playwright in headed mode with a single worker so you can follow along.
 #
 # Usage:
-#   bash scripts/e2e-watch.sh                     # run all tests
-#   bash scripts/e2e-watch.sh broker-listing-form  # run one spec file
-#   bash scripts/e2e-watch.sh -g "GF1"            # run tests matching name
-#   bash scripts/e2e-watch.sh --debug              # pause on failure (inspector)
+#   bash scripts/e2e-watch.sh                       # run all tests (normal speed)
+#   bash scripts/e2e-watch.sh broker-listing-form    # run one spec file
+#   bash scripts/e2e-watch.sh -g "GF1"              # run tests matching name
+#   bash scripts/e2e-watch.sh --debug                # pause on failure (inspector)
+#   bash scripts/e2e-watch.sh --slow                 # slow-motion mode (800ms between actions)
+#   bash scripts/e2e-watch.sh --slow --project=journey  # watch one journey slowly
+#   bash scripts/e2e-watch.sh --slow e2e/journey/broker-listing-creation.spec.ts
+#
+# Slow mode:
+#   Adds --slow-mo=800 so every Playwright action (click, fill, navigate)
+#   pauses 800ms, making the flow human-watchable. Combine with --debug
+#   to also pause on failure and open the Playwright Inspector.
 #
 # Prerequisites:
 #   - .env.e2e at project root (credentials for test users)
@@ -19,6 +27,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR/.."
 ENV_FILE="$PROJECT_ROOT/.env.e2e"
+
+# ── Parse --slow flag (consume it before passing $@ to Playwright) ───────────
+SLOW_MODE=""
+REMAINING_ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--slow" ]; then
+    SLOW_MODE="1"
+  else
+    REMAINING_ARGS+=("$arg")
+  fi
+done
+set -- "${REMAINING_ARGS[@]+"${REMAINING_ARGS[@]}"}"
+
+# Export SLOW_MO env var — read by playwright.config.ts → launchOptions.slowMo
+# Initialise to empty so `set -u` does not trip on later checks.
+export SLOW_MO="${SLOW_MO:-}"
+if [ -n "$SLOW_MODE" ]; then
+  export SLOW_MO=800
+fi
 
 # ── Load .env.e2e ────────────────────────────────────────────────────────────
 if [ ! -f "$ENV_FILE" ]; then
@@ -36,7 +63,11 @@ FRONTEND_PORT="${FRONTEND_URL##*:}"
 BACKEND_PORT="${BACKEND_URL##*:}"
 
 echo "┌─────────────────────────────────────────┐"
+if [ -n "$SLOW_MO" ]; then
+echo "│  E2E Watch Mode (SLOW — 800ms/action)   │"
+else
 echo "│  E2E Watch Mode                         │"
+fi
 echo "│  Frontend: $FRONTEND_URL              │"
 echo "│  Backend:  $BACKEND_URL              │"
 echo "└─────────────────────────────────────────┘"
@@ -116,13 +147,18 @@ else
 fi
 
 echo ""
-echo "━━━ Running Playwright (headed, 1 worker) ━━━"
+if [ -n "$SLOW_MO" ]; then
+  echo "━━━ Running Playwright (headed, 1 worker, slow-mo 800ms) ━━━"
+else
+  echo "━━━ Running Playwright (headed, 1 worker) ━━━"
+fi
 echo ""
 
 # ── Run Playwright ───────────────────────────────────────────────────────────
 # --headed:    show the browser window
 # --workers=1: one test at a time so you can follow along
 # --reporter=list: simple console output (no html report noise)
+# SLOW_MO env var: read by playwright.config.ts → launchOptions.slowMo
 # Remaining args ($@) are passed through — use them for file filters, -g, --debug
 npx playwright test \
   --headed \
@@ -140,7 +176,10 @@ else
   echo ""
   echo "Tips:"
   echo "  • Re-run a single test:  bash scripts/e2e-watch.sh -g 'GF1'"
+  echo "  • Slow mode:             bash scripts/e2e-watch.sh --slow -g 'GF1'"
   echo "  • Debug mode (pause):    bash scripts/e2e-watch.sh --debug -g 'GF1'"
+  echo "  • Slow + debug:          bash scripts/e2e-watch.sh --slow --debug -g 'GF1'"
+  echo "  • One journey slowly:    bash scripts/e2e-watch.sh --slow --project=journey"
   echo "  • View HTML report:      npx playwright show-report"
 fi
 

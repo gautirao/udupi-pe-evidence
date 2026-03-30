@@ -16,14 +16,14 @@
  *   - Failures are logged but do not affect the test result
  *
  * Run locally:
- *   BROKER_EMAIL=broker@example.com BROKER_PASSWORD=secret npm run test:e2e -- e2e/broker-listing-creation.spec.ts
+ *   BROKER_EMAIL=broker@example.com BROKER_PASSWORD=secret npm run test:e2e -- e2e/journey/broker-listing-creation.spec.ts
  */
 
 import { test, expect } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { hasRealCredentials } from './helpers';
+import { hasRealCredentials } from '../helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -36,7 +36,7 @@ const BROKER_PASSWORD = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWO
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
-const FIXTURE_DIR = path.join(__dirname, 'fixtures');
+const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures');
 // fixtures/test-image.jpg — checked-in JPEG for future single-image upload tests (#667 AC)
 // Currently unused here; flat1/2/3.jpg cover the 3-image DL1 upload path.
 

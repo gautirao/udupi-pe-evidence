@@ -10,11 +10,11 @@
  * AT2/AT3/AT4 require SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD and a LIVE listing fixture.
  *
  * Run locally:
- *   SMOKE_USER_EMAIL=you@example.com SMOKE_USER_PASSWORD=secret npm run test:e2e -- e2e/anon-teaser.spec.ts
+ *   SMOKE_USER_EMAIL=you@example.com SMOKE_USER_PASSWORD=secret npm run test:e2e -- e2e/journey/anon-teaser.spec.ts
  */
 
 import { test, expect } from '@playwright/test';
-import { hasRealCredentials } from './helpers';
+import { hasRealCredentials } from '../helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,7 +36,7 @@ function getListingFixture(): { id: string; isLive: boolean } | null {
   if (process.env.SMOKE_LISTING_ID) {
     return { id: process.env.SMOKE_LISTING_ID, isLive: true };
   }
-  const idFile = path.join(__dirname, '.test-listing-id');
+  const idFile = path.join(__dirname, '..', '.test-listing-id');
   if (!fs.existsSync(idFile)) return null;
   const lines = fs.readFileSync(idFile, 'utf-8').trim().split('\n');
   const id = lines[0]?.trim();

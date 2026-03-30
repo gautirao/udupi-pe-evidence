@@ -16,7 +16,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { hasRealCredentials } from './helpers';
+import { hasRealCredentials } from '../helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -27,7 +27,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-const ID_FILE = path.join(__dirname, '.test-listing-id');
+const ID_FILE = path.join(__dirname, '..', '.test-listing-id');
 
 interface ListingFixture {
   id: string;
@@ -261,8 +261,12 @@ test.describe('L5 — broker-authenticated', () => {
     // The "listing_approved" notification for this listing must appear in the popover.
     // The async event listener (@Async + AFTER_COMMIT) may still be landing — poll
     // by waiting for the notification item to become visible within 15 s.
+    //
+    // LC1's beforeAll may create a newer "listing_approved" notification that appears
+    // first (most recent). Filter by the global-setup listing title "[E2E Test Listing]"
+    // which appears in the notification message body to ensure we click the correct one.
     const notificationItem = page.locator(
-      `button:has-text("Listing approved")`,
+      `button:has-text("[E2E Test Listing]")`,
     ).first();
 
     await expect(notificationItem).toBeVisible({ timeout: 15_000 });

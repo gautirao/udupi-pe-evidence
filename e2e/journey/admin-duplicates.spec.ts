@@ -21,11 +21,11 @@
  * Run locally:
  *   ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=... \
  *   DEALER_EMAIL=dealer@example.com DEALER_PASSWORD=... \
- *   npm run test:e2e:local -- e2e/admin-duplicates.spec.ts
+ *   npm run test:e2e:local -- e2e/journey/admin-duplicates.spec.ts
  */
 
 import { test, expect } from '@playwright/test';
-import { hasRealCredentials } from './helpers';
+import { hasRealCredentials } from '../helpers';
 
 // ---------------------------------------------------------------------------
 // Env

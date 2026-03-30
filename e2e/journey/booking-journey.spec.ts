@@ -295,9 +295,12 @@ test.describe('UB — Booking UI journey', () => {
     // Submit the form
     await page.getByRole('button', { name: /send request/i }).click();
 
-    // Assert success toast — text from useCreateBooking onSuccess
+    // Assert success toast — text from useCreateBooking onSuccess.
+    // Radix Toast renders the title inside both a <div> (ToastTitle) and its
+    // <li role="status"> ancestor, so getByText matches 2 elements. Use .first()
+    // to satisfy Playwright strict mode.
     await expect(
-      page.getByText(/viewing request sent/i),
+      page.getByText(/viewing request sent/i).first(),
     ).toBeVisible({ timeout: 10_000 });
 
     // Assert dialog closes after success (onSuccess calls handleClose which calls onClose)
@@ -418,8 +421,10 @@ test.describe('UB — Booking UI journey', () => {
       // Matches the quoted message text rendered in BrokerBookings for REQUESTED bookings.
       // Works as long as the booking appears on the first page of results.
       // Limitation: if broker has many bookings, pagination could hide it; acceptable for CI.
+      // Multiple bookings with this message may exist from prior test runs.
+      // Use .first() to avoid Playwright strict mode violation.
       await expect(
-        page.getByText(BOOKING_MESSAGE),
+        page.getByText(BOOKING_MESSAGE).first(),
       ).toBeVisible({ timeout: 10_000 });
     } finally {
       await context.close();
