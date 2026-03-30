@@ -44,6 +44,22 @@ If the orchestrator catches itself about to write or edit code, STOP and invoke 
 
 ---
 
+## Parallel-Safe Execution (Future / User-Directed Only)
+
+Default mode is **serial**: one PR at a time. Parallel execution requires an explicit user directive.
+
+When the user explicitly requests parallel PR execution, the following eligibility rules apply — ALL must be confirmed before two PRs can run concurrently:
+
+1. No overlapping files between the two PRs (checked against team-lead's `Touched files` forecast)
+2. No shared Flyway migrations (sequential numbering rules out parallelism)
+3. No shared API contracts or DTOs (a contract change in PR N can invalidate PR M)
+4. No shared frontend routes or state management slices
+5. No dependency edge between the two issues (confirmed in checkpoint `Dependencies:`)
+
+If any condition is unconfirmed or uncertain: serialize. Never parallelize by default.
+
+---
+
 ## Sprint Start (Once per sprint, not per PR)
 
 Before the first PR:
@@ -170,6 +186,16 @@ For each GitHub issue (PR N):
 **5b. Persist post-gate data** — if ROUTE_AND_RUN emitted any `ROUTE_AND_RUN_WARNING:` lines (including deferred AC warnings from spec invalidation) or flakiness detection added Risks entries, update `.claude/SPRINT_CHECKPOINT.md` in-place with the new `Known temporary exceptions:` and `Risks:` entries. This ensures data survives context loss between here and step 9's full checkpoint write.
 
 5. **Git + PR**
+
+   **Pre-commit compliance check (HARD GATE)** — ALL of the following must be true before any `git commit`, `git push`, or `gh pr create`:
+   1. Required stage evidence exists (engineer output, code-reviewer verdict, QA report as applicable for the classification tier)
+   2. Full Gate Satisfaction Record (GSR) has been emitted by ROUTE_AND_RUN (see ROUTE_AND_RUN Stage Evidence Contract)
+   3. No gate in the GSR shows FAIL
+   4. No gate uses an invalid or vague SKIPPED reason (e.g. `SKIPPED(no E2E infra)`, `SKIPPED(server not running)`, `SKIPPED(not needed)` — see ROUTE_AND_RUN Step 3 invalid skip reasons)
+   5. `All gates satisfied: YES` is present in the emitted GSR
+
+   If any condition is false, STOP. Resolve the gap before proceeding. Post-hoc GSR reconstruction (writing it after the PR is created) is **banned**.
+
    - `git pull origin main` (sync if not already on fresh branch)
    - Verify no uncommitted changes on main: `git status --short`
    - `git checkout -b <type>/pr-<id>-<short-slug>`
@@ -369,6 +395,8 @@ Tests passed: <YES|NO|N/A>
 Engineer materialization: <PASS|FAIL|N/A>
 E2E passed: <YES|YES (targeted-only)|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
 E2E coverage relevance: <COVERED|GAP(no auth fixture)|GAP(no spec for flow)|N/A>
+Gate record: eng=<PASS|FAIL|N/A> | cr=<APPROVE|N/A> | sr=<APPROVE|N/A> | e2e-author=<DONE|SKIPPED(...)> | e2e=<PASS|SKIPPED(...)> | proc=<PASS|N/A>
+Evidence refs: eng=<agent-name> | cr=<agent-name> | e2e=<agent-name or N/A>
 Touched files:
 - <file1>
 - <file2>
@@ -405,6 +433,8 @@ Tests passed: <YES|NO|N/A>
 Engineer materialization: <PASS|FAIL|N/A>
 E2E passed: <YES|YES (targeted-only)|SKIPPED(trivial)|SKIPPED(doc-only)|SKIPPED(backend-only, no FE files, no FE consumer, no contract change, no cross-layer flow)|BLOCKED — reason>
 E2E coverage relevance: <COVERED|GAP(no auth fixture)|GAP(no spec for flow)|N/A>
+Gate record: eng=<PASS|FAIL|N/A> | cr=<APPROVE|N/A> | sr=<APPROVE|N/A> | e2e-author=<DONE|SKIPPED(...)> | e2e=<PASS|SKIPPED(...)> | proc=<PASS|N/A>
+Evidence refs: eng=<agent-name> | cr=<agent-name> | e2e=<agent-name or N/A>
 Touched files:
 - <file1>
 - <file2>
@@ -425,6 +455,11 @@ Next routing guess:
 === ROLLING CHECKPOINT END ===
 
 Note: Subsequent checkpoints omit `Sprint issues`, `Execution order`, `Dependencies` (already in preamble). `Sprint-level conventions` and `Known temporary exceptions` accumulate across PRs and are carried forward in every checkpoint. On resume, use the preamble checkpoint for full sprint context.
+
+### Gate record: rules
+- `Gate record:` is derived from the full GSR emitted by ROUTE_AND_RUN (Stage Evidence Contract → Orchestrator gate log). Copy values directly — do not reconstruct from memory.
+- `Evidence refs:` maps each gate to the producing agent (e.g. `eng=backend-engineer`, `cr=code-reviewer`, `e2e=qa`). Use `N/A` when the gate was skipped.
+- On resume: verify the last PR's `Gate record:` shows no FAIL and no invalid SKIPPED reason. A checkpoint missing `Gate record:` is a compliance gap — flag it before resuming.
 
 User instruction:
 "To resume, say: Resume sprint execution. The checkpoint file at .claude/SPRINT_CHECKPOINT.md will be read automatically."

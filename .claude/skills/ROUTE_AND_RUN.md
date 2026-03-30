@@ -313,7 +313,7 @@ When invoking `code-reviewer`, the orchestrator MUST construct a structured revi
 - `applyVideoUrl: boolean` for partial-update APIs
 - NaN-safe clamp: `Math.max(1, Math.min(N, parseInt(param, 10) || 1))`
 - Hook-level `onError` only (double-toast prevention)
-- React fiber-walk for file drops in E2E
+- `DragEvent` dispatch for file drops in E2E (`zone.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }))`) — fiber-walk removed in #667
 - `UriComponentsBuilder.build(false)` for user-input query params
 - Leaflet `invalidateSize()` before `flyTo()` in hidden containers
 - `house` type for E2E tests (avoids type-specific required fields)
