@@ -25,8 +25,18 @@ export default defineConfig({
       ],
     },
     {
+      name: 'journey',
+      use: { browserName: 'chromium' },
+      testMatch: ['**/e2e/journey/**/*.spec.ts'],
+    },
+    {
+      name: 'integration-ui',
+      use: { browserName: 'chromium' },
+      testMatch: ['**/e2e/integration-ui/**/*.spec.ts'],
+    },
+    {
       name: 'full',
-      // Intentionally includes the same files as smoke — full suite runs everything.
+      // No testMatch — runs all specs under testDir (e2e/**/*.spec.ts).
       use: { browserName: 'chromium' },
     },
   ],

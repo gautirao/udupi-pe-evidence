@@ -49,7 +49,7 @@ jobs:
           BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL || 'https://udupi-property-explorer.onrender.com' }}
 
       - name: Run production smoke tests
-        run: npm run test:e2e
+        run: npm run test:e2e:full
         env:
           PLAYWRIGHT_BASE_URL: ${{ secrets.PLAYWRIGHT_BASE_URL || 'https://udupi-property-explorer.pages.dev' }}
           BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL || 'https://udupi-property-explorer.onrender.com' }}
