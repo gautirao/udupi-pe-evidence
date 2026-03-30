@@ -37,6 +37,8 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
 const FIXTURE_DIR = path.join(__dirname, 'fixtures');
+// fixtures/test-image.jpg — checked-in JPEG for future single-image upload tests (#667 AC)
+// Currently unused here; flat1/2/3.jpg cover the 3-image DL1 upload path.
 
 // ---------------------------------------------------------------------------
 // Token helper — mirrors global-setup.ts getToken exactly
@@ -243,14 +245,11 @@ test('DL1 — full broker listing creation journey', async ({ page }) => {
 
   // Simulate a file-drop DragEvent with real File objects.
   //
-  // setInputFiles on the hidden <input type="file"> (display:none) dispatches
-  // native DOM events that React's event delegation does not reliably forward to
-  // the onChange handler in headless Chromium.  The component's onDrop path
-  // (handleDrop → handleFiles → uploadImage) is called directly instead by
-  // constructing a DataTransfer with real File objects inside the browser context.
-  //
   // Files are read in Node.js and passed as plain byte arrays (JSON-serialisable);
   // File objects are created inside page.evaluate so they have real content.
+  // A native DragEvent is dispatched on the drop zone — this reliably triggers the
+  // React onDrop handler in headless Chromium without needing to introspect React
+  // internals.
   const [d1, d2, d3] = [
     Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat1.jpg'))),
     Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat2.jpg'))),
@@ -269,43 +268,22 @@ test('DL1 — full broker listing creation journey', async ({ page }) => {
       ];
       console.log('[DL1-eval] created', files.length, 'File objects');
 
-      // Strategy A — invoke the React onDrop prop directly via the React fiber.
-      const fiberKey = Object.keys(zone).find(k => k.startsWith('__reactFiber') || k.startsWith('__reactInternalInstance'));
-      console.log('[DL1-eval] fiberKey:', fiberKey ?? 'none');
-
-      if (fiberKey) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let fiber = (zone as Record<string, any>)[fiberKey];
-        while (fiber && !fiber.memoizedProps?.onDrop) {
-          fiber = fiber.return;
-        }
-        if (fiber?.memoizedProps?.onDrop) {
-          console.log('[DL1-eval] found onDrop prop, invoking directly');
-          const dt = new DataTransfer();
-          files.forEach(f => dt.items.add(f));
-          fiber.memoizedProps.onDrop({
-            preventDefault: () => {},
-            stopPropagation: () => {},
-            dataTransfer: dt,
-          });
-          console.log('[DL1-eval] onDrop invoked via fiber');
-          return;
-        }
-      }
-
-      // Strategy B — fallback: DragEvent dispatch
-      console.log('[DL1-eval] falling back to DragEvent dispatch');
       const dt = new DataTransfer();
       files.forEach(f => dt.items.add(f));
       zone.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      console.log('[DL1-eval] DragEvent dispatched');
     },
-    { bytes1: d1, bytes2: d2, bytes3: d3, sel: '[data-testid="step-2-panel"] [role="button"]' },
+    // tabindex="0" uniquely identifies the drop zone vs upload action buttons (Delete/Retry)
+    { bytes1: d1, bytes2: d2, bytes3: d3, sel: '[data-testid="step-2-panel"] [role="button"][tabindex="0"]' },
   );
 
-  // Brief wait then capture UI state for diagnostics
-  await page.waitForTimeout(5_000);
+  // Wait for at least one preview thumbnail to confirm upload processing has started
+  await expect(
+    page.locator('[data-testid="step-2-panel"] img').first(),
+  ).toBeVisible({ timeout: 30_000 });
+
   const step2Text = await page.locator('[data-testid="step-2-panel"]').innerText().catch(() => '<not found>');
-  console.log('[DL1] Step-2 panel text (5s after drop):', step2Text.substring(0, 300));
+  console.log('[DL1] Step-2 panel text (after first thumbnail visible):', step2Text.substring(0, 300));
 
   // Diagnostic: check Supabase session in localStorage
   const authDiag = await page.evaluate(() => {
