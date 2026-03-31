@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, type DragEvent } from 'react';
+import { useRef, useState, useCallback, useEffect, type DragEvent } from 'react';
 import { useListingImages, type ListingImage } from '@/hooks/useListingImages';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -43,12 +43,10 @@ export function ImageUploader({ listingId, onCanSubmitChange }: ImageUploaderPro
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
-  // Notify parent of canSubmit changes
-  const prevCanSubmitRef = useRef(canSubmit);
-  if (prevCanSubmitRef.current !== canSubmit) {
-    prevCanSubmitRef.current = canSubmit;
+  // Notify parent of canSubmit changes (useEffect to avoid setState-in-render)
+  useEffect(() => {
     onCanSubmitChange?.(canSubmit);
-  }
+  }, [canSubmit, onCanSubmitChange]);
 
   // --- File selection ---
   const handleFiles = useCallback(
