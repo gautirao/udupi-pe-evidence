@@ -157,7 +157,7 @@ export default function Insights() {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left column - Saved Areas */}
           <div className="lg:col-span-1">
-            <SavedAreas />
+            <SavedAreas selectedArea={selectedArea} />
           </div>
 
           {/* Right column - Insights */}

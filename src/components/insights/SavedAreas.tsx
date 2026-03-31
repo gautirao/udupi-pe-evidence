@@ -1,13 +1,29 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, X, AlertCircle } from 'lucide-react';
-import { useSavedAreas, useDeleteSavedArea } from '@/hooks/useSavedAreas';
+import { Loader2, MapPin, X, AlertCircle, Bookmark } from 'lucide-react';
+import { useSavedAreas, useDeleteSavedArea, useSaveArea } from '@/hooks/useSavedAreas';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatRelativeDate } from '@/lib/formatters';
 
-export function SavedAreas() {
+interface SavedAreasProps {
+  selectedArea?: string | null;
+}
+
+export function SavedAreas({ selectedArea }: SavedAreasProps) {
+  const { user } = useAuth();
   const { data: savedAreas = [], isLoading, error } = useSavedAreas();
   const deleteMutation = useDeleteSavedArea();
+  const saveMutation = useSaveArea();
+
+  const isAlreadySaved = selectedArea
+    ? savedAreas.some((a) => a.areaKey === selectedArea)
+    : false;
+
+  const handleSaveArea = () => {
+    if (!selectedArea) return;
+    saveMutation.mutate({ areaKey: selectedArea, areaLabel: selectedArea });
+  };
 
   const handleDelete = (id: string) => {
     deleteMutation.mutate(id);
@@ -49,12 +65,33 @@ export function SavedAreas() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Saved Areas</CardTitle>
-        <CardDescription>
-          {savedAreas.length === 0
-            ? 'No saved areas yet. Save areas to see personalized insights.'
-            : `Tracking ${savedAreas.length} area${savedAreas.length !== 1 ? 's' : ''}`}
-        </CardDescription>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle>Saved Areas</CardTitle>
+            <CardDescription>
+              {savedAreas.length === 0
+                ? 'No saved areas yet. Save areas to see personalized insights.'
+                : `Tracking ${savedAreas.length} area${savedAreas.length !== 1 ? 's' : ''}`}
+            </CardDescription>
+          </div>
+          {user && (
+            <Button
+              data-testid="save-area-button"
+              size="sm"
+              variant={isAlreadySaved ? 'secondary' : 'default'}
+              disabled={!selectedArea || isAlreadySaved || saveMutation.isPending}
+              onClick={handleSaveArea}
+              className="gap-1.5 flex-shrink-0"
+            >
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Bookmark className={`h-4 w-4 ${isAlreadySaved ? 'fill-current' : ''}`} />
+              )}
+              {isAlreadySaved ? 'Saved' : 'Save Area'}
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         {savedAreas.length === 0 ? (
