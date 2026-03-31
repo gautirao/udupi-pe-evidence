@@ -86,6 +86,12 @@ class AdminTrustControllerTest {
     @MockitoBean
     private UserRoleService userRoleService;
 
+    @MockitoBean
+    private IdentityEvidenceRepository identityEvidenceRepository;
+
+    @MockitoBean
+    private com.example.realestate.listing.audit.AdminAuditService adminAuditService;
+
     @BeforeEach
     void setUp() {
         reset(dimensionRepository, listingRepository, badgeService, userRoleService);

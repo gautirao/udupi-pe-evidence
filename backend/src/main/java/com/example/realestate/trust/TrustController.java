@@ -18,14 +18,17 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -70,6 +73,9 @@ public class TrustController {
     /** Maximum location-verify attempts allowed within a single 24-hour sliding window. */
     private static final int LOCATION_VERIFY_MAX_ATTEMPTS = 5;
 
+    private static final Set<String> VALID_DOCUMENT_TYPES =
+            Set.of("AADHAAR", "PAN", "VOTER_ID", "PASSPORT", "DRIVING_LICENSE");
+
     private final BadgeService badgeService;
     private final ListingRepository listingRepository;
     private final ListingVerificationDimensionRepository dimensionRepository;
@@ -77,6 +83,7 @@ public class TrustController {
     private final ProfileRepository profileRepository;
     private final OtpService otpService;
     private final SupabaseStorageService supabaseStorageService;
+    private final IdentityEvidenceRepository identityEvidenceRepository;
 
     public TrustController(
             BadgeService badgeService,
@@ -85,7 +92,8 @@ public class TrustController {
             PhotoHashService photoHashService,
             ProfileRepository profileRepository,
             OtpService otpService,
-            SupabaseStorageService supabaseStorageService) {
+            SupabaseStorageService supabaseStorageService,
+            IdentityEvidenceRepository identityEvidenceRepository) {
         this.badgeService = badgeService;
         this.listingRepository = listingRepository;
         this.dimensionRepository = dimensionRepository;
@@ -93,6 +101,7 @@ public class TrustController {
         this.profileRepository = profileRepository;
         this.otpService = otpService;
         this.supabaseStorageService = supabaseStorageService;
+        this.identityEvidenceRepository = identityEvidenceRepository;
     }
 
     // -------------------------------------------------------------------------
@@ -380,24 +389,32 @@ public class TrustController {
     }
 
     // -------------------------------------------------------------------------
-    // POST /api/listings/{id}/trust/identity/request-otp — AUTHENTICATED, owner-only
+    // POST /api/listings/{id}/trust/identity/submit-evidence — AUTHENTICATED, owner-only
     // -------------------------------------------------------------------------
 
     /**
-     * Triggers an OTP send to the phone number stored on the caller's profile.
+     * Accepts identity evidence (document upload) for admin review.
+     * Replaces the previous OTP-based identity verification flow.
      *
      * <p>Returns:
      * <ul>
-     *   <li>200 — OTP sent successfully</li>
-     *   <li>400 — caller profile has no phone number</li>
+     *   <li>200 — evidence submitted; IDENTITY badge set to PENDING</li>
+     *   <li>400 — missing/invalid fields, wrong file type, or invalid document type</li>
      *   <li>403 — caller is not the listing owner</li>
      *   <li>404 — listing not found</li>
-     *   <li>409 — IDENTITY badge already EARNED</li>
-     *   <li>503 — OTP delivery failed</li>
+     *   <li>409 — IDENTITY badge already EARNED or PENDING</li>
+     *   <li>413 — file exceeds 10 MB limit</li>
      * </ul>
      */
-    @PostMapping(value = "/{id}/trust/identity/request-otp")
-    public ResponseEntity<?> requestIdentityOtp(CallerInfo caller, @PathVariable UUID id) {
+    @PostMapping(value = "/{id}/trust/identity/submit-evidence", consumes = "multipart/form-data")
+    public ResponseEntity<?> submitIdentityEvidence(
+            CallerInfo caller,
+            @PathVariable UUID id,
+            @RequestParam("legal_name") String legalName,
+            @RequestParam("phone_number") String phoneNumber,
+            @RequestParam("document_type") String documentType,
+            @RequestPart("file") MultipartFile file) {
+
         // 1. Resolve listing + ownership check
         Listing listing = listingRepository.findById(id).orElse(null);
         if (listing == null) {
@@ -407,116 +424,94 @@ public class TrustController {
         boolean isOwner = listing.getCreatedBy() != null
                 && listing.getCreatedBy().equals(caller.userId());
         if (!isOwner && !caller.isAdmin()) {
-            log.warn("Access denied to identity/request-otp listingId={} callerId={}", id, caller.userId());
+            log.warn("Access denied to identity/submit-evidence listingId={} callerId={}", id, caller.userId());
             return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
         }
 
-        // 2. Resolve caller's profile and phone
-        Profile profile = profileRepository.findByUserId(caller.userId()).orElse(null);
-        String phone = (profile != null) ? profile.getPhone() : null;
-        if (phone == null || phone.isBlank()) {
-            return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
+        // 2. Validate form fields
+        if (legalName == null || legalName.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("error", "Legal name is required"));
+        }
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("error", "Phone number is required"));
+        }
+        if (!VALID_DOCUMENT_TYPES.contains(documentType)) {
+            return ResponseEntity.status(400).body(Map.of("error",
+                    "Invalid document type. Must be one of: AADHAAR, PAN, VOTER_ID, PASSPORT, DRIVING_LICENSE"));
         }
 
-        // 3. Check IDENTITY badge not already EARNED; also handle lockout
+        // 3. Validate file
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.status(400).body(Map.of("error", "No file uploaded"));
+        }
+        if (file.getSize() > 10L * 1024 * 1024) {
+            return ResponseEntity.status(413).body(Map.of("error", "File size must not exceed 10 MB"));
+        }
+        if (!isMandateFileTypeAllowed(file)) {
+            return ResponseEntity.status(400).body(Map.of("error", "File must be a PDF or image (JPEG/PNG)"));
+        }
+
+        // 4. Check IDENTITY badge not already EARNED or PENDING
         List<ListingVerificationDimension> badges = badgeService.getBadges(id);
         ListingVerificationDimension identityDimension = badges.stream()
                 .filter(b -> "IDENTITY".equals(b.getDimensionType()))
                 .findFirst()
                 .orElse(null);
 
-        if (identityDimension != null && "EARNED".equals(identityDimension.getBadgeState())) {
-            return ResponseEntity.status(409).body(Map.of("error", "Identity already verified"));
-        }
-
-        // 3a. Lockout check — if badge is FAILED with a future lock, reject with 429
-        if (identityDimension != null && identityDimension.getOtpLockedUntil() != null) {
-            if (identityDimension.getOtpLockedUntil().isAfter(OffsetDateTime.now())) {
-                log.warn("OTP request blocked by lockout listingId={} callerId={} lockedUntil={}",
-                        id, caller.userId(), identityDimension.getOtpLockedUntil());
-                return ResponseEntity.status(429).body(Map.of(
-                        "error", "OTP locked. Retry after 24 hours.",
-                        "lockedUntil", identityDimension.getOtpLockedUntil().toString()));
+        if (identityDimension != null) {
+            String state = identityDimension.getBadgeState();
+            if ("EARNED".equals(state)) {
+                return ResponseEntity.status(409).body(Map.of("error", "Identity already verified"));
             }
-            // Lockout has expired — clear it before issuing a new OTP
-            badgeService.resetOtpLockout(id, "IDENTITY");
+            if ("PENDING".equals(state)) {
+                return ResponseEntity.status(409).body(Map.of("error", "Identity evidence already submitted and under review"));
+            }
         }
 
-        // 4. Send OTP — phone is not echoed in the response
+        // 5. Upload document to Supabase Storage
+        String documentUrl;
         try {
-            otpService.sendOtp(phone);
-        } catch (OtpDeliveryException e) {
-            log.error("OTP delivery failed listingId={} callerId={}", id, caller.userId(), e);
-            return ResponseEntity.status(503).body(Map.of("error", "OTP delivery failed"));
+            String ext = getExtensionFromContentType(file.getContentType());
+            String path = caller.userId() + "/" + documentType + "/" + UUID.randomUUID() + "." + ext;
+            documentUrl = supabaseStorageService.uploadObject(
+                    "identity-evidence", path, file.getBytes(),
+                    file.getContentType() != null ? file.getContentType() : "application/octet-stream"
+            ).orElse(null);
+        } catch (Exception e) {
+            log.warn("Identity evidence upload to storage failed listingId={}", id, e);
+            documentUrl = null;
         }
 
-        log.info("POST /api/listings/{}/trust/identity/request-otp -> 200 callerId={}", id, caller.userId());
-        return ResponseEntity.ok(Map.of("message", "OTP sent"));
-    }
-
-    // -------------------------------------------------------------------------
-    // POST /api/listings/{id}/trust/identity/verify-otp — AUTHENTICATED, owner-only
-    // -------------------------------------------------------------------------
-
-    /**
-     * Verifies the OTP code submitted by the caller and, if valid, grants the IDENTITY badge.
-     *
-     * <p>Returns:
-     * <ul>
-     *   <li>200 — OTP verified; IDENTITY badge EARNED</li>
-     *   <li>400 — invalid or expired OTP, or no phone on profile</li>
-     *   <li>403 — caller is not the listing owner</li>
-     *   <li>404 — listing not found</li>
-     * </ul>
-     */
-    @PostMapping(value = "/{id}/trust/identity/verify-otp", consumes = "application/json")
-    public ResponseEntity<?> verifyIdentityOtp(
-            CallerInfo caller,
-            @PathVariable UUID id,
-            @RequestBody OtpVerifyRequest request) {
-
-        // 1. Resolve listing + ownership check
-        Listing listing = listingRepository.findById(id).orElse(null);
-        if (listing == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "Listing not found"));
+        if (documentUrl == null) {
+            // Storage is non-fatal for mandate, but for identity evidence we need the URL
+            // to review the document. If storage is disabled in dev, use a placeholder.
+            documentUrl = "storage-disabled://identity-evidence/" + caller.userId() + "/" + documentType;
         }
 
-        boolean isOwner = listing.getCreatedBy() != null
-                && listing.getCreatedBy().equals(caller.userId());
-        if (!isOwner && !caller.isAdmin()) {
-            log.warn("Access denied to identity/verify-otp listingId={} callerId={}", id, caller.userId());
-            return ResponseEntity.status(403).body(Map.of("error", "Access denied — not the listing owner"));
-        }
-
-        // 2. Resolve caller's profile and phone
+        // 6. Resolve profile
         Profile profile = profileRepository.findByUserId(caller.userId()).orElse(null);
-        String phone = (profile != null) ? profile.getPhone() : null;
-        if (phone == null || phone.isBlank()) {
-            return ResponseEntity.status(400).body(Map.of("error", "No phone number on profile"));
-        }
+        UUID profileId = (profile != null) ? profile.getUserId() : caller.userId();
 
-        // 3. Verify OTP
-        boolean valid = otpService.verifyOtp(phone, request.getCode());
-        if (!valid) {
-            int attemptCount = badgeService.incrementOtpAttemptCount(id, "IDENTITY");
-            if (attemptCount >= OTP_MAX_ATTEMPTS) {
-                badgeService.failBadgeWithLockout(id, "IDENTITY", caller.userId());
-                log.warn("OTP max attempts reached listingId={} callerId={} attempts={}",
-                        id, caller.userId(), attemptCount);
-                return ResponseEntity.status(403).body(
-                        Map.of("error", "Maximum OTP attempts exceeded. Try again after 24 hours."));
-            }
-            int remaining = OTP_MAX_ATTEMPTS - attemptCount;
-            return ResponseEntity.status(400).body(Map.of(
-                    "error", "Incorrect OTP.",
-                    "attemptsRemaining", remaining));
-        }
+        // 7. Create identity_evidence row
+        OffsetDateTime now = OffsetDateTime.now();
+        IdentityEvidence evidence = new IdentityEvidence();
+        evidence.setProfileId(profileId);
+        evidence.setListingId(id);
+        evidence.setLegalName(legalName.trim());
+        evidence.setPhoneNumber(phoneNumber.trim());
+        evidence.setDocumentType(documentType);
+        evidence.setDocumentUrl(documentUrl);
+        evidence.setReviewState("PENDING");
+        evidence.setUpdatedAt(now);
 
-        // 4. Mark phone as verified on profile and grant badge — both in one transaction
-        verifyAndGrantIdentity(profile, id, caller.userId());
+        IdentityEvidence saved = identityEvidenceRepository.save(evidence);
 
-        log.info("POST /api/listings/{}/trust/identity/verify-otp -> 200 callerId={}", id, caller.userId());
-        return ResponseEntity.ok(Map.of("message", "Identity verified"));
+        // 8. Transition IDENTITY badge to PENDING
+        badgeService.submitIdentityEvidence(id, caller.userId(), documentUrl);
+
+        log.info("POST /api/listings/{}/trust/identity/submit-evidence -> 200 callerId={} evidenceId={}",
+                id, caller.userId(), saved.getId());
+        return ResponseEntity.ok(Map.of("message", "Identity evidence submitted for review", "evidenceId", saved.getId()));
     }
 
     // -------------------------------------------------------------------------
@@ -731,21 +726,6 @@ public class TrustController {
 
         log.info("POST /api/listings/{}/trust/authority/submit-mandate -> 200 callerId={}", id, caller.userId());
         return ResponseEntity.ok(Map.of("message", "Mandate submitted for review"));
-    }
-
-    // -------------------------------------------------------------------------
-    // Private: transactional helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * Atomically sets profile.phone_verified=true and grants the IDENTITY badge.
-     * Both writes must succeed or both roll back.
-     */
-    @Transactional
-    protected void verifyAndGrantIdentity(Profile profile, UUID listingId, UUID callerId) {
-        profile.setPhoneVerified(true);
-        profileRepository.save(profile);
-        badgeService.grantIdentityBadge(listingId, callerId);
     }
 
     // -------------------------------------------------------------------------

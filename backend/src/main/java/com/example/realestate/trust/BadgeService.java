@@ -438,15 +438,89 @@ public class BadgeService {
     // grantIdentityBadge
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // submitIdentityEvidence
+    // -------------------------------------------------------------------------
+
+    /**
+     * Transitions the IDENTITY dimension to PENDING state for a given listing,
+     * indicating that identity evidence has been submitted for admin review.
+     *
+     * <p>If the IDENTITY dimension is already PENDING or EARNED, throws
+     * {@link IdentityAlreadyVerifiedException} — the caller must surface a 409 conflict.
+     *
+     * <p>If the IDENTITY dimension does not exist, a new row is created with state PENDING.
+     * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED, FAILED), it is updated to PENDING.
+     *
+     * @param listingId listing for which identity evidence was submitted; must not be null
+     * @param callerId  UUID of the broker or owner submitting the evidence; must not be null
+     * @param verificationAssetUrl URL of the uploaded identity document; may be null
+     */
+    @Transactional
+    public ListingVerificationDimension submitIdentityEvidence(
+            UUID listingId, UUID callerId, String verificationAssetUrl) {
+        Objects.requireNonNull(listingId, "listingId must not be null");
+        Objects.requireNonNull(callerId, "callerId must not be null");
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        ListingVerificationDimension dimension = dimensionRepository
+                .findByListingIdAndDimensionType(listingId, "IDENTITY")
+                .orElseGet(() -> {
+                    ListingVerificationDimension d = new ListingVerificationDimension();
+                    d.setListingId(listingId);
+                    d.setDimensionType("IDENTITY");
+                    return d;
+                });
+
+        String previousState = dimension.getBadgeState();
+
+        if ("PENDING".equals(previousState) || "EARNED".equals(previousState)) {
+            throw new IdentityAlreadyVerifiedException();
+        }
+
+        dimension.setBadgeState("PENDING");
+        dimension.setUpdatedAt(now);
+        if (verificationAssetUrl != null) {
+            dimension.setVerificationAssetUrl(verificationAssetUrl);
+        }
+
+        ListingVerificationDimension saved = dimensionRepository.save(dimension);
+
+        recalculateAndPersistTier(listingId);
+
+        String afterJson = buildSimpleStateJson("IDENTITY", "PENDING");
+        String beforeJson = previousState != null ? buildSimpleStateJson("IDENTITY", previousState) : null;
+
+        adminAuditService.record(
+                callerId,
+                "IDENTITY_EVIDENCE_SUBMITTED",
+                ENTITY_TYPE_BADGE,
+                saved.getId(),
+                beforeJson,
+                afterJson);
+
+        log.info("Identity evidence submitted for review listingId={} callerId={}", listingId, callerId);
+
+        return saved;
+    }
+
+    // -------------------------------------------------------------------------
+    // grantIdentityBadge
+    // -------------------------------------------------------------------------
+
     /**
      * Grants the IDENTITY badge for a listing when the caller has verified their phone number
-     * via OTP.
+     * via OTP or when admin approves identity evidence.
      *
      * <p>If the IDENTITY badge is already EARNED, throws
      * {@link IdentityAlreadyVerifiedException} — the caller must surface a 409 conflict.
      *
      * <p>If the IDENTITY badge does not exist, a new row is created with state EARNED.
      * If it exists with any other state (AVAILABLE, EXPIRED, SUSPENDED), it is updated to EARNED.
+     *
+     * <p>Owner auto-grant: if the listing's sellerType is "owner", this method also
+     * auto-grants the AUTHORITY badge (added in #693).
      *
      * @param listingId listing for which identity was verified; must not be null
      * @param callerId  UUID of the broker or owner who verified their phone; must not be null

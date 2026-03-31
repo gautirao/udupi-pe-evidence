@@ -95,6 +95,9 @@ class TrustControllerSecurityTest {
     @MockitoBean
     private ListingVerificationDimensionRepository dimensionRepository;
 
+    @MockitoBean
+    private IdentityEvidenceRepository identityEvidenceRepository;
+
     /**
      * Unauthenticated GET /trust must not be rejected by Spring Security.
      * The controller is reached and returns 404 (listing not found), not 401 or 403.
