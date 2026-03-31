@@ -414,7 +414,7 @@ export default function TrustReviewQueue() {
                           {formatRelativeDate(item.submittedAt)}
                         </TableCell>
                         <TableCell>
-                          {item.documentUrl && !item.documentUrl.startsWith('storage-disabled://') ? (
+                          {item.documentUrl ? (
                             <Button
                               size="sm"
                               variant="ghost"

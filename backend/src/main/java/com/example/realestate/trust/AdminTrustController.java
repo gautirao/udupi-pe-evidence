@@ -3,6 +3,7 @@ package com.example.realestate.trust;
 import com.example.realestate.listing.audit.AdminAuditService;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,23 +49,29 @@ public class AdminTrustController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminTrustController.class);
 
+    /** TTL for signed URLs returned to the admin review UI (15 minutes). */
+    private static final int SIGNED_URL_TTL_SECONDS = 900;
+
     private final ListingVerificationDimensionRepository dimensionRepository;
     private final ListingRepository listingRepository;
     private final BadgeService badgeService;
     private final IdentityEvidenceRepository identityEvidenceRepository;
     private final AdminAuditService adminAuditService;
+    private final SupabaseStorageService supabaseStorageService;
 
     public AdminTrustController(
             ListingVerificationDimensionRepository dimensionRepository,
             ListingRepository listingRepository,
             BadgeService badgeService,
             IdentityEvidenceRepository identityEvidenceRepository,
-            AdminAuditService adminAuditService) {
+            AdminAuditService adminAuditService,
+            SupabaseStorageService supabaseStorageService) {
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
         this.badgeService = badgeService;
         this.identityEvidenceRepository = identityEvidenceRepository;
         this.adminAuditService = adminAuditService;
+        this.supabaseStorageService = supabaseStorageService;
     }
 
     /**
@@ -218,7 +226,16 @@ public class AdminTrustController {
             item.put("legalName", e.getLegalName());
             item.put("phoneNumber", e.getPhoneNumber());
             item.put("documentType", e.getDocumentType());
-            item.put("documentUrl", e.getDocumentUrl());
+            // Return a time-limited signed URL instead of the raw storage path.
+            // Identity documents are sensitive PII and must not have public URLs.
+            String docPath = e.getDocumentUrl();
+            String signedUrl = null;
+            if (docPath != null && !docPath.startsWith("storage-disabled://")) {
+                signedUrl = supabaseStorageService.createSignedUrl(
+                        "identity-evidence", docPath, SIGNED_URL_TTL_SECONDS)
+                        .orElse(null);
+            }
+            item.put("documentUrl", signedUrl);
             item.put("submittedAt", e.getCreatedAt());
             Listing listing = listingMap.get(e.getListingId());
             if (listing != null) {
@@ -246,6 +263,7 @@ public class AdminTrustController {
      *
      * @return 200 on success; 403 if not admin; 404 if evidence not found; 409 if not PENDING
      */
+    @Transactional
     @PostMapping("/identity/{evidenceId}/approve")
     public ResponseEntity<?> approveIdentityEvidence(
             CallerInfo caller,
@@ -302,6 +320,7 @@ public class AdminTrustController {
      *
      * @return 200 on success; 403 if not admin; 404 if evidence not found; 409 if not PENDING
      */
+    @Transactional
     @PostMapping("/identity/{evidenceId}/reject")
     public ResponseEntity<?> rejectIdentityEvidence(
             CallerInfo caller,

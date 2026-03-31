@@ -92,6 +92,9 @@ class AdminTrustControllerTest {
     @MockitoBean
     private com.example.realestate.listing.audit.AdminAuditService adminAuditService;
 
+    @MockitoBean
+    private com.example.realestate.listing.storage.SupabaseStorageService supabaseStorageService;
+
     @BeforeEach
     void setUp() {
         reset(dimensionRepository, listingRepository, badgeService, userRoleService);

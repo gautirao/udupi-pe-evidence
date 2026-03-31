@@ -12,6 +12,7 @@ import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -117,6 +118,60 @@ public class SupabaseStorageService {
             return Optional.empty();
         } catch (Exception e) {
             log.warn("Storage upload failed — path={} error={}", storagePath, e.getClass().getSimpleName());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Create a short-lived signed URL for a private Storage object.
+     * Uses the Supabase Storage {@code POST /object/sign} endpoint.
+     *
+     * @param storageBucket bucket name (e.g. "identity-evidence")
+     * @param storagePath   path within bucket (e.g. "userId/AADHAAR/uuid.jpg")
+     * @param expiresInSeconds TTL for the signed URL (e.g. 900 = 15 minutes)
+     * @return Optional containing the full signed URL, or empty if disabled or request failed
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<String> createSignedUrl(
+            String storageBucket, String storagePath, int expiresInSeconds) {
+        if (!enabled) {
+            log.debug("Signed URL skipped (disabled): path={}", storagePath);
+            return Optional.empty();
+        }
+        if (storagePath == null || storagePath.contains("..")) {
+            log.warn("Signed URL rejected — unsafe path: path={}", storagePath);
+            return Optional.empty();
+        }
+
+        String url = UriComponentsBuilder.fromHttpUrl(supabaseUrl)
+                .pathSegment("storage", "v1", "object", "sign", storageBucket)
+                .path("/" + storagePath)
+                .build().toUriString();
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("Authorization", "Bearer " + serviceRoleKey);
+            headers.set("Content-Type", "application/json");
+
+            Map<String, Object> body = Map.of("expiresIn", expiresInSeconds);
+            var response = restTemplate.exchange(url, HttpMethod.POST,
+                    new HttpEntity<>(body, headers), Map.class);
+
+            Map<String, Object> responseBody = response.getBody();
+            if (responseBody != null && responseBody.containsKey("signedURL")) {
+                String signedPath = (String) responseBody.get("signedURL");
+                // signedURL is relative — prepend the Supabase base URL
+                String fullUrl = supabaseUrl + "/storage/v1" + signedPath;
+                log.debug("Signed URL created: path={} ttl={}s", storagePath, expiresInSeconds);
+                return Optional.of(fullUrl);
+            }
+            log.warn("Signed URL response missing signedURL key: path={}", storagePath);
+            return Optional.empty();
+        } catch (RestClientResponseException e) {
+            log.warn("Signed URL failed — path={} status={}", storagePath, e.getStatusCode());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("Signed URL failed — path={} error={}", storagePath, e.getClass().getSimpleName());
             return Optional.empty();
         }
     }

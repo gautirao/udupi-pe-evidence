@@ -3,7 +3,7 @@
 
 CREATE TABLE identity_evidence (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    profile_id      UUID NOT NULL REFERENCES profiles(id),
+    profile_id      UUID NOT NULL REFERENCES profiles(user_id),
     listing_id      UUID NOT NULL REFERENCES property_listings(id) ON DELETE CASCADE,
     legal_name      VARCHAR(200) NOT NULL,
     phone_number    VARCHAR(100) NOT NULL,

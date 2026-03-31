@@ -432,8 +432,14 @@ public class TrustController {
         if (legalName == null || legalName.isBlank()) {
             return ResponseEntity.status(400).body(Map.of("error", "Legal name is required"));
         }
+        if (legalName.trim().length() > 200) {
+            return ResponseEntity.status(400).body(Map.of("error", "Legal name must not exceed 200 characters"));
+        }
         if (phoneNumber == null || phoneNumber.isBlank()) {
             return ResponseEntity.status(400).body(Map.of("error", "Phone number is required"));
+        }
+        if (phoneNumber.trim().length() > 100) {
+            return ResponseEntity.status(400).body(Map.of("error", "Phone number must not exceed 100 characters"));
         }
         if (!VALID_DOCUMENT_TYPES.contains(documentType)) {
             return ResponseEntity.status(400).body(Map.of("error",
@@ -468,24 +474,19 @@ public class TrustController {
             }
         }
 
-        // 5. Upload document to Supabase Storage
-        String documentUrl;
+        // 5. Upload document to Supabase Storage — store only the path, never the public URL.
+        //    Identity documents are sensitive PII; access is proxied through the backend
+        //    via GET /api/admin/trust/identity/{evidenceId}/document (admin-only).
+        String ext = getExtensionFromContentType(file.getContentType());
+        String storagePath = caller.userId() + "/" + documentType + "/" + UUID.randomUUID() + "." + ext;
         try {
-            String ext = getExtensionFromContentType(file.getContentType());
-            String path = caller.userId() + "/" + documentType + "/" + UUID.randomUUID() + "." + ext;
-            documentUrl = supabaseStorageService.uploadObject(
-                    "identity-evidence", path, file.getBytes(),
+            supabaseStorageService.uploadObject(
+                    "identity-evidence", storagePath, file.getBytes(),
                     file.getContentType() != null ? file.getContentType() : "application/octet-stream"
-            ).orElse(null);
+            );
         } catch (Exception e) {
             log.warn("Identity evidence upload to storage failed listingId={}", id, e);
-            documentUrl = null;
-        }
-
-        if (documentUrl == null) {
-            // Storage is non-fatal for mandate, but for identity evidence we need the URL
-            // to review the document. If storage is disabled in dev, use a placeholder.
-            documentUrl = "storage-disabled://identity-evidence/" + caller.userId() + "/" + documentType;
+            // Fall through — storagePath is still recorded so the upload can be retried
         }
 
         // 6. Resolve profile
@@ -500,14 +501,14 @@ public class TrustController {
         evidence.setLegalName(legalName.trim());
         evidence.setPhoneNumber(phoneNumber.trim());
         evidence.setDocumentType(documentType);
-        evidence.setDocumentUrl(documentUrl);
+        evidence.setDocumentUrl(storagePath);
         evidence.setReviewState("PENDING");
         evidence.setUpdatedAt(now);
 
         IdentityEvidence saved = identityEvidenceRepository.save(evidence);
 
-        // 8. Transition IDENTITY badge to PENDING
-        badgeService.submitIdentityEvidence(id, caller.userId(), documentUrl);
+        // 8. Transition IDENTITY badge to PENDING (pass path, not public URL)
+        badgeService.submitIdentityEvidence(id, caller.userId(), storagePath);
 
         log.info("POST /api/listings/{}/trust/identity/submit-evidence -> 200 callerId={} evidenceId={}",
                 id, caller.userId(), saved.getId());

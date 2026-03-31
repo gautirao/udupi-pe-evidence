@@ -338,7 +338,7 @@ class TrustControllerIdentityTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
         when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of());
         when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
-        // Storage returns empty (disabled)
+        // Storage returns empty (disabled) — controller still succeeds, recording the path
         when(supabaseStorageService.uploadObject(anyString(), anyString(), any(byte[].class), anyString()))
                 .thenReturn(Optional.empty());
         when(identityEvidenceRepository.save(any(IdentityEvidence.class))).thenAnswer(inv -> {
@@ -363,5 +363,35 @@ class TrustControllerIdentityTest {
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Identity evidence submitted for review"));
+    }
+
+    @Test
+    void submitEvidence_legalNameTooLong_returns400() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
+
+        String longName = "A".repeat(201);
+        mockMvc.perform(multipart("/api/listings/{id}/trust/identity/submit-evidence", LISTING_ID)
+                        .file(validJpegFile())
+                        .param("legal_name", longName)
+                        .param("phone_number", "+919876543210")
+                        .param("document_type", "AADHAAR")
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Legal name must not exceed 200 characters"));
+    }
+
+    @Test
+    void submitEvidence_phoneNumberTooLong_returns400() throws Exception {
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
+
+        String longPhone = "1".repeat(101);
+        mockMvc.perform(multipart("/api/listings/{id}/trust/identity/submit-evidence", LISTING_ID)
+                        .file(validJpegFile())
+                        .param("legal_name", "John Doe")
+                        .param("phone_number", longPhone)
+                        .param("document_type", "AADHAAR")
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Phone number must not exceed 100 characters"));
     }
 }
