@@ -2,7 +2,10 @@ package com.example.realestate.notification;
 
 import com.example.realestate.insights.SavedArea;
 import com.example.realestate.insights.SavedAreaRepository;
+import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.event.ListingSubmittedEvent;
 import com.example.realestate.listing.event.NewListingInAreaEvent;
+import com.example.realestate.security.UserRoleRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +22,7 @@ class NotificationEventListenerTest {
     private SavedAreaRepository savedAreaRepository;
     private NotificationRepository notificationRepository;
     private EmailService emailService;
+    private UserRoleRepository userRoleRepository;
     private NotificationEventListener listener;
 
     private static final UUID USER_A = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -30,11 +34,13 @@ class NotificationEventListenerTest {
         savedAreaRepository = mock(SavedAreaRepository.class);
         notificationRepository = mock(NotificationRepository.class);
         emailService = mock(EmailService.class);
+        userRoleRepository = mock(UserRoleRepository.class);
         listener = new NotificationEventListener(
                 new ObjectMapper(),
                 savedAreaRepository,
                 notificationRepository,
-                emailService);
+                emailService,
+                userRoleRepository);
     }
 
     private SavedArea savedArea(UUID userId, Long priceThresholdRupees) {
@@ -176,5 +182,55 @@ class NotificationEventListenerTest {
         // Only USER_B gets notified (USER_A's threshold exceeded)
         verify(notificationRepository, times(1)).save(any());
         verify(emailService, times(1)).sendNewListingAlert(eq("b@test.com"), any(), any(), any(), any());
+    }
+
+    // ===== onListingSubmitted tests =====
+
+    private ListingSubmittedEvent submittedEvent(String title) {
+        Listing listing = new Listing();
+        listing.setId(LISTING_ID);
+        listing.setCreatedBy(USER_A);
+        listing.setTitle(title);
+        return new ListingSubmittedEvent(listing, USER_A, title != null ? title : "Untitled");
+    }
+
+    @Test
+    void onListingSubmitted_notifiesAllAdmins() {
+        UUID adminA = UUID.randomUUID();
+        UUID adminB = UUID.randomUUID();
+        when(userRoleRepository.findAllUserIdsByRole("admin")).thenReturn(List.of(adminA, adminB));
+
+        listener.onListingSubmitted(submittedEvent("Beach House"));
+
+        verify(notificationRepository).insertNotification(
+                eq(adminA), eq("review_pending"),
+                eq("New listing pending review"),
+                eq("New listing 'Beach House' is pending review."),
+                argThat(json -> json.contains(LISTING_ID.toString())));
+        verify(notificationRepository).insertNotification(
+                eq(adminB), eq("review_pending"),
+                eq("New listing pending review"),
+                eq("New listing 'Beach House' is pending review."),
+                argThat(json -> json.contains(LISTING_ID.toString())));
+    }
+
+    @Test
+    void onListingSubmitted_zeroAdmins_noNotificationInserted() {
+        when(userRoleRepository.findAllUserIdsByRole("admin")).thenReturn(List.of());
+
+        listener.onListingSubmitted(submittedEvent("Empty Admin Test"));
+
+        verify(notificationRepository, never()).insertNotification(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void onListingSubmitted_repositoryThrows_doesNotRethrow() {
+        when(userRoleRepository.findAllUserIdsByRole("admin"))
+                .thenThrow(new RuntimeException("DB down"));
+
+        // Must not throw — error is swallowed
+        listener.onListingSubmitted(submittedEvent("Failure Test"));
+
+        verify(notificationRepository, never()).insertNotification(any(), any(), any(), any(), any());
     }
 }

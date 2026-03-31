@@ -9,6 +9,7 @@ import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.event.ListingSubmittedEvent;
 import com.example.realestate.listing.event.NewListingInAreaEvent;
 import com.example.realestate.listing.exception.ListingErrorCode;
 import com.example.realestate.listing.exception.ListingLifecycleException;
@@ -144,6 +145,10 @@ public class ListingWorkflowService {
         history.setActorId(userId);
         history.setActionedSubmissionCount(listing.getSubmissionCount());
         statusHistoryRepository.save(history);
+
+        String title = Objects.requireNonNullElse(listing.getTitle(), "Untitled");
+        applicationEventPublisher.publishEvent(
+                new ListingSubmittedEvent(saved, listing.getCreatedBy(), title));
 
         log.info("Submitted listing listingId={} by userId={} status=PENDING_REVIEW fromStatus={}",
                 listingId, userId, previousStatus);

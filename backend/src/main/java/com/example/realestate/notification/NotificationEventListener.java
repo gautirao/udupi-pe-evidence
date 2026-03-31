@@ -4,7 +4,9 @@ import com.example.realestate.insights.SavedArea;
 import com.example.realestate.insights.SavedAreaRepository;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.event.ListingSubmittedEvent;
 import com.example.realestate.listing.event.NewListingInAreaEvent;
+import com.example.realestate.security.UserRoleRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
@@ -30,15 +32,18 @@ public class NotificationEventListener {
     private final SavedAreaRepository savedAreaRepository;
     private final NotificationRepository notificationRepository;
     private final EmailService emailService;
+    private final UserRoleRepository userRoleRepository;
 
     public NotificationEventListener(ObjectMapper objectMapper,
                                       SavedAreaRepository savedAreaRepository,
                                       NotificationRepository notificationRepository,
-                                      EmailService emailService) {
+                                      EmailService emailService,
+                                      UserRoleRepository userRoleRepository) {
         this.objectMapper = objectMapper;
         this.savedAreaRepository = savedAreaRepository;
         this.notificationRepository = notificationRepository;
         this.emailService = emailService;
+        this.userRoleRepository = userRoleRepository;
     }
 
     @Async
@@ -58,6 +63,39 @@ public class NotificationEventListener {
             log.info("Approval notification sent listingId={}", event.listing().getId());
         } catch (Exception e) {
             log.error("Failed to send approval notification listingId={}", event.listing().getId(), e);
+            // Do NOT rethrow — notification failure must not affect already-committed listing status
+        }
+    }
+
+    @Async
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onListingSubmitted(ListingSubmittedEvent event) {
+        try {
+            List<UUID> adminIds = userRoleRepository.findAllUserIdsByRole("admin");
+            if (adminIds.isEmpty()) {
+                log.debug("No admin users found for review_pending notification listingId={}",
+                        event.listing().getId());
+                return;
+            }
+
+            ObjectNode metadata = objectMapper.createObjectNode();
+            metadata.put("listing_id", event.listing().getId().toString());
+            String metadataJson = objectMapper.writeValueAsString(metadata);
+
+            for (UUID adminId : adminIds) {
+                notificationRepository.insertNotification(
+                        adminId,
+                        "review_pending",
+                        "New listing pending review",
+                        "New listing '" + event.title() + "' is pending review.",
+                        metadataJson);
+            }
+            log.info("Review-pending notifications sent listingId={} adminCount={}",
+                    event.listing().getId(), adminIds.size());
+        } catch (Exception e) {
+            log.error("Failed to send review-pending notification listingId={}",
+                    event.listing().getId(), e);
             // Do NOT rethrow — notification failure must not affect already-committed listing status
         }
     }

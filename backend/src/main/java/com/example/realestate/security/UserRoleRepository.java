@@ -47,6 +47,16 @@ public class UserRoleRepository {
     }
 
     /**
+     * Returns all user IDs that have the given role (e.g. "admin").
+     */
+    public List<UUID> findAllUserIdsByRole(String role) {
+        return jdbc.queryForList(
+                "SELECT user_id FROM public.user_roles WHERE role::text = ?",
+                UUID.class,
+                role);
+    }
+
+    /**
      * Inserts the given role for the user using ON CONFLICT DO NOTHING.
      *
      * @return 1 if the row was inserted; 0 if the role already existed (conflict was suppressed).

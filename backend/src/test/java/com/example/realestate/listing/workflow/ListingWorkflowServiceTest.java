@@ -9,6 +9,7 @@ import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.duplicate.ProximityDuplicateService;
 import com.example.realestate.listing.event.ListingApprovedEvent;
 import com.example.realestate.listing.event.ListingRejectedEvent;
+import com.example.realestate.listing.event.ListingSubmittedEvent;
 import com.example.realestate.listing.event.NewListingInAreaEvent;
 import com.example.realestate.listing.exception.ListingErrorCode;
 import com.example.realestate.listing.exception.ListingLifecycleException;
@@ -594,6 +595,18 @@ class ListingWorkflowServiceTest {
         assertThat(history.getActorType()).isEqualTo(ActorType.BROKER);
         assertThat(history.getActorId()).isEqualTo(userId);
         assertThat(history.getActionedSubmissionCount()).isEqualTo(1);
+    }
+
+    @Test
+    void submitListing_publishesListingSubmittedEvent() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing listing = createSubmittableListing(listingId, userId, ListingStatus.DRAFT.toDbValue());
+        stubForSubmit(listingId, userId, listing);
+
+        workflowService.submitListing(listingId, userId, false);
+
+        verify(applicationEventPublisher).publishEvent(any(ListingSubmittedEvent.class));
     }
 
     @Test
