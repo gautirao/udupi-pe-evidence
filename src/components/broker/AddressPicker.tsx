@@ -57,13 +57,27 @@ function MapFlyTo({ position }: { position: L.LatLngExpression | null }) {
   const map = useMap();
   useEffect(() => {
     if (position) {
-      // invalidateSize() first: the wizard uses CSS display:none/block toggling,
-      // so this MapContainer may have been initialised while hidden (0×0 size).
-      // Leaflet's flyTo animation interpolates from the current centre, which can
-      // be NaN when the map never measured its container.  Invalidating here
-      // re-reads the container dimensions before the animation begins.
-      map.invalidateSize();
-      map.flyTo(position, 16, { duration: 0.8 });
+      try {
+        // invalidateSize() first: the wizard uses CSS display:none/block toggling,
+        // so this MapContainer may have been initialised while hidden (0×0 size).
+        // Leaflet's flyTo animation interpolates from the current centre, which can
+        // be NaN when the map never measured its container.  Invalidating here
+        // re-reads the container dimensions before the animation begins.
+        map.invalidateSize();
+
+        // Guard: if the container is still hidden (0×0), the map centre remains
+        // NaN even after invalidateSize(). Attempting flyTo from NaN throws
+        // "Invalid LatLng object". Bail out and let the next render retry.
+        const size = map.getSize();
+        if (!size || size.x === 0 || size.y === 0) return;
+
+        map.flyTo(position, 16, { duration: 0.8 });
+      } catch {
+        // Leaflet throws "Invalid LatLng object" when the map container is
+        // hidden (display:none) and has no measurable dimensions. This is
+        // harmless — the flyTo will succeed when the step panel becomes visible
+        // and triggers a re-render.
+      }
     }
   }, [position, map]);
   return null;
