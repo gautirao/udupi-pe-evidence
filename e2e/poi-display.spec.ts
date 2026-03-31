@@ -6,6 +6,7 @@
  *   P2 — NearbyPois section is hidden when API returns empty list (user auth)
  *   P3 — Broker sees approved POIs on their listing detail page (broker auth)
  *   P4 — Approved POIs from backend render with correct names (broker auth)
+ *   PM1 — Broker POI curation: approve in PoiManager → verify in Approved tab → verify on listing detail
  *
  * Auth enforcement (401 without token) is covered by the Spring unit test
  * ListingPoiControllerTest#getApproved_withoutAuth_returns401.
@@ -243,5 +244,194 @@ test.describe('Broker-authenticated POI display', () => {
 
     // Settlement POI renders in "Settlement Context" section
     await expect(page.getByText('Town Hall').first()).toBeVisible({ timeout: 5_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PM1 — Broker POI curation: approve in PoiManager → verify in Approved tab → verify on listing detail
+// ---------------------------------------------------------------------------
+test.describe('Broker POI curation flow', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
+
+  test('PM1 — approve POI in PoiManager, verify in Approved tab, verify on listing detail', async ({ page }) => {
+    test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping PM1');
+
+    // ── Fixture data ──────────────────────────────────────────────────────
+
+    /** Listing stub for the broker's EditListing page (GET /api/listings/:id). */
+    const EDIT_LISTING_FIXTURE = {
+      id: FIXTURE_LISTING_ID,
+      status: 'DRAFT',
+      propertyType: 'house',
+      title: 'E2E POI Test House',
+      locality: 'Udupi',
+      price: 5_000_000,
+      description: null,
+      landArea: 10,
+      landAreaUnit: 'cent',
+      builtArea: null,
+      builtAreaUnit: null,
+      bedrooms: null,
+      latitude: null,
+      longitude: null,
+      addressConfirmed: true,
+      imageCount: 3,
+      firstImageUrl: null,
+      rejectionReason: null,
+      videoUrl: null,
+      reraNumber: null,
+      listingPurpose: null,
+      sellerType: null,
+      carpetArea: null,
+      carpetAreaUnit: null,
+      floorNumber: null,
+      totalFloors: null,
+      furnishingStatus: null,
+      washrooms: null,
+      parkingCount: null,
+      roadFrontageFt: null,
+      commercialUsage: null,
+      numberOfUnits: null,
+      monthlyRent: null,
+      securityDepositMonths: null,
+      lockInMonths: null,
+      earnedBadgeCount: 0,
+      createdAt: '2026-01-01T00:00:00+00:00',
+      updatedAt: '2026-01-01T00:00:00+00:00',
+    };
+
+    /** POI suggestions before approval — 2 unapproved amenities + 1 settlement. */
+    const SUGGESTIONS_BEFORE = [
+      { id: 'poi-10', name: 'City Hospital', category: 'HOSPITAL', distanceMeters: 200, latitude: 13.341, longitude: 74.743, pinned: false, approved: false },
+      { id: 'poi-11', name: 'Central School', category: 'SCHOOL', distanceMeters: 400, latitude: 13.342, longitude: 74.744, pinned: false, approved: false },
+      { id: 'poi-12', name: 'Manipal Town', category: 'TOWN_CENTER', distanceMeters: 500, latitude: 13.340, longitude: 74.741, pinned: false, approved: true },
+    ];
+
+    /** POI suggestions after approving poi-10 — City Hospital is now approved. */
+    const SUGGESTIONS_AFTER = [
+      { id: 'poi-10', name: 'City Hospital', category: 'HOSPITAL', distanceMeters: 200, latitude: 13.341, longitude: 74.743, pinned: false, approved: true },
+      { id: 'poi-11', name: 'Central School', category: 'SCHOOL', distanceMeters: 400, latitude: 13.342, longitude: 74.744, pinned: false, approved: false },
+      { id: 'poi-12', name: 'Manipal Town', category: 'TOWN_CENTER', distanceMeters: 500, latitude: 13.340, longitude: 74.741, pinned: false, approved: true },
+    ];
+
+    // ── Stub: broker listing endpoint (EditListing) ───────────────────────
+    // Register POI sub-routes FIRST so they take priority over the listing route.
+
+    // Stub images endpoint (EditListing step 4 needs this)
+    await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/images`, async (route) => {
+      if (route.request().method() !== 'GET') { await route.continue(); return; }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([]),
+      });
+    });
+
+    // Stub suggestions endpoint — initially returns pre-approve data
+    const suggestionsUrl = `**/api/listings/${FIXTURE_LISTING_ID}/pois/suggestions`;
+    await page.route(suggestionsUrl, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(SUGGESTIONS_BEFORE),
+      });
+    });
+
+    // Stub the approve PATCH endpoint
+    await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois/poi-10/approve`, async (route) => {
+      if (route.request().method() !== 'PATCH') { await route.continue(); return; }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    // Stub broker listing endpoint — must NOT intercept /pois or /images sub-paths
+    await page.route(`**/api/listings/${FIXTURE_LISTING_ID}`, async (route) => {
+      if (route.request().method() !== 'GET') { await route.continue(); return; }
+      const url = route.request().url();
+      if (url.includes('/pois') || url.includes('/images')) { await route.fallback(); return; }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(EDIT_LISTING_FIXTURE),
+      });
+    });
+
+    // Stub public listing endpoint (for listing detail page later)
+    await stubListing(page);
+
+    // ── Navigate to EditListing Step 4 ────────────────────────────────────
+
+    const suggestionsResponse = page.waitForResponse(suggestionsUrl, { timeout: 15_000 });
+    await page.goto(`/broker/listings/${FIXTURE_LISTING_ID}/edit?step=4`);
+    await suggestionsResponse;
+
+    // ── Verify "Nearby Places" tab shows unapproved amenities ─────────────
+
+    await expect(page.getByText('Nearby Points of Interest')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('City Hospital').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Central School').first()).toBeVisible({ timeout: 5_000 });
+
+    // Manipal Town is a settlement POI — shown in Location Context, NOT in tabs
+    // Verify it appears in the Location Context block but not as an approvable row
+    await expect(page.getByRole('button', { name: /approve manipal town/i })).toHaveCount(0);
+
+    // ── Approve City Hospital ─────────────────────────────────────────────
+
+    // Re-stub suggestions to return post-approve data before clicking
+    await page.unroute(suggestionsUrl);
+    await page.route(suggestionsUrl, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(SUGGESTIONS_AFTER),
+      });
+    });
+
+    const approveResponse = page.waitForResponse(
+      (resp) => resp.url().includes(`/pois/poi-10/approve`) && resp.request().method() === 'PATCH',
+      { timeout: 10_000 },
+    );
+    const postApproveSuggestions = page.waitForResponse(suggestionsUrl, { timeout: 10_000 });
+
+    await page.getByRole('button', { name: /approve city hospital/i }).click();
+    await approveResponse;
+    await postApproveSuggestions;
+
+    // ── Verify "Approved" tab shows the approved POI ──────────────────────
+
+    // PoiManager auto-switches to "Approved" tab after successful approve
+    // (approveMutation.onSettled sets activeTab to 'approved')
+    await expect(page.getByText('City Hospital').first()).toBeVisible({ timeout: 5_000 });
+
+    // The Approved tab trigger should show a count badge
+    const approvedTab = page.getByRole('tab', { name: /approved/i });
+    await expect(approvedTab).toBeVisible({ timeout: 5_000 });
+    // Badge shows "1" for the single approved amenity POI
+    await expect(approvedTab.getByText('1')).toBeVisible({ timeout: 5_000 });
+
+    // ── Navigate to listing detail and verify NearbyPois ──────────────────
+
+    // Stub the public approved-POIs endpoint for listing detail
+    await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
+      // Skip if this is the /pois/suggestions sub-path
+      if (route.request().url().includes('/suggestions')) { await route.continue(); return; }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          { id: 'poi-10', name: 'City Hospital', category: 'HOSPITAL', distanceMeters: 200, latitude: 13.341, longitude: 74.743, pinned: false, approved: true },
+        ]),
+      });
+    });
+
+    const poisResponse = page.waitForResponse(
+      (resp) => resp.url().includes(`/listings/${FIXTURE_LISTING_ID}/pois`) && !resp.url().includes('/suggestions'),
+      { timeout: 10_000 },
+    );
+
+    await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
+    await poisResponse;
+
+    // City Hospital should be visible in the NearbyPois component
+    await expect(page.getByText('City Hospital').first()).toBeVisible({ timeout: 5_000 });
   });
 });
