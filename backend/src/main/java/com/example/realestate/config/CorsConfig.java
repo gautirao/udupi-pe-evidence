@@ -46,7 +46,7 @@ public class CorsConfig {
         config.setAllowedOrigins(allowedOrigins);
 
         // Standard HTTP methods for REST API
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
 
         // Required headers for authentication + content type.
         // Accept and DNT are sent by browsers (e.g. axios defaults + privacy settings)

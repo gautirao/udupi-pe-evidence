@@ -95,6 +95,22 @@ class CorsPreflightTest {
                 .andExpect(header().exists("Access-Control-Allow-Headers"));
     }
 
+    // ==================== Regression: PATCH preflight must be allowed (#689) ====================
+
+    /**
+     * PATCH is used by POI approve/pin endpoints. Before the fix, PATCH was
+     * missing from CorsConfig's allowed methods list, causing preflight 403.
+     */
+    @Test
+    void options_patchMethod_allowedOrigin_returns200() throws Exception {
+        mockMvc.perform(options("/api/listings/123/pois/456/approve")
+                        .header("Origin", ALLOWED_ORIGIN)
+                        .header("Access-Control-Request-Method", "PATCH")
+                        .header("Access-Control-Request-Headers", "Authorization,Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", ALLOWED_ORIGIN));
+    }
+
     // ==================== Security: unknown origin must be rejected ====================
 
     /** An origin not in CORS_ALLOWED_ORIGINS must be rejected — no CORS header. */
