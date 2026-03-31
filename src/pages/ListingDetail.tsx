@@ -39,6 +39,8 @@ const DIMENSION_LABELS: Record<string, string> = {
   LOCATION: 'Location Verified',
   PHOTOS: 'Photos Verified',
   AUTHORITY: 'Authority Verified',
+  FIELD: 'Field Verified',
+  DOCUMENTS: 'Documents Reviewed',
 };
 
 const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
@@ -719,9 +721,11 @@ export default function ListingDetail() {
                 LOCATION: 'The listing agent visited this property and confirmed its location within 200m.',
                 PHOTOS: 'Photos of this property were captured on-site and checked for duplicates.',
                 AUTHORITY: 'The agent has confirmed their authorisation to market this property.',
+                FIELD: 'A field agent physically visited this property.',
+                DOCUMENTS: 'Supporting documents for this property have been reviewed.',
               };
-              const REALNESS_TYPES = new Set(['LOCATION', 'PHOTOS']);
-              const AUTHORISATION_TYPES = new Set(['IDENTITY', 'AUTHORITY']);
+              const REALNESS_TYPES = new Set(['LOCATION', 'PHOTOS', 'FIELD']);
+              const AUTHORISATION_TYPES = new Set(['IDENTITY', 'AUTHORITY', 'DOCUMENTS']);
               const realnessBadges = trustData.badges.filter((b) => REALNESS_TYPES.has(b.dimensionType));
               const authorisationBadges = trustData.badges.filter((b) => AUTHORISATION_TYPES.has(b.dimensionType));
 
@@ -753,7 +757,7 @@ export default function ListingDetail() {
                     </h3>
                     {realnessBadges.length > 0 && (
                       <div className="mb-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Is this listing real?</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Has this listing been verified to exist?</p>
                         <div className="flex flex-wrap gap-2">
                           {realnessBadges.map((badge) => (
                             <BadgeChip key={badge.dimensionType} badge={badge} />
@@ -763,7 +767,7 @@ export default function ListingDetail() {
                     )}
                     {authorisationBadges.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Is the agent authorised?</p>
+                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Has this person been verified as authorised to market it?</p>
                         <div className="flex flex-wrap gap-2">
                           {authorisationBadges.map((badge) => (
                             <BadgeChip key={badge.dimensionType} badge={badge} />
