@@ -30,9 +30,9 @@ import { supabase } from '@/integrations/supabase/client';
 // ─── API types ────────────────────────────────────────────────────────────────
 
 type DimensionType = 'IDENTITY' | 'LOCATION' | 'PHOTOS' | 'AUTHORITY';
-type BadgeState = 'AVAILABLE' | 'EARNED' | 'PENDING' | 'EXPIRED' | 'SUSPENDED' | 'FAILED';
+export type BadgeState = 'AVAILABLE' | 'EARNED' | 'PENDING' | 'EXPIRED' | 'SUSPENDED' | 'FAILED';
 
-interface TrustProgressBadgeDto {
+export interface TrustProgressBadgeDto {
   dimensionType: DimensionType;
   badgeState: BadgeState;
   grantedAt: string | null;
@@ -40,7 +40,7 @@ interface TrustProgressBadgeDto {
   rejectionReason: string | null;
 }
 
-interface TrustProgressResponse {
+export interface TrustProgressResponse {
   badges: TrustProgressBadgeDto[];
   // dimensionType of first AVAILABLE badge, or null when all are terminal.
   // Unused in RE-154 (display-only); RE-155 will wire CTA routing.

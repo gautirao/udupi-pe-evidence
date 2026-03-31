@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { Navigate, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Loader2,
   PlusCircle,
@@ -15,9 +18,12 @@ import {
   XCircle,
   AlertCircle,
   Activity,
+  ShieldAlert,
+  X,
 } from 'lucide-react';
 import { useBrokerListingStats, useBrokerMyListings } from '@/hooks/useBrokerListings';
-import { TrustProgressPanel } from '@/components/trust/TrustProgressPanel';
+import { TrustProgressPanel, type TrustProgressResponse } from '@/components/trust/TrustProgressPanel';
+import { api } from '@/lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -59,17 +65,50 @@ const STAT_CARDS = [
   { key: 'rejectedCount' as const, label: 'Rejected', status: 'REJECTED', icon: XCircle, color: 'text-red-700', bg: 'bg-red-100' },
 ] as const;
 
-/**
- * Broker home page with stats overview, quick actions, and recent activity.
- *
- * Guards:
- *  - Unauthenticated: ProtectedRoute redirects to /auth before this component renders.
- *  - Not dealer/admin: redirect to / (access not permitted).
- */
+/** Safely read a boolean from localStorage (returns false on any error). */
+function isDismissed(listingId: string): boolean {
+  try {
+    return localStorage.getItem(`trust-banner-dismissed-${listingId}`) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 export default function BrokerDashboard() {
   const { isBroker, isAdmin, isLoading } = useAuth();
   const { data: stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats } = useBrokerListingStats();
   const { data: recentData, isLoading: recentLoading, isError: recentError, refetch: refetchRecent } = useBrokerMyListings(0, 5);
+
+  const featuredListing = recentData?.listings.find(
+    (l) => l.status === 'LIVE' || l.status === 'PENDING_REVIEW'
+  );
+
+  const { data: trustData } = useQuery({
+    queryKey: ['trust-progress', featuredListing?.id],
+    queryFn: () => api.get<TrustProgressResponse>(`/api/listings/${featuredListing!.id}/trust-progress`),
+    staleTime: 60_000,
+    enabled: !!featuredListing,
+  });
+
+  const featuredId = featuredListing?.id;
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
+
+  const hasAvailableBadge = trustData?.badges.some((b) => b.badgeState === 'AVAILABLE') ?? false;
+  const bannerDismissed = (featuredId != null && dismissedId === featuredId) || (featuredId != null && isDismissed(featuredId));
+  const showBanner = !!featuredId && hasAvailableBadge && !bannerDismissed;
+
+  function handleDismissBanner() {
+    if (featuredId) {
+      try {
+        localStorage.setItem(`trust-banner-dismissed-${featuredId}`, 'true');
+      } catch { /* quota exceeded -- ignore */ }
+      setDismissedId(featuredId);
+    }
+  }
+
+  function scrollToTrustProgress() {
+    document.getElementById('trust-progress-section')?.scrollIntoView({ behavior: 'smooth' });
+  }
 
   if (isLoading) {
     return (
@@ -85,10 +124,6 @@ export default function BrokerDashboard() {
     return <Navigate to="/" replace />;
   }
 
-  const featuredListing = recentData?.listings.find(
-    (l) => l.status === 'LIVE' || l.status === 'PENDING_REVIEW'
-  );
-
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-6 max-w-7xl">
@@ -98,6 +133,33 @@ export default function BrokerDashboard() {
             Overview of your property listings
           </p>
         </div>
+
+        {/* Trust verification banner */}
+        {showBanner && (
+          <Alert className="mb-6 border-amber-300 bg-amber-50">
+            <ShieldAlert className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>
+                Complete your trust verification to rank higher in buyer searches.{' '}
+                <button
+                  type="button"
+                  onClick={scrollToTrustProgress}
+                  className="underline font-medium text-amber-800 hover:text-amber-900"
+                >
+                  View trust progress
+                </button>
+              </span>
+              <button
+                type="button"
+                onClick={handleDismissBanner}
+                className="ml-4 flex-shrink-0 text-amber-600 hover:text-amber-800"
+                aria-label="Dismiss trust verification banner"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Stats row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -146,7 +208,7 @@ export default function BrokerDashboard() {
 
         {/* Trust progress for first LIVE/PENDING_REVIEW listing */}
         {featuredListing && (
-          <Card className="mb-6">
+          <Card id="trust-progress-section" className="mb-6">
             <CardHeader>
               <CardTitle className="text-base">
                 Trust Progress — {featuredListing.title ?? featuredListing.displayId ?? 'Your listing'}
