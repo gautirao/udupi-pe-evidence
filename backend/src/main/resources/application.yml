@@ -14,6 +14,7 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    locations: classpath:db/migration,classpath:com/example/realestate/migration
 
   servlet:
     multipart:
@@ -118,6 +119,13 @@ sentry:
   send-default-pii: false
   environment: ${RENDER_SERVICE_NAME:local}
   traces-sample-rate: 0
+
+# Phone encryption at rest (AES-256-GCM).
+# Production: set PHONE_ENCRYPTION_KEY env var to a Base64-encoded 32-byte secret.
+# The default below is a DEVELOPMENT-ONLY test key — NOT suitable for production.
+security:
+  phone:
+    encryption-key: ${PHONE_ENCRYPTION_KEY:QUVTMjU2R0NNLXRlc3Qta2V5LWZvci1kZXYtb25seTA=}
 
 # Trust configuration (RE-150, RE-158).
 # otp.provider: stub (default, NOT for production) | msg91 (issue #552)

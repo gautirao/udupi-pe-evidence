@@ -1,6 +1,9 @@
 package com.example.realestate.profile;
 
+import com.example.realestate.trust.PhoneEncryptionConverter;
+
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
@@ -36,6 +39,7 @@ public class Profile {
     @Column(name = "full_name")
     private String fullName;
 
+    @Convert(converter = PhoneEncryptionConverter.class)
     @Column(name = "phone")
     private String phone;
 
