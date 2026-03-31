@@ -91,14 +91,22 @@ interface PropertyMapProps {
   onPolygonCleared?: () => void;
   /** When set, displays a circle around the selected school on the map. */
   schoolCircle?: SchoolCircle;
+  /** Override map center when city changes */
+  cityCenter?: [number, number];
+  /** Override map zoom when city changes */
+  cityZoom?: number;
 }
 
 function MapController({
   selectedListing,
   focusBounds,
+  cityCenter,
+  cityZoom,
 }: {
   selectedListing?: PropertyListing | null;
   focusBounds?: [[number, number], [number, number]] | null;
+  cityCenter?: [number, number];
+  cityZoom?: number;
 }) {
   const map = useMap();
 
@@ -120,6 +128,12 @@ function MapController({
       map.fitBounds(focusBounds, { padding: [50, 50] });
     }
   }, [focusBounds, map]);
+
+  useEffect(() => {
+    if (cityCenter) {
+      map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
+    }
+  }, [cityCenter, cityZoom, map]);
 
   return null;
 }
@@ -212,7 +226,7 @@ const schoolMarkerIcon = L.divIcon({
   iconAnchor: [18, 18],
 });
 
-export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle }: PropertyMapProps) {
+export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle, cityCenter, cityZoom }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -220,8 +234,8 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
   return (
     <div className="w-full h-full relative">
       <MapContainer
-        center={UDUPI_CENTER}
-        zoom={DEFAULT_ZOOM}
+        center={cityCenter ?? UDUPI_CENTER}
+        zoom={cityZoom ?? DEFAULT_ZOOM}
         className="w-full h-full rounded-lg z-0"
         scrollWheelZoom
       >
@@ -229,7 +243,7 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapController selectedListing={selectedListing} focusBounds={focusBounds} />
+        <MapController selectedListing={selectedListing} focusBounds={focusBounds} cityCenter={cityCenter} cityZoom={cityZoom} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {onPolygonDrawn && onPolygonCleared && (
           <DrawControl

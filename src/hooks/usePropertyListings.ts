@@ -91,6 +91,8 @@ export interface PropertyListing {
 export interface PropertyFilters {
   propertyTypes?: PropertyType[];
   localities?: string[];
+  /** City filter for scoping localities (e.g. 'udupi', 'kundapur', 'mangalore') */
+  city?: string;
   priceMin?: number;
   priceMax?: number;
   dateFrom?: Date;
@@ -347,20 +349,35 @@ export function usePropertyListings(filters?: PropertyFilters) {
   });
 }
 
-export function useLocalities() {
+export function useLocalities(city?: string) {
   return useQuery({
-    queryKey: ['localities'],
+    queryKey: ['localities', city],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('property_listings')
-        .select('locality')
+        .select('locality, area_key')
         .eq('is_valid', true)
         .not('locality', 'is', null);
 
       if (error) throw error;
 
+      // Filter by city if provided (area_key format: country|region|city|locality)
+      let filtered = data;
+      if (city) {
+        filtered = data.filter((d) => {
+          if (!d.area_key) return false;
+          const parts = d.area_key.split('|');
+          const areaCity = (parts[2] ?? '').toLowerCase();
+          return areaCity === city.toLowerCase();
+        });
+        // Fallback: if area_key coverage is poor (< 10% of data), skip city filtering
+        if (filtered.length < data.length * 0.1) {
+          filtered = data;
+        }
+      }
+
       // Get unique localities
-      const localities = [...new Set(data.map((d) => d.locality).filter(Boolean))] as string[];
+      const localities = [...new Set(filtered.map((d) => d.locality).filter(Boolean))] as string[];
       return localities.sort();
     },
   });

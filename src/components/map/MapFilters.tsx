@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,8 +8,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PropertyFilters, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PropertyFilters, PropertyListing, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
+import { toggleLocality, isAtCap, computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
 import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -26,6 +28,9 @@ interface MapFiltersProps {
   onSchoolSelect: (school: SchoolResult | null) => void;
   schoolBoardFilter: string[];
   onSchoolBoardFilterChange: (boards: string[]) => void;
+  city: string;
+  onCityChange: (city: string) => void;
+  allListings: PropertyListing[];
 }
 
 const propertyTypes: { value: PropertyType; label: string }[] = [
@@ -48,8 +53,11 @@ export function MapFilters({
   onSchoolSelect,
   schoolBoardFilter,
   onSchoolBoardFilterChange,
+  city,
+  onCityChange,
+  allListings,
 }: MapFiltersProps) {
-  const { data: localities = [] } = useLocalities();
+  const { data: localities = [] } = useLocalities(city);
   const { data: priceRange } = usePriceRange();
   const [localityOpen, setLocalityOpen] = useState(false);
 
@@ -62,12 +70,18 @@ export function MapFilters({
   };
 
   const handleLocalitySelect = (locality: string) => {
-    const currentLocalities = filters.localities || [];
-    const newLocalities = currentLocalities.includes(locality)
-      ? currentLocalities.filter((l) => l !== locality)
-      : [...currentLocalities, locality];
-    onFiltersChange({ ...filters, localities: newLocalities.length > 0 ? newLocalities : undefined });
+    const result = toggleLocality(filters.localities, locality);
+    if (result === null) return; // at cap, toast already shown
+    onFiltersChange({ ...filters, localities: result });
   };
+
+  const nearbyLocalities = useMemo(() => {
+    if (!filters.localities || filters.localities.length === 0) return [];
+    const lastSelected = filters.localities[filters.localities.length - 1];
+    return computeNearbyLocalities(allListings, lastSelected).filter(
+      (loc) => !filters.localities?.includes(loc)
+    );
+  }, [filters.localities, allListings]);
 
   const handlePriceChange = (values: number[]) => {
     onFiltersChange({
@@ -137,6 +151,21 @@ export function MapFilters({
       </CardHeader>
 
       <CardContent className="flex-1 overflow-y-auto scrollbar-thin space-y-6">
+        {/* City Switcher */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">City</Label>
+          <Select value={city} onValueChange={onCityChange}>
+            <SelectTrigger className="w-full h-9 text-sm">
+              <SelectValue placeholder="Select city" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(CITY_CONFIG).map(([key, config]) => (
+                <SelectItem key={key} value={key}>{config.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Search */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -267,6 +296,7 @@ export function MapFilters({
                       <CommandItem
                         key={locality}
                         value={locality}
+                        disabled={isAtCap(filters.localities) && !filters.localities?.includes(locality)}
                         onSelect={() => handleLocalitySelect(locality)}
                       >
                         <div className="flex items-center gap-2">
@@ -297,6 +327,25 @@ export function MapFilters({
                   <X className="h-3 w-3 ml-1" />
                 </Badge>
               ))}
+            </div>
+          )}
+          {filters.localities && filters.localities.length > 0 && nearbyLocalities.length > 0 && (
+            <div className="mt-2">
+              <p className="text-xs text-muted-foreground mb-1">Nearby areas</p>
+              <div className="flex flex-wrap gap-1">
+                {nearbyLocalities.map((loc) => (
+                  <Button
+                    key={loc}
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs"
+                    disabled={isAtCap(filters.localities)}
+                    onClick={() => handleLocalitySelect(loc)}
+                  >
+                    {loc}
+                  </Button>
+                ))}
+              </div>
             </div>
           )}
         </div>

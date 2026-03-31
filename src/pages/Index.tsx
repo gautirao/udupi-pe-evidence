@@ -10,11 +10,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap, LogIn } from 'lucide-react';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap, LogIn, Maximize2 } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
+import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { NearbySchoolsBadge } from '@/components/listing/NearbySchoolsBadge';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -32,6 +33,13 @@ export default function Index() {
   // School search state
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
   const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
+
+  // City state
+  const [city, setCity] = useState(DEFAULT_CITY);
+  const handleCityChange = useCallback((newCity: string) => {
+    setCity(newCity);
+    setFilters((prev) => ({ ...prev, localities: undefined }));
+  }, []);
 
   // Restore school from URL params on mount
   const urlSchoolId = urlParams.get('schoolId');
@@ -154,6 +162,14 @@ export default function Index() {
     [filters.localities, listingsWithCoords]
   );
 
+  // Tick counter to force map refit when "Fit to selected areas" is clicked
+  const [fitTick, setFitTick] = useState(0);
+  const activeFocusBounds = useMemo(() => {
+    // fitTick is in the dep array solely to force a new reference on refit clicks
+    void fitTick;
+    return focusBounds;
+  }, [focusBounds, fitTick]);
+
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     navigate(`/listing/${listing.id}`);
   };
@@ -178,6 +194,9 @@ export default function Index() {
               onSchoolSelect={handleSchoolSelect}
               schoolBoardFilter={schoolBoardFilter}
               onSchoolBoardFilterChange={setSchoolBoardFilter}
+              city={city}
+              onCityChange={handleCityChange}
+              allListings={listingsWithCoords}
             />
           </div>
         )}
@@ -223,6 +242,9 @@ export default function Index() {
                 onSchoolSelect={handleSchoolSelect}
                 schoolBoardFilter={schoolBoardFilter}
                 onSchoolBoardFilterChange={setSchoolBoardFilter}
+                city={city}
+                onCityChange={handleCityChange}
+                allListings={listingsWithCoords}
               />
             </SheetContent>
           </Sheet>
@@ -249,7 +271,7 @@ export default function Index() {
               listings={listingsWithCoords}
               selectedListing={selectedListing}
               onSelectListing={setSelectedListing}
-              focusBounds={focusBounds}
+              focusBounds={activeFocusBounds}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
               onPolygonCleared={handlePolygonCleared}
@@ -259,6 +281,8 @@ export default function Index() {
                 radiusKm: filters.schoolRadiusKm ?? 2,
                 name: selectedSchool.name,
               } : undefined}
+              cityCenter={CITY_CONFIG[city]?.center}
+              cityZoom={CITY_CONFIG[city]?.zoom}
             />
           )}
 
@@ -288,19 +312,15 @@ export default function Index() {
                       key={locality}
                       variant="outline"
                       size="sm"
+                      disabled={isAtCap(filters.localities) && !isActive}
                       className={cn(
                         'flex-shrink-0 h-7 text-xs gap-1.5 bg-card/90 backdrop-blur shadow-sm',
                         isActive && 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 hover:text-primary-foreground'
                       )}
                       onClick={() => {
-                        const current = filters.localities ?? [];
-                        const newLocalities = isActive
-                          ? current.filter((l) => l !== locality)
-                          : [...current, locality];
-                        setFilters({
-                          ...filters,
-                          localities: newLocalities.length > 0 ? newLocalities : undefined,
-                        });
+                        const result = toggleLocality(filters.localities, locality);
+                        if (result === null) return;
+                        setFilters({ ...filters, localities: result });
                       }}
                     >
                       {locality}
@@ -315,6 +335,17 @@ export default function Index() {
                     </Button>
                   );
                 })}
+                {filters.localities && filters.localities.length >= 2 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-shrink-0 h-7 text-xs gap-1 bg-card/90 backdrop-blur shadow-sm"
+                    onClick={() => setFitTick((t) => t + 1)}
+                  >
+                    <Maximize2 className="h-3 w-3" />
+                    Fit to selected areas
+                  </Button>
+                )}
               </div>
             </div>
           )}
