@@ -144,6 +144,10 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
               </p>
             </div>
 
+            <p className="text-sm text-muted-foreground">
+              The broker will review your request and confirm or suggest an alternative time.
+            </p>
+
             {createBooking.isError && (
               <div className="flex items-center gap-2 text-destructive text-sm">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
