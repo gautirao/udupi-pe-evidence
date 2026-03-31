@@ -387,6 +387,11 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
         : 'Verification coming soon'
       : null;
 
+  const earnedAutoText =
+    badge.badgeState === 'EARNED' && badge.autoGranted === true
+      ? 'Automatically confirmed \u2014 you are the property owner'
+      : null;
+
   const showRejectionReason =
     badge.badgeState === 'AVAILABLE' && badge.rejectionReason;
 
@@ -406,6 +411,9 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
         )}
         {ctaText && (
           <span className="text-xs text-muted-foreground">{ctaText}</span>
+        )}
+        {earnedAutoText && (
+          <span className="text-xs text-green-700">{earnedAutoText}</span>
         )}
       </div>
       {showRejectionReason && (

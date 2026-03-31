@@ -494,6 +494,28 @@ public class BadgeService {
 
         log.info("Identity badge granted listingId={} callerId={}", listingId, callerId);
 
+        // --- Owner auto-grant: if sellerType == "owner", auto-grant Authority badge ---
+        Listing listing = listingRepository.findById(listingId)
+                .orElse(null);
+        if (listing != null && "owner".equals(listing.getSellerType())) {
+            try {
+                // Create OWNER_SELF_AUTH evidence row
+                AuthorityEvidence evidence = new AuthorityEvidence();
+                evidence.setListingId(listingId);
+                evidence.setEvidenceType("OWNER_SELF_AUTH");
+                evidence.setReviewState("APPROVED");
+                evidence.setVerifiedBy(callerId);
+                evidence.setVerifiedAt(now);
+                evidence.setUpdatedAt(now);
+                authorityEvidenceRepository.save(evidence);
+
+                grantAuthorityBadge(listingId, callerId);
+                log.info("Authority badge auto-granted for owner listingId={} callerId={}", listingId, callerId);
+            } catch (AuthorityAlreadyVerifiedException e) {
+                log.debug("Authority badge already earned for owner listingId={}, skipping auto-grant", listingId);
+            }
+        }
+
         return saved;
     }
 

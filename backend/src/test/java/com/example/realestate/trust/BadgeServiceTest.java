@@ -638,4 +638,98 @@ class BadgeServiceTest {
         verify(authorityEvidenceRepository, never()).findAllByListingIdAndReviewState(any(), any());
         verify(authorityEvidenceRepository, never()).save(any());
     }
+
+    // -------------------------------------------------------------------------
+    // grantIdentityBadge — owner auto-grant Authority (#693)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void grantIdentityBadge_ownerListing_autoGrantsAuthorityBadge() {
+        stubListing.setSellerType("owner");
+
+        // Identity dimension does not exist yet
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "IDENTITY"))
+                .thenReturn(Optional.empty());
+        // Authority dimension does not exist yet (for the auto-grant call)
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "AUTHORITY"))
+                .thenReturn(Optional.empty());
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId))
+                .thenReturn(new TrustTierResult(listingId, "C"))   // after IDENTITY
+                .thenReturn(new TrustTierResult(listingId, "B"));  // after AUTHORITY auto-grant
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+        when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        badgeService.grantIdentityBadge(listingId, actorId);
+
+        // Verify Authority badge was also granted (dimensionRepository.save called for both IDENTITY and AUTHORITY)
+        ArgumentCaptor<ListingVerificationDimension> dimCaptor =
+                ArgumentCaptor.forClass(ListingVerificationDimension.class);
+        verify(dimensionRepository, org.mockito.Mockito.atLeast(2)).save(dimCaptor.capture());
+
+        List<ListingVerificationDimension> savedDims = dimCaptor.getAllValues();
+        assertThat(savedDims).extracting(ListingVerificationDimension::getDimensionType)
+                .contains("IDENTITY", "AUTHORITY");
+
+        // Verify OWNER_SELF_AUTH evidence was created
+        ArgumentCaptor<AuthorityEvidence> evidenceCaptor =
+                ArgumentCaptor.forClass(AuthorityEvidence.class);
+        verify(authorityEvidenceRepository).save(evidenceCaptor.capture());
+
+        AuthorityEvidence evidence = evidenceCaptor.getValue();
+        assertThat(evidence.getEvidenceType()).isEqualTo("OWNER_SELF_AUTH");
+        assertThat(evidence.getReviewState()).isEqualTo("APPROVED");
+        assertThat(evidence.getListingId()).isEqualTo(listingId);
+        assertThat(evidence.getVerifiedBy()).isEqualTo(actorId);
+    }
+
+    @Test
+    void grantIdentityBadge_brokerListing_doesNotAutoGrantAuthority() {
+        stubListing.setSellerType("broker");
+
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "IDENTITY"))
+                .thenReturn(Optional.empty());
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId))
+                .thenReturn(new TrustTierResult(listingId, "C"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+
+        badgeService.grantIdentityBadge(listingId, actorId);
+
+        // Authority dimension should NOT be looked up or saved
+        verify(dimensionRepository, never())
+                .findByListingIdAndDimensionType(listingId, "AUTHORITY");
+    }
+
+    @Test
+    void grantIdentityBadge_ownerListing_authorityAlreadyEarned_skipsGracefully() {
+        stubListing.setSellerType("owner");
+
+        // Identity dimension does not exist yet
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "IDENTITY"))
+                .thenReturn(Optional.empty());
+        // Authority dimension already EARNED
+        ListingVerificationDimension existingAuthority = existingDimension("AUTHORITY", "EARNED");
+        when(dimensionRepository.findByListingIdAndDimensionType(listingId, "AUTHORITY"))
+                .thenReturn(Optional.of(existingAuthority));
+        when(dimensionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(trustTierCalculator.calculate(listingId))
+                .thenReturn(new TrustTierResult(listingId, "B"));
+        when(listingRepository.findById(listingId)).thenReturn(Optional.of(stubListing));
+        when(listingRepository.save(any())).thenReturn(stubListing);
+        when(authorityEvidenceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // Should not throw — the AuthorityAlreadyVerifiedException is caught internally
+        badgeService.grantIdentityBadge(listingId, actorId);
+
+        // Identity dimension was saved
+        ArgumentCaptor<ListingVerificationDimension> dimCaptor =
+                ArgumentCaptor.forClass(ListingVerificationDimension.class);
+        verify(dimensionRepository, org.mockito.Mockito.atLeastOnce()).save(dimCaptor.capture());
+
+        assertThat(dimCaptor.getAllValues()).extracting(ListingVerificationDimension::getDimensionType)
+                .contains("IDENTITY");
+    }
 }
