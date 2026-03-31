@@ -2,8 +2,10 @@
  * POI Display — nearby points-of-interest on listing detail
  *
  * Covers:
- *   P1 — NearbyPois section renders when API returns approved POIs
- *   P2 — NearbyPois section is hidden when API returns empty list
+ *   P1 — NearbyPois section renders when API returns approved POIs (user auth)
+ *   P2 — NearbyPois section is hidden when API returns empty list (user auth)
+ *   P3 — Broker sees approved POIs on their listing detail page (broker auth)
+ *   P4 — All API-returned POIs render; backend is the approval filter (broker auth)
  *
  * Auth enforcement (401 without token) is covered by the Spring unit test
  * ListingPoiControllerTest#getApproved_withoutAuth_returns401.
@@ -26,6 +28,10 @@ import { hasRealCredentials } from './helpers';
 const userEmail    = process.env.SMOKE_USER_EMAIL    ?? '';
 const userPassword = process.env.SMOKE_USER_PASSWORD ?? '';
 const hasUserCreds = hasRealCredentials(userEmail, userPassword);
+
+const brokerEmail    = process.env.BROKER_EMAIL ?? process.env.DEALER_EMAIL ?? '';
+const brokerPassword = process.env.BROKER_PASSWORD ?? process.env.DEALER_PASSWORD ?? '';
+const hasBrokerCreds = hasRealCredentials(brokerEmail, brokerPassword);
 
 test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
@@ -165,3 +171,72 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
   await expect(page.getByText('Nearby', { exact: true })).toHaveCount(0);
 });
 
+// ---------------------------------------------------------------------------
+// P3/P4 — Broker-authenticated POI verification
+// ---------------------------------------------------------------------------
+test.describe('Broker-authenticated POI display', () => {
+  test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
+
+  test('P3 — broker sees approved POIs on listing detail', async ({ page }) => {
+    test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping P3');
+
+    await stubListing(page);
+
+    await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(POI_FIXTURES),
+      });
+    });
+
+    await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // NearbyPois card renders (land mode → "Also Nearby" section contains "Nearby" text)
+    await expect(page.getByText('Nearby').first()).toBeVisible({ timeout: 10_000 });
+
+    // Both approved POI names appear — same data as user-auth P1
+    await expect(page.getByText('District Hospital').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("St. Mary's School").first()).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('P4 — all API-returned POIs render (backend is the approval filter)', async ({ page }) => {
+    test.skip(!hasBrokerCreds, 'BROKER_EMAIL / BROKER_PASSWORD not set — skipping P4');
+
+    // Mix of approved and non-approved POIs. In production the backend endpoint
+    // (findByListingIdAndApprovedTrue) only returns approved POIs, so non-approved
+    // data never reaches the frontend. This test verifies the frontend renders
+    // whatever the API provides — the approval boundary is the backend, not the UI.
+    const MIXED_POI_FIXTURES = [
+      { id: 'poi-1', name: 'District Hospital',  category: 'HOSPITAL', distanceMeters: 150, latitude: 13.341, longitude: 74.743, pinned: false, approved: true },
+      { id: 'poi-3', name: 'Unapproved Clinic',  category: 'HOSPITAL', distanceMeters: 200, latitude: 13.343, longitude: 74.745, pinned: false, approved: false },
+      { id: 'poi-2', name: "St. Mary's School",   category: 'SCHOOL',   distanceMeters: 300, latitude: 13.342, longitude: 74.744, pinned: false, approved: true },
+    ];
+
+    await stubListing(page);
+
+    await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MIXED_POI_FIXTURES),
+      });
+    });
+
+    await page.goto(`/listing/${FIXTURE_LISTING_ID}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // NearbyPois card renders
+    await expect(page.getByText('Nearby').first()).toBeVisible({ timeout: 10_000 });
+
+    // Approved POIs render
+    await expect(page.getByText('District Hospital').first()).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText("St. Mary's School").first()).toBeVisible({ timeout: 5_000 });
+
+    // Non-approved POI also renders — NearbyPois does not client-side filter by
+    // the `approved` field. This is correct: the backend endpoint only serves
+    // approved POIs, so the frontend trusts the API response.
+    await expect(page.getByText('Unapproved Clinic').first()).toBeVisible({ timeout: 5_000 });
+  });
+});
