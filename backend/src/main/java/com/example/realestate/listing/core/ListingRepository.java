@@ -70,6 +70,10 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             nativeQuery = true)
     long countImagesByListingId(@Param("listingId") UUID listingId);
 
+    // Buyer-facing queries sort by trust_tier ASC (A highest → D lowest), then ranking_score DESC.
+    // SCRAPED listings default to tier D / ranking_score 0 and correctly sort below verified LIVE
+    // listings. The trust pipeline only writes to broker-created (LIVE) listings, so no guard is needed.
+
     @Query(value = """
             SELECT * FROM public.property_listings
             WHERE latitude BETWEEN :minLat AND :maxLat
@@ -82,7 +86,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND (CAST(:minPpc AS bigint) IS NULL OR price_per_cent_paise >= :minPpc)
               AND (CAST(:maxPpc AS bigint) IS NULL OR price_per_cent_paise <= :maxPpc)
               AND (CAST(:createdAfter AS timestamptz) IS NULL OR created_at >= :createdAfter)
-            ORDER BY created_at DESC
+            ORDER BY trust_tier ASC, ranking_score DESC, created_at DESC, id DESC
             """,
             countQuery = """
             SELECT COUNT(*) FROM public.property_listings
@@ -275,11 +279,11 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND (:locality IS NULL OR locality = :locality)
               AND (:propertyType IS NULL OR property_type::text = :propertyType)
               AND (:bedrooms IS NULL OR bedrooms = CAST(:bedrooms AS integer))
-            ORDER BY
+            ORDER BY trust_tier ASC, ranking_score DESC,
               CASE WHEN :q IS NOT NULL
                    THEN ts_rank(search_vector, websearch_to_tsquery('english', :q))
                    ELSE 0 END DESC,
-              created_at DESC
+              created_at DESC, id DESC
             """,
             countQuery = """
             SELECT COUNT(*) FROM public.property_listings
@@ -374,7 +378,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
                     ST_GeomFromText(:polygonWkt, 4326),
                     ST_Point(longitude, latitude)
               )
-            ORDER BY created_at DESC
+            ORDER BY trust_tier ASC, ranking_score DESC, created_at DESC, id DESC
             """,
             countQuery = """
             SELECT COUNT(*) FROM public.property_listings
@@ -404,7 +408,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             WHERE status = 'LIVE'
               AND archived_at IS NULL
               AND is_duplicate = false
-            ORDER BY created_at DESC
+            ORDER BY trust_tier ASC, ranking_score DESC, created_at DESC, id DESC
             """,
             countQuery = """
             SELECT COUNT(*) FROM property_listings
