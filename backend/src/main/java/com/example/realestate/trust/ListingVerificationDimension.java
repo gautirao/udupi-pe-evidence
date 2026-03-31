@@ -58,7 +58,7 @@ public class ListingVerificationDimension {
     private OffsetDateTime suspendedAt;
 
     /** Set by DB default on INSERT; never updated by the application. */
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     /** Written explicitly by the application layer on every mutation. */

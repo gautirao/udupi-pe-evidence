@@ -388,7 +388,7 @@ export default function TrustReviewQueue() {
                   </TableHeader>
                   <TableBody>
                     {identityItems.map((item) => (
-                      <TableRow key={item.evidenceId}>
+                      <TableRow key={item.evidenceId} data-testid={`identity-evidence-${item.evidenceId}`}>
                         <TableCell className="font-medium">
                           {item.legalName}
                         </TableCell>
