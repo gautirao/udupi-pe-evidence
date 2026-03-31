@@ -179,7 +179,7 @@ export default function PendingListings() {
               </TableHeader>
               <TableBody>
                 {listings.map((listing) => (
-                  <TableRow key={listing.id}>
+                  <TableRow key={listing.id} data-testid={`pending-row-${listing.id}`}>
                     <TableCell className="font-medium max-w-[200px] truncate">
                       {listing.title || listing.description?.slice(0, 60) || 'Untitled'}
                     </TableCell>
