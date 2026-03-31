@@ -109,6 +109,9 @@ class TrustControllerAuthorityTest {
     @MockitoBean
     private ListingVerificationDimensionRepository dimensionRepository;
 
+    @MockitoBean
+    private IdentityEvidenceRepository identityEvidenceRepository;
+
     @BeforeEach
     void setUp() {
         reset(badgeService, listingRepository, photoHashService, userRoleService,

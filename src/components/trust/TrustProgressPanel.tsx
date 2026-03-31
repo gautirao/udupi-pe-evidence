@@ -1,21 +1,26 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { User, MapPin, Camera, Shield, ChevronRight, ChevronDown, Loader2 } from 'lucide-react';
+import { User, MapPin, Camera, Shield, ChevronRight, ChevronDown, Loader2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from '@/components/ui/input-otp';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { api, API_BASE_URL } from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -211,64 +216,81 @@ function PhotoUploadButton({ listingId, onSuccess }: PhotoUploadButtonProps) {
   );
 }
 
-// ─── Identity OTP flow ────────────────────────────────────────────────────────
+// ─── Identity evidence form ──────────────────────────────────────────────────
 
-type OtpStep = 'idle' | 'sending' | 'awaiting_code' | 'verifying';
+const DOCUMENT_TYPES = [
+  { value: 'AADHAAR', label: 'Aadhaar Card' },
+  { value: 'PAN', label: 'PAN Card' },
+  { value: 'VOTER_ID', label: 'Voter ID' },
+  { value: 'PASSPORT', label: 'Passport' },
+  { value: 'DRIVING_LICENSE', label: 'Driving License' },
+] as const;
 
-interface IdentityVerifyButtonProps {
+interface IdentityEvidenceFormProps {
   listingId: string;
+  badgeState: BadgeState;
+  rejectionReason?: string | null;
 }
 
-function IdentityVerifyButton({ listingId }: IdentityVerifyButtonProps) {
+function IdentityEvidenceForm({ listingId, badgeState, rejectionReason }: IdentityEvidenceFormProps) {
   const { toast } = useToast();
-  const { requestOtp, verifyOtp } = useIdentityVerification(listingId);
-  const [step, setStep] = useState<OtpStep>('idle');
-  const [code, setCode] = useState('');
-  const [otpError, setOtpError] = useState<string | null>(null);
+  const { submitEvidence } = useIdentityVerification(listingId);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [legalName, setLegalName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [documentType, setDocumentType] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  async function handleRequestOtp() {
-    setStep('sending');
-    try {
-      await requestOtp.mutateAsync();
-      setCode('');
-      setOtpError(null);
-      setStep('awaiting_code');
-    } catch (err) {
-      setStep('idle');
-      if (err instanceof ApiError && err.status === 503) {
-        toast({ variant: 'destructive', title: 'Could not send SMS', description: 'Try again.' });
-      } else if (err instanceof ApiError && err.status === 429) {
-        toast({ variant: 'destructive', title: 'Too many attempts', description: 'Try again in 1 hour.' });
-      } else {
-        toast({ variant: 'destructive', title: 'OTP send failed', description: 'Please try again.' });
-      }
-    }
-  }
-
-  async function handleVerify() {
-    if (code.length !== 6) return;
-    setStep('verifying');
-    try {
-      await verifyOtp.mutateAsync(code);
-      setStep('idle');
-      setCode('');
-      toast({ title: 'Identity verified', description: 'Your identity badge is now earned.' });
-    } catch (err) {
-      setStep('awaiting_code');
-      if (err instanceof ApiError && err.status === 429) {
-        setOtpError('Too many attempts. Try again in 1 hour.');
-      } else {
-        setOtpError('Incorrect code. Please try again.');
-      }
-    }
+  function resetForm() {
+    setLegalName('');
+    setPhoneNumber('');
+    setDocumentType('');
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
   function handleModalClose(open: boolean) {
     if (!open) {
-      setStep('idle');
-      setCode('');
-      setOtpError(null);
+      setIsOpen(false);
+      resetForm();
     }
+  }
+
+  async function handleSubmit() {
+    if (!legalName.trim() || !phoneNumber.trim() || !documentType || !selectedFile) return;
+
+    try {
+      await submitEvidence.mutateAsync({
+        legalName: legalName.trim(),
+        phoneNumber: phoneNumber.trim(),
+        documentType,
+        file: selectedFile,
+      });
+      setIsOpen(false);
+      resetForm();
+      toast({ title: 'Evidence submitted', description: 'Under review -- usually 1-2 business days.' });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        toast({ variant: 'destructive', title: 'Already submitted', description: String((err.body as { error?: string })?.error ?? 'Evidence already submitted.') });
+      } else if (err instanceof ApiError && err.status === 413) {
+        toast({ variant: 'destructive', title: 'File too large', description: 'File size must not exceed 10 MB.' });
+      } else {
+        toast({ variant: 'destructive', title: 'Submission failed', description: err instanceof Error ? err.message : 'Please try again.' });
+      }
+    }
+  }
+
+  const isSubmitting = submitEvidence.isPending;
+  const formValid = legalName.trim().length > 0 && phoneNumber.trim().length > 0 && documentType.length > 0 && selectedFile !== null;
+
+  // PENDING state — show status text
+  if (badgeState === 'PENDING') {
+    return (
+      <span className="text-xs text-amber-700">
+        Under review -- usually 1-2 business days
+      </span>
+    );
   }
 
   return (
@@ -276,79 +298,108 @@ function IdentityVerifyButton({ listingId }: IdentityVerifyButtonProps) {
       <Button
         size="sm"
         variant="outline"
-        disabled={step === 'sending'}
-        onClick={handleRequestOtp}
+        onClick={() => setIsOpen(true)}
       >
-        {step === 'sending' ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-            Sending…
-          </>
-        ) : (
-          'Verify your identity'
-        )}
+        {rejectionReason ? 'Resubmit' : 'Verify your identity'}
       </Button>
 
-      <Dialog open={step === 'awaiting_code' || step === 'verifying'} onOpenChange={handleModalClose}>
-        <DialogContent>
+      <Dialog open={isOpen} onOpenChange={handleModalClose}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Verify your identity</DialogTitle>
             <DialogDescription>
-              Enter the 6-digit code sent to your registered phone number.
+              Upload a government ID document for verification. This is reviewed by our team, usually within 1-2 business days.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col items-center gap-4 py-2">
-            <InputOTP
-              maxLength={6}
-              value={code}
-              onChange={setCode}
-              disabled={step === 'verifying'}
-            >
-              <InputOTPGroup>
-                <InputOTPSlot index={0} />
-                <InputOTPSlot index={1} />
-                <InputOTPSlot index={2} />
-                <InputOTPSlot index={3} />
-                <InputOTPSlot index={4} />
-                <InputOTPSlot index={5} />
-              </InputOTPGroup>
-            </InputOTP>
-            {otpError && (
-              <p className="text-sm text-destructive">{otpError}</p>
-            )}
-            <div className="flex gap-2 w-full justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={step === 'verifying'}
-                onClick={() => handleModalClose(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={step === 'verifying'}
-                onClick={handleRequestOtp}
-              >
-                Resend code
-              </Button>
-              <Button
-                size="sm"
-                disabled={code.length !== 6 || step === 'verifying'}
-                onClick={handleVerify}
-              >
-                {step === 'verifying' ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                    Verifying…
-                  </>
-                ) : (
-                  'Submit'
-                )}
-              </Button>
+
+          {rejectionReason && (
+            <div className="rounded-md bg-amber-50 border border-amber-200 p-3">
+              <p className="text-sm text-amber-800">
+                <span className="font-medium">Previous submission rejected:</span> {rejectionReason}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="ie-legal-name">Legal name</Label>
+              <Input
+                id="ie-legal-name"
+                placeholder="Full name as on document"
+                value={legalName}
+                onChange={(e) => setLegalName(e.target.value)}
+                disabled={isSubmitting}
+                maxLength={200}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ie-phone">Phone number</Label>
+              <Input
+                id="ie-phone"
+                placeholder="+91 98765 43210"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                disabled={isSubmitting}
+                maxLength={100}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Document type</Label>
+              <Select value={documentType} onValueChange={setDocumentType} disabled={isSubmitting}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select document type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((dt) => (
+                    <SelectItem key={dt.value} value={dt.value}>
+                      {dt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ie-file">Document image or PDF</Label>
+              <Input
+                id="ie-file"
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,application/pdf"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)}
+                disabled={isSubmitting}
+              />
+              <p className="text-xs text-muted-foreground">Max 10 MB. JPEG, PNG, or PDF.</p>
             </div>
           </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => handleModalClose(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!formValid || isSubmitting}
+              onClick={handleSubmit}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-3.5 w-3.5 mr-1.5" />
+                  Submit for review
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -375,13 +426,13 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
     listingId !== undefined &&
     onPhotoSubmitted !== undefined;
 
-  const isIdentityAvailable =
-    showCta &&
+  const isIdentityActionable =
+    (badge.badgeState === 'AVAILABLE' || badge.badgeState === 'PENDING') &&
     badge.dimensionType === 'IDENTITY' &&
     listingId !== undefined;
 
   const ctaText =
-    showCta && !isPhotosAvailable && !isIdentityAvailable
+    showCta && !isPhotosAvailable && !isIdentityActionable
       ? badge.autoGranted === true
         ? 'Auto-granted'
         : 'Verification coming soon'
@@ -393,7 +444,7 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
       : null;
 
   const showRejectionReason =
-    badge.badgeState === 'AVAILABLE' && badge.rejectionReason;
+    badge.badgeState === 'AVAILABLE' && badge.rejectionReason && badge.dimensionType !== 'IDENTITY';
 
   return (
     <div className="space-y-1">
@@ -406,8 +457,12 @@ function BadgeRow({ badge, listingId, onPhotoSubmitted }: BadgeRowProps) {
         {isPhotosAvailable && (
           <PhotoUploadButton listingId={listingId} onSuccess={onPhotoSubmitted} />
         )}
-        {isIdentityAvailable && (
-          <IdentityVerifyButton listingId={listingId} />
+        {isIdentityActionable && (
+          <IdentityEvidenceForm
+            listingId={listingId}
+            badgeState={badge.badgeState}
+            rejectionReason={badge.rejectionReason}
+          />
         )}
         {ctaText && (
           <span className="text-xs text-muted-foreground">{ctaText}</span>
