@@ -403,6 +403,33 @@ export default function Index() {
             </div>
           )}
 
+          {/* Empty / sparse map guidance (authenticated only) */}
+          {isAuthenticated && !isLoading && (() => {
+            const visibleCount = listingsWithCoords.length;
+            const cityLabel = CITY_CONFIG[city]?.label ?? city;
+            const hasLocalities = (filters.localities?.length ?? 0) > 0;
+
+            let message: string | null = null;
+
+            if (visibleCount === 0 && hasLocalities) {
+              message = 'No properties found in the selected areas. Try removing a filter or selecting different localities.';
+            } else if (visibleCount === 0) {
+              message = `No properties listed in ${cityLabel} yet. Try switching to a different city.`;
+            } else if (visibleCount <= 2 && !hasLocalities) {
+              message = `Properties in ${cityLabel} are concentrated in specific areas. Select a locality to zoom in.`;
+            }
+
+            if (!message) return null;
+
+            return (
+              <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] max-w-sm">
+                <div className="bg-card/95 backdrop-blur rounded-lg border shadow-lg px-4 py-3 text-center">
+                  <p className="text-sm text-muted-foreground">{message}</p>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Selected Listing Preview Card (authenticated only) */}
           {isAuthenticated && selectedListing && (
             <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg overflow-hidden">
