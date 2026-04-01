@@ -78,10 +78,20 @@ export function MapFilters({
   const nearbyLocalities = useMemo(() => {
     if (!filters.localities || filters.localities.length === 0) return [];
     const lastSelected = filters.localities[filters.localities.length - 1];
-    return computeNearbyLocalities(allListings, lastSelected).filter(
+
+    // Try haversine-based nearby first (30km radius)
+    const nearby = computeNearbyLocalities(allListings, lastSelected, 30).filter(
       (loc) => !filters.localities?.includes(loc)
     );
-  }, [filters.localities, allListings]);
+
+    if (nearby.length > 0) return nearby;
+
+    // Fallback: show other available localities not already selected
+    const available = (localities ?? []).filter(
+      (loc) => !filters.localities?.includes(loc)
+    );
+    return available.slice(0, 5);
+  }, [filters.localities, allListings, localities]);
 
   const handlePriceChange = (values: number[]) => {
     onFiltersChange({
@@ -331,7 +341,7 @@ export function MapFilters({
           )}
           {filters.localities && filters.localities.length > 0 && nearbyLocalities.length > 0 && (
             <div className="mt-2">
-              <p className="text-xs text-muted-foreground mb-1">Nearby areas</p>
+              <p className="text-xs text-muted-foreground mb-1">Suggested areas</p>
               <div className="flex flex-wrap gap-1">
                 {nearbyLocalities.map((loc) => (
                   <Button
