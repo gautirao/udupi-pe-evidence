@@ -44,6 +44,15 @@ public class School {
     @Column(name = "source", length = 50)
     private String source;
 
+    @Column(name = "udise_code")
+    private String udiseCode;
+
+    @Column(name = "state")
+    private String state;
+
+    @Column(name = "board")
+    private String board;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
@@ -72,6 +81,15 @@ public class School {
 
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+
+    public String getUdiseCode() { return udiseCode; }
+    public void setUdiseCode(String udiseCode) { this.udiseCode = udiseCode; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+
+    public String getBoard() { return board; }
+    public void setBoard(String board) { this.board = board; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
