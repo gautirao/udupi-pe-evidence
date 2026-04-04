@@ -35,6 +35,7 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
         Double getLongitude();
         String getAddress();
         Double getDistanceKm();
+        String getProminenceTier();
     }
 
     /**
@@ -54,6 +55,7 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
                 s.latitude,
                 s.longitude,
                 s.address,
+                s.prominence_tier AS "prominenceTier",
                 ST_Distance(
                     ST_Point(s.longitude, s.latitude)::geography,
                     ST_Point(:lon, :lat)::geography

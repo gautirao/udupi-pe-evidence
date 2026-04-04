@@ -75,7 +75,8 @@ public class SchoolService {
                         p.getAddress(),
                         p.getDistanceKm() != null
                                 ? Math.round(p.getDistanceKm() * 100.0) / 100.0
-                                : null
+                                : null,
+                        p.getProminenceTier()
                 ))
                 .toList();
     }

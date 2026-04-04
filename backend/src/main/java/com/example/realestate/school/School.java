@@ -53,6 +53,9 @@ public class School {
     @Column(name = "board")
     private String board;
 
+    @Column(name = "prominence_tier")
+    private String prominenceTier;
+
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
@@ -90,6 +93,9 @@ public class School {
 
     public String getBoard() { return board; }
     public void setBoard(String board) { this.board = board; }
+
+    public String getProminenceTier() { return prominenceTier; }
+    public void setProminenceTier(String prominenceTier) { this.prominenceTier = prominenceTier; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
