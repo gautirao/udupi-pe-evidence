@@ -1,3 +1,6 @@
+# Raw source data (large files — Kaggle CSVs, GeoJSONs — keep local only)
+scripts/data/schools/raw/
+
 # Logs
 logs
 *.log
@@ -51,4 +54,5 @@ e2e/.test-listing-id
 
 # Playwright storageState files — contain session tokens, must never be committed
 e2e/fixtures/*-auth.json
+coverage/*
 
