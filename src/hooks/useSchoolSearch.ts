@@ -4,7 +4,10 @@ import { api } from '@/lib/api';
 export interface SchoolResult {
   id: string;
   name: string;
-  boardType: string;
+  /** Canonical board column added in V68; null for legacy rows. */
+  board: string | null;
+  /** Legacy column — kept for backward compatibility with older rows. Null for Kaggle-sourced rows. */
+  boardType: string | null;
   latitude: number;
   longitude: number;
   address: string;

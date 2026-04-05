@@ -99,7 +99,7 @@ export function NearbySchoolsCard({
                 <GraduationCap className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                 <span className="truncate">{school.name}</span>
                 <span className="text-xs text-muted-foreground shrink-0">
-                  ({school.boardType})
+                  ({school.board ?? school.boardType})
                 </span>
               </div>
               <span className="text-muted-foreground shrink-0 ml-2">

@@ -70,6 +70,7 @@ public class SchoolService {
                         p.getId().toString(),
                         p.getName(),
                         p.getBoardType(),
+                        p.getBoard(),
                         p.getLatitude(),
                         p.getLongitude(),
                         p.getAddress(),

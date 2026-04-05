@@ -72,7 +72,7 @@ class SchoolControllerTest {
     void search_validQuery_returns200WithResults() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                13.3511, 74.7871, "Manipal, Udupi", null, null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null);
 
         when(schoolService.search(anyString(), anyInt()))
                 .thenReturn(List.of(school));
@@ -84,6 +84,7 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$[0].id").value(SCHOOL_ID.toString()))
                 .andExpect(jsonPath("$[0].name").value("Sharada Vidyalaya"))
                 .andExpect(jsonPath("$[0].boardType").value("CBSE"))
+                .andExpect(jsonPath("$[0].board").value("CBSE"))
                 .andExpect(jsonPath("$[0].latitude").value(13.3511))
                 .andExpect(jsonPath("$[0].longitude").value(74.7871))
                 .andExpect(jsonPath("$[0].prominenceTier").value((Object) null));
@@ -113,7 +114,7 @@ class SchoolControllerTest {
     void nearby_validCoordinates_returns200WithResults() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Vidyodaya High School", "State",
-                13.3409, 74.7421, "Ajjarkad, Udupi", 0.85, null);
+                null, 13.3409, 74.7421, "Ajjarkad, Udupi", 0.85, null);
 
         when(schoolService.findNearby(anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(school));
@@ -124,6 +125,7 @@ class SchoolControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Vidyodaya High School"))
+                .andExpect(jsonPath("$[0].board").value((Object) null))
                 .andExpect(jsonPath("$[0].distanceKm").value(0.85))
                 .andExpect(jsonPath("$[0].prominenceTier").value((Object) null));
     }
@@ -156,7 +158,7 @@ class SchoolControllerTest {
     void getById_existingSchool_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Christ King PU College", "State",
-                13.3433, 74.7456, "Kunjibettu, Udupi", null, null);
+                null, 13.3433, 74.7456, "Kunjibettu, Udupi", null, null);
 
         when(schoolService.findById(SCHOOL_ID)).thenReturn(Optional.of(school));
 
@@ -164,6 +166,7 @@ class SchoolControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Christ King PU College"))
                 .andExpect(jsonPath("$.boardType").value("State"))
+                .andExpect(jsonPath("$.board").value((Object) null))
                 .andExpect(jsonPath("$.prominenceTier").value((Object) null));
     }
 

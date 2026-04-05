@@ -31,6 +31,7 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
         UUID getId();
         String getName();
         String getBoardType();
+        String getBoard();
         Double getLatitude();
         Double getLongitude();
         String getAddress();
@@ -52,6 +53,7 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
                 s.id,
                 s.name,
                 s.board_type AS "boardType",
+                s.board AS "board",
                 s.latitude,
                 s.longitude,
                 s.address,

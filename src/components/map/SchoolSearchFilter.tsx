@@ -48,7 +48,7 @@ export function SchoolSearchFilter({
 
   // Filter results by board type if board filter is active
   const filteredResults = boardFilter.length > 0
-    ? results.filter((s) => boardFilter.includes(s.boardType))
+    ? results.filter((s) => boardFilter.includes(s.board ?? s.boardType))
     : results;
 
   // Close dropdown on outside click
@@ -107,7 +107,7 @@ export function SchoolSearchFilter({
           <GraduationCap className="h-4 w-4 text-primary shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{selectedSchool.name}</p>
-            <p className="text-xs text-muted-foreground">{selectedSchool.boardType}</p>
+            <p className="text-xs text-muted-foreground">{selectedSchool.board ?? selectedSchool.boardType ?? ''}</p>
           </div>
           <Button
             variant="ghost"
@@ -163,7 +163,7 @@ export function SchoolSearchFilter({
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{school.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {school.boardType}
+                      {school.board ?? school.boardType ?? ''}
                       {school.address ? ` \u00b7 ${school.address}` : ''}
                     </p>
                   </div>
