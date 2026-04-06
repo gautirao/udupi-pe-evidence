@@ -6,6 +6,7 @@ import { useAreaOverview } from '@/hooks/useAreaOverview';
 import { AreaHeader } from '@/components/area/AreaHeader';
 import { FallbackNotice } from '@/components/area/FallbackNotice';
 import { SnapshotCard } from '@/components/area/SnapshotCard';
+import { ComparisonTable } from '@/components/area/ComparisonTable';
 
 function LoadingSkeleton() {
   return (
@@ -64,12 +65,15 @@ export default function AreaOverview() {
 
       <SnapshotCard snapshot={data.snapshot} confidence={data.confidence} />
 
-      {/* Placeholder for #731 */}
-      <Card>
-        <CardContent className="py-6">
-          <p className="text-muted-foreground text-sm">Coming soon</p>
-        </CardContent>
-      </Card>
+      {data.comparison && data.comparison.length > 0 && (
+        <ComparisonTable
+          currentAreaLabel={data.areaLabel}
+          currentMedianPricePaise={data.snapshot?.medianPricePaise ?? null}
+          currentListingCount90d={data.listingCount90d}
+          currentTrendDirection={data.snapshot?.trendDirection ?? null}
+          comparisons={data.comparison}
+        />
+      )}
 
       {/* Placeholder for #732 */}
       <Card>
