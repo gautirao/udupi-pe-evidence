@@ -1,12 +1,13 @@
 import { useSearchParams, Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent } from '@/components/ui/card';
 import { useAreaOverview } from '@/hooks/useAreaOverview';
 import { AreaHeader } from '@/components/area/AreaHeader';
 import { FallbackNotice } from '@/components/area/FallbackNotice';
 import { SnapshotCard } from '@/components/area/SnapshotCard';
 import { ComparisonTable } from '@/components/area/ComparisonTable';
+import { SchoolsList } from '@/components/area/SchoolsList';
+import { MarketActivity } from '@/components/area/MarketActivity';
 
 function LoadingSkeleton() {
   return (
@@ -75,12 +76,8 @@ export default function AreaOverview() {
         />
       )}
 
-      {/* Placeholder for #732 */}
-      <Card>
-        <CardContent className="py-6">
-          <p className="text-muted-foreground text-sm">Coming soon</p>
-        </CardContent>
-      </Card>
+      <SchoolsList schools={data.schools} />
+      <MarketActivity activity={data.activity} confidence={data.confidence} />
     </div>
   );
 }
