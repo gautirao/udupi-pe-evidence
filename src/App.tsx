@@ -17,6 +17,7 @@ import ListingDetail from "./pages/ListingDetail";
 
 // Lazily loaded — Insights uses Recharts (~200 KB); load only when navigated to
 const Insights = lazy(() => import("./pages/Insights"));
+const AreaOverview = lazy(() => import("./pages/AreaOverview"));
 
 // Lazily loaded — Broker routes; not needed for public/admin users
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -92,6 +93,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <Insights />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/area-overview"
+                element={
+                  <ProtectedRoute>
+                    <AreaOverview />
                   </ProtectedRoute>
                 }
               />
