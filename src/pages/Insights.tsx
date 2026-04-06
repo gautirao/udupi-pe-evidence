@@ -1,25 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SavedAreas } from '@/components/insights/SavedAreas';
 import { PaywallCard } from '@/components/insights/PaywallCard';
 import { TrialBanner } from '@/components/insights/TrialBanner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, TrendingUp, Home, MapPin, AlertCircle, Eye, Star } from 'lucide-react';
+import { Loader2, TrendingUp, MapPin, AlertCircle } from 'lucide-react';
 import {
   useAvgPriceByArea,
   usePriceTrend,
-  useNewListings,
-  useRecommendations,
   useAreaMarketTrend,
   useMultiAreaTrend,
 } from '@/hooks/useInsights';
-import { formatPrice, formatRelativeDate } from '@/lib/formatters';
+import { formatPrice } from '@/lib/formatters';
 import { format } from 'date-fns';
 import {
   BarChart,
@@ -35,9 +29,7 @@ import {
 } from 'recharts';
 
 export default function Insights() {
-  const navigate = useNavigate();
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
-  const [newListingsDays, setNewListingsDays] = useState<number>(7);
   const [selectedPriceType, setSelectedPriceType] = useState<'land' | 'apartment' | 'house'>('land');
   const [avgPricePropertyType, setAvgPricePropertyType] = useState<string>('all');
   const [avgPriceBedrooms, setAvgPriceBedrooms] = useState<number>(0);
@@ -64,9 +56,6 @@ export default function Insights() {
     selectedPriceType === 'apartment' ? 'apartment' : 'house',
     hasAccess && !!selectedArea && selectedPriceType !== 'land'
   );
-  const { data: newListings = [], isLoading: newListingsLoading, error: newListingsError } = useNewListings(newListingsDays, { enabled: hasAccess });
-  const { data: recommendations = [], isLoading: recommendationsLoading, error: recommendationsError } = useRecommendations({ enabled: hasAccess });
-
   // Set initial selected area from avg price data (in effect to avoid setState-during-render)
   useEffect(() => {
     if (!selectedArea && avgPriceData.length > 0) {
@@ -140,17 +129,13 @@ export default function Insights() {
     listings: item.listingCount,
   }));
 
-  const handleViewListing = (id: string) => {
-    navigate(`/listing/${id}`);
-  };
-
   return (
     <AppLayout>
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="mb-6">
           <h1 className="text-3xl font-bold">Market Insights</h1>
           <p className="text-muted-foreground mt-1">
-            Price trends, new listings, and personalized recommendations
+            Price trends and area comparisons
           </p>
         </div>
 
@@ -446,164 +431,6 @@ export default function Insights() {
               </CardContent>
             </Card>
 
-            {/* New Listings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Home className="h-5 w-5 text-primary" />
-                  New Listings
-                </CardTitle>
-                <CardDescription>Recent listings in your saved areas</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <Tabs value={String(newListingsDays)} onValueChange={(v) => setNewListingsDays(Number(v))}>
-                    <TabsList>
-                      <TabsTrigger value="7">Last 7 days</TabsTrigger>
-                      <TabsTrigger value="14">Last 14 days</TabsTrigger>
-                      <TabsTrigger value="30">Last 30 days</TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                </div>
-                {newListingsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : newListingsError ? (
-                  <div className="flex items-center gap-2 text-destructive py-4">
-                    <AlertCircle className="h-5 w-5" />
-                    <p className="text-sm">Failed to load new listings</p>
-                  </div>
-                ) : newListings.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No new listings in the selected time period</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {newListings.map((listing) => (
-                      <div
-                        key={listing.id}
-                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-secondary/50 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="secondary" className="capitalize">
-                              {listing.propertyType}
-                            </Badge>
-                            {listing.createdAt && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatRelativeDate(listing.createdAt)}
-                              </span>
-                            )}
-                          </div>
-                          {listing.locality && (
-                            <p className="text-sm flex items-center gap-1.5 text-muted-foreground mb-1">
-                              <MapPin className="h-3.5 w-3.5" />
-                              {listing.locality}
-                            </p>
-                          )}
-                          {listing.pricePerCentPaise && (
-                            <p className="font-semibold text-primary">
-                              {formatPrice(paiseToRupees(listing.pricePerCentPaise), 'INR')} per cent
-                            </p>
-                          )}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleViewListing(listing.id)}
-                          className="gap-1.5 flex-shrink-0"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          View
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Recommendations */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Star className="h-5 w-5 text-primary" />
-                  Recommended Listings
-                </CardTitle>
-                <CardDescription>Top opportunities based on price analysis</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {recommendationsLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : recommendationsError ? (
-                  <div className="flex items-center gap-2 text-destructive py-4">
-                    <AlertCircle className="h-5 w-5" />
-                    <p className="text-sm">Failed to load recommendations</p>
-                  </div>
-                ) : recommendations.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No recommendations available. Try saving some areas!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {recommendations.map((listing) => (
-                      <div
-                        key={listing.id}
-                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-secondary/50 transition-colors"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant="secondary" className="capitalize">
-                              {listing.propertyType}
-                            </Badge>
-                            {listing.undervaluationScore && listing.undervaluationScore > 0 && (
-                              <Badge variant="default" className="bg-green-500">
-                                {(listing.undervaluationScore * 100).toFixed(0)}% below market
-                              </Badge>
-                            )}
-                            {listing.createdAt && (
-                              <span className="text-xs text-muted-foreground">
-                                {formatRelativeDate(listing.createdAt)}
-                              </span>
-                            )}
-                          </div>
-                          {listing.locality && (
-                            <p className="text-sm flex items-center gap-1.5 text-muted-foreground mb-1">
-                              <MapPin className="h-3.5 w-3.5" />
-                              {listing.locality}
-                            </p>
-                          )}
-                          <div className="flex items-center gap-3 text-sm">
-                            {listing.pricePerCentPaise && (
-                              <p className="font-semibold text-primary">
-                                {formatPrice(paiseToRupees(listing.pricePerCentPaise), 'INR')} per cent
-                              </p>
-                            )}
-                            {listing.medianPricePerCentPaise && (
-                              <p className="text-muted-foreground">
-                                Market: {formatPrice(paiseToRupees(listing.medianPricePerCentPaise), 'INR')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleViewListing(listing.id)}
-                          className="gap-1.5 flex-shrink-0"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          View
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
             </>
             )}
           </div>

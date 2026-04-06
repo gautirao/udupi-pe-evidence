@@ -50,7 +50,7 @@ interface AppLayoutProps {
 
 const adminPrimaryNavigation = [
   { name: 'Map', href: '/', icon: MapPin },
-  { name: 'Insights', href: '/insights', icon: BarChart3 },
+  { name: 'Area overview', href: '/area-overview', icon: BarChart3 },
 ];
 
 const adminNavigation = [
@@ -77,7 +77,7 @@ const brokerNavigation = [
 
 const ownerNavigation = [
   { name: 'Home', href: '/', icon: Home },
-  { name: 'Insights', href: '/insights', icon: BarChart3 },
+  { name: 'Area overview', href: '/area-overview', icon: BarChart3 },
   { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
   { name: 'My Listings', href: '/broker/listings', icon: Building2 },
   { name: 'New Listing', href: '/broker/listings/new', icon: Plus },

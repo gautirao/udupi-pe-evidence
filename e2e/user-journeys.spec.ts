@@ -112,45 +112,22 @@ test('U2 — /my-bookings loads with My Bookings heading', async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// U3 — /insights renders correctly regardless of access state
-//      A user without insightsAccessUntil sees the paywall.
-//      A user with active access sees Market Insights content.
-//      Either way: no crash, no blank page.
+// U3 — /insights redirects to /area-overview (Insights page renamed to Area Overview in #733)
 // ---------------------------------------------------------------------------
-test('U3 — /insights renders correctly (paywall or content — no crash)', async ({ page }) => {
+test('U3 — /insights redirects to /area-overview (no crash)', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping U3');
 
   await loginAsUser(page);
   await page.goto('/insights');
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 }).catch(() => {});
+
+  // The /insights route is now a <Navigate to="/area-overview" replace /> redirect
+  await expect(page).toHaveURL(/\/area-overview/, { timeout: 8_000 });
 
   // No error boundary
   await expect(
     page.locator('text=Something went wrong. Please refresh the page.'),
   ).toHaveCount(0);
-
-  // Page must render one of: the paywall card OR the Market Insights heading.
-  // Both are valid states depending on the user's insightsAccessUntil value.
-  const paywallVisible = await page
-    .getByText('Insights Access Required')
-    .isVisible()
-    .catch(() => false);
-
-  const headingVisible = await page
-    .getByRole('heading', { name: /market insights/i })
-    .isVisible()
-    .catch(() => false);
-
-  if (!paywallVisible && !headingVisible) {
-    throw new Error(
-      'U3: Insights page rendered neither the paywall ("Insights Access Required") ' +
-      'nor the "Market Insights" heading — likely a crash or blank page.',
-    );
-  }
-
-  // Saved Areas panel is always visible regardless of access state
-  await expect(page.getByText('Saved Areas').first()).toBeVisible({ timeout: 10_000 });
 });
 
 // ---------------------------------------------------------------------------

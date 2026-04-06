@@ -15,8 +15,7 @@ import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
 import ListingDetail from "./pages/ListingDetail";
 
-// Lazily loaded — Insights uses Recharts (~200 KB); load only when navigated to
-const Insights = lazy(() => import("./pages/Insights"));
+// Lazily loaded — AreaOverview uses Recharts (~200 KB); load only when navigated to
 const AreaOverview = lazy(() => import("./pages/AreaOverview"));
 
 // Lazily loaded — Broker routes; not needed for public/admin users
@@ -88,14 +87,7 @@ const App = () => (
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/" element={<Index />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
-              <Route
-                path="/insights"
-                element={
-                  <ProtectedRoute>
-                    <Insights />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/insights" element={<Navigate to="/area-overview" replace />} />
               <Route
                 path="/area-overview"
                 element={

@@ -7,8 +7,6 @@ import Insights from '../Insights';
 import {
   useAvgPriceByArea,
   usePriceTrend,
-  useNewListings,
-  useRecommendations,
   useAreaMarketTrend,
   useMultiAreaTrend,
 } from '@/hooks/useInsights';
@@ -40,8 +38,6 @@ vi.mock('@/contexts/AuthContext', () => ({
 vi.mock('@/hooks/useInsights', () => ({
   useAvgPriceByArea: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   usePriceTrend: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-  useNewListings: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-  useRecommendations: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   useAreaMarketTrend: vi.fn(() => ({ data: [], isLoading: false, error: null })),
   useMultiAreaTrend: vi.fn(() => []),
 }));
@@ -115,8 +111,6 @@ beforeEach(() => {
   // Re-apply default return values cleared by clearAllMocks
   vi.mocked(useAvgPriceByArea).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useAvgPriceByArea>);
   vi.mocked(usePriceTrend).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof usePriceTrend>);
-  vi.mocked(useNewListings).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useNewListings>);
-  vi.mocked(useRecommendations).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useRecommendations>);
   vi.mocked(useAreaMarketTrend).mockReturnValue({ data: [], isLoading: false, error: null } as ReturnType<typeof useAreaMarketTrend>);
   vi.mocked(useMultiAreaTrend).mockReturnValue([]);
   vi.mocked(api.post).mockResolvedValue({});
@@ -154,9 +148,6 @@ describe('Insights page — access gating', () => {
     expect(vi.mocked(useAvgPriceByArea)).toHaveBeenCalledWith('all', 0, { enabled: false });
     // usePriceTrend(selectedArea, propertyType, bedrooms, enabled): selectedArea=null, default type='land'
     expect(vi.mocked(usePriceTrend)).toHaveBeenCalledWith(null, 'land', 0, false);
-    // useNewListings(days, { enabled }): days=7 (default), enabled=false
-    expect(vi.mocked(useNewListings)).toHaveBeenCalledWith(7, { enabled: false });
-    expect(vi.mocked(useRecommendations)).toHaveBeenCalledWith({ enabled: false });
   });
 
   it('calls useAvgPriceByArea with enabled=true when hasAccess=true', () => {
