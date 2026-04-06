@@ -1,5 +1,6 @@
 package com.example.realestate.exception;
 
+import com.example.realestate.area.AreaNotFoundException;
 import com.example.realestate.listing.exception.ListingLifecycleException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.trust.AuthorityAlreadyVerifiedException;
@@ -64,6 +65,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         log.warn("Listing status transition rejected: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage()));
+    }
+
+    // ===== AreaNotFoundException → 404 =====
+
+    @ExceptionHandler(AreaNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleAreaNotFound(AreaNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "Area not found"));
     }
 
     // ===== BadgeNotFoundException → 404 =====

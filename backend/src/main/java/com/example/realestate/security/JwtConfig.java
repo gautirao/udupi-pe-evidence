@@ -41,6 +41,8 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/public/listings/**").permitAll()
                         // Public school search endpoints — no auth required (#407)
                         .requestMatchers(HttpMethod.GET, "/api/public/schools/**").permitAll()
+                        // Public area overview endpoint — no auth required (#729)
+                        .requestMatchers(HttpMethod.GET, "/api/public/areas/*/overview").permitAll()
                         // Public trust badge endpoint — no auth required (RE-151)
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/trust").permitAll()
                         .anyRequest().authenticated()
