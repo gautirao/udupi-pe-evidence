@@ -39,7 +39,7 @@ test.describe('N1 — user-authenticated', () => {
 
     // Owner nav items must be visible (superset of old user nav + listing management)
     await expect(page.getByRole('link', { name: /^area overview$/i }).first()).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByRole('link', { name: /my saved areas/i })).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('link', { name: /^saved$/i })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('link', { name: /^my listings$/i })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('link', { name: /new listing/i })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('link', { name: /my bookings/i })).toBeVisible({ timeout: 8_000 });

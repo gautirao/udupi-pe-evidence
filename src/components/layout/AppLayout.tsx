@@ -49,8 +49,8 @@ interface AppLayoutProps {
 // ─── Static nav arrays (defined once at module level) ───────────────────────
 
 const adminPrimaryNavigation = [
-  { name: 'Map', href: '/', icon: MapPin },
-  { name: 'Area overview', href: '/area-overview', icon: BarChart3 },
+  { name: 'Discover', href: '/', icon: MapPin },
+  { name: 'Area Overview', href: '/area-overview', icon: BarChart3 },
 ];
 
 const adminNavigation = [
@@ -76,9 +76,9 @@ const brokerNavigation = [
 ];
 
 const ownerNavigation = [
-  { name: 'Home', href: '/', icon: Home },
-  { name: 'Area overview', href: '/area-overview', icon: BarChart3 },
-  { name: 'My Saved Areas', href: '/saved-areas', icon: Bookmark },
+  { name: 'Discover', href: '/', icon: Home },
+  { name: 'Area Overview', href: '/area-overview', icon: BarChart3 },
+  { name: 'Saved', href: '/saved-areas', icon: Bookmark },
   { name: 'My Listings', href: '/broker/listings', icon: Building2 },
   { name: 'New Listing', href: '/broker/listings/new', icon: Plus },
   { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
@@ -86,7 +86,7 @@ const ownerNavigation = [
 ];
 
 const loggedOutNavigation = [
-  { name: 'Home', href: '/', icon: Home },
+  { name: 'Discover', href: '/', icon: Home },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -220,7 +220,10 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <div className="p-2 rounded-lg bg-primary/10">
                   <MapPin className="h-5 w-5 text-primary" />
                 </div>
-                <span className="font-semibold">Udupi Tracker</span>
+                <div className="flex flex-col">
+                  <span className="font-semibold leading-tight">Udupi Tracker</span>
+                  <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
+                </div>
               </div>
               <NavLinks mobile />
             </SheetContent>
@@ -231,7 +234,10 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="p-1.5 rounded-lg bg-primary/10">
               <MapPin className="h-5 w-5 text-primary" />
             </div>
-            <span className="font-semibold hidden sm:inline">Udupi Property Tracker</span>
+            <div className="hidden sm:flex flex-col">
+              <span className="font-semibold leading-tight">Udupi Property Tracker</span>
+              <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
+            </div>
           </Link>
 
           {/* Desktop nav */}
