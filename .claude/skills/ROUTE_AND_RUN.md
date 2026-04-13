@@ -294,6 +294,28 @@ Rationale: each agent runs in a fresh context window. The capsule file is a stab
 
   If QA reports FAIL, apply the Failure Routing Protocol in Step 3. Do NOT proceed to commit/push/PR until QA reports PASS.
 
+#### QA Targeted Rerun Protocol (Cycle 2+)
+
+**Activation condition:** `.claude/state/current-pr-fixlog.md` exists AND `qa-verify-cycles` ≥ 1. When this condition is met, this protocol replaces the default full-suite re-run. When the condition is NOT met (cycle 1, or no fixlog), use the standard verification mode prompts above.
+
+**Rerun scope priority (orchestrator must attempt in this order):**
+1. **Test-level rerun** — if the Playwright runner supports `--grep "<test name>"`, rerun the exact failing tests: `npx playwright test --grep "<pattern>" --project=chromium`
+2. **Spec-level rerun** — if test-level is not feasible, rerun only the failing spec files: `npx playwright test [spec-file-paths] --project=chromium`
+3. **Full suite** — only if neither narrower scope is technically possible; must be stated explicitly with a one-line reason
+
+**QA Task prompt — prepend verbatim before the standard verification prompt:**
+> "This is a targeted rerun (cycle 2+). Do the following in order:
+> 1. Read `.claude/state/current-pr.md` for AC and out-of-scope context.
+> 2. Read `.claude/state/current-pr-fixlog.md`. Identify all QA Failures rows where Status is OPEN or STILL_OPEN — these are the only failures requiring a verdict.
+> 3. Build rerun scope from those rows using the priority order: test-level → spec-level → full suite (only if narrower scope is not possible; state why if falling back to full suite).
+> 4. Run only the in-scope tests. Do NOT run the full suite unless the fallback applies.
+> 5. For each QA Failures row: state FIXED (now passes), STILL_OPEN (still fails), or NEW (newly discovered failure not in prior rows). Include exact failure output for STILL_OPEN and NEW.
+> 6. Do NOT re-raise failures already marked FIXED or DEFERRED."
+
+**What must NOT happen on cycle 2+:** running the full suite without stating why narrower scope was not possible; silently dropping or recreating QA Failures rows; losing stable row identity across cycles.
+
+**Invariants preserved:** all existing QA gate semantics, escalation triggers, and the maximum 2 fix-verify cycles rule (Failure Routing Protocol) remain unchanged.
+
 #### Code-Reviewer Invocation Protocol
 
 When invoking `code-reviewer`, the orchestrator MUST construct a structured review brief. Never send a vague prompt like "review this" or "check for issues."

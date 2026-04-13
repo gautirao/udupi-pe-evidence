@@ -168,8 +168,8 @@ baseline_sha: NONE
 |----|----------|------|------|--------|
 
 ## QA Failures
-| Spec | Status | Notes |
-|------|--------|-------|
+| ID | Spec | Test | Status | Notes |
+|----|------|------|--------|-------|
 
 ## Agent Ledger
 | Step | Agent | Action | Notes |
@@ -263,7 +263,28 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
 4. **Reviewer Baseline SHA** — `baseline_sha` is the `git rev-parse HEAD` captured **immediately before the cycle-2 reviewer is invoked** (i.e. after the engineer's fix is committed, before the reviewer runs). This is the exact commit the reviewer is evaluating, which enables future delta-review. On a clean cycle-1 APPROVE (no re-review needed): capture HEAD at that point instead.
 
-5. **QA Failures** — if QA returned FAIL: populate the QA Failures table with failing spec names and one-line summaries.
+5. **QA Failures — full lifecycle:**
+
+   **Identity rule:** QA failure rows are identified by `Spec + Test` name. IDs (Q1, Q2, …) are monotonically assigned on cycle 1 and never renumbered. A row for `area-overview.spec.ts :: AO3` is always Q2 (or whatever ID it was assigned) across all cycles. Do not drop or recreate rows.
+
+   **Cycle 1 (first FAIL):** For each failing test, write one row with a new sequential ID (Q1, Q2, …) and Status=`OPEN`. `Test` may be `*` if only spec-level granularity is available.
+
+   **Cycle 2+ (after engineer fix, QA re-run):** For each existing row in the QA Failures table:
+   - Test now passes → Status = `FIXED`
+   - Test still fails → Status = `STILL_OPEN`
+   - Newly failing test not in prior rows → add new row with next ID, Status = `NEW`
+   - Explicitly accepted for later follow-up → Status = `DEFERRED` (requires orchestrator/user agreement; populate Notes: `defer: <reason> | agreed: <context>`)
+
+   **QA merge-blocking rule:**
+   | Status | Blocks merge? |
+   |--------|---------------|
+   | OPEN | YES — not yet retried after fix |
+   | STILL_OPEN | YES — fix did not resolve the failure |
+   | NEW | YES — fix introduced a new test failure |
+   | FIXED | NO |
+   | DEFERRED | NO — only if Notes populated with reason and agreement; empty Notes = STILL_OPEN |
+
+**Cycle 2+ QA invocation:** ROUTE_AND_RUN's QA Targeted Rerun Protocol (Agent Invocation Rules § "QA Targeted Rerun Protocol") activates automatically when `qa-verify-cycles` ≥ 1 in the fixlog. ROUTE_AND_RUN constructs the scoped rerun prompt; SPRINT_EXECUTOR does not duplicate it. SPRINT_EXECUTOR's only obligation: ensure the QA Failures table in the fixlog is populated with OPEN rows before QA cycle 2 runs (this happens naturally via step 4b item 5 above).
 
 **Cycle 2 code-reviewer invocation:** ROUTE_AND_RUN's Delta-Only Re-Review Protocol (Code-Reviewer Invocation Protocol § "Delta-Only Re-Review Protocol") activates automatically when `code-review-cycles` ≥ 1 in the fixlog. ROUTE_AND_RUN constructs the scoped reviewer prompt; SPRINT_EXECUTOR does not duplicate it.
 
@@ -298,6 +319,7 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    4. No gate uses an invalid or vague SKIPPED reason (e.g. `SKIPPED(no E2E infra)`, `SKIPPED(server not running)`, `SKIPPED(not needed)` — see ROUTE_AND_RUN Step 3 invalid skip reasons)
    5. `All gates satisfied: YES` is present in the emitted GSR
    6. **Fixlog findings gate:** if `.claude/state/current-pr-fixlog.md` exists, the Findings table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved findings to the user before proceeding. DEFERRED findings are allowed only if orchestrator/user agreement was recorded in checkpoint Risks during step 4b. A missing or empty fixlog (Trivial/Doc-only, no code-reviewer ran) satisfies this condition.
+   7. **QA Failures gate:** if the fixlog exists, the QA Failures table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved QA failures to the user before proceeding. DEFERRED failures are allowed only if orchestrator/user agreement was recorded in checkpoint Risks (defer reason and agreement in Notes column required, same rule as Findings). A fixlog with no QA Failures rows (QA passed on cycle 1, or no QA ran) satisfies this condition.
 
    If any condition is false, STOP. Resolve the gap before proceeding. Post-hoc GSR reconstruction (writing it after the PR is created) is **banned**.
 
@@ -371,10 +393,11 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
 
 1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract:
    - `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`
-   - Count of FIXED findings, count of NEW findings (rows with Status=NEW), count of DEFERRED findings
-   - Count of total Findings rows
+   - From Findings table: count of FIXED, count of NEW, count of DEFERRED rows; total rows
+   - From QA Failures table: count of FIXED, count of NEW (Status=NEW), count of DEFERRED rows; total rows
    - Derive `Delta re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO
-   - If fixlog does not exist (no code-reviewer ran): use zeros and `Delta re-review: NO`
+   - Derive `QA targeted rerun: YES` if `qa-verify-cycles` ≥ 2, otherwise NO
+   - If fixlog does not exist: use zeros and NO for both derived fields
 
 2. **Append to `.claude/SHIP_LOG.md`:**
    ```
@@ -384,11 +407,13 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    - Why: <1 sentence from issue title/spec>
    - Deviations: <OUT OF SCOPE ACs from Spec invalidation field, or NONE>
    - Risks: <items from Risks field, or NONE>
-   - Cycles: engineer=<n> review=<n> qa=<n> | Delta re-review: YES/NO | Findings: <fixed> resolved, <new_count> new
-   - Deferred: <ID> — <reason> | agreed: <context> (one line per DEFERRED finding; omit section if none)
+   - Cycles: engineer=<n> review=<n> qa=<n> | Delta re-review: YES/NO | QA targeted rerun: YES/NO
+   - Findings: <fixed> resolved, <new_count> new (omit if zero findings)
+   - QA: <fixed> resolved, <new_count> new (omit if no QA failures occurred)
+   - Deferred: <ID> — <reason> | agreed: <context> (one line per DEFERRED finding or QA failure; omit section if none)
    ---
    ```
-   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source `Cycles` / findings counts from fixlog counters. Source each DEFERRED line from the Notes column of DEFERRED rows in the Findings table — copy verbatim, do not paraphrase.
+   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source all counts and derived fields from the fixlog. Source each DEFERRED line verbatim from the Notes column of DEFERRED rows in the Findings or QA Failures table — do not paraphrase.
 
 3. **Delete state files:**
    ```
