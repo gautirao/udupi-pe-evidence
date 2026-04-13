@@ -67,7 +67,9 @@ const smokeListingStatus = getListingStatus();
 // ---------------------------------------------------------------------------
 test('Q1 — app loads without blank screen or JS error banner', async ({ page }) => {
   await page.goto('/');
-  await page.waitForLoadState('domcontentloaded');
+  // Wait for React to render — LandingPage shows a spinner (SVG, no text) until
+  // auth state resolves, so domcontentloaded fires before any text is present.
+  await page.waitForFunction(() => document.body.innerText.trim().length > 0, { timeout: 10_000 });
 
   const bodyText = await page.locator('body').textContent();
   expect(bodyText?.trim().length, 'page body appears blank').toBeGreaterThan(0);

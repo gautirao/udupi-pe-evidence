@@ -1,6 +1,7 @@
 import { useSearchParams, Link } from 'react-router-dom';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, MapPin } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { useAreaOverview } from '@/hooks/useAreaOverview';
 import { AreaHeader } from '@/components/area/AreaHeader';
 import { FallbackNotice } from '@/components/area/FallbackNotice';
@@ -30,15 +31,32 @@ export default function AreaOverview() {
 
   const { data, isLoading, isError } = useAreaOverview(areaKey);
 
-  if (!areaKey || isError) {
+  if (!areaKey) {
+    return (
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
+        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+          <MapPin className="h-10 w-10 text-muted-foreground" />
+          <p className="text-lg font-medium text-foreground">Select an area to explore</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Choose a locality from the map to see price trends, market activity, and nearby schools.
+          </p>
+          <Button asChild variant="default" size="sm">
+            <Link to="/discover">Explore on Map</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
     return (
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <AlertCircle className="h-10 w-10 text-muted-foreground" />
           <p className="text-lg font-medium">Area not found</p>
-          <Link to="/" className="text-sm text-primary underline underline-offset-4">
-            Back to map
-          </Link>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/discover">Back to map</Link>
+          </Button>
         </div>
       </div>
     );

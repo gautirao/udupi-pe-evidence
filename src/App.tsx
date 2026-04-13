@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 
 // Eagerly loaded — these are on the critical path for first paint
 import Index from "./pages/Index";
+import LandingPage from "./pages/LandingPage";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import NotFound from "./pages/NotFound";
@@ -85,7 +86,8 @@ const App = () => (
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
-              <Route path="/" element={<Index />} />
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/discover" element={<Index />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
               <Route path="/insights" element={<Navigate to="/area-overview" replace />} />
               <Route

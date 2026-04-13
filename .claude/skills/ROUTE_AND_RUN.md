@@ -202,12 +202,19 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 #### Agent Context Loading Rule
 
 When constructing a Task prompt for any agent, the orchestrator MUST:
-1. Include only the enriched spec for the **current issue** (read the relevant section from `.claude/sprint-enriched-specs.md` — do NOT load all specs).
-2. Include `qa-fast` findings for the current issue only.
-3. Include `Sprint-level conventions` and `Known temporary exceptions` from the checkpoint (if in sprint).
-4. Do NOT include: enriched specs for other issues, previous PRs' evidence blocks, or accumulated conversational history.
 
-Rationale: each agent runs in a fresh context window. Loading all sprint specs and prior-PR evidence wastes ~30% of agent context on information irrelevant to the current task.
+**Capsule-first (sprint context — when `.claude/state/current-pr.md` exists):**
+1. Prepend to every agent Task prompt: `"Read .claude/state/current-pr.md for acceptance criteria and out-of-scope guardrails before starting."` Do NOT paste AC inline — agents read it from the capsule file.
+2. For re-entry agents (cycle ≥ 2, i.e. any agent running after a REQUEST_CHANGES cycle): also prepend: `"Read .claude/state/current-pr-fixlog.md for open findings and cycle counters."` First-pass agents do NOT read the fixlog.
+3. Include `qa-fast` findings for the current issue only (as inline `qa-fast context:` — these are ephemeral scan results, not in the capsule).
+4. Include `Sprint-level conventions` and `Known temporary exceptions` from the checkpoint.
+5. Do NOT include: enriched spec text for other issues, previous PRs' evidence blocks, or accumulated conversational history.
+
+**Standalone context (no capsule — when `.claude/state/current-pr.md` does NOT exist):**
+1. Include only the enriched spec snippet for the **current issue** (read the relevant section from `.claude/sprint-enriched-specs.md`).
+2–5. Same as sprint context items 3–5 above.
+
+Rationale: each agent runs in a fresh context window. The capsule file is a stable, overwrite-protected source for AC and out-of-scope guardrails — it eliminates re-pasting and ensures consistent AC across all agents in a PR cycle. Re-entry agents additionally need the fixlog to reconstruct what has already been found and fixed.
 
 ---
 
@@ -287,6 +294,28 @@ Rationale: each agent runs in a fresh context window. Loading all sprint specs a
 
   If QA reports FAIL, apply the Failure Routing Protocol in Step 3. Do NOT proceed to commit/push/PR until QA reports PASS.
 
+#### QA Targeted Rerun Protocol (Cycle 2+)
+
+**Activation condition:** `.claude/state/current-pr-fixlog.md` exists AND `qa-verify-cycles` ≥ 1. When this condition is met, this protocol replaces the default full-suite re-run. When the condition is NOT met (cycle 1, or no fixlog), use the standard verification mode prompts above.
+
+**Rerun scope priority (orchestrator must attempt in this order):**
+1. **Test-level rerun** — if the Playwright runner supports `--grep "<test name>"`, rerun the exact failing tests: `npx playwright test --grep "<pattern>" --project=chromium`
+2. **Spec-level rerun** — if test-level is not feasible, rerun only the failing spec files: `npx playwright test [spec-file-paths] --project=chromium`
+3. **Full suite** — only if neither narrower scope is technically possible; must be stated explicitly with a one-line reason
+
+**QA Task prompt — prepend verbatim before the standard verification prompt:**
+> "This is a targeted rerun (cycle 2+). Do the following in order:
+> 1. Read `.claude/state/current-pr.md` for AC and out-of-scope context.
+> 2. Read `.claude/state/current-pr-fixlog.md`. Identify all QA Failures rows where Status is OPEN or STILL_OPEN — these are the only failures requiring a verdict.
+> 3. Build rerun scope from those rows using the priority order: test-level → spec-level → full suite (only if narrower scope is not possible; state why if falling back to full suite).
+> 4. Run only the in-scope tests. Do NOT run the full suite unless the fallback applies.
+> 5. For each QA Failures row: state FIXED (now passes), STILL_OPEN (still fails), or NEW (newly discovered failure not in prior rows). Include exact failure output for STILL_OPEN and NEW.
+> 6. Do NOT re-raise failures already marked FIXED or DEFERRED."
+
+**What must NOT happen on cycle 2+:** running the full suite without stating why narrower scope was not possible; silently dropping or recreating QA Failures rows; losing stable row identity across cycles.
+
+**Invariants preserved:** all existing QA gate semantics, escalation triggers, and the maximum 2 fix-verify cycles rule (Failure Routing Protocol) remain unchanged.
+
 #### Code-Reviewer Invocation Protocol
 
 When invoking `code-reviewer`, the orchestrator MUST construct a structured review brief. Never send a vague prompt like "review this" or "check for issues."
@@ -341,6 +370,27 @@ Include the following `focus_areas` when reviewing test-only PRs. These are BLOC
   ```
   Example from code-reviewer: `ROUTE_AND_RUN_WARNING: MED This PR introduces a second error response format. Consider standardizing in a follow-up.`
   After each agent completes, parse agent output for any `ROUTE_AND_RUN_WARNING:` lines and collect them. Append all collected warnings to the checkpoint's Risks section with prefix `[<agent-name>] <severity>: <message>`.
+
+#### Delta-Only Re-Review Protocol (Cycle 2+)
+
+**Activation condition:** `.claude/state/current-pr-fixlog.md` exists AND `code-review-cycles` ≥ 1. When this condition is met, this protocol replaces the default full-diff review. When the condition is NOT met (cycle 1, or no fixlog), use the standard Code-Reviewer Invocation Protocol above.
+
+**Baseline refresh rule (orchestrator, before every cycle-2+ reviewer invocation):** Always capture a fresh baseline at the current HEAD immediately before invoking the reviewer — run `git rev-parse HEAD` and write the result to `baseline_sha` in the fixlog, overwriting any prior value. This baseline is scoped to the next delta-review cycle only; it is refreshed again before each subsequent cycle. Do not reuse a stale baseline from a prior cycle.
+
+**Reviewer Task prompt — prepend verbatim before the standard review brief:**
+> "This is a delta-only re-review (cycle 2+). This review is scoped to unresolved findings and the code delta since the last review — you must not re-review the full PR from the beginning. Do the following in order:
+> 1. Read `.claude/state/current-pr.md` for AC and out-of-scope context.
+> 2. Read `.claude/state/current-pr-fixlog.md`. Identify all Findings rows where Status is OPEN or STILL_OPEN — these are the only prior findings requiring a verdict.
+> 3. Run `git diff <baseline_sha>..HEAD` (substituting the actual SHA from the fixlog) to see only the changes since the last review.
+> 4. For each OPEN/STILL_OPEN finding: state FIXED, STILL_OPEN, or NEW (new problem introduced by the fix, at a potentially different location). Include a file:line reference for each verdict.
+> 5. You may raise NEW findings for problems introduced by the fix that were not in the original review — these get the next monotonic ID in the fixlog.
+> 6. Do NOT re-raise findings already marked FIXED or DEFERRED unless a new issue is introduced adjacent to them.
+> 7. Re-verify any AC item that the fix may have affected."
+
+**What must NOT happen on cycle 2+:** re-reading the full PR diff from the beginning; re-raising already-FIXED findings; producing a fresh full review brief that ignores the fixlog.
+
+**Invariants preserved:** `ac_checklist` (step 3 of standard protocol), `review_mode` (step 1), and `model` override (step 2) remain unchanged. ADVISORY-FIX and ADVISORY-DEFER still apply to any new issues discovered on cycle 2+.
+
 - `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
 
