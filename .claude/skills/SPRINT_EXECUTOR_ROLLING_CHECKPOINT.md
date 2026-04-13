@@ -146,7 +146,7 @@ For each GitHub issue (PR N):
 **1c. Initialize fixlog** — after step 1b (in-flight marker written, resume checks complete):
 
 - Create directory if absent: `mkdir -p .claude/state`
-- **Fresh start:** write `.claude/state/current-pr-fixlog.md` using the template below.
+- **Fresh start** (checkpoint did NOT show `Status: IN_PROGRESS`): always overwrite `.claude/state/current-pr-fixlog.md` — a stale fixlog from a prior interrupted run must not survive into a new PR. Write from the template below.
 - **Resume** (`Status: IN_PROGRESS` found AND fixlog already exists): DO NOT overwrite — the existing file was read in step 1b's resume section. Use those restored values.
 
 **Fixlog template (fresh start only):**
@@ -176,6 +176,34 @@ baseline_sha: NONE
 |------|-------|--------|-------|
 ```
 
+**1d. Write capsule** — immediately after the fixlog is initialized, write `.claude/state/current-pr.md`. Always overwrite (fresh or resume — the capsule represents the current PR's contract and must be current).
+
+Source fields:
+- `PR:` and `Title:` — from the current issue number and title (step 1)
+- `Acceptance Criteria:` — AC bullets verbatim from the current issue's section in `.claude/sprint-enriched-specs.md`
+- `Out of Scope:` — out-of-scope bullets verbatim from the same section (or `NONE`)
+- `Touched Files Hint:` — populated by `qa-fast` output after step 4 runs; write `PENDING` initially, update after `qa-fast` completes
+
+**Capsule template:**
+```
+# Current PR Capsule
+
+PR: #<issue_number>
+Title: <title>
+
+## Acceptance Criteria
+- <AC 1>
+- <AC 2>
+
+## Out of Scope
+<bullets from enriched spec, or NONE>
+
+## Touched Files Hint
+PENDING  ← replaced with qa-fast output after step 4 runs
+```
+
+**Capsule update after qa-fast:** When `qa-fast` returns, update the `Touched Files Hint` section with the files `qa-fast` identified as likely to be modified. This is the only post-creation update to the capsule.
+
 2. **Mark In Progress** — set GitHub Project item status to "In Progress":
    ```bash
    gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOAAVnaM4BSWI7 --field-id PVTSSF_lAHOAAVnaM4BSWI7zg_6HMc --single-select-option-id 1a1777ea
@@ -187,7 +215,7 @@ baseline_sha: NONE
 4. **Run ROUTE_AND_RUN** — execute the full triage → route → agents sequence per `ROUTE_AND_RUN.md`.
 
    Sprint-specific context for `qa-fast` — always pass this prompt:
-   > "Review the codebase and identify risks for this planned change: [issue description]. Acceptance criteria: [AC from enriched spec]. The feature does not exist yet."
+   > "Review the codebase and identify risks for this planned change: [issue description]. Read `.claude/state/current-pr.md` for acceptance criteria and out-of-scope guardrails. The feature does not exist yet."
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
 
@@ -212,9 +240,23 @@ baseline_sha: NONE
 
 2. **Increment counters** — for each agent type that ran: `engineer-cycles` +1 per engineer run, `code-review-cycles` +1 per code-reviewer run, `qa-verify-cycles` +1 per QA verification run.
 
-3. **Open Findings** — if code-reviewer returned REQUEST_CHANGES: extract each BLOCKING finding into the Open Findings table with sequential IDs (F1, F2, …) and Status=OPEN. On cycle 2+ APPROVE: update each previously-OPEN row to FIXED or STILL_OPEN based on the reviewer's explicit verdict.
+3. **Open Findings — full lifecycle:**
 
-4. **Reviewer Baseline SHA** — when code-reviewer first returns APPROVE: capture `git rev-parse HEAD` and set `baseline_sha` to the result.
+   **ID stability rule:** Finding IDs (F1, F2, …) are assigned once on cycle 1 and NEVER regenerated. New findings discovered on later cycles get the next sequential ID (e.g. F3 if F1–F2 already exist). Existing IDs are only updated in-place.
+
+   **Cycle 1 (first REQUEST_CHANGES):** Extract each BLOCKING finding into the Open Findings table with a new sequential ID and Status=`OPEN`.
+
+   **Cycle 2+ (after engineer fix, reviewer re-run):** For each previously-OPEN row:
+   - Reviewer confirms resolved → Status = `FIXED`
+   - Reviewer finds it still present → Status = `STILL_OPEN`
+   - Reviewer identifies a new issue in the fix → add a NEW row with next ID, Status = `NEW`
+   - Engineer explicitly deferred with agreement → Status = `DEFERRED` (only if orchestrator/user agreed)
+
+   **STILL_OPEN and NEW findings block merge** (same as original BLOCKING). DEFERRED findings are logged in checkpoint Risks and do not block merge.
+
+4. **Reviewer Baseline SHA** — capture `git rev-parse HEAD` and write `baseline_sha` to the fixlog in EITHER of these cases (whichever comes first):
+   - Immediately after the engineer's fix commit on cycle 2 (before cycle-2 re-review runs) — this is the preferred capture point as it represents the state the reviewer will evaluate
+   - When code-reviewer first returns APPROVE on cycle 1 (no re-review needed)
 
 5. **QA Failures** — if QA returned FAIL: populate the QA Failures table with failing spec names and one-line summaries.
 
@@ -335,7 +377,12 @@ baseline_sha: NONE
    ```
    Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source `Cycles` / `Re-review` / `Findings resolved` from the fixlog.
 
-3. **Delete fixlog:** `rm .claude/state/current-pr-fixlog.md`. Do NOT delete the `.claude/state/` directory — it persists across PRs.
+3. **Delete state files:**
+   ```
+   rm .claude/state/current-pr-fixlog.md
+   rm .claude/state/current-pr.md
+   ```
+   Do NOT delete the `.claude/state/` directory — it persists across PRs.
 
 **9c. Update STATE.md** — update `.claude/STATE.md`:
    - Increment "Sprint status" count (e.g. `IN_PROGRESS · 3/8 complete`)

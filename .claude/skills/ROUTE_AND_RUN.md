@@ -202,12 +202,19 @@ Do NOT simulate agents inline. Do NOT merge outputs.
 #### Agent Context Loading Rule
 
 When constructing a Task prompt for any agent, the orchestrator MUST:
-1. Include only the enriched spec for the **current issue** (read the relevant section from `.claude/sprint-enriched-specs.md` — do NOT load all specs).
-2. Include `qa-fast` findings for the current issue only.
-3. Include `Sprint-level conventions` and `Known temporary exceptions` from the checkpoint (if in sprint).
-4. Do NOT include: enriched specs for other issues, previous PRs' evidence blocks, or accumulated conversational history.
 
-Rationale: each agent runs in a fresh context window. Loading all sprint specs and prior-PR evidence wastes ~30% of agent context on information irrelevant to the current task.
+**Capsule-first (sprint context — when `.claude/state/current-pr.md` exists):**
+1. Prepend to every agent Task prompt: `"Read .claude/state/current-pr.md for acceptance criteria and out-of-scope guardrails before starting."` Do NOT paste AC inline — agents read it from the capsule file.
+2. For re-entry agents (cycle ≥ 2, i.e. any agent running after a REQUEST_CHANGES cycle): also prepend: `"Read .claude/state/current-pr-fixlog.md for open findings and cycle counters."` First-pass agents do NOT read the fixlog.
+3. Include `qa-fast` findings for the current issue only (as inline `qa-fast context:` — these are ephemeral scan results, not in the capsule).
+4. Include `Sprint-level conventions` and `Known temporary exceptions` from the checkpoint.
+5. Do NOT include: enriched spec text for other issues, previous PRs' evidence blocks, or accumulated conversational history.
+
+**Standalone context (no capsule — when `.claude/state/current-pr.md` does NOT exist):**
+1. Include only the enriched spec snippet for the **current issue** (read the relevant section from `.claude/sprint-enriched-specs.md`).
+2–5. Same as sprint context items 3–5 above.
+
+Rationale: each agent runs in a fresh context window. The capsule file is a stable, overwrite-protected source for AC and out-of-scope guardrails — it eliminates re-pasting and ensures consistent AC across all agents in a PR cycle. Re-entry agents additionally need the fixlog to reconstruct what has already been found and fixed.
 
 ---
 
