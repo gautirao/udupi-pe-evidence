@@ -135,12 +135,46 @@ For each GitHub issue (PR N):
    - Preserve all other checkpoint fields unchanged.
 
    **On resume, if `Status: IN_PROGRESS` is found** — a PR was in-flight when context was lost. Before proceeding to any new work:
+   - **Read fixlog first** — if `.claude/state/current-pr-fixlog.md` exists, read it immediately. Restore `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, `baseline_sha`, Open Findings (OPEN rows), and QA Failures. This is the authoritative state source — do NOT rely on memory for these fields.
    - Check for a dangling branch: `git branch --list "*pr-<issue-number>*"` (where issue-number is from `Current PR:`)
    - Check for uncommitted changes on main: `git status --short`
    - **Branch exists with commits** → engineer completed but PR lifecycle didn't finish. Surface to user: "RE-XX was in-flight. Branch `<name>` exists with work. Resume from step 5 (git+PR) or restart the PR from scratch?"
    - **No branch, no uncommitted changes** → check for an already-merged PR: `gh pr list --state merged --search "<issue-title-slug>" --limit 1 --json number,mergedAt`. If a merged PR exists for this issue: the PR lifecycle completed but checkpoint wasn't updated. Skip to step 6 (close issue + update status) and proceed.
    - **No branch, no merged PR, no uncommitted changes** → engineer hadn't started or produced no output. Clear the in-flight marker and restart the PR from step 1.
    - **Uncommitted changes on main** → surface to user for manual resolution before proceeding.
+
+**1c. Initialize fixlog** — after step 1b (in-flight marker written, resume checks complete):
+
+- Create directory if absent: `mkdir -p .claude/state`
+- **Fresh start:** write `.claude/state/current-pr-fixlog.md` using the template below.
+- **Resume** (`Status: IN_PROGRESS` found AND fixlog already exists): DO NOT overwrite — the existing file was read in step 1b's resume section. Use those restored values.
+
+**Fixlog template (fresh start only):**
+```
+# PR Fixlog — #NNN RE-XX title
+
+## Counters
+| Field | Value |
+|-------|-------|
+| engineer-cycles | 0 |
+| code-review-cycles | 0 |
+| qa-verify-cycles | 0 |
+
+## Reviewer Baseline
+baseline_sha: NONE
+
+## Open Findings
+| ID | Severity | File | Line | Status |
+|----|----------|------|------|--------|
+
+## QA Failures
+| Spec | Status | Notes |
+|------|--------|-------|
+
+## Agent Ledger
+| Step | Agent | Action | Notes |
+|------|-------|--------|-------|
+```
 
 2. **Mark In Progress** — set GitHub Project item status to "In Progress":
    ```bash
@@ -164,6 +198,28 @@ For each GitHub issue (PR N):
    **Sprint E2E context (for test-type PRs under Phase 2):** When triage Type is `test` and Phase 2 is active, pass `targeted_files: [list of new/modified spec files from this PR]` as sprint context to ROUTE_AND_RUN. ROUTE_AND_RUN uses this to select targeted-first E2E (see its QA verification prompt). If a full-suite trigger applies (3rd PR, last PR, shared fixture change), pass `targeted_files: FULL_SUITE_TRIGGER` instead — ROUTE_AND_RUN falls back to full suite.
 
    Note: Engineer materialization validation, spec invalidation checking, and E2E failure attribution (Scenario A/B) are handled inside ROUTE_AND_RUN (Post-Engineer Materialization Check, Spec Invalidation Check, and Failure Routing Protocol sections). SPRINT_EXECUTOR does not re-check these — it reads the Gate Satisfaction Record emitted by ROUTE_AND_RUN. If `Engineer materialization: FAIL` or `Spec invalidation: BLOCKED`, ROUTE_AND_RUN will not return — it will emit BLOCKED and stop. SPRINT_EXECUTOR only sees successful returns.
+
+**4b. Update fixlog after ROUTE_AND_RUN returns** — after ROUTE_AND_RUN completes and returns control, update `.claude/state/current-pr-fixlog.md`:
+
+1. **Agent Ledger** — append one row per agent that ran, in order. Derive from the GSR "Route used" field and verdicts in the conversation output:
+
+   | Step | Agent | Action | Notes |
+   |------|-------|--------|-------|
+   | N | qa-fast | COMPLETE | classification=\<tier\> |
+   | N | \<engineer-agent\> | COMPLETE | files=\<count\> |
+   | N | code-reviewer | APPROVE or REQUEST_CHANGES | findings=\<count\> |
+   | N | qa | PASS or FAIL | specs=\<count\> |
+
+2. **Increment counters** — for each agent type that ran: `engineer-cycles` +1 per engineer run, `code-review-cycles` +1 per code-reviewer run, `qa-verify-cycles` +1 per QA verification run.
+
+3. **Open Findings** — if code-reviewer returned REQUEST_CHANGES: extract each BLOCKING finding into the Open Findings table with sequential IDs (F1, F2, …) and Status=OPEN. On cycle 2+ APPROVE: update each previously-OPEN row to FIXED or STILL_OPEN based on the reviewer's explicit verdict.
+
+4. **Reviewer Baseline SHA** — when code-reviewer first returns APPROVE: capture `git rev-parse HEAD` and set `baseline_sha` to the result.
+
+5. **QA Failures** — if QA returned FAIL: populate the QA Failures table with failing spec names and one-line summaries.
+
+**Cycle 2 code-reviewer invocation note:** When ROUTE_AND_RUN orchestrates a code-reviewer re-run (after REQUEST_CHANGES + engineer fix cycle), the orchestrator MUST prepend the following to the code-reviewer Task prompt — this is the only reviewer prompt change required:
+> "Read `.claude/state/current-pr-fixlog.md`. Focus this review on the Open Findings rows where Status=OPEN. For each finding, state FIXED or STILL_OPEN with a file:line reference. Do NOT re-review the full diff."
 
 **5a. Post-ROUTE_AND_RUN checks (after ROUTE_AND_RUN completes and returns control)**
 
@@ -262,7 +318,11 @@ For each GitHub issue (PR N):
      - If a decision is a one-off state (quarantined spec, deferred AC, partial completion, temporary workaround): copy it to `Known temporary exceptions:` in the preamble.
    - Include both fields in the qa engineer Task prompt for the **next PR** — add verbatim after the enriched spec: "Sprint-level conventions from completed PRs: [paste]. Known temporary exceptions: [paste]. Follow conventions. If deviating, state why in Key decisions."
 
-**9b. Append ship log entry** — after the checkpoint write, append a brief entry to `.claude/SHIP_LOG.md`:
+**9b. Append ship log entry + close fixlog** — after the checkpoint write:
+
+1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract: `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, count of FIXED findings, count of total Open Findings rows. Derive `Re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO.
+
+2. **Append to `.claude/SHIP_LOG.md`:**
    ```
    ## PR #NNN — Issue title
    Date: YYYY-MM-DD | Sprint: <sprint name> | Route: <agent chain from checkpoint>
@@ -270,9 +330,12 @@ For each GitHub issue (PR N):
    - Why: <1 sentence from issue title/spec>
    - Deviations: <OUT OF SCOPE ACs from Spec invalidation field, or NONE>
    - Risks: <items from Risks field, or NONE>
+   - Cycles: engineer=<n> review=<n> qa=<n> | Re-review: YES/NO | Findings resolved: <fixed>/<total>
    ---
    ```
-   Source fields directly from the checkpoint just written — do NOT re-derive.
+   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source `Cycles` / `Re-review` / `Findings resolved` from the fixlog.
+
+3. **Delete fixlog:** `rm .claude/state/current-pr-fixlog.md`. Do NOT delete the `.claude/state/` directory — it persists across PRs.
 
 **9c. Update STATE.md** — update `.claude/STATE.md`:
    - Increment "Sprint status" count (e.g. `IN_PROGRESS · 3/8 complete`)
