@@ -37,6 +37,9 @@ public class AreaOverviewService {
     private static final double SCHOOL_RADIUS_KM = 3.0;
     private static final int COMPARISON_APPROXIMATE_THRESHOLD = 5;
 
+    static final int TRENDING_DEFAULT_LIMIT = 6;
+    static final int TRENDING_MAX_LIMIT = 12;
+
     private final JdbcOperations jdbcOperations;
     private final NamedParameterJdbcTemplate namedJdbcTemplate;
     private final SchoolService schoolService;
@@ -118,6 +121,75 @@ public class AreaOverviewService {
                 schools,
                 activity
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Trending areas
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns the top areas by 30-day listing activity.
+     *
+     * <p>The {@code limit} parameter is silently clamped to [1, {@value #TRENDING_MAX_LIMIT}].
+     * Rows with {@code listing_count_90d = 0} or NULL are excluded.
+     * An empty table returns {@code {areas: []}} — never 404.
+     *
+     * @param limit requested result count (default {@value #TRENDING_DEFAULT_LIMIT})
+     * @return response containing at most {@code clampedLimit} areas sorted desc by listing count
+     */
+    @Transactional(readOnly = true)
+    public TrendingAreasResponse getTrending(int limit) {
+        int clampedLimit = Math.max(1, Math.min(TRENDING_MAX_LIMIT, limit));
+        log.debug("getTrending: limit={} (clamped={})", limit, clampedLimit);
+
+        List<TrendingAreasResponse.TrendingAreaDto> areas = jdbcOperations.query(
+                """
+                SELECT area_key, listing_count_90d, median_price_paise,
+                       district_area_key
+                FROM area_overview_stats
+                WHERE listing_count_90d IS NOT NULL
+                  AND listing_count_90d > 0
+                ORDER BY listing_count_90d DESC
+                LIMIT ?
+                """,
+                (rs, rowNum) -> {
+                    String areaKey       = rs.getString("area_key");
+                    String areaLabel     = lastPipeSegment(areaKey);
+
+                    // district_area_key is stored on locality rows; fall back to
+                    // slicing the first 3 pipe segments when the column is NULL.
+                    String storedDistrict = rs.getString("district_area_key");
+                    String effectiveDistrict;
+                    if (storedDistrict != null && !storedDistrict.isEmpty()) {
+                        effectiveDistrict = storedDistrict;
+                    } else if (areaKey != null) {
+                        String[] parts = areaKey.split("\\|", -1);
+                        effectiveDistrict = parts.length >= 3
+                                ? parts[0] + "|" + parts[1] + "|" + parts[2]
+                                : null;
+                    } else {
+                        effectiveDistrict = null;
+                    }
+                    // Guard: propagate null instead of emitting "" for missing district
+                    String districtLabel = effectiveDistrict != null ? lastPipeSegment(effectiveDistrict) : null;
+
+                    long medianRaw = rs.getLong("median_price_paise");
+                    Long medianPricePaise = rs.wasNull() ? null : medianRaw;
+
+                    return new TrendingAreasResponse.TrendingAreaDto(
+                            areaKey,
+                            areaLabel,
+                            districtLabel,
+                            medianPricePaise,
+                            rs.getInt("listing_count_90d")
+                    );
+                },
+                clampedLimit
+        );
+
+        log.info("getTrending: returned {} areas (requestedLimit={}, clampedLimit={})",
+                areas.size(), limit, clampedLimit);
+        return new TrendingAreasResponse(areas);
     }
 
     // -------------------------------------------------------------------------
