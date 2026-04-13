@@ -2,10 +2,10 @@
  * Anonymous Teaser Discovery — AT1–AT4
  *
  * Covers the anonymous teaser discovery feature (#613–#617):
- *   AT1 — anon home: no redirect, teaser cards visible, Sign In CTA present
+ *   AT1 — anon home: no redirect, landing page content visible
  *   AT2 — listing detail login gate: CTA has correct returnTo param
  *   AT3 — returnTo deep-link: login redirects back to listing
- *   AT4 — full unlock after login: map markers present, anon CTA absent
+ *   AT4 — full unlock after login: redirected to /discover, anon CTA absent
  *
  * AT2/AT3/AT4 require SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD and a LIVE listing fixture.
  *
@@ -47,32 +47,24 @@ function getListingFixture(): { id: string; isLive: boolean } | null {
 const fixture = getListingFixture();
 
 // ---------------------------------------------------------------------------
-// AT1 — anon home: no redirect, teaser cards visible, Sign In CTA present
+// AT1 — anon home: no redirect, landing page content visible
 // ---------------------------------------------------------------------------
-test('AT1 — anon home: no redirect, teaser cards visible, Sign In CTA present', async ({ page }) => {
+test('AT1 — anon home: no redirect, landing page content visible', async ({ page }) => {
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
 
   // Must NOT redirect to /auth
   await expect(page).toHaveURL('/');
 
-  // Sign in CTA visible — text from Index.tsx:271
+  // Hero headline from LandingPage.tsx — confirms the marketing page rendered
   await expect(
-    page.locator('text=Sign in to see full details and contact brokers'),
+    page.locator('h1', { hasText: 'Find Your Perfect Home with Trust & Clarity' }),
   ).toBeVisible({ timeout: 10_000 });
 
-  // Teaser cards require at least one LIVE listing from the discovery endpoint.
-  // In local dev, the endpoint may return empty (stale backend or no LIVE data) — don't fail.
-  try {
-    await expect(
-      page.locator('a', { hasText: 'Sign in to view' }).first(),
-    ).toBeVisible({ timeout: 5_000 });
-  } catch {
-    // No teaser cards — discovery endpoint returned empty or is unavailable locally.
-  }
-
-  // No Leaflet map markers — anonymous users get no lat/lon (Index.tsx:141–142)
-  await expect(page.locator('.leaflet-marker-icon')).toHaveCount(0);
+  // "Explore on Map" hero CTA must be present and link to /discover
+  await expect(
+    page.locator('a[href="/discover"]').first(),
+  ).toBeVisible({ timeout: 5_000 });
 });
 
 // ---------------------------------------------------------------------------
@@ -134,17 +126,20 @@ test('AT3 — returnTo deep-link: login redirects back to listing', async ({ pag
 });
 
 // ---------------------------------------------------------------------------
-// AT4 — full unlock after login: map markers present, anon CTA absent
+// AT4 — full unlock after login: redirected to /discover, anon CTA absent
 // ---------------------------------------------------------------------------
 test.describe('AT4 — user-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('AT4 — full unlock after login: map markers present, anon CTA absent', async ({ page }) => {
+  test('AT4 — full unlock after login: redirected to /discover, anon CTA absent', async ({ page }) => {
     test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping AT4');
 
-    // Navigate to home
+    // Navigating to / while authenticated triggers LandingPage's redirect to /discover
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+
+    // Authenticated users are redirected from / to /discover by LandingPage
+    await page.waitForURL('/discover', { timeout: 10_000 });
 
     // Authenticated users get full listings with coordinates — map markers appear when data has coords.
     // In local environments the test listing has no lat/lon, so markers may not appear; don't fail.
