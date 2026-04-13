@@ -12,7 +12,7 @@ Phase A (serial — AppLayout conflict):
 2. ✅ #748 → PR #751 merged — marketing landing page (hero, feature cards, footer CTA; /discover alias)
 
 Phase B (parallel after A merges):
-3. ⬜ #747 — GET /api/public/areas/trending backend endpoint
+3. ✅ #747 → PR #752 merged — GET /api/public/areas/trending backend endpoint (2026-04-13)
 4. ⬜ #745 — listing detail two-column layout + areaKey fix in ListingResponse
 
 Phase C (after #745):
@@ -32,6 +32,6 @@ Pre-flight decisions (all resolved):
 - #749 expansion: "Show more" button reveals cards 4–6
 - #749 price formatting: ≥1 Cr → "₹X.XX Cr"; ≥1 L and <1 Cr → "₹XX L"
 
-Status: IN PROGRESS · 2/6 complete
-Next PR: #747 (backend endpoint first) or #745 (frontend, Phase B parallel)
+Status: IN PROGRESS · 3/6 complete
+Next PR: #745 (frontend — listing detail two-column layout + areaKey fix)
 === ROLLING CHECKPOINT END ===
