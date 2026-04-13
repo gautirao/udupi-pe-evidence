@@ -109,6 +109,8 @@ export interface ListingResponse {
   lockInMonths: number | null;
   sellerType: string | null;
   earnedBadgeCount: number;
+  /** Area key used for locality insights — e.g. "KA|UDUPI|MANIPAL" */
+  areaKey: string | null;
 }
 
 /**

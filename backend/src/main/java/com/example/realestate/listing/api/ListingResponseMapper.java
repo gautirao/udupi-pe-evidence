@@ -185,6 +185,6 @@ public class ListingResponseMapper {
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
                 l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
-                l.getTrustTier());
+                l.getTrustTier(), l.getAreaKey());
     }
 }

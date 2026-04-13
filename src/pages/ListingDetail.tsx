@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,6 +80,8 @@ interface PublicListingDetail extends ListingResponse {
   expectedPossessionDate?: string | null;
   approvalsDeclared?: string | null;
   reraValid?: boolean;
+  /** Area key used for locality insights — e.g. "KA|UDUPI|MANIPAL" */
+  areaKey?: string | null;
 }
 
 function useListingById(id: string | undefined, isPreview: boolean, userId?: string) {
@@ -439,9 +441,9 @@ export default function ListingDetail() {
         </Card>
 
         {/* Property Details */}
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Content */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6">
             {/* Title & Badges */}
             <div>
               <div className="flex items-center gap-2 mb-3">
@@ -696,6 +698,27 @@ export default function ListingDetail() {
               </Card>
             )}
 
+            {/* Key Highlights — top-3 trust badges as a bullet list */}
+            {trustData?.badges && trustData.badges.length > 0 && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="font-semibold mb-3">Key Highlights</h3>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground list-disc list-inside">
+                    {trustData.badges.slice(0, 3).map((badge) => (
+                      <li key={badge.dimensionType}>
+                        {DIMENSION_LABELS[badge.dimensionType] ?? badge.dimensionType}
+                      </li>
+                    ))}
+                  </ul>
+                  {trustData.badges.length > 3 && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      + {trustData.badges.length - 3} more
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Listing Transparency Card (RE-94) */}
             <ListingTransparencyCard
               daysOnMarket={listing.daysOnMarket}
@@ -816,18 +839,28 @@ export default function ListingDetail() {
             />
           </div>
 
-          {/* Sidebar - Contact */}
-          <div className="space-y-4">
-            {/* Request Viewing — primary CTA, always first */}
+          {/* Sidebar */}
+          <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+            {/* Interested? — primary CTAs */}
             {user ? (
               <Card>
-                <CardContent className="p-4">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Interested?</CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 space-y-2">
                   <Button
                     className="w-full"
                     onClick={() => setBookingModalOpen(true)}
                   >
                     <Calendar className="h-4 w-4 mr-2" />
                     Request Viewing
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setBookingModalOpen(true)}
+                  >
+                    Contact Broker
                   </Button>
                 </CardContent>
               </Card>
@@ -842,6 +875,27 @@ export default function ListingDetail() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Locality Insights */}
+            {listing.areaKey && (() => {
+              const localityName = listing.areaKey.split('|').pop() ?? listing.areaKey;
+              return (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base">Locality Insights</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <Link
+                      to={`/area-overview?areaKey=${encodeURIComponent(listing.areaKey)}`}
+                      className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      Explore {localityName}
+                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                    </Link>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* AreaMarketWidget still expects the snake_case PropertyListing shape;
                 the cast is safe here because the widget degrades gracefully when

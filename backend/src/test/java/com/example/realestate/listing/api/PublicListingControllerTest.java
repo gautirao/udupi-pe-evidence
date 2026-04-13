@@ -129,7 +129,7 @@ class PublicListingControllerTest {
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
-                    l.getTrustTier());
+                    l.getTrustTier(), l.getAreaKey());
         });
 
         // Teaser mapper — single listing
