@@ -15,6 +15,7 @@ cat .claude/STATE.md
 ```
 done | idle | closed | complete | COMPLETE | ABORTED | BLOCKED_AWAITING_USER
 ```
+`idle` — treated as inactive (no execution in progress; system is at rest waiting for new work, not paused mid-execution).
 
 **Mode decision tree:**
 
@@ -135,7 +136,7 @@ ls .claude/sprint-enriched-specs.md
 | Source | Role | Precedence |
 |--------|------|-----------|
 | `STATE.md` | Execution state (Mode A trigger only) | Highest — checked first |
-| GitHub Project | Sprint membership | Authoritative for Mode B/C |
+| GitHub sprint state (ProjectV2) | Sprint membership | Authoritative for Mode B/C |
 | `SPRINT_CHECKPOINT.md` | Execution order cache | Cache only — never overrides active execution state |
 | `HANDOFF.md` | Advisory context | Advisory only — never overrides a newer STATE.md |
 
@@ -167,10 +168,13 @@ Always output the decision block first, then the resume prompt block.
 
 ```
 Resume Mode: <A — In-flight execution | B — Sprint resume | C — Kickoff>
-Source of truth for resume decision: <STATE.md | GitHub | none>
+Source of truth for resume decision: <STATE.md | GitHub sprint state (ProjectV2) | none>
 Ignored sources:
-- <source> — <why ignored, e.g. "GitHub — skipped: Mode A path" | "SPRINT_CHECKPOINT.md — cache only">
-Decision path: <one sentence describing the trigger condition that fired>
+- <SPRINT_CHECKPOINT.md — cache only; cannot override active execution state>
+- <HANDOFF.md — advisory only; cannot override STATE.md> (omit if not present)
+Decision path:
+- <primary trigger condition that fired>
+- <GitHub sprint detection skipped (Mode A short-circuit)> (Mode A only)
 Action: <what the resume prompt instructs the executor to do>
 ```
 
