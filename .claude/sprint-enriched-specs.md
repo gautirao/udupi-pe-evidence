@@ -1,112 +1,87 @@
-# Sprint 32 Enriched Specs — E2E Fidelity Refactor
+# Design Polish Sprint 1 Enriched Specs
 
-## #666 feat(e2e): booking UI journey — request viewing modal end-to-end
+## #748 feat(frontend): marketing landing page — hero, value props, footer CTA
 
 AC:
-- [ ] New file `e2e/journey/booking-journey.spec.ts` exists
-- [ ] UB1: Using user storageState, navigate to test listing detail page, click "Request Viewing" button, fill `#requested-date` (3 days from today `YYYY-MM-DD`), select first option in `#time-slot` Radix Select, fill `#requester-message` with "Automated test booking", click "Send Request". Assert success toast matching `/viewing request sent/i` visible. Assert "Send Request" button disabled or dialog closes.
-- [ ] UB2: With booking from UB1 existing, re-open modal and attempt submit. Assert inline error with class `.text-destructive` visible (not just a network 409).
-- [ ] UB3: Using broker storageState, navigate to `/broker/bookings` (NOT `/dealer/bookings`). Assert booking from UB1 visible in table.
-- [ ] `beforeAll` authenticates as test user and cancels any pre-existing booking on the test listing before UB1 runs. 409 is NOT a valid pass for UB1.
-- [ ] `afterAll` cancels/deletes the test booking via API (documented API-assist — fixture cleanup only).
+- [ ] Unauthenticated users visiting `/` render the marketing landing page with Hero, "Why Choose ReTrends?" (3 static cards), Trending Localities placeholder (3 skeleton cards), and Footer CTA sections, in that order.
+- [ ] Authenticated users visiting `/` are redirected to the map route (`/discover`) — no flash of marketing content.
+- [ ] Hero "Explore on Map" CTA navigates to `/discover` (decorative — no area pre-selection per pre-flight decision).
+- [ ] Footer CTA buttons: "Start Map Search" navigates to `/discover`; "Explore Area Overview" navigates to `/area-overview` (no `areaKey` required).
+- [ ] Existing anonymous teaser E2E (map anonymous view) still passes after the route change; selectors updated if `/` no longer renders map.
+- [ ] Page renders without errors for both anonymous and authenticated users.
 
-Out of scope: Unauthenticated RequestViewingModal state. No changes to modal component.
-Key unknowns: NONE — route corrected to `/broker/bookings`. Actual toast text confirmed as "Viewing request sent" (from `useCreateBooking` in `src/hooks/useBookings.ts`); `/viewing request sent/i` matches.
+Out of scope: Trending Localities data wiring (#749), trust badge explainer section, dynamic stat counts, mobile-specific layout tuning.
+
+Key unknowns: RESOLVED
+- Routing: anon `/` → marketing page; auth `/` → `/discover`. Hero CTA decorative → `/discover`, no area pre-selection.
+- Footer "Explore Area Overview" → `/area-overview` (no `areaKey`). `/area-overview` must render graceful empty state (not a dead-end).
 
 ---
 
-## #667 fix(e2e): DL1 image upload — replace React fiber introspection with standard file input
+## #745 feat(frontend): listing detail — two-column layout, sidebar, Locality Insights card, Key Highlights
 
 AC:
-- [ ] `e2e/broker-listing-creation.spec.ts` no longer contains any reference to `__reactFiber`, `__reactInternalInstance`, `fiber.return`, or `memoizedProps.onDrop`. The "Strategy A" fiber-walk block (lines ~273-294) is removed.
-- [ ] Image upload uses `setInputFiles` with `{ force: true }` on the hidden `<input type="file">`, OR uses a native `DragEvent` dispatch with `DataTransfer`. No React internals.
-- [ ] After upload, at least one preview thumbnail image is visible in the step-2 panel before the test continues.
-- [ ] `e2e/fixtures/test-image.jpg` exists — a valid JPEG (~100×100px) checked into the repo.
-- [ ] DL1 test passes end-to-end with the new upload strategy.
+- [ ] At viewport ≥1024px, `ListingDetail.tsx` renders a two-column layout: main content (carousel, title/price/stats, About, Key Highlights) on the left; sticky sidebar (Interested heading, Request Viewing, Contact Broker, Locality Insights card) on the right.
+- [ ] At viewport <1024px, layout collapses to single column with no overlap or sticky regressions.
+- [ ] "Request Viewing" and "Contact Broker" both open the existing `RequestViewingModal` with unchanged submit behavior; only the triggering button label differs.
+- [ ] Locality Insights card renders when an `areaKey` is derivable from the listing's locality and links to `/area-overview?areaKey=<key>`; card is omitted (not errored) when no areaKey can be derived.
+- [ ] Key Highlights section renders top-3 trust badges from existing `DIMENSION_LABELS` mapping as a bullet list; shows "+ N more" affordance when more than 3 badges are present.
+- [ ] UJ1 E2E journey passes; admin and broker preview modes render without regression.
 
-Out of scope: No changes to `ImageUploader` React component.
-Key unknowns: If `setInputFiles({ force: true })` does not trigger the React `onChange`, the fallback is native `DragEvent` dispatch (not fiber walk). If neither works, a small `data-testid` addition to the component may be needed — this expands scope and requires a note to the user before proceeding.
+Out of scope: Heart/wishlist button, distinct Contact Broker flow with phone reveal, any backend changes, mobile-specific optimizations.
+
+Key unknowns: RESOLVED
+- areaKey blocker = add areaKey field to ListingResponse + ListingResponseMapper as part of #745.
 
 ---
 
-## #668 fix(e2e): remove weak assertions and waitForTimeout across suite
-
-**Scope corrections applied:**
-- `map-filters.spec.ts` is NOT in scope — current file has zero `waitForTimeout` calls.
-- BC1 is in `listing-lifecycle.spec.ts`, NOT `user-journeys.spec.ts`. Scope for `user-journeys.spec.ts` is U4 only.
+## #746 feat(map): add View Area Overview button to filter bar + New badge on listing cards
 
 AC:
-- [ ] `e2e/poi-display.spec.ts` line 157: `waitForTimeout(2_000)` replaced with `waitForResponse` on the POI endpoint or `waitForSelector` that resolves when POI data is rendered. No `waitForTimeout` remains in this file.
-- [ ] `e2e/user-journeys.spec.ts` U4 (line ~161): `waitForTimeout(3_000)` replaced with `waitForResponse` on the area-market RPC endpoint or deterministic selector wait. No `waitForTimeout` remains. **Scope for this file ends here — no BC1 block exists in user-journeys.spec.ts.**
-- [ ] No `waitForTimeout` in `e2e/broker-listing-creation.spec.ts` — DO NOT touch this file (covered by #667).
-- [ ] No new `waitForTimeout` calls introduced in any modified file.
+- [ ] "View Area Overview" button appears beside the Filters button in the map sidebar and is enabled only when exactly one area is selected; clicking navigates to `/area-overview?areaKey=<selectedAreaKey>`.
+- [ ] Button is hidden (not disabled) when 0 or >1 areas are selected; state updates reactively as selection changes.
+- [ ] Listing cards in the map sidebar show an orange "New" badge when `created_at` is within the last 7 days (UTC-based computation against `Date.now()`).
+- [ ] "New" badge is not shown for listings with `created_at` ≥ 7 days ago.
+- [ ] Existing map interactions unchanged: locality multi-select, fit-to-selection, nearby chip, filter modal, infinite query pagination.
 
-Out of scope: `map-filters.spec.ts`. `broker-listing-creation.spec.ts`. BC1 block (lives in `listing-lifecycle.spec.ts`, handled by #671).
-Key unknowns: NONE after scope correction.
+Out of scope: Backend changes, badge styling variants beyond "orange", mobile tap-target tuning.
+
+Key unknowns: RESOLVED
+- Button: **hidden** (absent) when 0 or >1 areas selected.
+- "New" badge: **UTC-based rolling 7×24h** check against `Date.now()`.
 
 ---
 
-## #669 feat(e2e): admin moderation journey — approve and reject listings via UI
+## #747 feat(backend): GET /api/public/areas/trending — top areas by 30d activity
 
 AC:
-- [ ] New file `e2e/journey/admin-moderation.spec.ts` exists.
-- [ ] AM1: Admin storageState, navigate to `/admin/listings`, click "Approve" button on test listing row. Assert toast `/listing approved/i` (actual: "Listing Approved"). Assert listing row removed from queue OR status badge changes.
-- [ ] AM2: Second PENDING_REVIEW listing created via API in `beforeAll`. Admin opens reject dialog (click "Reject"), selects `REJECTION_CODES` option from the Select component, fills rejection note textarea, clicks "Reject Listing". Assert toast `/listing rejected/i`. Assert row removed.
-- [ ] AM3: Broker storageState, navigate to `/broker/listings`, find rejected listing from AM2, assert REJECTED badge. Navigate to detail, assert rejection reason text visible.
-- [ ] `beforeAll` creates two PENDING_REVIEW listings via API (broker creates + submits). `afterAll` cleans up both via admin delete API.
-- [ ] L4 API-only approve block in `listing-lifecycle.spec.ts` is deleted (coordinated with #671).
+- [ ] `GET /api/public/areas/trending` returns 200 with shape `{ areas: [{ areaKey, areaLabel, districtLabel, medianPricePaise, listingCount90d }] }`; no auth required.
+- [ ] `limit` query param defaults to 6, clamps silently to max 12 (no 400).
+- [ ] Results sorted by `listing_count_90d DESC` (per pre-flight decision).
+- [ ] Areas with zero listings are excluded from the response.
+- [ ] Empty dataset returns 200 with `{ "areas": [] }`, never 404.
+- [ ] Backend unit/integration test covers: sorted ordering, limit enforcement (default + clamp), zero-listing exclusion, empty-table case.
 
-Out of scope: "Return for Edits" flow. No changes to `PendingListings.tsx`.
-Key unknowns: PendingListings reads from Supabase directly (not Spring backend). The `beforeAll` creates listings via Spring API. If Supabase RLS or replication lag causes the listing to not appear in the admin queue, the test will need a `waitForSelector` with polling.
+Out of scope: New Flyway migration, changes to `AreaOverviewRollupJob`, caching layer, frontend wiring (#749).
+
+Key unknowns: RESOLVED
+- Sort column: `listing_count_90d DESC`.
+- `limit` > 12: **silent clamp to 12** (no 400). Optional: server-side metrics logging for clamped requests.
 
 ---
 
-## #670 feat(e2e): saved areas journey — save area, delete area, alert toggle
-
-**⚠️ ISSUE-CORRECTION PENDING — awaiting user decision on SA1 scope.**
-
-Finding: The "Save Area" UI button does not exist. `useSaveArea()` hook is implemented but has zero callers. There is no UI for a user to initiate saving an area.
-
-Options surfaced to user:
-- **Option A:** Remove SA1 from scope. Implement SA2 + SA3 only (API-seeded area in `beforeAll`). Add TODO comment for SA1.
-- **Option B:** Separate prerequisite issue to build the Save Area UI button first. SA1 blocked on that issue.
-
-AC (SA2 + SA3 only — pending Option A confirmation):
-- [ ] New file `e2e/journey/saved-areas.spec.ts` exists.
-- [ ] `beforeAll` creates a saved area via `POST /api/saved-areas` API (documented API-assist fixture).
-- [ ] SA2: Navigate to `/saved-areas`, click `aria-label="Remove saved area"` button, confirm if dialog, assert area removed from list.
-- [ ] SA3: Navigate to `/saved-areas`, click the alerts Switch, assert state changes, reload, assert state persisted.
-- [ ] `afterAll` cleans up any remaining test saved areas via API.
-- [ ] Spec includes `// TODO SA1: test save-area UI when useSaveArea() is wired to a UI button` comment.
-
-Out of scope: SA1 (UI save interaction — no button exists). No changes to `SavedAreas.tsx`.
-Key unknowns: NONE for SA2/SA3 once user confirms Option A.
-
----
-
-## #671 refactor(e2e): move API-only backend tests out of Playwright
-
-**Scope correction:** BC1 is in `listing-lifecycle.spec.ts` (lines 552-698), NOT `user-journeys.spec.ts`. Both L4 and BC1 API-only blocks are in the same file.
+## #749 feat(frontend): wire Trending Localities section on landing page
 
 AC:
-- [ ] `e2e/listing-lifecycle.spec.ts` L4 (API-only approve block, lines ~218-333): Deleted. Note: #669 also deletes from `listing-lifecycle.spec.ts` (L4 block). #669 must merge before #671 to avoid conflict — coordinate on which PR owns which block.
-- [ ] `e2e/listing-lifecycle.spec.ts` BC1 (API-only cascade block, lines ~552-698): All `page.evaluate(fetch(...))` assertion blocks removed or ported. `BookingControllerTest.java` covers HTTP 201 happy path; assess whether cascade integration coverage exists in `@SpringBootTest` — if not, port to `BookingCascadeIntegrationTest.java`.
-- [ ] No API-only `page.evaluate(fetch(...))` assertions remain in `listing-lifecycle.spec.ts`. `user-journeys.spec.ts` is NOT touched by this issue.
-- [ ] Existing Playwright UI tests (L1, L2, L3, L5, LC1 in `listing-lifecycle.spec.ts`) are not affected.
+- [ ] Landing page Trending Localities section calls `GET /api/public/areas/trending?limit=6` on mount (no auth header) and renders locality cards with `areaLabel`, `districtLabel`, price from `medianPricePaise` (formatted as INR crores/lakhs), and `listingCount90d` formatted as "N properties".
+- [ ] Each card's "Explore Area →" link navigates to `/area-overview?areaKey=<areaKey>` using the exact key returned by the API.
+- [ ] While fetching, exactly 3 skeleton cards are rendered in place of the section body.
+- [ ] On error response or empty `areas: []`, the entire Trending Localities section (including header) is hidden.
+- [ ] "Trending" badge renders on each card.
+- [ ] Desktop shows 3 cards initially with a "Show more" button revealing all 6.
 
-Out of scope: `user-journeys.spec.ts` (no BC1 there — already confirmed). No new E2E UI tests.
-Key unknowns: BC1 cascade coverage in `@SpringBootTest` may be missing — if porting needed, PR gains a backend component; flag to user before proceeding.
+Out of scope: Backend changes, authenticated variant, mobile-specific card layout, analytics on card clicks.
 
----
-
-## #672 chore(e2e): Playwright config — smoke/journey/integration-ui project split + CI update
-
-AC:
-- [ ] `playwright.config.ts` has 4 projects: `smoke` (existing files in e2e/ root), `journey` (matches `e2e/journey/**/*.spec.ts`), `integration-ui` (matches `e2e/integration-ui/**/*.spec.ts`), and `full` (runs all three).
-- [ ] `package.json` adds scripts: `test:e2e:smoke`, `test:e2e:journey`, `test:e2e:full`.
-- [ ] `.github/workflows/ci.yml` `playwright-pr` job: `npx playwright test e2e/quick-smoke.spec.ts` → `npx playwright test --project=smoke`.
-- [ ] `.github/workflows/e2e-post-deploy.yml`: `npm run test:e2e` → `npm run test:e2e:full` (or equivalent).
-- [ ] `e2e/journey/` and `e2e/integration-ui/` directories exist before this PR merges. If landing before other PRs, add `.gitkeep` files so config is valid.
-
-Out of scope: No test file content changes.
-Key unknowns: NONE.
+Key unknowns: RESOLVED
+- Expansion: **"Show more" button** reveals cards 4–6 (one-step progressive disclosure).
+- Price formatting: `medianPricePaise` → **≥ 1 Cr: "₹X.XX Cr"** | **≥ 1 L and < 1 Cr: "₹XX L"**.
