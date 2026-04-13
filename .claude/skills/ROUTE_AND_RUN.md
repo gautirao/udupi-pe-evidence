@@ -353,16 +353,17 @@ Include the following `focus_areas` when reviewing test-only PRs. These are BLOC
 
 **Activation condition:** `.claude/state/current-pr-fixlog.md` exists AND `code-review-cycles` ≥ 1. When this condition is met, this protocol replaces the default full-diff review. When the condition is NOT met (cycle 1, or no fixlog), use the standard Code-Reviewer Invocation Protocol above.
 
-**Precondition check (orchestrator, before invoking reviewer):** Verify `baseline_sha` in the fixlog is not `NONE`. If it is `NONE`, capture `git rev-parse HEAD` now and write it to the fixlog before proceeding — this is the SHA the reviewer will use for the delta.
+**Baseline refresh rule (orchestrator, before every cycle-2+ reviewer invocation):** Always capture a fresh baseline at the current HEAD immediately before invoking the reviewer — run `git rev-parse HEAD` and write the result to `baseline_sha` in the fixlog, overwriting any prior value. This baseline is scoped to the next delta-review cycle only; it is refreshed again before each subsequent cycle. Do not reuse a stale baseline from a prior cycle.
 
 **Reviewer Task prompt — prepend verbatim before the standard review brief:**
-> "This is a delta-only re-review (cycle 2+). Do the following in order:
+> "This is a delta-only re-review (cycle 2+). This review is scoped to unresolved findings and the code delta since the last review — you must not re-review the full PR from the beginning. Do the following in order:
 > 1. Read `.claude/state/current-pr.md` for AC and out-of-scope context.
-> 2. Read `.claude/state/current-pr-fixlog.md`. Identify all Findings rows where Status is OPEN or STILL_OPEN — these are the only findings requiring a verdict.
-> 3. Run `git diff <baseline_sha> HEAD` (substituting the actual SHA from the fixlog) to see only the changes since the last review.
+> 2. Read `.claude/state/current-pr-fixlog.md`. Identify all Findings rows where Status is OPEN or STILL_OPEN — these are the only prior findings requiring a verdict.
+> 3. Run `git diff <baseline_sha>..HEAD` (substituting the actual SHA from the fixlog) to see only the changes since the last review.
 > 4. For each OPEN/STILL_OPEN finding: state FIXED, STILL_OPEN, or NEW (new problem introduced by the fix, at a potentially different location). Include a file:line reference for each verdict.
-> 5. Do NOT re-raise findings already marked FIXED or DEFERRED unless a new issue is introduced adjacent to them.
-> 6. Re-verify any AC item that the fix may have affected."
+> 5. You may raise NEW findings for problems introduced by the fix that were not in the original review — these get the next monotonic ID in the fixlog.
+> 6. Do NOT re-raise findings already marked FIXED or DEFERRED unless a new issue is introduced adjacent to them.
+> 7. Re-verify any AC item that the fix may have affected."
 
 **What must NOT happen on cycle 2+:** re-reading the full PR diff from the beginning; re-raising already-FIXED findings; producing a fresh full review brief that ignores the fixlog.
 

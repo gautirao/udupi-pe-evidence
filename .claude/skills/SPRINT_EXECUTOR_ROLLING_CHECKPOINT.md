@@ -250,7 +250,7 @@ PENDING  ← replaced with qa-fast output after step 4 runs
    - Reviewer confirms resolved → Status = `FIXED`
    - Reviewer finds it still present → Status = `STILL_OPEN`
    - Reviewer identifies a new issue introduced by the fix → add a new row with next ID, Status = `NEW`
-   - Engineer explicitly deferred with orchestrator/user agreement → Status = `DEFERRED`
+   - Engineer explicitly deferred with orchestrator/user agreement → Status = `DEFERRED`. **Required:** populate the Notes column of that Findings row with `defer: <one-line reason> | agreed: <orchestrator|user — context>`. A DEFERRED row with empty Notes is treated as STILL_OPEN for merge-gate purposes. Also record the deferral in checkpoint Risks.
 
    **Merge-blocking rule (explicit):**
    | Status | Blocks merge? |
@@ -259,7 +259,7 @@ PENDING  ← replaced with qa-fast output after step 4 runs
    | STILL_OPEN | YES — fix did not resolve the finding |
    | NEW | YES — fix introduced a new problem |
    | FIXED | NO |
-   | DEFERRED | NO — requires explicit orchestrator/user agreement recorded in checkpoint Risks |
+   | DEFERRED | NO — only if Notes column is populated with reason and agreement; empty Notes = STILL_OPEN |
 
 4. **Reviewer Baseline SHA** — `baseline_sha` is the `git rev-parse HEAD` captured **immediately before the cycle-2 reviewer is invoked** (i.e. after the engineer's fix is committed, before the reviewer runs). This is the exact commit the reviewer is evaluating, which enables future delta-review. On a clean cycle-1 APPROVE (no re-review needed): capture HEAD at that point instead.
 
@@ -267,7 +267,7 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
 **Cycle 2 code-reviewer invocation:** ROUTE_AND_RUN's Delta-Only Re-Review Protocol (Code-Reviewer Invocation Protocol § "Delta-Only Re-Review Protocol") activates automatically when `code-review-cycles` ≥ 1 in the fixlog. ROUTE_AND_RUN constructs the scoped reviewer prompt; SPRINT_EXECUTOR does not duplicate it.
 
-SPRINT_EXECUTOR's only obligation before the cycle-2 reviewer runs: verify `baseline_sha` in the fixlog is not `NONE`. If it is, capture `git rev-parse HEAD` and write it to the fixlog now. ROUTE_AND_RUN's precondition check also enforces this, but SPRINT_EXECUTOR may set it earlier (immediately after the engineer's fix commit) for clarity.
+SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a fresh `git rev-parse HEAD` and overwrite `baseline_sha` in the fixlog. This is done immediately before invoking the reviewer — not once at cycle 2 and reused. Each reviewer cycle gets its own baseline. ROUTE_AND_RUN's Baseline refresh rule also enforces this, but SPRINT_EXECUTOR captures it first for clarity.
 
 **5a. Post-ROUTE_AND_RUN checks (after ROUTE_AND_RUN completes and returns control)**
 
@@ -384,10 +384,11 @@ SPRINT_EXECUTOR's only obligation before the cycle-2 reviewer runs: verify `base
    - Why: <1 sentence from issue title/spec>
    - Deviations: <OUT OF SCOPE ACs from Spec invalidation field, or NONE>
    - Risks: <items from Risks field, or NONE>
-   - Cycles: engineer=<n> review=<n> qa=<n> | Delta re-review: YES/NO | Findings: <fixed> resolved, <new_count> new, <deferred> deferred
+   - Cycles: engineer=<n> review=<n> qa=<n> | Delta re-review: YES/NO | Findings: <fixed> resolved, <new_count> new
+   - Deferred: <ID> — <reason> | agreed: <context> (one line per DEFERRED finding; omit section if none)
    ---
    ```
-   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source all `Cycles` / findings fields from the fixlog.
+   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source `Cycles` / findings counts from fixlog counters. Source each DEFERRED line from the Notes column of DEFERRED rows in the Findings table — copy verbatim, do not paraphrase.
 
 3. **Delete state files:**
    ```
