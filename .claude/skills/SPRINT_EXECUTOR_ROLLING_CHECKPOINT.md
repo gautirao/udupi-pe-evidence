@@ -135,7 +135,7 @@ For each GitHub issue (PR N):
    - Preserve all other checkpoint fields unchanged.
 
    **On resume, if `Status: IN_PROGRESS` is found** — a PR was in-flight when context was lost. Before proceeding to any new work:
-   - **Read fixlog first** — if `.claude/state/current-pr-fixlog.md` exists, read it immediately. Restore `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, `baseline_sha`, Open Findings (OPEN rows), and QA Failures. This is the authoritative state source — do NOT rely on memory for these fields.
+   - **Read fixlog first** — if `.claude/state/current-pr-fixlog.md` exists, read it immediately. Restore `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, `baseline_sha`, Findings (all rows), and QA Failures. This is the authoritative state source — do NOT rely on memory for these fields.
    - Check for a dangling branch: `git branch --list "*pr-<issue-number>*"` (where issue-number is from `Current PR:`)
    - Check for uncommitted changes on main: `git status --short`
    - **Branch exists with commits** → engineer completed but PR lifecycle didn't finish. Surface to user: "RE-XX was in-flight. Branch `<name>` exists with work. Resume from step 5 (git+PR) or restart the PR from scratch?"
@@ -163,7 +163,7 @@ For each GitHub issue (PR N):
 ## Reviewer Baseline
 baseline_sha: NONE
 
-## Open Findings
+## Findings
 | ID | Severity | File | Line | Status |
 |----|----------|------|------|--------|
 
@@ -240,28 +240,33 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
 2. **Increment counters** — for each agent type that ran: `engineer-cycles` +1 per engineer run, `code-review-cycles` +1 per code-reviewer run, `qa-verify-cycles` +1 per QA verification run.
 
-3. **Open Findings — full lifecycle:**
+3. **Findings — full lifecycle:**
 
-   **ID stability rule:** Finding IDs (F1, F2, …) are assigned once on cycle 1 and NEVER regenerated. New findings discovered on later cycles get the next sequential ID (e.g. F3 if F1–F2 already exist). Existing IDs are only updated in-place.
+   **ID monotonicity rule:** Finding IDs (F1, F2, …) are monotonically assigned and NEVER renumbered. F1 assigned on cycle 1 is always F1. New findings on later cycles get the next ID in sequence (e.g. if F1–F2 exist, a new finding is F3). Existing IDs are updated in-place only.
 
-   **Cycle 1 (first REQUEST_CHANGES):** Extract each BLOCKING finding into the Open Findings table with a new sequential ID and Status=`OPEN`.
+   **Cycle 1 (first REQUEST_CHANGES):** Extract each BLOCKING finding into the Findings table with a new sequential ID and Status=`OPEN`.
 
-   **Cycle 2+ (after engineer fix, reviewer re-run):** For each previously-OPEN row:
+   **Cycle 2+ (after engineer fix, reviewer re-run):** For each row in the Findings table:
    - Reviewer confirms resolved → Status = `FIXED`
    - Reviewer finds it still present → Status = `STILL_OPEN`
-   - Reviewer identifies a new issue in the fix → add a NEW row with next ID, Status = `NEW`
-   - Engineer explicitly deferred with agreement → Status = `DEFERRED` (only if orchestrator/user agreed)
+   - Reviewer identifies a new issue introduced by the fix → add a new row with next ID, Status = `NEW`
+   - Engineer explicitly deferred with orchestrator/user agreement → Status = `DEFERRED`
 
-   **STILL_OPEN and NEW findings block merge** (same as original BLOCKING). DEFERRED findings are logged in checkpoint Risks and do not block merge.
+   **Merge-blocking rule (explicit):**
+   | Status | Blocks merge? |
+   |--------|---------------|
+   | OPEN | YES — finding not yet reviewed after fix |
+   | STILL_OPEN | YES — fix did not resolve the finding |
+   | NEW | YES — fix introduced a new problem |
+   | FIXED | NO |
+   | DEFERRED | NO — requires explicit orchestrator/user agreement recorded in checkpoint Risks |
 
-4. **Reviewer Baseline SHA** — capture `git rev-parse HEAD` and write `baseline_sha` to the fixlog in EITHER of these cases (whichever comes first):
-   - Immediately after the engineer's fix commit on cycle 2 (before cycle-2 re-review runs) — this is the preferred capture point as it represents the state the reviewer will evaluate
-   - When code-reviewer first returns APPROVE on cycle 1 (no re-review needed)
+4. **Reviewer Baseline SHA** — `baseline_sha` is the `git rev-parse HEAD` captured **immediately before the cycle-2 reviewer is invoked** (i.e. after the engineer's fix is committed, before the reviewer runs). This is the exact commit the reviewer is evaluating, which enables future delta-review. On a clean cycle-1 APPROVE (no re-review needed): capture HEAD at that point instead.
 
 5. **QA Failures** — if QA returned FAIL: populate the QA Failures table with failing spec names and one-line summaries.
 
 **Cycle 2 code-reviewer invocation note:** When ROUTE_AND_RUN orchestrates a code-reviewer re-run (after REQUEST_CHANGES + engineer fix cycle), the orchestrator MUST prepend the following to the code-reviewer Task prompt — this is the only reviewer prompt change required:
-> "Read `.claude/state/current-pr-fixlog.md`. Focus this review on the Open Findings rows where Status=OPEN. For each finding, state FIXED or STILL_OPEN with a file:line reference. Do NOT re-review the full diff."
+> "Read `.claude/state/current-pr-fixlog.md`. Focus this review on the Findings rows where Status=OPEN or STILL_OPEN. For each finding, state FIXED, STILL_OPEN, or NEW (if the fix introduced a new problem) with a file:line reference. Do NOT re-review the full diff."
 
 **5a. Post-ROUTE_AND_RUN checks (after ROUTE_AND_RUN completes and returns control)**
 
@@ -362,7 +367,7 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
 **9b. Append ship log entry + close fixlog** — after the checkpoint write:
 
-1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract: `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, count of FIXED findings, count of total Open Findings rows. Derive `Re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO.
+1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract: `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, count of FIXED findings, count of total Findings rows. Derive `Re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO.
 
 2. **Append to `.claude/SHIP_LOG.md`:**
    ```
