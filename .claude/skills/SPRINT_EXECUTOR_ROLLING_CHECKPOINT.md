@@ -265,8 +265,9 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
 5. **QA Failures** — if QA returned FAIL: populate the QA Failures table with failing spec names and one-line summaries.
 
-**Cycle 2 code-reviewer invocation note:** When ROUTE_AND_RUN orchestrates a code-reviewer re-run (after REQUEST_CHANGES + engineer fix cycle), the orchestrator MUST prepend the following to the code-reviewer Task prompt — this is the only reviewer prompt change required:
-> "Read `.claude/state/current-pr-fixlog.md`. Focus this review on the Findings rows where Status=OPEN or STILL_OPEN. For each finding, state FIXED, STILL_OPEN, or NEW (if the fix introduced a new problem) with a file:line reference. Do NOT re-review the full diff."
+**Cycle 2 code-reviewer invocation:** ROUTE_AND_RUN's Delta-Only Re-Review Protocol (Code-Reviewer Invocation Protocol § "Delta-Only Re-Review Protocol") activates automatically when `code-review-cycles` ≥ 1 in the fixlog. ROUTE_AND_RUN constructs the scoped reviewer prompt; SPRINT_EXECUTOR does not duplicate it.
+
+SPRINT_EXECUTOR's only obligation before the cycle-2 reviewer runs: verify `baseline_sha` in the fixlog is not `NONE`. If it is, capture `git rev-parse HEAD` and write it to the fixlog now. ROUTE_AND_RUN's precondition check also enforces this, but SPRINT_EXECUTOR may set it earlier (immediately after the engineer's fix commit) for clarity.
 
 **5a. Post-ROUTE_AND_RUN checks (after ROUTE_AND_RUN completes and returns control)**
 
@@ -296,6 +297,7 @@ PENDING  ← replaced with qa-fast output after step 4 runs
    3. No gate in the GSR shows FAIL
    4. No gate uses an invalid or vague SKIPPED reason (e.g. `SKIPPED(no E2E infra)`, `SKIPPED(server not running)`, `SKIPPED(not needed)` — see ROUTE_AND_RUN Step 3 invalid skip reasons)
    5. `All gates satisfied: YES` is present in the emitted GSR
+   6. **Fixlog findings gate:** if `.claude/state/current-pr-fixlog.md` exists, the Findings table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved findings to the user before proceeding. DEFERRED findings are allowed only if orchestrator/user agreement was recorded in checkpoint Risks during step 4b. A missing or empty fixlog (Trivial/Doc-only, no code-reviewer ran) satisfies this condition.
 
    If any condition is false, STOP. Resolve the gap before proceeding. Post-hoc GSR reconstruction (writing it after the PR is created) is **banned**.
 
@@ -367,7 +369,12 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
 **9b. Append ship log entry + close fixlog** — after the checkpoint write:
 
-1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract: `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, count of FIXED findings, count of total Findings rows. Derive `Re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO.
+1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract:
+   - `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`
+   - Count of FIXED findings, count of NEW findings (rows with Status=NEW), count of DEFERRED findings
+   - Count of total Findings rows
+   - Derive `Delta re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO
+   - If fixlog does not exist (no code-reviewer ran): use zeros and `Delta re-review: NO`
 
 2. **Append to `.claude/SHIP_LOG.md`:**
    ```
@@ -377,10 +384,10 @@ PENDING  ← replaced with qa-fast output after step 4 runs
    - Why: <1 sentence from issue title/spec>
    - Deviations: <OUT OF SCOPE ACs from Spec invalidation field, or NONE>
    - Risks: <items from Risks field, or NONE>
-   - Cycles: engineer=<n> review=<n> qa=<n> | Re-review: YES/NO | Findings resolved: <fixed>/<total>
+   - Cycles: engineer=<n> review=<n> qa=<n> | Delta re-review: YES/NO | Findings: <fixed> resolved, <new_count> new, <deferred> deferred
    ---
    ```
-   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source `Cycles` / `Re-review` / `Findings resolved` from the fixlog.
+   Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source all `Cycles` / findings fields from the fixlog.
 
 3. **Delete state files:**
    ```

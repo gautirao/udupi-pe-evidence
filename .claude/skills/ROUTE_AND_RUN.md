@@ -348,6 +348,26 @@ Include the following `focus_areas` when reviewing test-only PRs. These are BLOC
   ```
   Example from code-reviewer: `ROUTE_AND_RUN_WARNING: MED This PR introduces a second error response format. Consider standardizing in a follow-up.`
   After each agent completes, parse agent output for any `ROUTE_AND_RUN_WARNING:` lines and collect them. Append all collected warnings to the checkpoint's Risks section with prefix `[<agent-name>] <severity>: <message>`.
+
+#### Delta-Only Re-Review Protocol (Cycle 2+)
+
+**Activation condition:** `.claude/state/current-pr-fixlog.md` exists AND `code-review-cycles` ≥ 1. When this condition is met, this protocol replaces the default full-diff review. When the condition is NOT met (cycle 1, or no fixlog), use the standard Code-Reviewer Invocation Protocol above.
+
+**Precondition check (orchestrator, before invoking reviewer):** Verify `baseline_sha` in the fixlog is not `NONE`. If it is `NONE`, capture `git rev-parse HEAD` now and write it to the fixlog before proceeding — this is the SHA the reviewer will use for the delta.
+
+**Reviewer Task prompt — prepend verbatim before the standard review brief:**
+> "This is a delta-only re-review (cycle 2+). Do the following in order:
+> 1. Read `.claude/state/current-pr.md` for AC and out-of-scope context.
+> 2. Read `.claude/state/current-pr-fixlog.md`. Identify all Findings rows where Status is OPEN or STILL_OPEN — these are the only findings requiring a verdict.
+> 3. Run `git diff <baseline_sha> HEAD` (substituting the actual SHA from the fixlog) to see only the changes since the last review.
+> 4. For each OPEN/STILL_OPEN finding: state FIXED, STILL_OPEN, or NEW (new problem introduced by the fix, at a potentially different location). Include a file:line reference for each verdict.
+> 5. Do NOT re-raise findings already marked FIXED or DEFERRED unless a new issue is introduced adjacent to them.
+> 6. Re-verify any AC item that the fix may have affected."
+
+**What must NOT happen on cycle 2+:** re-reading the full PR diff from the beginning; re-raising already-FIXED findings; producing a fresh full review brief that ignores the fixlog.
+
+**Invariants preserved:** `ac_checklist` (step 3 of standard protocol), `review_mode` (step 1), and `model` override (step 2) remain unchanged. ADVISORY-FIX and ADVISORY-DEFER still apply to any new issues discovered on cycle 2+.
+
 - `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
 
