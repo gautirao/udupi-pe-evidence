@@ -159,6 +159,8 @@ For each GitHub issue (PR N):
 | engineer-cycles | 0 |
 | code-review-cycles | 0 |
 | qa-verify-cycles | 0 |
+| qa-targeted-reruns | 0 |
+| qa-full-reruns | 0 |
 
 ## Reviewer Baseline
 baseline_sha: NONE
@@ -168,8 +170,8 @@ baseline_sha: NONE
 |----|----------|------|------|--------|
 
 ## QA Failures
-| ID | Spec | Test | Status | Notes |
-|----|------|------|--------|-------|
+| ID | Spec | Test | Status | Notes | Rerun Scope |
+|----|------|------|--------|-------|-------------|
 
 ## Agent Ledger
 | Step | Agent | Action | Notes |
@@ -238,7 +240,7 @@ PENDING  ← replaced with qa-fast output after step 4 runs
    | N | code-reviewer | APPROVE or REQUEST_CHANGES | findings=\<count\> |
    | N | qa | PASS or FAIL | specs=\<count\> |
 
-2. **Increment counters** — for each agent type that ran: `engineer-cycles` +1 per engineer run, `code-review-cycles` +1 per code-reviewer run, `qa-verify-cycles` +1 per QA verification run.
+2. **Increment counters** — for each agent type that ran: `engineer-cycles` +1 per engineer run, `code-review-cycles` +1 per code-reviewer run, `qa-verify-cycles` +1 per QA verification run. For QA cycle 2+ only: also increment `qa-targeted-reruns` +1 if the scope was test-level or spec-level; increment `qa-full-reruns` +1 if the scope was full suite. Derive scope from the `Rerun Scope` column populated in item 5 below — if any row shows `FULL`, the run was a full-suite run.
 
 3. **Findings — full lifecycle:**
 
@@ -267,13 +269,15 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
    **Identity rule:** QA failure rows are identified by `Spec + Test` name. IDs (Q1, Q2, …) are monotonically assigned on cycle 1 and never renumbered. A row for `area-overview.spec.ts :: AO3` is always Q2 (or whatever ID it was assigned) across all cycles. Do not drop or recreate rows.
 
-   **Cycle 1 (first FAIL):** For each failing test, write one row with a new sequential ID (Q1, Q2, …) and Status=`OPEN`. `Test` may be `*` if only spec-level granularity is available.
+   **Cycle 1 (first FAIL):** For each failing test, write one row with a new sequential ID (Q1, Q2, …), Status=`OPEN`, and `Rerun Scope`=`-` (not yet scoped — scope is populated on cycle 2+ only). `Test` may be `*` if only spec-level granularity is available.
 
    **Cycle 2+ (after engineer fix, QA re-run):** For each existing row in the QA Failures table:
    - Test now passes → Status = `FIXED`
    - Test still fails → Status = `STILL_OPEN`
-   - Newly failing test not in prior rows → add new row with next ID, Status = `NEW`
+   - Newly failing test not in prior rows → add new row with next ID, Status = `NEW`, `Rerun Scope`=`-`
    - Explicitly accepted for later follow-up → Status = `DEFERRED` (requires orchestrator/user agreement; populate Notes: `defer: <reason> | agreed: <context>`)
+
+   **Mandatory Rerun Scope logging (cycle 2+):** After each cycle-2+ QA run, update the `Rerun Scope` column for every row that was targeted in that run: test-level (`--grep "test name"`), spec-level (`<file>.spec.ts`), or `FULL` (full suite fallback). Rows not targeted in this cycle retain their prior value. This makes QA scope auditable from the fixlog.
 
    **QA merge-blocking rule:**
    | Status | Blocks merge? |
@@ -284,7 +288,11 @@ PENDING  ← replaced with qa-fast output after step 4 runs
    | FIXED | NO |
    | DEFERRED | NO — only if Notes populated with reason and agreement; empty Notes = STILL_OPEN |
 
+   **QA cycle cap:** Maximum 2 QA invocations per PR. If STILL_OPEN or NEW rows remain after QA cycle 2, do NOT invoke QA a third time — escalate via ROUTE_AND_RUN's Failure Routing Protocol. NEW failures raised during a targeted rerun do NOT reset the cycle counter: the cap counts QA runs (invocations), not failure rows. Q3 added on cycle 2 is still counted within cycle 2.
+
 **Cycle 2+ QA invocation:** ROUTE_AND_RUN's QA Targeted Rerun Protocol (Agent Invocation Rules § "QA Targeted Rerun Protocol") activates automatically when `qa-verify-cycles` ≥ 1 in the fixlog. ROUTE_AND_RUN constructs the scoped rerun prompt; SPRINT_EXECUTOR does not duplicate it. SPRINT_EXECUTOR's only obligation: ensure the QA Failures table in the fixlog is populated with OPEN rows before QA cycle 2 runs (this happens naturally via step 4b item 5 above).
+
+**QA identity vs reviewer delta (separation rule):** QA cycle 2+ targets failures by `Spec + Test` identity from the fixlog — it does NOT use `git diff` or `baseline_sha`. `baseline_sha` and delta diffing are exclusively for code-reviewer re-runs (see Delta-Only Re-Review Protocol in ROUTE_AND_RUN). These are two distinct protocols: reviewer scope = code changed since baseline SHA; QA scope = tests that failed in a prior cycle. Never cross-apply.
 
 **Cycle 2 code-reviewer invocation:** ROUTE_AND_RUN's Delta-Only Re-Review Protocol (Code-Reviewer Invocation Protocol § "Delta-Only Re-Review Protocol") activates automatically when `code-review-cycles` ≥ 1 in the fixlog. ROUTE_AND_RUN constructs the scoped reviewer prompt; SPRINT_EXECUTOR does not duplicate it.
 
@@ -318,8 +326,8 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    3. No gate in the GSR shows FAIL
    4. No gate uses an invalid or vague SKIPPED reason (e.g. `SKIPPED(no E2E infra)`, `SKIPPED(server not running)`, `SKIPPED(not needed)` — see ROUTE_AND_RUN Step 3 invalid skip reasons)
    5. `All gates satisfied: YES` is present in the emitted GSR
-   6. **Fixlog findings gate:** if `.claude/state/current-pr-fixlog.md` exists, the Findings table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved findings to the user before proceeding. DEFERRED findings are allowed only if orchestrator/user agreement was recorded in checkpoint Risks during step 4b. A missing or empty fixlog (Trivial/Doc-only, no code-reviewer ran) satisfies this condition.
-   7. **QA Failures gate:** if the fixlog exists, the QA Failures table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved QA failures to the user before proceeding. DEFERRED failures are allowed only if orchestrator/user agreement was recorded in checkpoint Risks (defer reason and agreement in Notes column required, same rule as Findings). A fixlog with no QA Failures rows (QA passed on cycle 1, or no QA ran) satisfies this condition.
+   6. **Fixlog findings gate:** if `.claude/state/current-pr-fixlog.md` exists, the Findings table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved findings to the user before proceeding. DEFERRED findings are allowed only if the Notes column for that row is non-empty (`defer: <reason> | agreed: <context>`) — a DEFERRED row with an empty Notes column is treated as STILL_OPEN for gate purposes regardless of its Status field. A missing or empty fixlog (Trivial/Doc-only, no code-reviewer ran) satisfies this condition.
+   7. **QA Failures gate:** if the fixlog exists, the QA Failures table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved QA failures to the user before proceeding. DEFERRED failures are allowed only if the Notes column for that row is non-empty (`defer: <reason> | agreed: <context>`) — a DEFERRED row with an empty Notes column is treated as STILL_OPEN for gate purposes regardless of its Status field. A fixlog with no QA Failures rows (QA passed on cycle 1, or no QA ran) satisfies this condition.
 
    If any condition is false, STOP. Resolve the gap before proceeding. Post-hoc GSR reconstruction (writing it after the PR is created) is **banned**.
 
@@ -392,12 +400,13 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
 **9b. Append ship log entry + close fixlog** — after the checkpoint write:
 
 1. **Read fixlog** — read `.claude/state/current-pr-fixlog.md` to extract:
-   - `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`
+   - `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, `qa-targeted-reruns`, `qa-full-reruns`
    - From Findings table: count of FIXED, count of NEW, count of DEFERRED rows; total rows
    - From QA Failures table: count of FIXED, count of NEW (Status=NEW), count of DEFERRED rows; total rows
    - Derive `Delta re-review: YES` if `code-review-cycles` ≥ 2, otherwise NO
    - Derive `QA targeted rerun: YES` if `qa-verify-cycles` ≥ 2, otherwise NO
-   - If fixlog does not exist: use zeros and NO for both derived fields
+   - Derive `new_failures_detected` = count of QA Failures rows with Status=NEW (failures first introduced on cycle 2+)
+   - If fixlog does not exist: use zeros and NO for all derived fields
 
 2. **Append to `.claude/SHIP_LOG.md`:**
    ```
@@ -410,6 +419,7 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    - Cycles: engineer=<n> review=<n> qa=<n> | Delta re-review: YES/NO | QA targeted rerun: YES/NO
    - Findings: <fixed> resolved, <new_count> new (omit if zero findings)
    - QA: <fixed> resolved, <new_count> new (omit if no QA failures occurred)
+   - QA Summary: qa_cycles=<n> targeted_reruns=<n> full_runs=<n> new_failures=<n> (omit entire line if qa-verify-cycles=0)
    - Deferred: <ID> — <reason> | agreed: <context> (one line per DEFERRED finding or QA failure; omit section if none)
    ---
    ```
