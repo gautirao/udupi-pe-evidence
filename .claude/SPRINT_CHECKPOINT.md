@@ -13,7 +13,7 @@ Phase A (serial — AppLayout conflict):
 
 Phase B (parallel after A merges):
 3. ✅ #747 → PR #752 merged — GET /api/public/areas/trending backend endpoint (2026-04-13)
-4. ⬜ #745 — listing detail two-column layout + areaKey fix in ListingResponse
+4. ✅ #745 → PR #753 merged — listing detail two-column layout + areaKey in ListingResponse (2026-04-13)
 
 Phase C (after #745):
 5. ⬜ #746 — map "View Area Overview" button + New badge on listing cards
@@ -32,6 +32,6 @@ Pre-flight decisions (all resolved):
 - #749 expansion: "Show more" button reveals cards 4–6
 - #749 price formatting: ≥1 Cr → "₹X.XX Cr"; ≥1 L and <1 Cr → "₹XX L"
 
-Status: IN PROGRESS · 3/6 complete
-Next PR: #745 (frontend — listing detail two-column layout + areaKey fix)
+Status: IN PROGRESS · 4/6 complete
+Next PR: #746 (Phase C — map View Area Overview button + New badge on listing cards)
 === ROLLING CHECKPOINT END ===
