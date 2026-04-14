@@ -90,19 +90,34 @@ If any condition is unconfirmed or uncertain: serialize. Never parallelize by de
 ## Sprint Start (Once per sprint, not per PR)
 
 Before the first PR:
-0. **Resolve current sprint iteration ID** — fetch the Sprint field's iteration list and identify the active iteration:
+0. **Declare sprint identity** (see `## Sprint Identity` above) and resolve the fields that identity model requires:
+
+   **If Model A (Iteration-based):**
+   Fetch the Sprint field's iteration list and identify the active iteration:
    ```bash
    gh api graphql -f query='{ node(id: "PVTIF_lAHOAAVnaM4BSWI7zg_6HeY") { ... on ProjectV2IterationField { configuration { iterations { id title startDate } } } } }' --jq '.data.node.configuration.iterations'
    ```
    Store the active iteration's `id` in the checkpoint preamble as `Current sprint iteration ID:`. All project item status updates and sprint assignment use this ID.
 
-   Also build the **issue → project item ID map** — needed for status updates via `gh project item-edit`:
+   **If Model B (Milestone-based):**
+   Record the declared milestone (name + number) and sprint label in the checkpoint preamble as `Milestone:` and `Sprint label:`. The `Sprint` iteration field is waived — do NOT set it when assigning Project items. Skip `Current sprint iteration ID:`.
+
+   **Both models — build the issue → project item ID map** (needed for status reconciliation via `gh project item-edit` when issues are tracked in Project v2; required for Model A, recommended for Model B):
    ```bash
    gh api graphql -f query='{ node(id: "PVT_kwHOAAVnaM4BSWI7") { ... on ProjectV2 { items(first: 50) { nodes { id content { ... on Issue { number title } } } } } } }' --jq '.data.node.items.nodes | map(select(.content != null)) | map({number: .content.number, title: .content.title, itemId: .id})'
    ```
-   Store this map in the checkpoint preamble as `Project item IDs:` (format: `#NNN → <item-id>`).
+   Store this map in the checkpoint preamble as `Project item IDs:` (format: `#NNN → <item-id>`). If a sprint issue is not yet a Project item, add it: `gh project item-add 1 --owner gautirao --url <issue-url>`.
 
-1. Fetch all sprint issue numbers + titles from the current GitHub Project iteration — store in checkpoint preamble as `Sprint issues:` list. Filter the project item list (from step 0) to only items assigned to the current sprint iteration. Issues not yet in the project can be added via `gh project item-add 1 --owner gautirao --url <issue-url>`.
+1. **Fetch sprint issue numbers + titles** — method depends on identity model:
+
+   **Model A:** Filter the project item list (from step 0) to only items assigned to the current sprint iteration.
+
+   **Model B:** Query issues by milestone + label:
+   ```bash
+   gh issue list --milestone "<milestone-name>" --label "<sprint-label>" --state all --json number,title,state --limit 50
+   ```
+
+   Store in checkpoint preamble as `Sprint issues:` list. Issues not yet in the Project can be added via `gh project item-add 1 --owner gautirao --url <issue-url>` (Project tracking is required for Model A, recommended for Model B).
 2. Fetch full descriptions for all issues (one `gh issue view <number> --json title,body` call each) — needed for spec enrichment and team-lead pre-flight.
 3. **Spec enrichment (all issues, once)** — invoke the `spec-enricher` agent (Task tool) with all issue IDs, titles, and descriptions:
 
@@ -480,7 +495,7 @@ When all issues in the execution order have been merged and closed:
    - **FAIL** → do NOT mark sprint as complete. Update checkpoint with `Status: NEEDS FOLLOW-UP` and `Integration validation: FAIL — [failure summary]`. Play `afplay /System/Library/Sounds/Basso.aiff`. Surface the failure to the user with options: (a) investigate and fix as a follow-up PR (create issue), (b) revert the suspected PR (see Revert Protocol below), (c) accept the failure and close the sprint with a known risk. Do not proceed to archiving until the user decides.
    - **Skip condition:** if the sprint contained only doc-only or trivial PRs with no code changes, skip integration validation and record `Integration validation: SKIPPED(no code PRs)`.
 
-2. **Write final checkpoint** — update `.claude/SPRINT_CHECKPOINT.md` with `Status: SPRINT COMPLETE`, `Integration validation: PASS`, and `Next PR: (none)`.
+2. **Run the Sprint Completion Gate** (see `## Sprint Completion Gate (hard)` below). Only if every check passes may you write `Status: SPRINT COMPLETE (<Model A | Model B> — <identity>)` to `.claude/SPRINT_CHECKPOINT.md`. Also record `Integration validation: PASS` and `Next PR: (none)`. If any gate check fails, stop: do NOT write the completion status, do NOT archive, surface the failing checks and corrective commands to the user.
 3. **Archive** — copy the completed checkpoint to the sprint archives directory:
    ```bash
    mkdir -p .claude/sprint-archives
@@ -562,9 +577,13 @@ git revert <merge-commit-sha> --no-edit
 
 === ROLLING CHECKPOINT START ===
 Sprint: <name/id>
+Sprint identity: <Model A — iteration-based | Model B — milestone-based>
+  Iteration: <iteration title + ID>          # Model A only — omit line for Model B
+  Milestone: <milestone name (#N, state)>    # Model B only — omit line for Model A
+  Sprint label: <label name>                 # Model B only — omit line for Model A
 GitHub Project: RE Trends (project 1, PVT_kwHOAAVnaM4BSWI7)
-Current sprint iteration ID: <iteration-id from Sprint Start step 0>
-Project item IDs: #NNN → <item-id> | #NNN → <item-id> | ... (all sprint issues)
+Current sprint iteration ID: <iteration-id>  # Model A only — set to WAIVED for Model B
+Project item IDs: #NNN → <item-id> | #NNN → <item-id> | ... (all sprint issues; required Model A, recommended Model B)
 Sprint issues: <#NNN Title | #NNN Title | ...> (all issues, one line, GitHub issue numbers)
 Execution order: <#NNN | #NNN | ...> (team-lead recommended order, or ORIGINAL if no reorder)
 Dependencies: <RE-XX depends on RE-YY [confirmed|likely|speculative] | NONE>

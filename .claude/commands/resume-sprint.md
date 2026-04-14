@@ -85,7 +85,11 @@ rtk gh pr list --state merged --limit 10 --json number,title,mergedAt --jq 'sort
 ```
 The most recent merged PR that matches a sprint issue pattern is the last completed PR.
 
-**Detect the active sprint iteration:**
+**Detect active sprint — dual-model:**
+
+Read `.claude/SPRINT_CHECKPOINT.md` first to determine the declared `Sprint identity:` (Model A or Model B). If the checkpoint is absent or lacks the `Sprint identity:` field, try Model A detection first, then Model B.
+
+**Model A detection — active iteration:**
 ```bash
 rtk gh api graphql -f query='{
   node(id: "PVTIF_lAHOAAVnaM4BSWI7zg_6HeY") {
@@ -97,9 +101,18 @@ rtk gh api graphql -f query='{
   }
 }' --jq '.data.node.configuration.iterations'
 ```
-The active sprint is the lowest-numbered iteration that has at least one open issue. Do NOT use start dates — sprints run ahead of schedule.
+The active Model A sprint is the lowest-numbered iteration that has at least one open issue (matched via the project items query below). Do NOT use start dates — sprints run ahead of schedule.
+
+**Model B detection — open milestone + sprint label:**
+```bash
+rtk gh api "repos/gautirao/udupi-property-explorer/milestones?state=open" --jq '.[] | select(.open_issues > 0) | {number, title, open_issues, closed_issues}'
+rtk gh issue list --milestone "<milestone-title>" --label "sprint-*" --state open --json number,title,labels,milestone --limit 50
+```
+The active Model B sprint is the open milestone whose issues also carry a `sprint-*` label. If multiple candidate milestones exist, prefer the one named in `SPRINT_CHECKPOINT.md`; otherwise surface to user.
 
 **Fetch remaining open issues in the sprint:**
+
+_Model A path:_
 ```bash
 rtk gh api graphql -f query='{
   node(id: "PVT_kwHOAAVnaM4BSWI7") {
@@ -116,7 +129,9 @@ rtk gh api graphql -f query='{
   }
 }' --jq '.data.node.items.nodes | map(select(.content != null and .content.state == "OPEN")) | map({number: .content.number, title: .content.title, status: .status.name, iteration: .iteration.title, itemId: .id})'
 ```
-Filter to the active sprint's `iterationId`. If no issues match: Mode C applies.
+Filter to the active sprint's `iterationId`. If no issues match AND Model B detection also finds nothing: Mode C applies.
+
+_Model B path:_ use the milestone + label query above. Issues do NOT need to be Project items for Model B membership; Project items (when present) are for `Status` reconciliation only.
 
 **Read checkpoint (cache — Mode B only):**
 ```bash
@@ -136,8 +151,8 @@ ls .claude/sprint-enriched-specs.md
 | Source | Role | Precedence |
 |--------|------|-----------|
 | `STATE.md` | Execution state (Mode A trigger only) | Highest — checked first |
-| GitHub sprint state (ProjectV2) | Sprint membership | Authoritative for Mode B/C |
-| `SPRINT_CHECKPOINT.md` | Execution order cache | Cache only — never overrides active execution state |
+| GitHub sprint state — Model A: Project v2 Sprint iteration; Model B: milestone + sprint label | Sprint membership | Authoritative for Mode B/C (dual-model) |
+| `SPRINT_CHECKPOINT.md` | Execution order cache + declared `Sprint identity:` | Cache only for membership; authoritative for which identity model to use |
 | `HANDOFF.md` | Advisory context | Advisory only — never overrides a newer STATE.md |
 
 Rules:
@@ -209,7 +224,7 @@ Checkpoint file: .claude/SPRINT_CHECKPOINT.md
 
 Last completed PR: [PR number + title]
 Next PR: [issue number + title from checkpoint or first remaining open issue]
-Active sprint iteration: [iteration title]
+Sprint identity: [Model A — iteration "<title>" | Model B — milestone "<name>" + label "<label>"]
 Remaining open issues: [count] — [issue numbers]
 
 [If enriched specs absent in checkpoint:]
@@ -224,10 +239,12 @@ Checkpoint is self-contained. Read it, verify state, and proceed to the Next PR 
 Resume sprint execution.
 
 Resume Mode: C — Kickoff
-No active sprint issues found in GitHub Project.
+No active sprint found via either identity model:
+- Model A: no Project v2 iteration has open issues.
+- Model B: no open milestone + sprint-* label pair has open issues.
 No active execution state found in STATE.md.
 
-Action required: Begin a new sprint. Run Sprint Start steps 0–5b per SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md.
+Action required: Begin a new sprint. Run Sprint Start steps 0–5b per SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md — declare identity model (A or B) first.
 [If user has indicated a sprint to start, include sprint name/issues here.]
 ```
 
@@ -237,6 +254,7 @@ Action required: Begin a new sprint. Run Sprint Start steps 0–5b per SPRINT_EX
 
 - This command is read-only — it generates a prompt; it does not execute sprint work.
 - Mode A does NOT require GitHub sprint labels. STATE.md fully drives execution — validation sprints, ad hoc work, and label-free sprints all work.
+- Sprint identity is dual-model (see `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md` § Sprint Identity). When the checkpoint declares `Sprint identity: Model B`, do not fall back to iteration-based detection. When the checkpoint is missing, try Model A first, then Model B; never assert "no sprint" after only checking iterations.
 - If `SPRINT_CHECKPOINT.md` shows `Status: SPRINT COMPLETE` and STATE.md is also terminal, Mode C applies — tell the user the sprint is done and ask which sprint to start next.
 - The generated resume prompt must be complete enough that a fresh conversation can resume without needing this command again.
 - Do NOT rewrite existing GitHub GraphQL queries — preserve them exactly (they are correct for Mode B).
