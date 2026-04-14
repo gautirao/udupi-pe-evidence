@@ -1,7 +1,9 @@
 === ROLLING CHECKPOINT START ===
 Sprint: Design Polish Sprint 1
-GitHub Project: RE Trends (project 1, PVT_kwHOAAVnaM4BSWI7)
-Milestone: design-polish-sprint-1
+Sprint identity: Model B — milestone-based
+  Milestone: design-polish-sprint-1 (#7, closed 2026-04-14)
+  Sprint label: sprint-design-polish-1
+  Project: RE Trends (PVT_kwHOAAVnaM4BSWI7) — items present, Status=Done, Sprint iteration waived
 
 Sprint issues: #744, #745, #746, #747, #748, #749
 Enriched specs: SEE .claude/sprint-enriched-specs.md (all unknowns resolved 2026-04-13)
@@ -32,5 +34,10 @@ Pre-flight decisions (all resolved):
 - #749 expansion: "Show more" button reveals cards 4–6
 - #749 price formatting: ≥1 Cr → "₹X.XX Cr"; ≥1 L and <1 Cr → "₹XX L"
 
-Status: SPRINT COMPLETE · 6/6
+Status: SPRINT COMPLETE (Model B — milestone-based) · 6/6
+Completion gate (all checks PASS, 2026-04-14):
+- Universal: 6/6 issues CLOSED with merged closing PRs (#750–#755) ✓
+- Model B: milestone + sprint label on all 6 ✓
+- Model B (optional Project): Status=Done on all 6, Sprint iteration waived ✓
+- Model B: milestone #7 closed ✓
 === ROLLING CHECKPOINT END ===

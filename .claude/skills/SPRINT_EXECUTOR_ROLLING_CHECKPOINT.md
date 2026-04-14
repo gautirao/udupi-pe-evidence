@@ -29,6 +29,33 @@ These IDs are stable project constants. Sprint iteration IDs change per sprint �
 
 ---
 
+## Sprint Identity
+
+Every sprint MUST declare its identity at Sprint Start using exactly ONE of the two models below. The chosen model is recorded in the checkpoint preamble as `Sprint identity:` and is used consistently by resume, reporting, and the completion gate.
+
+**Model A — Iteration-based**
+- Identity = GitHub Project v2 `Sprint` iteration field value (e.g. `Sprint 25`).
+- Every issue MUST be a Project item with `Sprint` field set to that iteration ID.
+- Use for calendar-bound sprints aligned to a numbered iteration.
+
+**Model B — Milestone-based**
+- Identity = GitHub milestone name + sprint label pair (e.g. milestone `design-polish-sprint-1` + label `sprint-design-polish-1`).
+- Every issue MUST have both the declared milestone AND the declared sprint label.
+- If issues are also added to the Project, the `Sprint` iteration field MUST be left unset (waived) so it doesn't drift into a numbered iteration via project automation.
+- Use for theme-bound sprints that do not map cleanly to a 7-day calendar iteration.
+
+Record in checkpoint preamble:
+```
+Sprint identity: <Model A | Model B>
+  Iteration: <iteration title + ID>          # Model A only
+  Milestone: <milestone name + number>        # Model B only
+  Sprint label: <label name>                  # Model B only
+```
+
+Mixing both models within a single sprint is a workflow violation — pick one at Sprint Start and stick with it.
+
+---
+
 ## Operating Mode
 
 - Exactly 1 PR per run
@@ -621,6 +648,34 @@ Note: Subsequent checkpoints omit `Sprint issues`, `Execution order`, `Dependenc
 
 User instruction:
 "To resume, say: Resume sprint execution. The checkpoint file at .claude/SPRINT_CHECKPOINT.md will be read automatically."
+
+---
+
+## Sprint Completion Gate (hard)
+
+A sprint MUST NOT be declared `SPRINT COMPLETE` — in the checkpoint, in STATE.md, or in any user-facing report — unless every one of the following conditions holds. This is the single authoritative gate; do not soften or skip any step.
+
+**Universal preconditions (both models):**
+1. Every issue in `Sprint issues:` is `CLOSED` on GitHub.
+2. Every issue has its closing PR linked via `closingIssuesReferences`, and every such PR is `MERGED`.
+
+**Model A (Iteration-based) additional conditions:**
+3. Every issue is present as an item in Project v2 `PVT_kwHOAAVnaM4BSWI7` ("RE Trends").
+4. Every issue's Project `Sprint` iteration field matches the declared iteration ID.
+5. Every issue's Project `Status` field = `Done` (option `25c24fa1`).
+
+**Model B (Milestone-based) additional conditions:**
+3. Every issue is assigned to the declared milestone.
+4. Every issue carries the declared sprint label.
+5. If any issues are present as Project items (optional under Model B):
+   a. `Status` = `Done` on every such item.
+   b. `Sprint` iteration field is UNSET (waived) on every such item — never a numbered iteration.
+6. The declared milestone is `closed` on GitHub (`gh api -X PATCH repos/<owner>/<repo>/milestones/<n> -f state=closed`).
+
+**Gate protocol:**
+- Run the checks above immediately before flipping `Status:` to `SPRINT COMPLETE`.
+- If ANY check fails: emit the failing check and the specific issue numbers that don't match. Do not flip status. Do not update STATE.md. Play `afplay /System/Library/Sounds/Basso.aiff` and surface to user with the exact corrective commands (add to project, set Status, set/clear Sprint, close milestone).
+- The declaration string in checkpoints, STATE.md, and reports must include the identity model, e.g. `SPRINT COMPLETE (Model B — milestone design-polish-sprint-1)`.
 
 ---
 
