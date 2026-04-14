@@ -85,11 +85,26 @@ rtk gh pr list --state merged --limit 10 --json number,title,mergedAt --jq 'sort
 ```
 The most recent merged PR that matches a sprint issue pattern is the last completed PR.
 
-**Detect active sprint — dual-model:**
+**Detect active sprint — dual-model, checkpoint-preferred:**
 
-Read `.claude/SPRINT_CHECKPOINT.md` first to determine the declared `Sprint identity:` (Model A or Model B). If the checkpoint is absent or lacks the `Sprint identity:` field, try Model A detection first, then Model B.
+Read `.claude/SPRINT_CHECKPOINT.md` first. The resolution rule is:
 
-**Model A detection — active iteration:**
+1. **Checkpoint declares `Sprint identity:` explicitly** → use the recorded values directly. No discovery query needed.
+   - `Sprint identity: Model A` → use `Iteration:` (title + ID) and `Current sprint iteration ID:` verbatim; skip all Model B queries.
+   - `Sprint identity: Model B` → use `Milestone:` and `Sprint label:` verbatim; skip all Model A queries.
+2. **Checkpoint is absent OR lacks `Sprint identity:`** (old-format archive, new conversation) → run the fallback discovery below.
+3. **`HANDOFF.md` exists with a sprint identity block** → advisory only; use it to bias disambiguation when fallback discovery returns multiple candidates, never as authoritative identity.
+
+**Grace rule for older archives:** checkpoints written before the dual-model policy had no `Sprint identity:` field. When resuming such a checkpoint, infer the model from what IS recorded:
+- `Current sprint iteration ID:` present and not `WAIVED` → treat as Model A; use that ID.
+- Only `Milestone:` + sprint-like label visible in commit history → treat as Model B; run fallback discovery scoped to that milestone.
+- Neither present → run full fallback discovery.
+
+---
+
+**Fallback discovery (only when checkpoint is absent/silent on identity):**
+
+_Model A fallback — active iteration:_
 ```bash
 rtk gh api graphql -f query='{
   node(id: "PVTIF_lAHOAAVnaM4BSWI7zg_6HeY") {
@@ -101,14 +116,22 @@ rtk gh api graphql -f query='{
   }
 }' --jq '.data.node.configuration.iterations'
 ```
-The active Model A sprint is the lowest-numbered iteration that has at least one open issue (matched via the project items query below). Do NOT use start dates — sprints run ahead of schedule.
+Active Model A sprint = lowest-numbered iteration with at least one open issue. Do NOT use start dates — sprints run ahead of schedule.
 
-**Model B detection — open milestone + sprint label:**
+_Model B fallback — open milestone + sprint-label discovery:_
+
+GitHub CLI `--label` matches exactly (no wildcards), so discovery is a two-step query:
 ```bash
+# Step 1: list open milestones with open issues
 rtk gh api "repos/gautirao/udupi-property-explorer/milestones?state=open" --jq '.[] | select(.open_issues > 0) | {number, title, open_issues, closed_issues}'
-rtk gh issue list --milestone "<milestone-title>" --label "sprint-*" --state open --json number,title,labels,milestone --limit 50
+
+# Step 2: for each candidate milestone, list its open issues with labels
+rtk gh issue list --milestone "<milestone-title>" --state open --json number,title,labels --limit 50 \
+  --jq '.[] | {number, title, sprintLabels: [.labels[].name | select(startswith("sprint-"))]}'
 ```
-The active Model B sprint is the open milestone whose issues also carry a `sprint-*` label. If multiple candidate milestones exist, prefer the one named in `SPRINT_CHECKPOINT.md`; otherwise surface to user.
+Active Model B sprint = the milestone whose open issues share a single consistent `sprint-*` label. If multiple candidates or multiple conflicting sprint-labels within one milestone: surface to user, do NOT guess.
+
+---
 
 **Fetch remaining open issues in the sprint:**
 
@@ -131,7 +154,11 @@ rtk gh api graphql -f query='{
 ```
 Filter to the active sprint's `iterationId`. If no issues match AND Model B detection also finds nothing: Mode C applies.
 
-_Model B path:_ use the milestone + label query above. Issues do NOT need to be Project items for Model B membership; Project items (when present) are for `Status` reconciliation only.
+_Model B path — exact milestone + label query (not glob):_
+```bash
+rtk gh issue list --milestone "<exact-milestone-title>" --label "<exact-sprint-label>" --state open --json number,title,labels,milestone --limit 50
+```
+Both values MUST be the exact recorded strings — GitHub CLI does not expand wildcards. If `<exact-sprint-label>` came from fallback discovery (not the checkpoint), surface the resolved pair to the user before proceeding. Issues do NOT need to be Project items for Model B membership; Project items (when present) are for `Status` reconciliation only.
 
 **Read checkpoint (cache — Mode B only):**
 ```bash
