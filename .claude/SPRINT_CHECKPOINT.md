@@ -19,7 +19,7 @@ Phase C (after #745):
 5. ✅ #746 → PR #754 merged — map "View Area Overview" button + New badge on listing cards (2026-04-13)
 
 Phase D (after #747 + #748):
-6. ⬜ #749 — wire Trending Localities section on landing page  ← NEXT
+6. ✅ #749 → PR #755 merged — wire Trending Localities section on landing page (2026-04-13)
 
 Pre-flight decisions (all resolved):
 - areaKey blocker: add areaKey field to ListingResponse + ListingResponseMapper as part of #745
@@ -32,6 +32,5 @@ Pre-flight decisions (all resolved):
 - #749 expansion: "Show more" button reveals cards 4–6
 - #749 price formatting: ≥1 Cr → "₹X.XX Cr"; ≥1 L and <1 Cr → "₹XX L"
 
-Status: IN PROGRESS · 5/6 complete
-Next PR: #749 (Phase D — wire Trending Localities section on landing page)
+Status: SPRINT COMPLETE · 6/6
 === ROLLING CHECKPOINT END ===
