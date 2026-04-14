@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MapFilters } from '../MapFilters';
+import { isNew } from '@/pages/Index';
 
 // jsdom doesn't provide ResizeObserver (used by Radix primitives)
 class ResizeObserverStub {
@@ -12,6 +14,13 @@ class ResizeObserverStub {
 globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 
 // ─── Mocks ────────────────────────────────────────────────────
+
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }));
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 vi.mock('@/hooks/usePropertyListings', () => ({
   useLocalities: vi.fn(() => ({ data: ['Udupi', 'Karkala'], isLoading: false })),
@@ -37,9 +46,12 @@ const defaultProps = {
   onSchoolSelect: vi.fn(),
   schoolBoardFilter: [] as string[],
   onSchoolBoardFilterChange: vi.fn(),
+  city: 'udupi',
+  onCityChange: vi.fn(),
+  allListings: [],
 };
 
-function renderFilters(props = defaultProps) {
+function renderFilters(props: React.ComponentProps<typeof MapFilters> = defaultProps) {
   return render(<MapFilters {...props} />);
 }
 
@@ -134,5 +146,74 @@ describe('MapFilters — clear button visibility', () => {
   it('shows Clear button when searchQuery is set', () => {
     renderFilters({ ...defaultProps, searchQuery: 'test' });
     expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
+  });
+});
+
+describe('MapFilters — View Area Overview button (F3)', () => {
+  it('does not render the button when areaOverviewKey is null', () => {
+    renderFilters({ ...defaultProps, areaOverviewKey: null });
+    expect(screen.queryByRole('button', { name: /view area overview/i })).not.toBeInTheDocument();
+  });
+
+  it('does not render the button when areaOverviewKey is undefined', () => {
+    renderFilters({ ...defaultProps, areaOverviewKey: undefined });
+    expect(screen.queryByRole('button', { name: /view area overview/i })).not.toBeInTheDocument();
+  });
+
+  it('renders the button and navigates with encoded URL when areaOverviewKey is set', async () => {
+    const user = userEvent.setup();
+    render(
+      <MapFilters
+        filters={{}}
+        onFiltersChange={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        selectedSchool={null}
+        onSchoolSelect={vi.fn()}
+        schoolBoardFilter={[]}
+        onSchoolBoardFilterChange={vi.fn()}
+        city="udupi"
+        onCityChange={vi.fn()}
+        allListings={[]}
+        areaOverviewKey="IN|KA|Udupi|Manipal"
+      />
+    );
+    const btn = screen.getByRole('button', { name: /view area overview/i });
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/area-overview?areaKey=IN%7CKA%7CUdupi%7CManipal'
+    );
+  });
+});
+
+// ─── isNew unit tests (F5) ────────────────────────────────────
+
+describe('isNew', () => {
+  it('returns false for null', () => {
+    expect(isNew(null)).toBe(false);
+  });
+
+  it('returns false for empty string', () => {
+    expect(isNew('')).toBe(false);
+  });
+
+  it('returns true for a date 6 days ago', () => {
+    const sixDaysAgo = new Date(Date.now() - 6 * 86400_000).toISOString();
+    expect(isNew(sixDaysAgo)).toBe(true);
+  });
+
+  it('returns true at exactly the 7-day boundary (inclusive)', () => {
+    const now = 1_700_000_000_000; // fixed epoch — eliminates flakiness from real Date.now() drift
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const exactlySevenDays = new Date(now - 7 * 86400_000).toISOString();
+    expect(isNew(exactlySevenDays)).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('returns false for a date 8 days ago', () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 86400_000).toISOString();
+    expect(isNew(eightDaysAgo)).toBe(false);
   });
 });

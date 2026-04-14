@@ -19,6 +19,12 @@ import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY } from '@/lib/locali
 import { NearbySchoolsBadge } from '@/components/listing/NearbySchoolsBadge';
 import { useAuth } from '@/contexts/AuthContext';
 
+export const isNew = (createdAt: string | null | undefined): boolean => {
+  if (!createdAt) return false;
+  const t = new Date(createdAt).getTime();
+  return !isNaN(t) && Date.now() - t <= 7 * 24 * 60 * 60 * 1000;
+};
+
 export default function Index() {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -170,6 +176,17 @@ export default function Index() {
     return focusBounds;
   }, [focusBounds, fitTick]);
 
+  // Derive areaKey for "View Area Overview" button.
+  // Only relevant when exactly one locality is selected; read the first loaded listing that
+  // carries a non-null areaKey (field added in PR #745).
+  const areaOverviewKey = useMemo(() => {
+    if (filters.localities?.length !== 1) return null;
+    const selectedLocality = filters.localities[0];
+    return filteredListings.find(
+      (l) => l.locality === selectedLocality && l.areaKey
+    )?.areaKey ?? null;
+  }, [filters.localities, filteredListings]);
+
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     navigate(`/listing/${listing.id}`);
   };
@@ -197,6 +214,7 @@ export default function Index() {
               city={city}
               onCityChange={handleCityChange}
               allListings={listingsWithCoords}
+              areaOverviewKey={areaOverviewKey}
             />
           </div>
         )}
@@ -245,6 +263,7 @@ export default function Index() {
                 city={city}
                 onCityChange={handleCityChange}
                 allListings={listingsWithCoords}
+                areaOverviewKey={areaOverviewKey}
               />
             </SheetContent>
           </Sheet>
@@ -453,6 +472,11 @@ export default function Index() {
                       {selectedListing.property_type}
                     </Badge>
                     <NearbySchoolsBadge listingId={selectedListing.id} />
+                    {isNew(selectedListing.created_at) && (
+                      <Badge className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium hover:bg-orange-500">
+                        New
+                      </Badge>
+                    )}
                   </div>
                   <Button
                     variant="ghost"

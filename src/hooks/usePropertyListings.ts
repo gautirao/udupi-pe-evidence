@@ -86,6 +86,8 @@ export interface PropertyListing {
   reraValid?: boolean;
   /** Trust tier computed by backend: A, B, C, or D. Null for legacy rows pre-V46. */
   trustTier?: string | null;
+  /** Composite area key e.g. "IN|KA|Udupi|Manipal". Added in PR #745. */
+  areaKey?: string | null;
 }
 
 export interface PropertyFilters {
@@ -164,6 +166,7 @@ interface PolygonListingResponse {
   possessionStatus: string | null;
   reraValid: boolean;
   trustTier: string | null;
+  areaKey?: string | null;
 }
 
 interface PolygonPageResponse {
@@ -228,6 +231,7 @@ function polygonResponseToListing(r: PolygonListingResponse): PropertyListing & 
     possessionStatus: r.possessionStatus,
     reraValid: r.reraValid,
     trustTier: r.trustTier,
+    areaKey: r.areaKey ?? null,
     images,
   };
 }

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PropertyFilters, PropertyListing, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
 import { toggleLocality, isAtCap, computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
-import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown } from 'lucide-react';
+import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown, BarChart2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,9 @@ interface MapFiltersProps {
   city: string;
   onCityChange: (city: string) => void;
   allListings: PropertyListing[];
+  /** Derived composite area key when exactly one locality is selected and a listing
+   *  with a non-null areaKey is found. Controls visibility of the "View Area Overview" button. */
+  areaOverviewKey?: string | null;
 }
 
 const propertyTypes: { value: PropertyType; label: string }[] = [
@@ -56,7 +60,9 @@ export function MapFilters({
   city,
   onCityChange,
   allListings,
+  areaOverviewKey,
 }: MapFiltersProps) {
+  const navigate = useNavigate();
   const { data: localities = [] } = useLocalities(city);
   const { data: priceRange } = usePriceRange();
   const [localityOpen, setLocalityOpen] = useState(false);
@@ -158,6 +164,17 @@ export function MapFilters({
             </Button>
           )}
         </div>
+        {areaOverviewKey && (
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full mt-2 gap-1.5 text-xs h-8"
+            onClick={() => navigate(`/area-overview?areaKey=${encodeURIComponent(areaOverviewKey)}`)}
+          >
+            <BarChart2 className="h-3.5 w-3.5" />
+            View Area Overview
+          </Button>
+        )}
       </CardHeader>
 
       <CardContent className="flex-1 overflow-y-auto scrollbar-thin space-y-6">
