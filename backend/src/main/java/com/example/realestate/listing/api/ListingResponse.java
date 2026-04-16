@@ -3,6 +3,7 @@ package com.example.realestate.listing.api;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -62,7 +63,16 @@ public record ListingResponse(
         int earnedBadgeCount,
         /** Computed trust tier: A, B, C, or D. Null only for legacy rows before V46. */
         String trustTier,
-        String areaKey
+        String areaKey,
+        /**
+         * Ordered image gallery for the listing detail view.
+         *
+         * <p>Populated ONLY on single-listing endpoints (public detail, broker preview).
+         * List/batch endpoints always set this to an empty list to keep list payloads
+         * unchanged — {@code imageCount} + {@code firstImageUrl} remain the source of
+         * truth for list views.
+         */
+        List<ListingImageDTO> images
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

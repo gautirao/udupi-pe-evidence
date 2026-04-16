@@ -135,7 +135,7 @@ class ListingControllerTest {
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
-                    l.getTrustTier(), l.getAreaKey());
+                    l.getTrustTier(), l.getAreaKey(), java.util.List.of());
         });
         // Batch variant: delegate each listing through the single-listing stub.
         when(listingResponseMapper.toResponseList(any())).thenAnswer(inv -> {

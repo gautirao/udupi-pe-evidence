@@ -135,12 +135,24 @@ public class ListingResponseMapper {
     }
 
     private ListingResponse build(Listing l, String rejectionReason) {
-        var images = listingImageRepository.findByListingIdOrderByPositionAsc(l.getId());
+        // Single-listing path: use the gallery-ordering query (position ASC, id ASC tiebreaker,
+        // plus url-not-null filter) so the detail-page gallery is deterministic (#758).
+        var images = listingImageRepository.findGalleryByListingId(l.getId());
         int earnedBadgeCount = (int) dimensionRepository.countByListingIdAndBadgeState(l.getId(), "EARNED");
-        return build(l, rejectionReason, images, earnedBadgeCount);
+        List<ListingImageDTO> gallery = images.stream()
+                .map(i -> new ListingImageDTO(i.getUrl(), null, i.getPosition()))
+                .toList();
+        return build(l, rejectionReason, images, earnedBadgeCount, gallery);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
+        // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
+        // not balloon in size. List views render from firstImageUrl + imageCount (#758).
+        return build(l, rejectionReason, images, earnedBadgeCount, List.of());
+    }
+
+    private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images,
+                                  int earnedBadgeCount, List<ListingImageDTO> gallery) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -185,6 +197,6 @@ public class ListingResponseMapper {
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
                 l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
-                l.getTrustTier(), l.getAreaKey());
+                l.getTrustTier(), l.getAreaKey(), gallery);
     }
 }

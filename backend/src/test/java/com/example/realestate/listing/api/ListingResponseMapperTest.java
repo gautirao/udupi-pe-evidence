@@ -38,6 +38,7 @@ class ListingResponseMapperTest {
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
+        when(listingImageRepository.findGalleryByListingId(any())).thenReturn(List.of());
         // Default: no earned badges
         when(dimensionRepository.countByListingIdAndBadgeState(any(), anyString())).thenReturn(0L);
         when(dimensionRepository.findAllByListingIdInAndBadgeState(anyList(), anyString())).thenReturn(List.of());
@@ -97,7 +98,7 @@ class ListingResponseMapperTest {
 
         ListingImage img = new ListingImage();
         img.setUrl("https://example.com/photo.jpg");
-        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId()))
+        when(listingImageRepository.findGalleryByListingId(l.getId()))
                 .thenReturn(List.of(img));
 
         ListingResponse response = mapper.toResponse(l);
@@ -283,13 +284,122 @@ class ListingResponseMapperTest {
 
         ListingImage img = new ListingImage();
         img.setUrl("https://example.com/single.jpg");
-        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId()))
+        when(listingImageRepository.findGalleryByListingId(l.getId()))
                 .thenReturn(List.of(img));
 
         ListingResponse response = mapper.toResponse(l);
 
         assertThat(response.imageCount()).isEqualTo(1);
         assertThat(response.firstImageUrl()).isEqualTo("https://example.com/single.jpg");
+    }
+
+    // ==================== #758: single-listing response hydrates images[] =====
+
+    @Test
+    void toResponse_populatesImagesArray_withUrlAltPositionOnly() {
+        Listing l = buildListing("LIVE");
+
+        ListingImage img0 = new ListingImage();
+        img0.setId(UUID.randomUUID());
+        img0.setListingId(l.getId());
+        img0.setUrl("https://cdn.example.com/a.jpg");
+        img0.setPosition(0);
+        img0.setStoragePath("listing/a.jpg"); // must NOT leak into the response DTO
+
+        ListingImage img1 = new ListingImage();
+        img1.setId(UUID.randomUUID());
+        img1.setListingId(l.getId());
+        img1.setUrl("https://cdn.example.com/b.jpg");
+        img1.setPosition(1);
+        img1.setStoragePath("listing/b.jpg");
+
+        ListingImage img2 = new ListingImage();
+        img2.setId(UUID.randomUUID());
+        img2.setListingId(l.getId());
+        img2.setUrl("https://cdn.example.com/c.jpg");
+        img2.setPosition(2);
+        img2.setStoragePath("listing/c.jpg");
+
+        when(listingImageRepository.findGalleryByListingId(l.getId()))
+                .thenReturn(List.of(img0, img1, img2));
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.images()).hasSize(3);
+        assertThat(response.images().get(0).url()).isEqualTo("https://cdn.example.com/a.jpg");
+        assertThat(response.images().get(0).position()).isZero();
+        assertThat(response.images().get(0).alt()).isNull();
+        assertThat(response.images().get(1).url()).isEqualTo("https://cdn.example.com/b.jpg");
+        assertThat(response.images().get(1).position()).isEqualTo(1);
+        assertThat(response.images().get(2).url()).isEqualTo("https://cdn.example.com/c.jpg");
+        assertThat(response.images().get(2).position()).isEqualTo(2);
+        // Ordering is preserved end-to-end (positions ascend).
+        assertThat(response.images())
+                .extracting(ListingImageDTO::url)
+                .containsExactly(
+                        "https://cdn.example.com/a.jpg",
+                        "https://cdn.example.com/b.jpg",
+                        "https://cdn.example.com/c.jpg");
+        // Whitelist: ListingImageDTO must expose only url, alt, position — no storage_path, id, listing_id.
+        assertThat(ListingImageDTO.class.getRecordComponents()).hasSize(3);
+        var componentNames = java.util.Arrays.stream(ListingImageDTO.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName)
+                .toList();
+        assertThat(componentNames).containsExactlyInAnyOrder("url", "alt", "position");
+    }
+
+    @Test
+    void toPublicResponse_populatesImagesArray() {
+        Listing l = buildListing("LIVE");
+        ListingImage img = new ListingImage();
+        img.setId(UUID.randomUUID());
+        img.setListingId(l.getId());
+        img.setUrl("https://cdn.example.com/only.jpg");
+        img.setPosition(0);
+        when(listingImageRepository.findGalleryByListingId(l.getId())).thenReturn(List.of(img));
+
+        ListingResponse response = mapper.toPublicResponse(l);
+
+        assertThat(response.images()).hasSize(1);
+        assertThat(response.images().get(0).url()).isEqualTo("https://cdn.example.com/only.jpg");
+    }
+
+    @Test
+    void toResponse_noImages_returnsEmptyImagesList() {
+        Listing l = buildListing("DRAFT");
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.images()).isEmpty();
+    }
+
+    // ==================== #758: list/batch paths keep images empty =====
+
+    @Test
+    void toResponseList_batchPath_leavesImagesEmptyToKeepListPayloadUnchanged() {
+        Listing l1 = buildListing("LIVE");
+        Listing l2 = buildListing("DRAFT");
+
+        ListingImage img1 = new ListingImage();
+        img1.setListingId(l1.getId());
+        img1.setUrl("https://example.com/l1.jpg");
+        img1.setPosition(0);
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of(img1));
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(l1, l2));
+
+        assertThat(responses).hasSize(2);
+        // firstImageUrl / imageCount still populated for list views — no regression.
+        ListingResponse r1 = responses.stream().filter(r -> r.id().equals(l1.getId())).findFirst().orElseThrow();
+        assertThat(r1.firstImageUrl()).isEqualTo("https://example.com/l1.jpg");
+        assertThat(r1.imageCount()).isEqualTo(1);
+        // But images[] is empty on list payloads — list endpoints stay lean.
+        assertThat(r1.images()).isEmpty();
+
+        ListingResponse r2 = responses.stream().filter(r -> r.id().equals(l2.getId())).findFirst().orElseThrow();
+        assertThat(r2.images()).isEmpty();
     }
 
     // ==================== trustTier is propagated ====================

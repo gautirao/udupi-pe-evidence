@@ -97,6 +97,7 @@ class PublicListingControllerTest {
 
         // Delegate public mapper to a minimal implementation.
         // CRITICAL: rejectionReason must always be null (security invariant tested explicitly).
+        // Single-listing path always populates images[] (#758).
         when(listingResponseMapper.toPublicResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
             int daysOnMarket = l.getFirstPublishedAt() != null
@@ -129,7 +130,11 @@ class PublicListingControllerTest {
                     l.getSellerType(), daysOnMarket, false, lastUpdatedAt,
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
-                    l.getTrustTier(), l.getAreaKey());
+                    l.getTrustTier(), l.getAreaKey(),
+                    java.util.List.of(
+                            new ListingImageDTO("https://cdn.example.com/img-a.jpg", null, 0),
+                            new ListingImageDTO("https://cdn.example.com/img-b.jpg", null, 1),
+                            new ListingImageDTO("https://cdn.example.com/img-c.jpg", null, 2)));
         });
 
         // Teaser mapper — single listing
@@ -206,7 +211,20 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.title").value("Sea View Villa"))
                 .andExpect(jsonPath("$.daysOnMarket").value(5))
                 .andExpect(jsonPath("$.backOnMarket").value(false))
-                .andExpect(jsonPath("$.firstPublishedAt").isNotEmpty());
+                .andExpect(jsonPath("$.firstPublishedAt").isNotEmpty())
+                // #758: single-listing response exposes images[] with non-empty URLs, ordered by position
+                .andExpect(jsonPath("$.images.length()").value(3))
+                .andExpect(jsonPath("$.images[0].url").value("https://cdn.example.com/img-a.jpg"))
+                .andExpect(jsonPath("$.images[0].position").value(0))
+                .andExpect(jsonPath("$.images[1].url").value("https://cdn.example.com/img-b.jpg"))
+                .andExpect(jsonPath("$.images[1].position").value(1))
+                .andExpect(jsonPath("$.images[2].url").value("https://cdn.example.com/img-c.jpg"))
+                .andExpect(jsonPath("$.images[2].position").value(2))
+                // Whitelist: no internal fields leak
+                .andExpect(jsonPath("$.images[0].storagePath").doesNotExist())
+                .andExpect(jsonPath("$.images[0].storage_path").doesNotExist())
+                .andExpect(jsonPath("$.images[0].id").doesNotExist())
+                .andExpect(jsonPath("$.images[0].listingId").doesNotExist());
     }
 
     // ==================== GET /{id} — DRAFT listing -> 404 ====================
