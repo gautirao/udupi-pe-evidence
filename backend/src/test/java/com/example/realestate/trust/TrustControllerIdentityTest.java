@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -249,6 +250,7 @@ class TrustControllerIdentityTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
         when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of());
         when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
+        when(supabaseStorageService.isEnabled()).thenReturn(true);
         when(supabaseStorageService.uploadObject(anyString(), anyString(), any(byte[].class), anyString()))
                 .thenReturn(Optional.of("https://storage.example.com/aadhaar.jpg"));
 
@@ -307,6 +309,7 @@ class TrustControllerIdentityTest {
             when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
             when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of());
             when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
+            when(supabaseStorageService.isEnabled()).thenReturn(true);
             when(supabaseStorageService.uploadObject(anyString(), anyString(), any(byte[].class), anyString()))
                     .thenReturn(Optional.of("https://storage.example.com/doc.jpg"));
             when(identityEvidenceRepository.save(any(IdentityEvidence.class))).thenAnswer(inv -> {
@@ -334,15 +337,21 @@ class TrustControllerIdentityTest {
     }
 
     @Test
-    void submitEvidence_storageDisabled_stillSucceeds() throws Exception {
+    void submitEvidence_storageDisabled_persistsSentinelPath() throws Exception {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerListing()));
         when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of());
         when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithPhone()));
-        // Storage returns empty (disabled) — controller still succeeds, recording the path
-        when(supabaseStorageService.uploadObject(anyString(), anyString(), any(byte[].class), anyString()))
-                .thenReturn(Optional.empty());
+        // Storage is disabled — controller must skip the upload and persist the
+        // "storage-disabled://" sentinel into identity_evidence.documentUrl so
+        // AdminTrustController's pending-list guard surfaces a null documentUrl cleanly.
+        when(supabaseStorageService.isEnabled()).thenReturn(false);
+
+        java.util.concurrent.atomic.AtomicReference<String> savedDocUrl = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> badgePath   = new java.util.concurrent.atomic.AtomicReference<>();
+
         when(identityEvidenceRepository.save(any(IdentityEvidence.class))).thenAnswer(inv -> {
             IdentityEvidence e = inv.getArgument(0);
+            savedDocUrl.set(e.getDocumentUrl());
             try {
                 java.lang.reflect.Field idField = IdentityEvidence.class.getDeclaredField("id");
                 idField.setAccessible(true);
@@ -353,7 +362,10 @@ class TrustControllerIdentityTest {
         ListingVerificationDimension dim = new ListingVerificationDimension();
         dim.setDimensionType("IDENTITY");
         dim.setBadgeState("PENDING");
-        when(badgeService.submitIdentityEvidence(any(), any(), anyString())).thenReturn(dim);
+        when(badgeService.submitIdentityEvidence(any(), any(), anyString())).thenAnswer(inv -> {
+            badgePath.set(inv.getArgument(2));
+            return dim;
+        });
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/identity/submit-evidence", LISTING_ID)
                         .file(validJpegFile())
@@ -363,6 +375,22 @@ class TrustControllerIdentityTest {
                         .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Identity evidence submitted for review"));
+
+        // Assert: upload was NOT attempted — service is disabled and controller short-circuits.
+        verify(supabaseStorageService, never())
+                .uploadObject(anyString(), anyString(), any(byte[].class), anyString());
+
+        // Assert: persisted documentUrl is prefixed with the sentinel.
+        assertThat(savedDocUrl.get())
+                .as("identity_evidence.documentUrl must be prefixed with storage-disabled:// when storage is off")
+                .isNotNull()
+                .startsWith("storage-disabled://");
+
+        // Assert: badge-service was given the same sentinel path (keeps audit trail consistent).
+        assertThat(badgePath.get())
+                .as("badge submission path must match the persisted sentinel path")
+                .isNotNull()
+                .startsWith("storage-disabled://");
     }
 
     @Test

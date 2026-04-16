@@ -479,14 +479,28 @@ public class TrustController {
         //    via GET /api/admin/trust/identity/{evidenceId}/document (admin-only).
         String ext = getExtensionFromContentType(file.getContentType());
         String storagePath = caller.userId() + "/" + documentType + "/" + UUID.randomUUID() + "." + ext;
-        try {
-            supabaseStorageService.uploadObject(
-                    "identity-evidence", storagePath, file.getBytes(),
-                    file.getContentType() != null ? file.getContentType() : "application/octet-stream"
-            );
-        } catch (Exception e) {
-            log.warn("Identity evidence upload to storage failed listingId={}", id, e);
-            // Fall through — storagePath is still recorded so the upload can be retried
+
+        // When storage is disabled (by flag OR missing credentials) the upload is a no-op
+        // and would leave an identity_evidence row pointing at an unreachable path. Write
+        // the "storage-disabled://" sentinel instead so AdminTrustController's pending-list
+        // handler surfaces a null documentUrl cleanly (see AdminTrustController#listPending).
+        // The operator sees the submission in the admin queue and can advise the user to
+        // resubmit once SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are configured.
+        String persistedPath = storagePath;
+        if (!supabaseStorageService.isEnabled()) {
+            persistedPath = SupabaseStorageService.STORAGE_DISABLED_SENTINEL_PREFIX + storagePath;
+            log.warn("Identity evidence submitted while Supabase storage is disabled — "
+                    + "persisting sentinel path listingId={} evidencePath={}", id, persistedPath);
+        } else {
+            try {
+                supabaseStorageService.uploadObject(
+                        "identity-evidence", storagePath, file.getBytes(),
+                        file.getContentType() != null ? file.getContentType() : "application/octet-stream"
+                );
+            } catch (Exception e) {
+                log.warn("Identity evidence upload to storage failed listingId={}", id, e);
+                // Fall through — storagePath is still recorded so the upload can be retried
+            }
         }
 
         // 6. Resolve profile
@@ -501,14 +515,14 @@ public class TrustController {
         evidence.setLegalName(legalName.trim());
         evidence.setPhoneNumber(phoneNumber.trim());
         evidence.setDocumentType(documentType);
-        evidence.setDocumentUrl(storagePath);
+        evidence.setDocumentUrl(persistedPath);
         evidence.setReviewState("PENDING");
         evidence.setUpdatedAt(now);
 
         IdentityEvidence saved = identityEvidenceRepository.save(evidence);
 
         // 8. Transition IDENTITY badge to PENDING (pass path, not public URL)
-        badgeService.submitIdentityEvidence(id, caller.userId(), storagePath);
+        badgeService.submitIdentityEvidence(id, caller.userId(), persistedPath);
 
         log.info("POST /api/listings/{}/trust/identity/submit-evidence -> 200 callerId={} evidenceId={}",
                 id, caller.userId(), saved.getId());

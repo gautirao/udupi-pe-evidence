@@ -18,8 +18,18 @@ import java.util.Optional;
 /**
  * Best-effort Supabase Storage object deletion via the Admin REST API (service_role key).
  *
- * <p>Enabled only when {@code supabase.storage.enabled=true}. Disabled by default so that
- * the backend starts cleanly in environments where SUPABASE_SERVICE_ROLE_KEY is not set.
+ * <p>Enabled only when {@code supabase.storage.enabled=true} AND both {@code SUPABASE_URL}
+ * and {@code SUPABASE_SERVICE_ROLE_KEY} are set. Disabled by default so that the backend
+ * starts cleanly in environments where the service-role key is not available.
+ *
+ * <p>If {@code enabled=true} but credentials are missing, the service logs a single WARN at
+ * startup, marks itself internally disabled, and continues booting. This allows prod
+ * operators to toggle {@code SUPABASE_STORAGE_ENABLED} without also supplying the two
+ * secrets in the same deploy. Status is surfaced at {@code /actuator/info} via
+ * {@link SupabaseStorageInfoContributor}.
+ *
+ * <p>HTTPS enforcement on {@code supabase.url} remains a hard fail — plaintext
+ * transmission of the service-role key is never permitted.
  *
  * <p>Per IMAGE_UPLOAD_FAILURE_MODES.md §3: Storage delete is non-fatal. DB row is always
  * deleted first; this call is best-effort. Orphan cleanup (§5) covers any missed objects.
@@ -29,8 +39,22 @@ public class SupabaseStorageService {
 
     private static final Logger log = LoggerFactory.getLogger(SupabaseStorageService.class);
 
+    /** Sentinel value persisted to {@code identity_evidence.document_url} when storage is disabled. */
+    public static final String STORAGE_DISABLED_SENTINEL_PREFIX = "storage-disabled://";
+
+    /** Reason surfaced at /actuator/info. */
+    enum StatusReason {
+        ENABLED("enabled"),
+        DISABLED_BY_FLAG("disabled-by-flag"),
+        MISSING_CREDENTIALS("missing-credentials");
+
+        private final String value;
+        StatusReason(String value) { this.value = value; }
+        public String value() { return value; }
+    }
+
     @Value("${supabase.storage.enabled:false}")
-    private boolean enabled;
+    private boolean configuredEnabled;
 
     @Value("${supabase.url:}")
     private String supabaseUrl;
@@ -41,6 +65,12 @@ public class SupabaseStorageService {
     @Value("${supabase.storage.bucket:listing-images}")
     private String bucket;
 
+    /** Effective runtime state. Set by {@link #validate()}. */
+    private boolean enabled;
+
+    /** Human-readable reason for the current state. Set by {@link #validate()}. */
+    private StatusReason statusReason = StatusReason.DISABLED_BY_FLAG;
+
     private final RestTemplate restTemplate;
 
     public SupabaseStorageService(RestTemplate restTemplate) {
@@ -48,28 +78,68 @@ public class SupabaseStorageService {
     }
 
     /**
-     * Fail fast on startup if storage is enabled but required credentials are absent.
-     * This prevents silent misconfiguration in production.
+     * Reconcile configuration into effective runtime state on startup.
+     *
+     * <p>Behaviour:
+     * <ul>
+     *   <li>{@code enabled=false} → internally disabled, reason=disabled-by-flag (info log).</li>
+     *   <li>{@code enabled=true} + both creds present + HTTPS URL → internally enabled (info log).</li>
+     *   <li>{@code enabled=true} + URL or key missing → graceful downgrade: WARN once, internally disabled,
+     *       reason=missing-credentials. No exception thrown.</li>
+     *   <li>{@code enabled=true} + non-HTTPS URL → hard fail ({@link IllegalStateException}).
+     *       Plaintext transmission of the service-role key is never permitted.</li>
+     * </ul>
      */
     @PostConstruct
     public void validate() {
-        if (enabled) {
-            if (supabaseUrl == null || supabaseUrl.isBlank()
-                    || serviceRoleKey == null || serviceRoleKey.isBlank()) {
-                throw new IllegalStateException(
-                        "supabase.storage.enabled=true but SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing. "
-                        + "Set both environment variables or disable with SUPABASE_STORAGE_ENABLED=false.");
-            }
-            // Enforce HTTPS to prevent plaintext transmission of the service role key
-            if (!supabaseUrl.startsWith("https://")) {
-                throw new IllegalStateException(
-                        "supabase.url must start with https:// — plaintext URLs are not permitted "
-                        + "as they would transmit the SUPABASE_SERVICE_ROLE_KEY unencrypted.");
-            }
-            log.info("SupabaseStorageService: enabled — bucket={} url={}", bucket, supabaseUrl);
-        } else {
+        if (!configuredEnabled) {
+            this.enabled = false;
+            this.statusReason = StatusReason.DISABLED_BY_FLAG;
             log.info("SupabaseStorageService: disabled (set SUPABASE_STORAGE_ENABLED=true to enable)");
+            return;
         }
+
+        boolean urlMissing = supabaseUrl == null || supabaseUrl.isBlank();
+        boolean keyMissing = serviceRoleKey == null || serviceRoleKey.isBlank();
+        if (urlMissing || keyMissing) {
+            this.enabled = false;
+            this.statusReason = StatusReason.MISSING_CREDENTIALS;
+            // Single WARN at startup — hot paths stay on log.debug.
+            log.warn("SupabaseStorageService: supabase.storage.enabled=true but {} is missing. "
+                    + "Service will run in disabled mode; uploads/signed-URLs/deletes are no-ops. "
+                    + "Set both SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to activate, "
+                    + "or set SUPABASE_STORAGE_ENABLED=false to silence this warning.",
+                    (urlMissing && keyMissing)
+                            ? "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY"
+                            : urlMissing ? "SUPABASE_URL" : "SUPABASE_SERVICE_ROLE_KEY");
+            return;
+        }
+
+        // Enforce HTTPS to prevent plaintext transmission of the service role key.
+        // This remains a hard fail — no graceful downgrade for an unsafe URL scheme.
+        if (!supabaseUrl.startsWith("https://")) {
+            throw new IllegalStateException(
+                    "supabase.url must start with https:// — plaintext URLs are not permitted "
+                    + "as they would transmit the SUPABASE_SERVICE_ROLE_KEY unencrypted.");
+        }
+
+        this.enabled = true;
+        this.statusReason = StatusReason.ENABLED;
+        log.info("SupabaseStorageService: enabled — bucket={} url={}", bucket, supabaseUrl);
+    }
+
+    /**
+     * @return {@code true} iff the service is live (configured enabled AND credentials present AND HTTPS).
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /**
+     * @return human-readable reason for the current effective state. Stable across reads.
+     */
+    public String getStatusReason() {
+        return statusReason.value();
     }
 
     /**
