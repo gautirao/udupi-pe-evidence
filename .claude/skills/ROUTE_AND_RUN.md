@@ -56,7 +56,7 @@ Derive the change tier from the triage fields. This is mechanical — do not ove
 |------|---------|----------|---------------|-------------------|---------------|-------------|---------------|
 | Doc-only | skip | skip | skip | skip | skip | skip | skips (doc pattern) |
 | Trivial | skip | see Trivial engineer-test rule below | skip | skip | skip | skip | best-effort local backstop |
-| Normal | required | required | required (sonnet) | only if Gate F | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
+| Normal | **conditional** (Standard: required; Lean: skip-eligible — see § Step 1C) | required | required (sonnet) | only if Gate F | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
 | High-risk | required | required | required (**opus**) | **required** | **conditional** (qa-fast signal) | **required** | best-effort local backstop |
 
 ### Trivial classification evidence (required)
@@ -107,6 +107,41 @@ Scenario walkthrough:
 ```
 
 If any checklist item fails or any required scenario produces an unexpected result, escalate to the user before committing.
+
+---
+
+## Step 1C — Execution Mode (v2)
+
+Execution mode is **derived** from classification and sprint context. It controls token spend and routing intensity. It does **not** alter classification criteria, gate requirements, or any High-risk behavior.
+
+| Mode | Conditions | Token effect |
+|------|-----------|-------------|
+| **Lean** | Normal + sprint PR 2+ + Phase 2 active + sprint risk cache covers touched area | qa-fast skip-eligible; style ADVISORY-FIX deferred to TECH_DEBT; ≤2 pre-E2E agents |
+| **Standard** | Normal + first sprint PR, OR Phase 2 not yet active | qa-fast required; all ADVISORY-FIX trigger re-run; ≤3 pre-E2E agents |
+| **Full Guardrail** | High-risk OR Gate F applies | qa-fast required; all findings mandatory; ≤4 pre-E2E agents |
+
+**Mode does NOT affect:** change classification, E2E gate, review gate, security gate, spec invalidation gate, materialization check, or orchestrator boundaries. High-risk is always Full Guardrail — no exception.
+
+**Agent budget** (non-gate agents — security-reviewer, qa verification, and qa E2E authoring are mandatory gates excluded from this count):
+
+| Mode | Max pre-E2E agents | Typical chain |
+|------|--------------------|---------------|
+| Doc-only | 0 | — |
+| Trivial | 1 | engineer (if code) |
+| Normal Lean | 2 | engineer + code-reviewer (if qa-fast triggers → +1, effectively Standard) |
+| Normal Standard | 3 | qa-fast + engineer + code-reviewer |
+| Full Guardrail | 4 | qa-fast + optional analyst + engineer + code-reviewer |
+
+If routing would exceed the mode budget: compress (e.g. merge architect pre-work into engineer pre-flight) or record one-line justification in the triage block. `team-lead` Mode 2 overrides budget by design — record justification. A budget overage without justification is a compliance gap.
+
+**Budget enforcement — STOP rule:** When the mode's agent budget is reached, the orchestrator MUST stop further non-gate agent routing immediately. Additional agents may only be invoked when required to satisfy a **mandatory quality gate**: engineer (code), code-reviewer, QA E2E, or security-reviewer. No other agent invocation is permitted after the budget ceiling without an explicit justification in the GSR.
+
+**Budget enforcement in GSR:** Add the following field when agent count exceeds the mode's typical ceiling:
+```
+budget_exceeded: YES — <explicit one-line justification>
+budget_override_for: <gate name>   ← include only when the overage is a mandatory gate invocation
+```
+When within budget, omit both fields (default: NO). Silent overuse without `budget_exceeded` is a compliance gap. `budget_override_for` without `budget_exceeded: YES` is invalid.
 
 ---
 
@@ -225,6 +260,55 @@ Rationale: each agent runs in a fresh context window. The capsule file is a stab
   > "Review the codebase and identify risks for this planned change: [paste issue/PR description].
   > The feature does not exist yet — scan the surrounding codebase and flag what could go wrong."
 
+  **qa-fast is always required when ANY condition holds (override Lean skip):**
+  1. Classification is High-risk
+  2. This is the first PR of the sprint (no sprint risk cache yet)
+  3. The PR touches a module, file path, or flow NOT referenced by a `qa-risk:` entry in `Sprint-level conventions`
+  4. Backend + frontend coupling is present in this change
+  5. Auth, session, or permission changes are in scope
+
+  **qa-fast may be skipped (Lean mode only) when ALL conditions hold:**
+  1. Execution Mode is Lean (see § Step 1C)
+  2. `Sprint-level conventions` in the checkpoint contains a `qa-risk:` entry explicitly covering the touched area or module
+  3. No new cross-layer coupling is present
+  4. No auth/session/permission-adjacent paths are in scope
+
+  **qa-risk scope constraint — skip is only valid when the entry covers the same surface:**
+  A `qa-risk:` entry may only justify skipping qa-fast if the current change touches the **same surface area**, meaning at least one of:
+  - Same frontend component(s) (same `.tsx` file or named component), OR
+  - Same backend endpoint(s) (same controller method or route path), OR
+  - Same database table(s)
+  AND none of the following differ from when the entry was written:
+  - API contract (request/response shape, new required field, changed error contract)
+  - Validation rules
+  - Cross-layer data flow path
+  If any of the above differ → qa-fast is REQUIRED (override Lean skip regardless of entry existence).
+
+  **Event/flow heuristic (additional override — qa-fast required even with same surface match):**
+  Even when the surface area matches, qa-fast MUST NOT be skipped if the change touches ANY of:
+  - Event handlers (`onClick`, `onSubmit`, `onChange`, `useEffect` with side effects)
+  - API calls (fetch, axios, service layer invocations)
+  - State transition logic (`setState`, reducers, form state, computed/derived state)
+  - Conditional rendering that affects flow (not purely cosmetic, e.g. hides/shows a form step)
+  These patterns change runtime behavior in ways the original qa-fast scan cannot cover. If any are present → qa-fast is REQUIRED regardless of `qa-risk:` entry existence.
+
+  **qa-risk invalidation triggers:**
+  If the current PR includes ANY of the following, `qa-risk:` entries with a **matching `<area>` prefix** are considered **stale** and qa-fast MUST run (even in Lean mode):
+  - DB schema change (migration touching existing tables or constraints)
+  - API contract change
+  - Auth, RLS, or permission logic change
+  - Change to a shared utility or core service used by the `qa-risk:` entry's area
+
+  **Invalidation is scoped, not global.** Only entries whose `<area>` prefix matches the affected area are invalidated. Example: a change to `dealer-form` invalidates `qa-risk: dealer-form::*` entries but does NOT invalidate `qa-risk: discovery-api::*` or `qa-risk: auth-flow::*`.
+
+  When qa-fast runs due to invalidation: its new findings MUST overwrite (not append to) the prior `qa-risk:` entries for that area. Add to the Gate Satisfaction Record:
+  ```
+  qa-risk-invalidated: <area>::* — <reason>
+  ```
+  A GSR missing this field when invalidation occurred is incomplete — reviewers should flag it.
+
+  When skipping qa-fast, record in Gate Satisfaction Record: `qa-fast: SKIPPED(Lean — qa-risk: <area>::<component|endpoint|table> covers same surface; no contract/validation/flow change)`. A skip record that does not cite the exact `qa-risk:` entry and confirm the scope constraint is **INVALID** — treat the PR as if qa-fast was not skipped.
+
 - Engineer agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`) MUST follow these rules — include them verbatim in every engineer Task prompt:
 
   **Pre-flight checklist (mandatory before writing any code):**
@@ -272,6 +356,12 @@ Rationale: each agent runs in a fresh context window. The capsule file is a stab
   - **ADVISORY-DEFER** — Tracked for follow-up but does not block the current PR. Examples: architecture concerns requiring design decisions, integration test infra that doesn't exist yet, cross-cutting refactors spanning multiple modules.
   - After code-reviewer completes, the orchestrator MUST re-invoke the engineer for ALL **ADVISORY-FIX** items (same cycle as BLOCKING, just lower priority). ADVISORY-DEFER items are logged in the checkpoint Risks section AND appended to `.claude/TECH_DEBT.md` (grouped by backend/frontend/database/infra). The tech debt log is reviewed at sprint end.
   - If the code-reviewer does not tag advisories, the orchestrator classifies them: default to FIX unless effort > 30 min or the fix requires design decisions spanning multiple modules. Log the classification and reason in the checkpoint Risks section.
+  - **Lean mode ADVISORY-FIX override (Normal Lean only — see § Step 1C):** In Lean mode, ADVISORY-FIX items are sub-classified before deciding whether to trigger an engineer re-run:
+    - **ADVISORY-FIX-QUALITY** (engineer re-run required in ALL modes): off-by-one, missing assertions for covered logic, missing null guards on inputs with boundary behavior, broken contract alignment.
+    - **ADVISORY-FIX-STYLE** (Lean mode: deferred to TECH_DEBT, no engineer re-run): extract-method, constants extraction for magic values, rename, comment improvement. **Scope constraint:** an item may only be classified as ADVISORY-FIX-STYLE if it does NOT relate to performance, accessibility, security, data correctness, or user-visible functional ambiguity. If any of these are in scope, classify as ADVISORY-FIX-QUALITY.
+    - **Tie-breaker:** If sub-classification is unclear between STYLE and QUALITY, default to ADVISORY-FIX-QUALITY (more scrutiny, not less).
+    - When ALL remaining ADVISORY-FIX items are STYLE in Lean mode: code-reviewer does NOT re-run. When ANY QUALITY items remain: delta review is still required after engineer fix.
+    - Standard and Full Guardrail modes treat all ADVISORY-FIX as QUALITY — no sub-classification needed.
 - `qa` in **E2E authoring mode** runs AFTER code-reviewer (and security-reviewer if applicable) APPROVE, BEFORE `qa` verification mode, for Normal and High-risk changes only. Conditional — triggered only when qa-fast recommended `E2E authoring recommended: YES`.
   When invoking E2E authoring mode, use this exact Task prompt:
   > "Mode: e2e-authoring. Write E2E tests for the new/modified user flow introduced by this change. Follow TOOLING.md E2E test placement rules. qa-fast context: [paste qa-fast E2E justification]. Changed files: [list files]. Implementation summary: [1-2 line summary of what the engineer built]. Run the new/updated spec file(s) using a targeted Playwright command to confirm the authored tests pass. Only run the full suite (`npm run test:e2e:local`) if targeted validation is not feasible. Do NOT modify implementation code."
@@ -667,7 +757,9 @@ Findings: [CRITICAL/HIGH/MEDIUM/LOW with file:line and exploit path]
 Gate outcomes should be recorded in compact status form by default (e.g. `classification=normal`, `materialization=PASS`, `reviewer=APPROVE`, `security=N/A`, `e2e=PASS`). Add prose only when a gate fails, escalates, or requires explanation.
 
 Classification: [tier]
+Execution mode: Lean | Standard | Full Guardrail | N/A(trivial|doc-only)
 Classification evidence: [changed files + behavior impact for trivial; or N/A]
+qa-fast: RAN | SKIPPED(Lean — qa-risk: <area>::<component|endpoint|table> covers same surface; no contract/validation/flow change) | SKIPPED(trivial) | SKIPPED(doc-only)
 Engineer tests: PASS | FAIL | SKIPPED(trivial, non-executable)
 Code-reviewer: APPROVE | N/A(trivial)
 Security-reviewer: APPROVE | N/A
@@ -683,3 +775,8 @@ All gates satisfied: YES
 If the orchestrator cannot output `All gates satisfied: YES`, it MUST NOT proceed to commit/push/PR.
 
 If `Engineer materialization` is not `PASS` for Normal or High-risk code tasks, `All gates satisfied` cannot be `YES`.
+
+**GSR derivability invariant:** Every field in the GSR MUST be derivable from actual execution in this PR cycle — not inferred from memory or prior PRs. Specifically:
+- If `qa-fast: SKIPPED(Lean — ...)`: the cited `qa-risk:` entry MUST exist verbatim in `Sprint-level conventions` at the time of skip. A skip citing an entry that does not exist in the checkpoint is an INVALID record.
+- If `code-reviewer: APPROVE` but ADVISORY-FIX-STYLE items were deferred: those items MUST appear in TECH_DEBT.md at commit time. An APPROVE with undocumented deferred style items is an incomplete record.
+- If `budget_exceeded` is absent: actual agent count must be ≤ mode ceiling. If reviewer finds more agents ran than the ceiling permits without this field, flag as compliance gap.

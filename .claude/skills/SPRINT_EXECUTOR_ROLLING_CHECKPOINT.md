@@ -154,6 +154,25 @@ Before the first PR:
    - After the first PR: use a shortened qa-fast prompt: "Sprint qa-fast context: codebase was scanned during the first sprint PR. Focus on: selector fragility, auth fixture reuse, data isolation, and any files or flows NOT yet reviewed for [current issue title]. Do not re-scan shared config already surveyed this sprint. Issue-specific risks must still be surfaced."
    - If any PR's enriched spec reveals a non-homogeneous concern (e.g., a production code change beyond testability hooks), invalidate the cache for that PR only — full triage re-derivation applies.
 
+**Sprint risk cache — qa-fast findings (all sprints, not just homogeneous — activates after first PR passes):**
+
+After every PR where qa-fast ran, the orchestrator MUST extract into `Sprint-level conventions` (if not already present):
+- Any module, file path, or user flow that qa-fast flagged as HIGH or MEDIUM risk
+- Fragile patterns qa-fast identified (selector fragility, auth fixture complexity, data isolation, race conditions)
+- Pitfalls specific to this codebase (e.g. Leaflet quirk, Bucket4j edge case) qa-fast warned about
+
+**qa-risk entry format (normalized — required):**
+`qa-risk: <area>::<component|endpoint|table> — <what qa-fast found> (from RE-XX)`
+
+Examples:
+- `qa-risk: dealer-form::DealerForm.tsx — CSS display-toggle state loss on unmount (from RE-31)`
+- `qa-risk: discovery-api::GET /api/discover — paginated response shape change breaks FE consumer (from RE-45)`
+- `qa-risk: listings-table::listings — ALTER migration requires backfill; table lock risk (from RE-51)`
+
+**Before adding a new entry:** check for semantic duplicates in `Sprint-level conventions` by matching `<area>::<component|endpoint|table>`. If an entry for the same surface already exists, **merge** (update the finding text and RE source) rather than appending a duplicate. Duplicate entries for the same surface area are not allowed — they inflate context without adding information.
+
+These `qa-risk:` entries enable ROUTE_AND_RUN Lean mode qa-fast skip for later PRs touching the same area. If a later PR touches an area with NO `qa-risk:` entry, qa-fast cannot be skipped for that PR — the area is unscanned. If a `qa-risk:` entry is from more than 6 PRs ago in a long sprint, treat as potentially stale and re-run qa-fast.
+
 **5b. Write initial checkpoint** — before starting the first PR, write the full preamble checkpoint to `.claude/SPRINT_CHECKPOINT.md` using the CHECKPOINT Format below. Include: Sprint name, iteration ID, Project item IDs map, Sprint issues, Execution order, Dependencies. Set `Enriched specs: SEE .claude/sprint-enriched-specs.md`. Set `Status: STARTING` and `Next PR: <first issue>`. Also update `.claude/STATE.md`: set "Active sprint" and "Sprint status: IN_PROGRESS · 0/N complete".
 
 5. Execute issues in the team-lead recommended order. If no reordering was recommended, use the original GitHub Project iteration order.
@@ -177,7 +196,7 @@ For each GitHub issue (PR N):
    - Preserve all other checkpoint fields unchanged.
 
    **On resume, if `Status: IN_PROGRESS` is found** — a PR was in-flight when context was lost. Before proceeding to any new work:
-   - **Read fixlog first** — if `.claude/state/current-pr-fixlog.md` exists, read it immediately. Restore `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, `baseline_sha`, Findings (all rows), and QA Failures. This is the authoritative state source — do NOT rely on memory for these fields.
+   - **Read fixlog first** — if `.claude/state/current-pr-fixlog.md` exists, read it immediately. Restore `engineer-cycles`, `code-review-cycles`, `qa-verify-cycles`, `baseline_sha`, Findings (all rows), and QA Failures. This is the authoritative state source — do NOT rely on memory for these fields. When restoring to active context: surface only rows with Status=OPEN, STILL_OPEN, or NEW — FIXED and DEFERRED rows are loaded for counter accuracy but need not be re-stated in active context unless specifically queried.
    - Check for a dangling branch: `git branch --list "*pr-<issue-number>*"` (where issue-number is from `Current PR:`)
    - Check for uncommitted changes on main: `git status --short`
    - **Branch exists with commits** → engineer completed but PR lifecycle didn't finish. Surface to user: "RE-XX was in-flight. Branch `<name>` exists with work. Resume from step 5 (git+PR) or restart the PR from scratch?"
@@ -437,6 +456,7 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    - **Propagate sprint memory fields:** After recording Key decisions for the completed PR:
      - If a decision establishes a pattern for remaining PRs (selector strategy, auth fixture approach, page object location, wait strategy): copy it to `Sprint-level conventions:` in the preamble. Do not add one-off facts here.
      - If a decision is a one-off state (quarantined spec, deferred AC, partial completion, temporary workaround): copy it to `Known temporary exceptions:` in the preamble.
+     - **Conventions list cap (v2):** `Sprint-level conventions` is capped at 10 items. Before adding a new entry, prune any entry no longer applicable to remaining PRs (e.g. a pattern that only applied to an already-merged module). Pruned entries are preserved in SHIP_LOG.md but not carried forward in the live checkpoint. `Known temporary exceptions` is capped at 8 active items; resolved exceptions (linked to FIXED findings or DONE PRs) are pruned at each checkpoint write — do not carry closed exceptions into subsequent checkpoints.
    - Include both fields in the qa engineer Task prompt for the **next PR** — add verbatim after the enriched spec: "Sprint-level conventions from completed PRs: [paste]. Known temporary exceptions: [paste]. Follow conventions. If deviating, state why in Key decisions."
 
 **9b. Append ship log entry + close fixlog** — after the checkpoint write:
@@ -466,6 +486,13 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    ---
    ```
    Source `What`, `Why`, `Deviations`, `Risks` from the checkpoint just written. Source all counts and derived fields from the fixlog. Source each DEFERRED line verbatim from the Notes column of DEFERRED rows in the Findings or QA Failures table — do not paraphrase.
+
+   **Compact format (v2 — clean run only):** Use the compact format when ALL three hold: fixlog Findings table has zero rows, QA Failures table has zero rows, and no DEFERRED items exist. Full format is required for any PR with findings, QA failures, or deferred items.
+   ```
+   ## PR #NNN — Issue title
+   Date: YYYY-MM-DD | Sprint: <sprint name> | Route: <agent chain> | cycles: eng=1 cr=1 qa=1
+   ---
+   ```
 
 3. **Delete state files:**
    ```
