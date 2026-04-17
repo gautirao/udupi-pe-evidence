@@ -1,5 +1,5 @@
 /**
- * Area Overview E2E smoke tests — AO1–AO7
+ * Area Overview E2E smoke tests — AO1–AO9
  *
  * Covers:
  *   AO1 — full confidence: heading, listing count, price, comparison table, MarketActivity
@@ -9,12 +9,15 @@
  *   AO5 — nav rename: "Area overview" link visible, "Insights" absent, click navigates correctly
  *   AO6 — /insights redirect: URL changes to /area-overview
  *   AO7 — unknown area key: "Area not found" error state
+ *   AO8 — empty areaKey param: "Area not found" rendered, no crash (guards empty-string entry points)
+ *   AO9 — buildAreaKey contract (IN|KA|district|locality format): page renders heading, no crash
  *
- * Depends on: #728, #729, #730, #731, #732, #733, #734
+ * Depends on: #728, #729, #730, #731, #732, #733, #734, #757-PR1
  *
  * Setup: seeds area_overview_stats via psql in beforeAll; cleans up in afterAll.
  *        Centroid for FULL area is set near Manipal (13.35°N, 74.79°E) so real
  *        schools in the DB (STATE board, within 3 km) are included in AO4.
+ *        AO9 uses IN_KA_KEY (IN|KA|... format) to validate buildAreaKey contract.
  *
  * Run locally:
  *   npm run test:e2e -- e2e/area-overview.spec.ts
@@ -38,6 +41,9 @@ const FULL_KEY     = 'KA|E2E-TEST-DIST|E2E-TK|E2E-FULL-AREA';
 const LIMITED_KEY  = 'KA|E2E-TEST-DIST|E2E-TK|E2E-LIMITED-AREA';
 const FALLBACK_KEY = 'KA|E2E-TEST-DIST|E2E-TK|E2E-FALLBACK-AREA';
 const DISTRICT_KEY = 'KA|E2E-TEST-DIST';
+// AO9 — buildAreaKey contract: IN|KA|{district}|{locality} format
+const IN_KA_DISTRICT_KEY = 'IN|KA|E2E-TEST-DIST';
+const IN_KA_KEY = 'IN|KA|E2E-TEST-DIST|E2E-FULL-AREA';
 
 // ─── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -74,7 +80,8 @@ test.beforeAll(async () => {
   psql(`
     DELETE FROM area_overview_stats
     WHERE area_key IN (
-      '${FULL_KEY}', '${LIMITED_KEY}', '${FALLBACK_KEY}', '${DISTRICT_KEY}'
+      '${FULL_KEY}', '${LIMITED_KEY}', '${FALLBACK_KEY}', '${DISTRICT_KEY}',
+      '${IN_KA_KEY}', '${IN_KA_DISTRICT_KEY}'
     );
   `);
 
@@ -124,13 +131,39 @@ test.beforeAll(async () => {
     VALUES
       ('${FALLBACK_KEY}', 'locality', 2, 'fallback', '${DISTRICT_KEY}');
   `);
+
+  // AO9 — IN|KA|... format rows (buildAreaKey contract)
+  psql(`
+    INSERT INTO area_overview_stats
+      (area_key, area_level, listing_count_90d, confidence_tier,
+       median_price_paise, price_p10_paise, price_p90_paise,
+       property_type_dist, trend_direction, trend_pct_change)
+    VALUES
+      ('${IN_KA_DISTRICT_KEY}', 'district', 20, 'full',
+       350000000, 200000000, 600000000,
+       '{"land": 80, "house": 15, "apartment": 5}', 'stable', 0.0);
+  `);
+
+  psql(`
+    INSERT INTO area_overview_stats
+      (area_key, area_level, listing_count_90d, confidence_tier,
+       median_price_paise, price_p10_paise, price_p90_paise,
+       property_type_dist, trend_direction, trend_pct_change,
+       district_area_key)
+    VALUES
+      ('${IN_KA_KEY}', 'locality', 18, 'full',
+       480000000, 280000000, 750000000,
+       '{"land": 65, "house": 20, "apartment": 15}', 'rising', 4.1,
+       '${IN_KA_DISTRICT_KEY}');
+  `);
 });
 
 test.afterAll(async () => {
   psql(`
     DELETE FROM area_overview_stats
     WHERE area_key IN (
-      '${FULL_KEY}', '${LIMITED_KEY}', '${FALLBACK_KEY}', '${DISTRICT_KEY}'
+      '${FULL_KEY}', '${LIMITED_KEY}', '${FALLBACK_KEY}', '${DISTRICT_KEY}',
+      '${IN_KA_KEY}', '${IN_KA_DISTRICT_KEY}'
     );
   `);
 });
@@ -283,5 +316,51 @@ test.describe('AO7 — unknown area key', () => {
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText('Area not found')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('text=Something went wrong')).toHaveCount(0);
+  });
+});
+
+// ─── AO8 — Empty areaKey param ─────────────────────────────────────────────────
+
+test.describe('AO8 — empty areaKey param', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+
+  test('AO8 — /area-overview?areaKey= (empty string) shows Area not found without crash', async ({ page }) => {
+    // Guard: AreaOverview component treats areaKey='' as an error state
+    // (`if (!areaKey || isError)` branch). This covers any entry point that
+    // might navigate to /area-overview without supplying a value.
+    await page.goto('/area-overview?areaKey=');
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.getByText('Area not found')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('text=Something went wrong')).toHaveCount(0);
+  });
+});
+
+// ─── AO9 — buildAreaKey contract (IN|KA|district|locality format) ──────────────
+
+test.describe('AO9 — buildAreaKey contract', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+
+  test('AO9 — IN|KA|district|locality key navigates to area overview with heading and no crash', async ({ page }) => {
+    // Validates the contract established by buildAreaKey() in src/lib/areaKey.ts:
+    //   buildAreaKey('E2E-TEST-DIST', 'E2E-FULL-AREA') => 'IN|KA|E2E-TEST-DIST|E2E-FULL-AREA'
+    // Callers must encodeURIComponent() the result before inserting into the URL.
+    const areaKey = 'IN|KA|E2E-TEST-DIST|E2E-FULL-AREA'; // == buildAreaKey('E2E-TEST-DIST', 'E2E-FULL-AREA')
+    await page.goto(`/area-overview?areaKey=${encodeURIComponent(areaKey)}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // URL carries the areaKey param (non-empty)
+    await expect(page).toHaveURL(/areaKey=IN%7CKA%7CE2E-TEST-DIST%7CE2E-FULL-AREA/);
+
+    // Area heading renders — last pipe segment is the locality label
+    await expect(page.getByRole('heading', { name: /E2E-FULL-AREA/i })).toBeVisible({ timeout: 10_000 });
+
+    // Page does not show 404 error state
+    await expect(page.getByText('Area not found')).toHaveCount(0);
+
+    // No JS error boundary triggered
+    await expect(page.locator('text=Something went wrong')).toHaveCount(0);
+
+    // Data basis line confirms backend resolved the area (18 listings seeded)
+    await expect(page.getByText(/Based on 18 listings in the last 90 days/i)).toBeVisible({ timeout: 10_000 });
   });
 });
