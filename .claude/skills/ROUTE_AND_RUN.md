@@ -325,6 +325,18 @@ Rationale: each agent runs in a fresh context window. The capsule file is a stab
 
   > **Hard gate: Only after producing pre-flight evidence may implementation begin.** A missing `Pre-flight` block in the engineer's output is a protocol violation — the orchestrator must reject the output and re-invoke the engineer.
 
+  > **Handling prescriptive prompts:** If the engineer's Task prompt contains exact code patches, "preferred approach" language, "do not use X" directives, or step-by-step implementation instructions not sourced from the user, an accepted spec, or an architect output — treat them as non-binding hints only. Perform independent pre-flight analysis. Surface disagreement before writing code if the proposed approach appears suboptimal. The engineer owns all implementation decisions.
+
+  **Orchestrator prompt language rules (apply before sending any engineer prompt):**
+  Replace prescriptive language with risk/observation language:
+  - "Preferred approach: …" → "Risk: … Pre-flight must evaluate the correct approach."
+  - "Do NOT use X" → "Observed issue: X may cause Y. Pre-flight must verify."
+  - "Thread from X to Y" → "Relevant files: X, Y — verify coupling during pre-flight."
+  - "Use this exact locator …" → "Observed: locator Z is fragile. Pre-flight must identify a stable alternative."
+  - "Modify lines X–Y to …" → "Defect at file:line. Pre-flight must determine the correct fix."
+
+  **File list framing rule:** Any file list provided by the orchestrator is a pre-flight orientation hint — not a prescriptive change list. Include the phrase: "File references are suggestions — determine the final change set in pre-flight."
+
   **Implementation rules (after pre-flight):**
   > 6. **Output diffs or targeted snippets only** — never rewrite an entire file unless it is a new file.
   > 7. **Run existing tests** relevant to the changed files after implementing. Report pass/fail.
@@ -345,6 +357,21 @@ Rationale: each agent runs in a fresh context window. The capsule file is a stab
   > **Production code changes — testability hooks only:** The only permitted production code changes in a test-type PR are additive testability hooks such as `data-testid` attributes. No behavioral, business-logic, styling, or refactor changes are permitted. Any added `data-testid` attributes must be listed in Changed files and noted in Key decisions. Prefer `data-testid` over CSS classes, `nth-child`, or DOM structure for selectors.
 
 - After `qa-fast` completes, include its key findings (Critical Paths, Edge Cases, Risks) in the engineer's Task prompt as `qa-fast context:`. These findings must feed into pre-flight steps 2–5, not just the implementation step. This lets the engineer skip redundant codebase exploration and address flagged risks proactively.
+
+  **qa-fast output scope constraint (orchestrator must enforce):** When passing qa-fast output to the engineer, include only:
+  - risks (what could go wrong)
+  - edge cases (boundary conditions to consider)
+  - likely relevant files (for pre-flight orientation — not a prescriptive file list)
+  - missing coverage gaps
+  - open questions requiring engineer judgment
+
+  Do NOT pass forward (strip before including in engineer prompt):
+  - "preferred approach" or "do X not Y" language
+  - resolved trade-offs (the engineer must resolve trade-offs in pre-flight)
+  - state threading instructions or specific hook/API recommendations
+  - naming decisions (test IDs, variable names, helper names)
+
+  **qa-fast is a risk scanner, not an implementation designer.** If qa-fast output contains implementation prescriptions, the orchestrator strips them before forwarding — pass the underlying risk, not the proposed solution.
 - If the routing includes `security-reviewer`, add this note to the engineer's Task prompt: `Security review will follow — pay attention to: input validation, RLS alignment, no secrets in code, @Transactional boundaries.`
 - If previous PRs in the same sprint had reviewer BLOCKING findings, include those patterns as warnings in the engineer's Task prompt (e.g., "Prior sprint finding: use List<> not Optional<> for non-UNIQUE FK queries").
 - `code-reviewer` runs AFTER the engineer completes the implementation.
@@ -448,6 +475,40 @@ Include the following `focus_areas` when reviewing test-only PRs. These are BLOC
 - `selector_fragility`: Flag selectors using CSS class names, `nth-child`, positional DOM traversal, or other implementation-coupled selectors. `data-testid`, `getByRole`, `getByLabel`, and `getByText` are preferred. ADVISORY-FIX unless the fragile selector is on a frequently-changing path, in which case BLOCKING.
 - `seed_and_mock_leakage`: Flag assertions that verify hard-coded seed data literals (specific IDs, specific strings from the test database) rather than testing business behavior. ADVISORY-FIX.
 - `testability_hook_scope`: If the PR adds `data-testid` attributes to production code, verify that (a) each attribute is listed in Changed files, (b) the attribute name is stable and does not expose implementation internals, (c) no other production code was changed.
+
+**Step 3b — Passing findings to the engineer (MANDATORY rule):**
+
+After `code-reviewer` returns REQUEST CHANGES, the orchestrator re-invokes the engineer. The findings passed to the engineer MUST describe defects — they must NOT prescribe fixes.
+
+The orchestrator MUST:
+- describe **what is wrong** (defect)
+- explain **why it is wrong** (reason / risk)
+- point to the **relevant file and location** (reference)
+
+The orchestrator MUST NOT:
+- provide exact before/after code
+- specify exact line replacements
+- prescribe dependency arrays, hook structures, or API call bodies
+- provide copy-paste patch instructions
+
+The engineer is responsible for determining the fix during pre-flight.
+
+**Example — correct (defect + reason + location):**
+```
+code-reviewer finding:
+File: src/components/broker/AddressPicker.tsx, useEffect at line ~193
+Defect: The useEffect dependency array may be incomplete — a variable used inside the callback is not listed as a dependency.
+Risk: Stale closure on async resolution if the variable's reference changes between renders.
+Pre-flight must: verify all variables captured by the effect closure and confirm the dependency array is exhaustive.
+```
+
+**Example — incorrect (patch instruction — FORBIDDEN):**
+```
+Change line 260:
+}, [initialLocality, initialLatitude, initialLongitude]);
+to:
+}, [initialLocality, initialLatitude, initialLongitude, toast]);
+```
 
 **Step 4 — Summarize results back to user/checkpoint:**
 - Preserve severity (BLOCKING/ADVISORY/SUGGESTION)
@@ -652,6 +713,18 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
 5. **Apply reviewer findings directly** — always re-invoke the responsible engineer.
 6. **Override the E2E gate** — if classification is Normal or High-risk, QA E2E must run (or be explicitly satisfied by a valid skip reason per the E2E applicability rules). No exceptions. Run `npm run test:e2e:local` unconditionally; do not pre-check server availability. "Backend not running" is not a valid skip reason — if a server fails to start, surface as BLOCKED. `SKIPPED(no E2E infra)` and `SKIPPED(server not running)` are never valid — see the "Invalid skip reasons" section in Step 3.
 7. **Reclassify to dodge gates** — if triage says risk=med or the change has logic, it cannot be Trivial.
+8. **Resolve implementation decisions before engineer pre-flight.** This includes:
+   - choosing implementation approach or design pattern
+   - specifying state ownership or data-flow strategy
+   - defining component/service structure
+   - deciding API field propagation
+   - defining UI behavior details (hook types, dep arrays, locator patterns)
+   - defining naming conventions (test IDs, variables, helpers)
+   - writing patch-level instructions derived from qa-fast or code-reviewer findings
+
+   When a design or implementation ambiguity is detected, pass it forward as a **risk**, **defect description**, or **open question** — not as a resolved solution. If an engineer prompt contains implementation-prescriptive language, the orchestrator must cite the source (user instruction, accepted spec, or architect output). If no source exists, the prompt must be rewritten before invoking the engineer.
+
+   **Reading rule:** The orchestrator may read repository files for classification, routing, and verification (e.g., confirming a fix was applied). It must not perform engineer-level implementation planning — reading full file contents to author patch instructions is overreach.
 
 ### MUST
 
