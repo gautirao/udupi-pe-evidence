@@ -722,7 +722,7 @@ If the pre-push hook fails (no marker, stale marker, E2E actually fails): play `
    - defining naming conventions (test IDs, variables, helpers)
    - writing patch-level instructions derived from qa-fast or code-reviewer findings
 
-   When a design or implementation ambiguity is detected, pass it forward as a **risk**, **defect description**, or **open question** — not as a resolved solution. If an engineer prompt contains implementation-prescriptive language, the orchestrator must cite the source (user instruction, accepted spec, or architect output). If no source exists, the prompt must be rewritten before invoking the engineer.
+   When a design or implementation ambiguity is detected, pass it forward as a **risk**, **defect description**, or **open question** — not as a resolved solution. If an engineer prompt contains implementation-prescriptive language without a valid cited source (user instruction, accepted spec, or architect output), the orchestrator must rewrite the prompt before invoking the engineer.
 
    **Reading rule:** The orchestrator may read repository files for classification, routing, and verification (e.g., confirming a fix was applied). It must not perform engineer-level implementation planning — reading full file contents to author patch instructions is overreach.
 
