@@ -92,6 +92,18 @@ export default function EditListing() {
   const [videoUrl, setVideoUrl] = useState('');
   const [videoUrlError, setVideoUrlError] = useState('');
 
+  /**
+   * D1 hybrid — Title auto-regen from confirmed locality.
+   * `titleManuallyEdited` is set the first time the broker manually types in
+   * the title field. While false, onLocalityConfirmed auto-updates the title.
+   */
+  const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
+  /**
+   * The last locality string that was confirmed via AddressPicker pin confirm
+   * (AC5). Used in Step 4 to detect title/locality disagreement.
+   */
+  const [confirmedLocality, setConfirmedLocality] = useState('');
+
   // Listing purpose
   const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>('sale');
 
@@ -225,7 +237,7 @@ export default function EditListing() {
   // For rent listings: propertyType + monthlyRent + locality. For sale: propertyType + price + locality.
   const step1Complete = listingPurpose === 'rent'
     ? (!!propertyType && monthlyRent !== '' && parseInt(monthlyRent, 10) > 0 && !!locality)
-    : (!!propertyType && (listing.price ?? 0) > 0 && !!locality);
+    : (!!propertyType && (priceRupees ?? 0) > 0 && !!locality);
   // Step 2 is complete when >= 3 images have been uploaded (tracked by canSubmitImages)
   const step2Complete = canSubmitImages;
   // Step 3 is complete when address has been confirmed
@@ -343,6 +355,24 @@ export default function EditListing() {
     setCurrentStep(4);
   };
 
+  /**
+   * AC5 / D1 hybrid — called by AddressPicker after broker confirms a pin.
+   * Auto-regenerates the title from the confirmed locality when the broker
+   * has not yet manually edited the title field.
+   */
+  const handleLocalityConfirmed = (locality: string, _lat: number, _lng: number) => {
+    setConfirmedLocality(locality);
+    if (!titleManuallyEdited) {
+      // Generate a sensible default title from the confirmed locality.
+      // Extract the first meaningful segment (everything up to the first comma)
+      // to keep the title concise.
+      const shortLocality = locality.split(',')[0].trim();
+      if (shortLocality) {
+        setTitle(`Property in ${shortLocality}`);
+      }
+    }
+  };
+
   const handleSubmitForReview = () => {
     submitListing.mutate(undefined, {
       onSuccess: () => {
@@ -367,6 +397,24 @@ export default function EditListing() {
 
   const isSubmittable = SUBMITTABLE_STATUSES.includes(listing.status);
 
+  /**
+   * D1 hybrid — Step 4 title/locality consistency gate.
+   * Show the non-dismissible warning banner when:
+   *   1. A locality has been confirmed via AddressPicker (confirmedLocality set), AND
+   *   2. The broker has manually edited the title (titleManuallyEdited = true), AND
+   *   3. The current title does NOT include the confirmed locality's first segment.
+   *
+   * When titleManuallyEdited is false, the title was auto-regenerated and will
+   * always be consistent — no banner needed.
+   */
+  const confirmedLocalityShort = confirmedLocality.split(',')[0].trim().toLowerCase();
+  const titleIncludesLocality =
+    !confirmedLocalityShort || title.toLowerCase().includes(confirmedLocalityShort);
+  const showTitleLocalityWarning =
+    titleManuallyEdited &&
+    !!confirmedLocality &&
+    !titleIncludesLocality;
+
   const statusBadgeVariant = listing.status === 'REJECTED'
     ? 'destructive'
     : listing.status === 'DRAFT'
@@ -376,7 +424,11 @@ export default function EditListing() {
   const requiredFieldsComplete = isRent
     ? (monthlyRent !== '' && parseInt(monthlyRent, 10) > 0 && !!propertyType && !!locality)
     : (priceRupees != null && priceRupees > 0 && !!propertyType && !!locality);
-  const allConditionsMet = canSubmitImages && !!listing.addressConfirmed && requiredFieldsComplete;
+  const allConditionsMet =
+    canSubmitImages &&
+    !!listing.addressConfirmed &&
+    requiredFieldsComplete &&
+    !showTitleLocalityWarning;
 
   return (
     <AppLayout>
@@ -457,7 +509,10 @@ export default function EditListing() {
                     id="title"
                     placeholder="e.g. 3 BHK Apartment in Manipal"
                     value={title}
-                    onChange={(e) => setTitle(e.target.value)}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      setTitleManuallyEdited(true);
+                    }}
                   />
                 </div>
 
@@ -855,6 +910,7 @@ export default function EditListing() {
                       updateListing.mutate({ addressConfirmed: false });
                     }
                   }}
+                  onLocalityConfirmed={handleLocalityConfirmed}
                 />
                 <div className="flex flex-col items-end pt-4 border-t gap-1">
                   <Button
@@ -878,6 +934,40 @@ export default function EditListing() {
         {/* ── Step 4: Review & Submit ── */}
         {currentStep === 4 && (
         <div data-testid="step-4-panel">
+
+          {/* D1 hybrid — Title/locality consistency banner (non-dismissible) */}
+          {showTitleLocalityWarning && (
+            <div
+              role="alert"
+              data-testid="title-locality-warning"
+              className="mb-4 flex items-start gap-3 rounded-md border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900"
+            >
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-yellow-600" />
+              <div className="flex-1">
+                <p className="font-medium">Title doesn't reflect the selected area</p>
+                <p className="text-yellow-800 mt-0.5">
+                  Your title doesn't mention the confirmed location ({confirmedLocality.split(',')[0].trim()}).
+                  Update your title or click below to reset it.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="flex-shrink-0 border-yellow-400 text-yellow-900 hover:bg-yellow-100"
+                onClick={() => {
+                  const shortLocality = confirmedLocality.split(',')[0].trim();
+                  if (shortLocality) {
+                    setTitle(`Property in ${shortLocality}`);
+                    setTitleManuallyEdited(false);
+                  }
+                }}
+              >
+                Update title
+              </Button>
+            </div>
+          )}
+
           {/* Review summary */}
           <Card className="mb-4">
             <CardHeader>

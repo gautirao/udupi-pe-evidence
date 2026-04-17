@@ -12,7 +12,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Search, MapPin, Check, Loader2 } from 'lucide-react';
+import { Search, MapPin, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 // Fix default marker icons in Leaflet (same fix as PropertyMap)
@@ -50,6 +50,8 @@ export interface AddressPickerProps {
   initialConfirmed?: boolean;
   onConfirm: (address: AddressPickerValue) => void;
   onUnconfirm?: () => void;
+  /** Called after the user explicitly confirms a pin position (AC5). */
+  onLocalityConfirmed?: (locality: string, lat: number, lng: number) => void;
 }
 
 /** Fly the map to a given position when it changes. */
@@ -115,6 +117,7 @@ export function AddressPicker({
   initialConfirmed,
   onConfirm,
   onUnconfirm,
+  onLocalityConfirmed,
 }: AddressPickerProps) {
   // --- state ---
   const [query, setQuery] = useState(initialLocality ?? '');
@@ -142,6 +145,23 @@ export function AddressPicker({
 
   const [geolocating, setGeolocating] = useState(false);
 
+  /**
+   * AC4 — localityOverridden: set when broker explicitly edits the locality
+   * search field AFTER a pin has been confirmed. When true, future pin confirms
+   * do NOT overwrite the locality input. Component-state only; not persisted.
+   */
+  const [localityOverridden, setLocalityOverridden] = useState(false);
+
+  /**
+   * AC1 — cache of locality strings that have already been forward-geocoded in
+   * this component instance. useRef (not useState) so cache updates are
+   * synchronous and don't trigger re-renders that would race with the cache check.
+   */
+  const geocodedRef = useRef<Set<string>>(new Set());
+
+  /** AC3 — show inline warning when locality edited after pin confirmed. */
+  const [showReconciliationWarning, setShowReconciliationWarning] = useState(false);
+
   const { toast } = useToast();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,36 +178,133 @@ export function AddressPicker({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // --- search with debounce ---
-  const handleSearchChange = useCallback((value: string) => {
-    setQuery(value);
-    // Typing alone never confirms
-    if (debounceRef.current) clearTimeout(debounceRef.current);
+  // Clear any pending search debounce on unmount to prevent setState on an
+  // unmounted component.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
-    if (!value.trim()) {
-      setResults([]);
-      setShowResults(false);
-      setNoResults(false);
-      return;
+  /**
+   * AC1 — Forward-geocode on first render when locality is known but lat/lng
+   * are not yet set. Uses a component-level Set to avoid re-triggering on
+   * subsequent renders for the same locality string.
+   *
+   * AC2 — Reconcile query, displayName, and pinPosition to incoming prop
+   * changes (e.g. broker edited Step 1 locality while wizard is CSS-toggled).
+   *
+   * Both concerns share a single effect keyed on all three props so that a
+   * locality change always re-syncs state even when lat/lng haven't changed.
+   */
+  useEffect(() => {
+    const locality = initialLocality ?? '';
+    const hasCoords =
+      initialLatitude != null &&
+      initialLongitude != null &&
+      !isNaN(initialLatitude) &&
+      !isNaN(initialLongitude);
+
+    // AC2: sync query to incoming locality prop.
+    if (locality) {
+      setQuery(locality);
     }
 
-    debounceRef.current = setTimeout(async () => {
-      setSearching(true);
-      setNoResults(false);
+    // AC2: sync pinPosition to incoming lat/lng if both are provided.
+    if (hasCoords) {
+      setPinPosition([initialLatitude!, initialLongitude!]);
+      setDisplayName(locality || '');
+      return; // lat/lng already known — no need to forward-geocode.
+    }
+
+    // AC1: forward-geocode when locality is set but no coords are available,
+    // and we have not already geocoded this exact locality string this session.
+    if (!locality || geocodedRef.current.has(locality)) return;
+
+    // Mark as geocoded before the async call to prevent double-fire in React
+    // Strict Mode (effects run twice; marking here ensures the second run skips).
+    geocodedRef.current.add(locality);
+
+    let cancelled = false;
+    (async () => {
       try {
-        const res = await searchNominatim(value);
-        setResults(res);
-        setShowResults(true); // show dropdown even for zero results
-        setNoResults(res.length === 0);
+        const res = await searchNominatim(locality);
+        if (cancelled) return;
+
+        if (res.length === 0) {
+          toast({
+            title: 'Location not found',
+            description: `Couldn't auto-locate "${locality}" — please place pin manually.`,
+          });
+          return;
+        }
+
+        const first = res[0];
+        // Guard: Nominatim can return NaN coords in malformed responses.
+        if (isNaN(first.lat) || isNaN(first.lon)) {
+          toast({
+            title: 'Location lookup failed',
+            description: 'Please place pin manually.',
+          });
+          return;
+        }
+
+        const pos: L.LatLngTuple = [first.lat, first.lon];
+        // Set provisional pin — NOT confirmed. User must still explicitly confirm.
+        setPinPosition(pos);
+        setDisplayName(first.display_name);
+        // Do not call onConfirm — pin is provisional only.
       } catch {
-        setResults([]);
-        setNoResults(false);
-        setShowResults(false);
-      } finally {
-        setSearching(false);
+        if (cancelled) return;
+        toast({
+          title: 'Location lookup failed',
+          description: 'Please place pin manually.',
+        });
       }
-    }, SEARCH_DEBOUNCE_MS);
-  }, []);
+    })();
+
+    return () => { cancelled = true; };
+  }, [initialLocality, initialLatitude, initialLongitude, toast]);
+
+  // --- search with debounce ---
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setQuery(value);
+      // AC4: if a pin is confirmed and the user manually edits the locality
+      // search field, mark localityOverridden and show a reconciliation warning.
+      if (confirmed) {
+        setLocalityOverridden(true);
+        setShowReconciliationWarning(true);
+      }
+      // Typing alone never confirms
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+
+      if (!value.trim()) {
+        setResults([]);
+        setShowResults(false);
+        setNoResults(false);
+        return;
+      }
+
+      debounceRef.current = setTimeout(async () => {
+        setSearching(true);
+        setNoResults(false);
+        try {
+          const res = await searchNominatim(value);
+          setResults(res);
+          setShowResults(true); // show dropdown even for zero results
+          setNoResults(res.length === 0);
+        } catch {
+          setResults([]);
+          setNoResults(false);
+          setShowResults(false);
+        } finally {
+          setSearching(false);
+        }
+      }, SEARCH_DEBOUNCE_MS);
+    },
+    [confirmed],
+  );
 
   // --- pick a search result → auto-confirm ---
   const handleSelectResult = useCallback(
@@ -198,14 +315,17 @@ export function AddressPicker({
 
       setPinPosition(pos);
       setDisplayName(result.display_name);
-      setQuery(result.display_name);
+      setQuery(result.display_name);   // always update — picking from dropdown is authoritative
       setShowResults(false);
       setDragged(false);
       setConfirmed(true);
+      setLocalityOverridden(false);    // picking a result resets the override
+      setShowReconciliationWarning(false);
 
       onConfirm(buildOutput(result.lat, result.lon, parsed, true));
+      onLocalityConfirmed?.(result.display_name, result.lat, result.lon);
     },
-    [onConfirm],
+    [onConfirm, onLocalityConfirmed],
   );
 
   // --- marker drag end → unconfirm, require explicit confirm ---
@@ -223,7 +343,14 @@ export function AddressPicker({
         const parsed = parseAddress(rev.address);
         setParsedAddress(parsed);
         setDisplayName(rev.display_name);
-        setQuery(rev.display_name);
+        // AC4: only update search query if user hasn't overridden locality.
+        // Use functional setter to read latest state without stale closure.
+        setLocalityOverridden((wasOverridden) => {
+          if (!wasOverridden) {
+            setQuery(rev.display_name);
+          }
+          return wasOverridden;
+        });
       }
     } catch {
       // keep existing display name on failure
@@ -246,7 +373,12 @@ export function AddressPicker({
         const parsed = parseAddress(rev.address);
         setParsedAddress(parsed);
         setDisplayName(rev.display_name);
-        setQuery(rev.display_name);
+        setLocalityOverridden((wasOverridden) => {
+          if (!wasOverridden) {
+            setQuery(rev.display_name);
+          }
+          return wasOverridden;
+        });
       }
     } catch {
       // keep existing display name on failure
@@ -276,7 +408,12 @@ export function AddressPicker({
             const parsed = parseAddress(rev.address);
             setParsedAddress(parsed);
             setDisplayName(rev.display_name);
-            setQuery(rev.display_name);
+            setLocalityOverridden((wasOverridden) => {
+              if (!wasOverridden) {
+                setQuery(rev.display_name);
+              }
+              return wasOverridden;
+            });
           }
         } catch {
           // keep existing display name
@@ -307,8 +444,14 @@ export function AddressPicker({
     if (!pinPosition) return;
     setConfirmed(true);
     setDragged(false);
-    onConfirm(buildOutput(pinPosition[0], pinPosition[1], parsedAddress, true));
-  }, [pinPosition, onConfirm, parsedAddress]);
+    setShowReconciliationWarning(false);
+    const output = buildOutput(pinPosition[0], pinPosition[1], parsedAddress, true);
+    onConfirm(output);
+    // AC4/AC5: if localityOverridden is true, do NOT update the locality/query;
+    // the user's explicit edit wins. Still fire onLocalityConfirmed with the
+    // current query value so EditListing can decide what to do with it.
+    onLocalityConfirmed?.(query, pinPosition[0], pinPosition[1]);
+  }, [pinPosition, onConfirm, parsedAddress, onLocalityConfirmed, query]);
 
   // --- change location: reset confirmed state, preserve pin position ---
   const handleChangeLocation = useCallback(() => {
@@ -317,6 +460,8 @@ export function AddressPicker({
     setQuery('');
     setDisplayName('');
     setParsedAddress({ address_line1: '' });
+    setLocalityOverridden(false);
+    setShowReconciliationWarning(false);
     onUnconfirm?.();
   }, [onUnconfirm]);
 
@@ -362,6 +507,20 @@ export function AddressPicker({
           </ul>
         )}
       </div>
+
+      {/* AC3 — Reconciliation warning: locality edited after pin confirmed */}
+      {showReconciliationWarning && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <span>
+            You edited the location search after confirming a pin. Re-search and confirm a new
+            location, or keep the existing pin and click "Confirm Location".
+          </span>
+        </div>
+      )}
 
       {/* Use my location button */}
       {!!navigator.geolocation && (
@@ -445,7 +604,12 @@ export function AddressPicker({
                 Change
               </Button>
             </div>
-          ) : null}
+          ) : (
+            // Provisional pin from forward-geocode — show confirm button
+            <Button size="sm" onClick={handleConfirmClick}>
+              Confirm Location
+            </Button>
+          )}
         </div>
       )}
 
