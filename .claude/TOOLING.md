@@ -78,15 +78,6 @@ Exception:
 - Test harness/build configuration changes required to run tests may proceed,
   but must be explicitly called out as soon as discovered and included in the Post-Implementation Checklist.
 
-## Worktree Location Rule
-
-All git worktrees must be created outside the repository root.
-
-Default location:
-../worktrees/<branch-name>
-
-Never create worktrees inside the main project directory.
-
 ## Audio notifications (only when applicable)
 
 Audio notifications apply only when running via Claude CLI **and** an audio command exists (e.g., `afplay` on macOS).

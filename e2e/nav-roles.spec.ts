@@ -30,7 +30,7 @@ const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 test.describe('N1 — user-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('N1 — user role (owner): Area overview, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {
+  test('N1 — user role (owner): Trends, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {
     test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping N1');
 
     await page.goto('/');
@@ -38,7 +38,7 @@ test.describe('N1 — user-authenticated', () => {
     await page.waitForTimeout(2_000);
 
     // Owner nav items must be visible (superset of old user nav + listing management)
-    await expect(page.getByRole('link', { name: /^area overview$/i }).first()).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByRole('link', { name: /^trends$/i }).first()).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('link', { name: /^saved$/i })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('link', { name: /^my listings$/i })).toBeVisible({ timeout: 8_000 });
     await expect(page.getByRole('link', { name: /new listing/i })).toBeVisible({ timeout: 8_000 });
