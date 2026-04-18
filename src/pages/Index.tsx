@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
@@ -186,6 +186,42 @@ export default function Index() {
       .map((locality) => listings.find((l) => l.locality === locality && l.areaKey)?.areaKey)
       .filter((k): k is string => k != null && k.length > 0);
   }, [filters.localities, listings]);
+
+  // URL sync: write city + areaKey params whenever they change.
+  // Declared before the read-mount effect so it fires first on initial render
+  // (hasHydrated is still false → skipped), preventing it from overwriting URL
+  // params before they have been read.
+  const hasHydrated = useRef(false);
+  useEffect(() => {
+    if (!hasHydrated.current) return;
+    setUrlParams(
+      (prev) => {
+        prev.set('city', city);
+        prev.delete('areaKey');
+        trendsAreaKeys.forEach((k) => prev.append('areaKey', k));
+        return prev;
+      },
+      { replace: true }
+    );
+  }, [city, trendsAreaKeys, setUrlParams]);
+
+  // Read city + areaKey from URL on mount only; must be declared AFTER the
+  // write-back effect so the write-back fires (and skips) before this sets
+  // hasHydrated = true.
+  useEffect(() => {
+    const urlCity = urlParams.get('city');
+    const urlAreaKeys = urlParams.getAll('areaKey').slice(0, 3);
+    if (urlCity) setCity(urlCity);
+    if (urlAreaKeys.length > 0) {
+      const localityNames = urlAreaKeys
+        .map((k) => k.split('|').pop())
+        .filter((n): n is string => Boolean(n));
+      if (localityNames.length > 0) {
+        setFilters((prev) => ({ ...prev, localities: localityNames }));
+      }
+    }
+    hasHydrated.current = true;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     navigate(`/listing/${listing.id}`);
