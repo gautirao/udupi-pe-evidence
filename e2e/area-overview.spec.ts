@@ -280,29 +280,29 @@ test.describe('AO4 — schools display', () => {
 test.describe('AO5 — nav rename', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('AO5 — Area overview nav link visible; Insights absent; click navigates to /area-overview', async ({ page }) => {
+  test('AO5 — Trends nav link visible; Insights absent; click navigates to /trends', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1_500); // allow auth context to resolve nav role
 
-    // "Area overview" nav link visible
-    await expect(page.getByRole('link', { name: /^area overview$/i }).first()).toBeVisible({ timeout: 8_000 });
+    // "Trends" nav link visible
+    await expect(page.getByRole('link', { name: /^trends$/i }).first()).toBeVisible({ timeout: 8_000 });
 
     // "Insights" nav link NOT visible
     await expect(page.getByRole('link', { name: /^insights$/i })).toHaveCount(0);
 
-    // Clicking navigates to /area-overview
-    await page.getByRole('link', { name: /^area overview$/i }).first().click();
-    await expect(page).toHaveURL(/\/area-overview/, { timeout: 8_000 });
+    // Clicking navigates to /trends
+    await page.getByRole('link', { name: /^trends$/i }).first().click();
+    await expect(page).toHaveURL(/\/trends/, { timeout: 8_000 });
   });
 });
 
 // ─── AO6 — /insights redirect ──────────────────────────────────────────────────
 
-test('AO6 — /insights redirects to /area-overview without crash', async ({ page }) => {
+test('AO6 — /insights redirects to /trends without crash', async ({ page }) => {
   await page.goto('/insights');
   await page.waitForLoadState('domcontentloaded');
-  await expect(page).toHaveURL(/\/area-overview/, { timeout: 8_000 });
+  await expect(page).toHaveURL(/\/trends/, { timeout: 8_000 });
   await expect(page.locator('text=Something went wrong')).toHaveCount(0);
 });
 
@@ -312,7 +312,7 @@ test.describe('AO7 — unknown area key', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   test('AO7 — invalid area key renders Area not found without crash', async ({ page }) => {
-    await page.goto('/area-overview?areaKey=INVALID%7CKEY%7CTHAT%7CDOES%7CNOT%7CEXIST');
+    await page.goto('/trends?areaKey=INVALID%7CKEY%7CTHAT%7CDOES%7CNOT%7CEXIST');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText('Area not found')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('text=Something went wrong')).toHaveCount(0);
@@ -324,11 +324,11 @@ test.describe('AO7 — unknown area key', () => {
 test.describe('AO8 — empty areaKey param', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('AO8 — /area-overview?areaKey= (empty string) shows Area not found without crash', async ({ page }) => {
+  test('AO8 — /trends?areaKey= (empty string) shows Area not found without crash', async ({ page }) => {
     // Guard: AreaOverview component treats areaKey='' as an error state
     // (`if (!areaKey || isError)` branch). This covers any entry point that
-    // might navigate to /area-overview without supplying a value.
-    await page.goto('/area-overview?areaKey=');
+    // might navigate to /trends without supplying a value.
+    await page.goto('/trends?areaKey=');
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByText('Area not found')).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('text=Something went wrong')).toHaveCount(0);
@@ -340,12 +340,12 @@ test.describe('AO8 — empty areaKey param', () => {
 test.describe('AO9 — buildAreaKey contract', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('AO9 — IN|KA|district|locality key navigates to area overview with heading and no crash', async ({ page }) => {
+  test('AO9 — IN|KA|district|locality key navigates to /trends with heading and no crash', async ({ page }) => {
     // Validates the contract established by buildAreaKey() in src/lib/areaKey.ts:
     //   buildAreaKey('E2E-TEST-DIST', 'E2E-FULL-AREA') => 'IN|KA|E2E-TEST-DIST|E2E-FULL-AREA'
     // Callers must encodeURIComponent() the result before inserting into the URL.
     const areaKey = 'IN|KA|E2E-TEST-DIST|E2E-FULL-AREA'; // == buildAreaKey('E2E-TEST-DIST', 'E2E-FULL-AREA')
-    await page.goto(`/area-overview?areaKey=${encodeURIComponent(areaKey)}`);
+    await page.goto(`/trends?areaKey=${encodeURIComponent(areaKey)}`);
     await page.waitForLoadState('domcontentloaded');
 
     // URL carries the areaKey param (non-empty)

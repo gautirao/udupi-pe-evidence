@@ -886,7 +886,7 @@ export default function ListingDetail() {
                   </CardHeader>
                   <CardContent className="p-4 pt-0">
                     <Link
-                      to={`/area-overview?areaKey=${encodeURIComponent(listing.areaKey)}`}
+                      to={`/trends?areaKey=${encodeURIComponent(listing.areaKey)}`}
                       className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                     >
                       Explore {localityName}

@@ -75,6 +75,13 @@ function BrokerBookingsRedirect() {
   return <Navigate to={`/broker/bookings${query ? `?${query}` : ''}`} replace />;
 }
 
+/** Redirect /area-overview?... → /trends?... preserving all query params */
+function AreaOverviewRedirect() {
+  const [searchParams] = useSearchParams();
+  const query = searchParams.toString();
+  return <Navigate to={`/trends${query ? `?${query}` : ''}`} replace />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -89,15 +96,9 @@ const App = () => (
               <Route path="/" element={<LandingPage />} />
               <Route path="/discover" element={<Index />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
-              <Route path="/insights" element={<Navigate to="/area-overview" replace />} />
-              <Route
-                path="/area-overview"
-                element={
-                  <ProtectedRoute>
-                    <AreaOverview />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/insights" element={<Navigate to="/trends" replace />} />
+              <Route path="/trends" element={<AreaOverview />} />
+              <Route path="/area-overview" element={<AreaOverviewRedirect />} />
               {/* Onboarding */}
               <Route
                 path="/onboarding"

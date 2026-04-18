@@ -8,7 +8,7 @@
  * IMPORTANT: This returns the RAW (unencoded) string.
  * Callers MUST wrap with encodeURIComponent() before inserting into a URL.
  * Example:
- *   `/area-overview?areaKey=${encodeURIComponent(buildAreaKey(district, locality))}`
+ *   `/trends?areaKey=${encodeURIComponent(buildAreaKey(district, locality))}`
  *
  * Note: district and locality must not contain the pipe character (|).
  * Values from reverse-geocoding (Nominatim) are safe — they do not produce pipes.

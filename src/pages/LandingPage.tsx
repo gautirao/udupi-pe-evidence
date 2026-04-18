@@ -68,7 +68,7 @@ function TrendingLocalitiesSection() {
                       {area.listingCount90d} properties
                     </p>
                     <Link
-                      to={`/area-overview?areaKey=${encodeURIComponent(area.areaKey)}`}
+                      to={`/trends?areaKey=${encodeURIComponent(area.areaKey)}`}
                       className="mt-2 text-sm font-medium text-primary hover:underline"
                     >
                       Explore Area →

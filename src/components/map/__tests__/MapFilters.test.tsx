@@ -182,7 +182,7 @@ describe('MapFilters — View Area Overview button (F3)', () => {
     expect(btn).toBeInTheDocument();
     await user.click(btn);
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/area-overview?areaKey=IN%7CKA%7CUdupi%7CManipal'
+      '/trends?areaKey=IN%7CKA%7CUdupi%7CManipal'
     );
   });
 });

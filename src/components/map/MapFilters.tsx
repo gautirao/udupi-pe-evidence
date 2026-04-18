@@ -169,7 +169,7 @@ export function MapFilters({
             variant="secondary"
             size="sm"
             className="w-full mt-2 gap-1.5 text-xs h-8"
-            onClick={() => navigate(`/area-overview?areaKey=${encodeURIComponent(areaOverviewKey)}`)}
+            onClick={() => navigate(`/trends?areaKey=${encodeURIComponent(areaOverviewKey)}`)}
           >
             <BarChart2 className="h-3.5 w-3.5" />
             View Area Overview

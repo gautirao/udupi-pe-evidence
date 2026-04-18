@@ -112,17 +112,17 @@ test('U2 — /my-bookings loads with My Bookings heading', async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// U3 — /insights redirects to /area-overview (Insights page renamed to Area Overview in #733)
+// U3 — /insights redirects to /trends (route renamed from /area-overview in #767)
 // ---------------------------------------------------------------------------
-test('U3 — /insights redirects to /area-overview (no crash)', async ({ page }) => {
+test('U3 — /insights redirects to /trends (no crash)', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping U3');
 
   await loginAsUser(page);
   await page.goto('/insights');
   await page.waitForLoadState('domcontentloaded');
 
-  // The /insights route is now a <Navigate to="/area-overview" replace /> redirect
-  await expect(page).toHaveURL(/\/area-overview/, { timeout: 8_000 });
+  // The /insights route is now a <Navigate to="/trends" replace /> redirect
+  await expect(page).toHaveURL(/\/trends/, { timeout: 8_000 });
 
   // No error boundary
   await expect(
