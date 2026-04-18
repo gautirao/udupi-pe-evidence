@@ -238,7 +238,7 @@ export default function LandingPage() {
             </SelectContent>
           </Select>
 
-          <Button size="lg" onClick={handleExplore}>
+          <Button size="lg" onClick={handleExplore} className="bg-blue-600 hover:bg-blue-700 text-white">
             Explore on Map
           </Button>
         </div>

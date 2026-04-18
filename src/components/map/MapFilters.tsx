@@ -166,9 +166,8 @@ export function MapFilters({
         </div>
         {trendsAreaKeys.length > 0 && (
           <Button
-            variant="secondary"
             size="sm"
-            className="w-full mt-2 gap-1.5 text-xs h-8"
+            className="w-full mt-2 gap-1.5 text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               const params = new URLSearchParams({ city });
               trendsAreaKeys.slice(0, 3).forEach((k) => params.append('areaKey', k));
@@ -350,8 +349,7 @@ export function MapFilters({
               {filters.localities.map((locality) => (
                 <Badge
                   key={locality}
-                  variant="secondary"
-                  className="text-xs cursor-pointer"
+                  className="text-xs cursor-pointer bg-blue-100 text-blue-700 hover:bg-blue-200 border-0"
                   onClick={() => handleLocalitySelect(locality)}
                 >
                   {locality}

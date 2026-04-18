@@ -210,7 +210,11 @@ export default function Trends() {
 
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-card rounded-lg border p-5 space-y-1">
+        <div className={`rounded-lg border p-5 space-y-1 ${
+          trendDirection === 'rising' ? 'bg-green-50 border-green-200'
+            : trendDirection === 'falling' ? 'bg-red-50 border-red-200'
+            : 'bg-card'
+        }`}>
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">Price Change</span>
             {trendDirection === 'rising' ? (
@@ -262,9 +266,9 @@ export default function Trends() {
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="prices">Price Trends</TabsTrigger>
-          <TabsTrigger value="supply">Supply &amp; Demand</TabsTrigger>
+          <TabsTrigger value="overview" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Overview</TabsTrigger>
+          <TabsTrigger value="prices" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Price Trends</TabsTrigger>
+          <TabsTrigger value="supply" className="data-[state=active]:bg-blue-600 data-[state=active]:text-white">Supply &amp; Demand</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -296,7 +300,7 @@ export default function Trends() {
                 </p>
                 <Button
                   onClick={() => navigate(`/discover?city=${city}&areaKey=${encodeURIComponent(selectedKey)}`)}
-                  className="gap-2"
+                  className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <MapPin className="h-4 w-4" />
                   Explore on Map
