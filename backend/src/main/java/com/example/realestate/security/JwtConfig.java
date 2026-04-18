@@ -47,6 +47,8 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/public/areas/trending").permitAll()
                         // Public trust badge endpoint — no auth required (RE-151)
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/trust").permitAll()
+                        // Public Trends endpoints — no auth required (#771)
+                        .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));

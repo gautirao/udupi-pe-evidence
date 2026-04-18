@@ -193,6 +193,50 @@ public class AreaOverviewService {
     }
 
     // -------------------------------------------------------------------------
+    // Trends endpoints (public, city-scoped)
+    // -------------------------------------------------------------------------
+
+    static final int OPTIONS_DEFAULT_LIMIT = 3;
+    static final int OPTIONS_MAX_LIMIT = 6;
+
+    /**
+     * Returns the top trending locality areas for the given city.
+     *
+     * <p>City matching is case-insensitive on the district segment of the areaKey
+     * (e.g. city="udupi" matches keys starting with "IN|KA|Udupi|").
+     *
+     * @param city  lowercase city slug (e.g. "udupi", "mangalore")
+     * @param limit maximum number of areas to return (silently clamped to [1, OPTIONS_MAX_LIMIT])
+     */
+    @Transactional(readOnly = true)
+    public TrendsOptionsResponse getOptions(String city, int limit) {
+        int clampedLimit = Math.max(1, Math.min(OPTIONS_MAX_LIMIT, limit));
+        log.debug("getOptions: city={}, limit={} (clamped={})", city, limit, clampedLimit);
+
+        List<TrendsOptionsResponse.TrendsOptionDto> areas = jdbcOperations.query(
+                """
+                SELECT area_key
+                FROM area_overview_stats
+                WHERE listing_count_90d IS NOT NULL
+                  AND listing_count_90d > 0
+                  AND area_level = 'locality'
+                  AND LOWER(split_part(area_key, '|', 3)) = LOWER(?)
+                ORDER BY listing_count_90d DESC
+                LIMIT ?
+                """,
+                (rs, rowNum) -> {
+                    String areaKey = rs.getString("area_key");
+                    return new TrendsOptionsResponse.TrendsOptionDto(areaKey, lastPipeSegment(areaKey));
+                },
+                city,
+                clampedLimit
+        );
+
+        log.info("getOptions: city={}, returned {} areas", city, areas.size());
+        return new TrendsOptionsResponse(city, areas);
+    }
+
+    // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
 
