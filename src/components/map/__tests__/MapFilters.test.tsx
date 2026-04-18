@@ -149,18 +149,18 @@ describe('MapFilters — clear button visibility', () => {
   });
 });
 
-describe('MapFilters — View Area Overview button (F3)', () => {
-  it('does not render the button when areaOverviewKey is null', () => {
-    renderFilters({ ...defaultProps, areaOverviewKey: null });
-    expect(screen.queryByRole('button', { name: /view area overview/i })).not.toBeInTheDocument();
+describe('MapFilters — View Trends button (F3)', () => {
+  it('does not render the button when trendsAreaKeys is empty', () => {
+    renderFilters({ ...defaultProps, trendsAreaKeys: [] });
+    expect(screen.queryByRole('button', { name: /view trends/i })).not.toBeInTheDocument();
   });
 
-  it('does not render the button when areaOverviewKey is undefined', () => {
-    renderFilters({ ...defaultProps, areaOverviewKey: undefined });
-    expect(screen.queryByRole('button', { name: /view area overview/i })).not.toBeInTheDocument();
+  it('does not render the button when trendsAreaKeys is undefined', () => {
+    renderFilters({ ...defaultProps, trendsAreaKeys: undefined });
+    expect(screen.queryByRole('button', { name: /view trends/i })).not.toBeInTheDocument();
   });
 
-  it('renders the button and navigates with encoded URL when areaOverviewKey is set', async () => {
+  it('renders the button and navigates with city + encoded areaKeys when trendsAreaKeys is set', async () => {
     const user = userEvent.setup();
     render(
       <MapFilters
@@ -175,14 +175,39 @@ describe('MapFilters — View Area Overview button (F3)', () => {
         city="udupi"
         onCityChange={vi.fn()}
         allListings={[]}
-        areaOverviewKey="IN|KA|Udupi|Manipal"
+        trendsAreaKeys={['IN|KA|Udupi|Manipal']}
       />
     );
-    const btn = screen.getByRole('button', { name: /view area overview/i });
+    const btn = screen.getByRole('button', { name: /view trends/i });
     expect(btn).toBeInTheDocument();
     await user.click(btn);
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/trends?areaKey=IN%7CKA%7CUdupi%7CManipal'
+      '/trends?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal'
+    );
+  });
+
+  it('includes all keys in URL when multiple trendsAreaKeys provided', async () => {
+    const user = userEvent.setup();
+    render(
+      <MapFilters
+        filters={{}}
+        onFiltersChange={vi.fn()}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+        selectedSchool={null}
+        onSchoolSelect={vi.fn()}
+        schoolBoardFilter={[]}
+        onSchoolBoardFilterChange={vi.fn()}
+        city="udupi"
+        onCityChange={vi.fn()}
+        allListings={[]}
+        trendsAreaKeys={['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala']}
+      />
+    );
+    const btn = screen.getByRole('button', { name: /view trends/i });
+    await user.click(btn);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/trends?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal&areaKey=IN%7CKA%7CUdupi%7CKarkala'
     );
   });
 });

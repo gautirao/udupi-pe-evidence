@@ -176,16 +176,16 @@ export default function Index() {
     return focusBounds;
   }, [focusBounds, fitTick]);
 
-  // Derive areaKey for "View Area Overview" button.
-  // Only relevant when exactly one locality is selected; read the first loaded listing that
-  // carries a non-null areaKey (field added in PR #745).
-  const areaOverviewKey = useMemo(() => {
-    if (filters.localities?.length !== 1) return null;
-    const selectedLocality = filters.localities[0];
-    return filteredListings.find(
-      (l) => l.locality === selectedLocality && l.areaKey
-    )?.areaKey ?? null;
-  }, [filters.localities, filteredListings]);
+  // Derive areaKeys for "View Trends" button — one key per selected locality.
+  // Uses the full unfiltered listing set so the CTA remains visible even when
+  // active filters produce zero results. Silently omits localities with no
+  // matching listing that carries a non-empty areaKey.
+  const trendsAreaKeys = useMemo(() => {
+    if (!filters.localities || filters.localities.length === 0) return [];
+    return filters.localities
+      .map((locality) => listings.find((l) => l.locality === locality && l.areaKey)?.areaKey)
+      .filter((k): k is string => k != null && k.length > 0);
+  }, [filters.localities, listings]);
 
   const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
     navigate(`/listing/${listing.id}`);
@@ -214,7 +214,7 @@ export default function Index() {
               city={city}
               onCityChange={handleCityChange}
               allListings={listingsWithCoords}
-              areaOverviewKey={areaOverviewKey}
+              trendsAreaKeys={trendsAreaKeys}
             />
           </div>
         )}
@@ -263,7 +263,7 @@ export default function Index() {
                 city={city}
                 onCityChange={handleCityChange}
                 allListings={listingsWithCoords}
-                areaOverviewKey={areaOverviewKey}
+                trendsAreaKeys={trendsAreaKeys}
               />
             </SheetContent>
           </Sheet>

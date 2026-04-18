@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PropertyFilters, PropertyListing, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
 import { toggleLocality, isAtCap, computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
-import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown, BarChart2 } from 'lucide-react';
+import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown, TrendingUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
@@ -32,9 +32,9 @@ interface MapFiltersProps {
   city: string;
   onCityChange: (city: string) => void;
   allListings: PropertyListing[];
-  /** Derived composite area key when exactly one locality is selected and a listing
-   *  with a non-null areaKey is found. Controls visibility of the "View Area Overview" button. */
-  areaOverviewKey?: string | null;
+  /** areaKey values for all selected localities that have a listing with a non-null areaKey.
+   *  Controls visibility of the "View Trends" button (shown when ≥1 key present). */
+  trendsAreaKeys?: string[];
 }
 
 const propertyTypes: { value: PropertyType; label: string }[] = [
@@ -60,7 +60,7 @@ export function MapFilters({
   city,
   onCityChange,
   allListings,
-  areaOverviewKey,
+  trendsAreaKeys = [],
 }: MapFiltersProps) {
   const navigate = useNavigate();
   const { data: localities = [] } = useLocalities(city);
@@ -164,15 +164,19 @@ export function MapFilters({
             </Button>
           )}
         </div>
-        {areaOverviewKey && (
+        {trendsAreaKeys.length > 0 && (
           <Button
             variant="secondary"
             size="sm"
             className="w-full mt-2 gap-1.5 text-xs h-8"
-            onClick={() => navigate(`/trends?areaKey=${encodeURIComponent(areaOverviewKey)}`)}
+            onClick={() => {
+              const params = new URLSearchParams({ city });
+              trendsAreaKeys.slice(0, 3).forEach((k) => params.append('areaKey', k));
+              navigate(`/trends?${params.toString()}`);
+            }}
           >
-            <BarChart2 className="h-3.5 w-3.5" />
-            View Area Overview
+            <TrendingUp className="h-3.5 w-3.5" />
+            View Trends
           </Button>
         )}
       </CardHeader>
