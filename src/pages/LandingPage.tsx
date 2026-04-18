@@ -1,15 +1,22 @@
 import { useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Map, ShieldCheck, BarChart2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { formatPrice } from '@/lib/formatters';
 
-function TrendingLocalitiesSection() {
+const CITIES = [
+  { value: 'bangalore', label: 'Bangalore' },
+  { value: 'mangalore', label: 'Mangalore' },
+  { value: 'udupi', label: 'Udupi' },
+];
+
+function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
   const { areas, isLoading, isError } = useTrendingAreas();
   const [expanded, setExpanded] = useState(false);
 
@@ -21,9 +28,17 @@ function TrendingLocalitiesSection() {
 
   return (
     <section className="container mx-auto px-4 py-16 max-w-7xl">
-      <h2 className="text-2xl font-semibold text-foreground text-center mb-10">
-        Trending Localities
-      </h2>
+      <div className="flex items-center justify-between mb-10">
+        <h2 className="text-2xl font-semibold text-foreground">
+          Trending Localities
+        </h2>
+        <Link
+          to={`/trends?city=${encodeURIComponent(selectedCity)}`}
+          className="text-sm font-medium text-primary hover:underline"
+        >
+          View All Trends →
+        </Link>
+      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -47,6 +62,7 @@ function TrendingLocalitiesSection() {
                 area.medianPricePaise != null
                   ? formatPrice(area.medianPricePaise / 100)
                   : null;
+              const cardCity = area.areaKey.split('|')[2]?.toLowerCase() ?? 'udupi';
               return (
                 <Card key={area.areaKey}>
                   <CardContent className="p-6 flex flex-col gap-2">
@@ -67,12 +83,20 @@ function TrendingLocalitiesSection() {
                     <p className="text-sm text-muted-foreground">
                       {area.listingCount90d} properties
                     </p>
-                    <Link
-                      to={`/trends?areaKey=${encodeURIComponent(area.areaKey)}`}
-                      className="mt-2 text-sm font-medium text-primary hover:underline"
-                    >
-                      Explore Area →
-                    </Link>
+                    <div className="mt-2 flex items-center gap-4">
+                      <Link
+                        to={`/trends?areaKey=${encodeURIComponent(area.areaKey)}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Explore Area →
+                      </Link>
+                      <Link
+                        to={`/discover?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`}
+                        className="text-sm text-muted-foreground hover:underline"
+                      >
+                        Explore on Map
+                      </Link>
+                    </div>
                   </CardContent>
                 </Card>
               );
@@ -121,6 +145,26 @@ const FEATURE_CARDS: FeatureCard[] = [
 
 export default function LandingPage() {
   const { user, isLoading } = useAuth();
+  const navigate = useNavigate();
+  const [selectedCity, setSelectedCity] = useState('bangalore');
+  const [selectedAreaKey, setSelectedAreaKey] = useState('');
+  const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
+
+  const cityAreas = areaOptions.filter((a) => {
+    const areaCity = a.areaKey.split('|')[2]?.toLowerCase() ?? '';
+    return areaCity === selectedCity;
+  });
+
+  const handleCityChange = (city: string) => {
+    setSelectedCity(city);
+    setSelectedAreaKey('');
+  };
+
+  const handleExplore = () => {
+    const params = new URLSearchParams({ city: selectedCity });
+    if (selectedAreaKey) params.set('areaKey', selectedAreaKey);
+    navigate(`/discover?${params.toString()}`);
+  };
 
   if (isLoading) {
     return (
@@ -162,9 +206,40 @@ export default function LandingPage() {
         <p className="mt-4 text-sm font-medium text-muted-foreground">
           500+ Verified Listings · Trusted Brokers
         </p>
-        <div className="mt-8">
-          <Button asChild size="lg">
-            <Link to="/discover">Explore on Map</Link>
+
+        <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+          <Select value={selectedCity} onValueChange={handleCityChange}>
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Select city" />
+            </SelectTrigger>
+            <SelectContent>
+              {CITIES.map((c) => (
+                <SelectItem key={c.value} value={c.value}>
+                  {c.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={selectedAreaKey}
+            onValueChange={setSelectedAreaKey}
+            disabled={areasLoading || cityAreas.length === 0}
+          >
+            <SelectTrigger className="w-56">
+              <SelectValue placeholder="Any area (optional)" />
+            </SelectTrigger>
+            <SelectContent>
+              {cityAreas.map((a) => (
+                <SelectItem key={a.areaKey} value={a.areaKey}>
+                  {a.areaLabel}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button size="lg" onClick={handleExplore}>
+            Explore on Map
           </Button>
         </div>
       </section>
@@ -194,7 +269,7 @@ export default function LandingPage() {
       {/* ------------------------------------------------------------------ */}
       {/* Trending Localities */}
       {/* ------------------------------------------------------------------ */}
-      <TrendingLocalitiesSection />
+      <TrendingLocalitiesSection selectedCity={selectedCity} />
 
       {/* ------------------------------------------------------------------ */}
       {/* Footer CTA */}
