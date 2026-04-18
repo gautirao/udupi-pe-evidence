@@ -878,7 +878,9 @@ export default function ListingDetail() {
 
             {/* Locality Insights */}
             {listing.areaKey && (() => {
-              const localityName = listing.areaKey.split('|').pop() ?? listing.areaKey;
+              const parts = listing.areaKey.split('|');
+              const localityName = parts.at(-1) ?? listing.areaKey;
+              const trendCity = parts[2]?.toLowerCase() ?? 'udupi';
               return (
                 <Card>
                   <CardHeader className="pb-2">
@@ -886,10 +888,10 @@ export default function ListingDetail() {
                   </CardHeader>
                   <CardContent className="p-4 pt-0">
                     <Link
-                      to={`/trends?areaKey=${encodeURIComponent(listing.areaKey)}`}
+                      to={`/trends?city=${trendCity}&areaKey=${encodeURIComponent(listing.areaKey)}`}
                       className="text-sm text-primary hover:underline inline-flex items-center gap-1"
                     >
-                      Explore {localityName}
+                      View Area Trends — {localityName}
                       <ExternalLink className="h-3 w-3" aria-hidden="true" />
                     </Link>
                   </CardContent>

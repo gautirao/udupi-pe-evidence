@@ -10,7 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap, LogIn, Maximize2 } from 'lucide-react';
+import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap, LogIn, Maximize2, TrendingUp } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
@@ -537,9 +537,23 @@ export default function Index() {
                 </div>
 
                 <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                  <p className="text-xs text-muted-foreground">
-                    Posted {formatRelativeDate(selectedListing.created_at)}
-                  </p>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-xs text-muted-foreground">
+                      Posted {formatRelativeDate(selectedListing.created_at)}
+                    </p>
+                    {selectedListing.areaKey && (() => {
+                      const listingCity = selectedListing.areaKey.split('|')[2]?.toLowerCase() ?? DEFAULT_CITY;
+                      return (
+                        <Link
+                          to={`/trends?city=${listingCity}&areaKey=${encodeURIComponent(selectedListing.areaKey)}`}
+                          className="text-xs text-primary hover:underline flex items-center gap-0.5"
+                        >
+                          <TrendingUp className="h-3 w-3" aria-hidden="true" />
+                          View Area Trends
+                        </Link>
+                      );
+                    })()}
+                  </div>
                   <Button
                     size="sm"
                     onClick={() => handleViewDetails(selectedListing)}
