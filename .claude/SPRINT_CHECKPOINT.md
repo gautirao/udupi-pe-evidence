@@ -1,43 +1,62 @@
 === ROLLING CHECKPOINT START ===
-Sprint: Design Polish Sprint 1
+Sprint: 2-bugfix-routing
 Sprint identity: Model B — milestone-based
-  Milestone: design-polish-sprint-1 (#7, closed 2026-04-14)
-  Sprint label: sprint-design-polish-1
-  Project: RE Trends (PVT_kwHOAAVnaM4BSWI7) — items present, Status=Done, Sprint iteration waived
+  Milestone: 2-bugfix-routing (#8, open)
+  Sprint label: sprint-bugfix-routing
+  Project: RE Trends (PVT_kwHOAAVnaM4BSWI7) — item added, Sprint iteration waived
+Current sprint iteration ID: WAIVED
+Project item IDs: #757 → PVTI_lAHOAAVnaM4BSWI7zgqPVv4
+Sprint issues: #757 Bugfix: missing area-key propagation + locality/map state desync in broker listing flow
+Execution order: PR1 (#757-routing-audit) → PR2 (#757-addresspicker-reconciliation)
+Dependencies: PR2 soft-depends on PR1 areaKey helper (speculative); serialised
 
-Sprint issues: #744, #745, #746, #747, #748, #749
-Enriched specs: SEE .claude/sprint-enriched-specs.md (all unknowns resolved 2026-04-13)
+Enriched specs: SEE .claude/sprint-enriched-specs.md
 
-Execution order:
-Phase A (serial — AppLayout conflict):
-1. ✅ #744 → PR #750 merged — nav rename + logo tagline + CORS fix
-2. ✅ #748 → PR #751 merged — marketing landing page (hero, feature cards, footer CTA; /discover alias)
+Last completed PR: #762 fix(frontend): AddressPicker reconciliation + forward geocode + title/locality gate (PR2 of #757)
+Previous PR: #761 feat(frontend): buildAreaKey helper + areaKey routing audit (PR1 of #757)
+Status: SPRINT COMPLETE
+Integration validation: PASS
 
-Phase B (parallel after A merges):
-3. ✅ #747 → PR #752 merged — GET /api/public/areas/trending backend endpoint (2026-04-13)
-4. ✅ #745 → PR #753 merged — listing detail two-column layout + areaKey in ListingResponse (2026-04-13)
+Gate record: eng=PASS | cr=APPROVE (all 3 blocking + 2 advisory fixed) | sr=N/A | e2e-author=DONE | e2e=PASS | proc=N/A
+Evidence refs: eng=frontend-engineer | cr=code-reviewer | e2e=qa
+Tests passed: YES (5 unit + 6 smoke + 3 AR E2E)
+E2E passed: YES (6 smoke + AR1 + AR2 + AR3)
 
-Phase C (after #745):
-5. ✅ #746 → PR #754 merged — map "View Area Overview" button + New badge on listing cards (2026-04-13)
+Touched files (PR2):
+- src/components/broker/AddressPicker.tsx (modified — AC1–AC5, localityOverridden, onLocalityConfirmed, unmount cleanup, handleSelectResult fix)
+- src/pages/broker/EditListing.tsx (modified — D1 hybrid: titleManuallyEdited, confirmedLocality, step4 warning banner, step1Complete bugfix)
+- src/components/broker/__tests__/AddressPicker.test.tsx (new — 5 unit tests: AC14 forward-geocode, AC15 prop reconciliation)
+- e2e/broker-address-reconciliation.spec.ts (new — AR1, AR2, AR3)
 
-Phase D (after #747 + #748):
-6. ✅ #749 → PR #755 merged — wire Trending Localities section on landing page (2026-04-13)
+Touched files (PR1):
+- src/lib/areaKey.ts (new — buildAreaKey helper, widened signature)
+- src/lib/areaKey.test.ts (new — 13 unit tests)
+- e2e/area-overview.spec.ts (AO8 + AO9 added)
 
-Pre-flight decisions (all resolved):
-- areaKey blocker: add areaKey field to ListingResponse + ListingResponseMapper as part of #745
-- Hero search (#748): decorative → /discover, no area pre-selection
-- area_key on property_listings confirmed; listing_count_90d confirmed as sort column
-- #748 Footer: single "Start Map Search" → /discover (ProtectedRoute bounce removed)
-- #746 button: hidden (not disabled) when 0 or >1 areas selected
-- #746 "New" badge: UTC-based rolling 7×24h cutoff
-- #747 limit >12: silent clamp to 12
-- #749 expansion: "Show more" button reveals cards 4–6
-- #749 price formatting: ≥1 Cr → "₹X.XX Cr"; ≥1 L and <1 Cr → "₹XX L"
+Key decisions:
+- geocodedRef as useRef<Set<string>> (not useState) — prevents stale closure + render cascade on cache update
+- async IIFE + cancelled flag (no setTimeout debounce) — compatible with React 18 act(async) in tests
+- Single unified useEffect on [initialLocality, initialLatitude, initialLongitude, toast] for AC1+AC2
+- localityOverridden is client-only component state (no Flyway migration)
+- handleSelectResult always updates query and resets localityOverridden (fix: prior guard left query stale)
+- step1Complete fixed to use priceRupees (local state) not listing.price (server state)
+- D1 gate: titleManuallyEdited + confirmedLocality; warning only in current session (by design — resets on reload)
+- AR3 E2E: beforeAll pre-confirms address (addressConfirmed=true) so step-3 indicator is enabled from step-2; test uses Change→search→pick flow to fire onLocalityConfirmed
+- buildAreaKey returns empty string for falsy/whitespace inputs — no malformed keys (PR1)
+- Pipe characters in input pass through (callers responsible; JSDoc documented) (PR1)
+- AO8/AO9 need [smoke] tag to be included in local E2E gate — follow-up (PR1, still pending)
 
-Status: SPRINT COMPLETE (Model B — milestone-based) · 6/6
-Completion gate (all checks PASS, 2026-04-14):
-- Universal: 6/6 issues CLOSED with merged closing PRs (#750–#755) ✓
-- Model B: milestone + sprint label on all 6 ✓
-- Model B (optional Project): Status=Done on all 6, Sprint iteration waived ✓
-- Model B: milestone #7 closed ✓
+Sprint-level conventions:
+- CSS display-toggle for wizard panels (preserves image upload state — RE-31)
+- buildAreaKey produces raw pipe-separated string; callers encodeURIComponent() at call site
+- E2E: new spec file e2e/broker-address-reconciliation.spec.ts (AR tests for PR2)
+- buildAreaKey signature is string|null|undefined — geocoding callers may supply null
+
+Known temporary exceptions:
+- AO8/AO9 lack [smoke] tag — not exercised by local E2E gate; add tag as follow-up
+- D1 gate does NOT apply retroactively on page reload (titleManuallyEdited stays false) — by design for MVP
+
+Reverted PRs: NONE
+
+Next PR: NONE — Sprint complete. Issue #757 fully resolved via PR1 (#761) + PR2 (#762).
 === ROLLING CHECKPOINT END ===

@@ -3,22 +3,23 @@
 <!-- Claude-managed. Tracks where the session is and how to resume.
      NOT a source of project/product truth — decisions live in docs/ and .claude/ARCHITECTURE.md -->
 
-Last updated: 2026-04-13
+Last updated: 2026-04-17
 
 ## Current Position
-- Active sprint: Design Polish Sprint 1
-- Sprint identity: Model B — milestone `design-polish-sprint-1` (#7) + label `sprint-design-polish-1`
-- Sprint status: SPRINT COMPLETE (Model B) · 6/6 · all issues CLOSED, Project Status=Done, Sprint iteration waived, milestone closed
+- Active sprint: 2-bugfix-routing
+- Sprint identity: Model B — milestone `2-bugfix-routing` (#8) + label `sprint-bugfix-routing`
+- Sprint status: SPRINT COMPLETE · 1/1 issue (#757) resolved via PR1 (#761) + PR2 (#762)
+- Phase: done
 
 ## Blockers
 - NONE
 
 ## Recent Completions (last 5)
-- Design Polish Sprint 1 #745 → PR #753 — listing detail two-column layout + areaKey (2026-04-13)
-- Design Polish Sprint 1 #746 → PR #754 — map View Area Overview button + New badge (2026-04-13)
-- Design Polish Sprint 1 #749 → PR #755 — Trending Localities section wired on landing page (2026-04-13)
+- 2-bugfix-routing #757 PR1 → #761 — buildAreaKey helper + areaKey routing audit (2026-04-17)
+- 2-bugfix-routing #757 PR2 → #762 — AddressPicker reconciliation + forward geocode + title/locality gate (2026-04-17)
+- 2-bugfix-routing COMPLETE — both PRs merged (2026-04-17)
 - Design Polish Sprint 1 COMPLETE — all 6 PRs (#750–#755) merged (2026-04-13)
 
 ## Session Continuity
-- Last session: 2026-04-13 — Design Polish Sprint 1 complete
+- Last session: 2026-04-17 — 2-bugfix-routing sprint complete
 - Resume action: Start next sprint or idle
