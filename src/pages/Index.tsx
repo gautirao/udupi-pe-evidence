@@ -194,6 +194,9 @@ export default function Index() {
   const hasHydrated = useRef(false);
   useEffect(() => {
     if (!hasHydrated.current) return;
+    // Skip write-back while listings are still loading — prevents overwriting URL
+    // areaKey params before the resolved listing set is available.
+    if (listingsLoading) return;
     setUrlParams(
       (prev) => {
         prev.set('city', city);
@@ -203,7 +206,7 @@ export default function Index() {
       },
       { replace: true }
     );
-  }, [city, trendsAreaKeys, setUrlParams]);
+  }, [city, trendsAreaKeys, setUrlParams, listingsLoading]);
 
   // Read city + areaKey from URL on mount only; must be declared AFTER the
   // write-back effect so the write-back fires (and skips) before this sets
@@ -214,6 +217,7 @@ export default function Index() {
     if (urlCity) setCity(urlCity);
     if (urlAreaKeys.length > 0) {
       const localityNames = urlAreaKeys
+        .filter((k) => k.split('|').length >= 2)
         .map((k) => k.split('|').pop())
         .filter((n): n is string => Boolean(n));
       if (localityNames.length > 0) {
@@ -374,8 +378,17 @@ export default function Index() {
                       )}
                       onClick={() => {
                         const result = toggleLocality(filters.localities, locality);
-                        if (result === null) return;
-                        setFilters({ ...filters, localities: result });
+                        if (!result) return;
+                        setFilters((prev) => ({ ...prev, localities: result }));
+                        const newAreaKeys = result
+                          .map((loc) => listings.find((l) => l.locality === loc && l.areaKey)?.areaKey)
+                          .filter((k): k is string => k != null && k.length > 0);
+                        setUrlParams((prev) => {
+                          prev.set('city', city);
+                          prev.delete('areaKey');
+                          newAreaKeys.forEach((k) => prev.append('areaKey', k));
+                          return prev;
+                        }, { replace: true });
                       }}
                     >
                       {locality}
