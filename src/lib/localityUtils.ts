@@ -11,6 +11,7 @@ export const CITY_CONFIG: Record<string, CityConfig> = {
   udupi: { label: 'Udupi', center: [13.3409, 74.7421], zoom: 11 },
   kundapur: { label: 'Kundapur', center: [13.6218, 74.6943], zoom: 12 },
   mangalore: { label: 'Mangalore', center: [12.9141, 74.856], zoom: 12 },
+  bangalore: { label: 'Bangalore', center: [12.9716, 77.5946] as [number, number], zoom: 11 },
 };
 
 export const DEFAULT_CITY = 'udupi';

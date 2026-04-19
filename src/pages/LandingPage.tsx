@@ -9,6 +9,8 @@ import { Loader2, Map, ShieldCheck, BarChart2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { formatPrice } from '@/lib/formatters';
+import { AREA_DEFAULTS } from '@/constants/areaDefaults';
+import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
 
 const CITIES = [
   { value: 'bangalore', label: 'Bangalore' },
@@ -62,7 +64,8 @@ function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
                 area.medianPricePaise != null
                   ? formatPrice(area.medianPricePaise / 100)
                   : null;
-              const cardCity = area.areaKey.split('|')[2]?.toLowerCase() ?? 'udupi';
+              const districtSegment = area.areaKey.split('|')[2] ?? '';
+              const cardCity = DISTRICT_TO_CITY_SLUG[districtSegment] ?? (districtSegment.toLowerCase() || 'udupi');
               return (
                 <Card key={area.areaKey}>
                   <CardContent className="p-6 flex flex-col gap-2">
@@ -85,7 +88,7 @@ function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
                     </p>
                     <div className="mt-2 flex items-center gap-4">
                       <Link
-                        to={`/trends?areaKey=${encodeURIComponent(area.areaKey)}`}
+                        to={`/trends?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`}
                         className="text-sm font-medium text-primary hover:underline"
                       >
                         Explore Area →
@@ -151,9 +154,11 @@ export default function LandingPage() {
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
   const cityAreas = areaOptions.filter((a) => {
-    const areaCity = a.areaKey.split('|')[2]?.toLowerCase() ?? '';
-    return areaCity === selectedCity;
+    const district = a.areaKey.split('|')[2] ?? '';
+    return (DISTRICT_TO_CITY_SLUG[district] ?? district.toLowerCase()) === selectedCity;
   });
+
+  const areasToShow = cityAreas.length > 0 ? cityAreas : (AREA_DEFAULTS[selectedCity] ?? []);
 
   const handleCityChange = (city: string) => {
     setSelectedCity(city);
@@ -224,13 +229,13 @@ export default function LandingPage() {
           <Select
             value={selectedAreaKey}
             onValueChange={setSelectedAreaKey}
-            disabled={areasLoading || cityAreas.length === 0}
+            disabled={areasLoading && areasToShow.length === 0}
           >
             <SelectTrigger className="w-56">
               <SelectValue placeholder="Any area (optional)" />
             </SelectTrigger>
             <SelectContent>
-              {cityAreas.map((a) => (
+              {areasToShow.map((a) => (
                 <SelectItem key={a.areaKey} value={a.areaKey}>
                   {a.areaLabel}
                 </SelectItem>
@@ -284,7 +289,15 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex items-center justify-center">
             <Button asChild size="lg">
-              <Link to="/discover">Start Map Search</Link>
+              <Link
+                to={`/discover?${new URLSearchParams(
+                  selectedAreaKey
+                    ? { city: selectedCity, areaKey: selectedAreaKey }
+                    : { city: selectedCity },
+                ).toString()}`}
+              >
+                Start Map Search
+              </Link>
             </Button>
           </div>
         </div>
