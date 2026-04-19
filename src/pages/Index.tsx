@@ -156,6 +156,9 @@ export default function Index() {
     ? filteredListings.filter((l) => l.latitude && l.longitude)
     : [];
 
+  const hasHydrated = useRef(false);
+  const initialAnonAreaKeysRef = useRef<string[]>([]);
+
   const areaMedians = useMemo(() => computeAreaMedians(filteredListings), [filteredListings]);
 
   const topLocalities = useMemo(
@@ -177,21 +180,25 @@ export default function Index() {
   }, [focusBounds, fitTick]);
 
   // Derive areaKeys for "View Trends" button — one key per selected locality.
-  // Uses the full unfiltered listing set so the CTA remains visible even when
-  // active filters produce zero results. Silently omits localities with no
-  // matching listing that carries a non-empty areaKey.
+  // For authenticated users: uses the full unfiltered listing set so the CTA
+  // remains visible even when active filters produce zero results.
+  // For anonymous users: listings query is disabled, so fall back to the areaKey
+  // URL params directly — this ensures the CTA is visible when the page is opened
+  // with ?areaKey=... params (e.g. from the Home city/area selector).
   const trendsAreaKeys = useMemo(() => {
-    if (!filters.localities || filters.localities.length === 0) return [];
-    return filters.localities
-      .map((locality) => listings.find((l) => l.locality === locality && l.areaKey)?.areaKey)
-      .filter((k): k is string => k != null && k.length > 0);
-  }, [filters.localities, listings]);
+    if (isAuthenticated) {
+      if (!filters.localities || filters.localities.length === 0) return [];
+      return filters.localities
+        .map((locality) => listings.find((l) => l.locality === locality && l.areaKey)?.areaKey)
+        .filter((k): k is string => k != null && k.length > 0);
+    }
+    return initialAnonAreaKeysRef.current.filter((k) => k.length > 0);
+  }, [isAuthenticated, filters.localities, listings]);
 
   // URL sync: write city + areaKey params whenever they change.
   // Declared before the read-mount effect so it fires first on initial render
   // (hasHydrated is still false → skipped), preventing it from overwriting URL
   // params before they have been read.
-  const hasHydrated = useRef(false);
   useEffect(() => {
     if (!hasHydrated.current) return;
     // Skip write-back while listings are still loading — prevents overwriting URL
@@ -214,6 +221,7 @@ export default function Index() {
   useEffect(() => {
     const urlCity = urlParams.get('city');
     const urlAreaKeys = urlParams.getAll('areaKey').slice(0, 3);
+    initialAnonAreaKeysRef.current = urlAreaKeys;
     if (urlCity) setCity(urlCity);
     if (urlAreaKeys.length > 0) {
       const localityNames = urlAreaKeys
@@ -234,14 +242,58 @@ export default function Index() {
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex relative">
-        {/* Filters Panel — lg+ inline sidebar (authenticated only) */}
-        {isAuthenticated && (
-          <div
-            className={cn(
-              'hidden lg:block h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
-              showFilters ? 'w-72' : 'w-0 overflow-hidden'
-            )}
-          >
+        {/* Filters Panel — lg+ inline sidebar (visible to all users) */}
+        <div
+          className={cn(
+            'hidden lg:block h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
+            showFilters ? 'w-72' : 'w-0 overflow-hidden'
+          )}
+        >
+          <MapFilters
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedSchool={selectedSchool}
+            onSchoolSelect={handleSchoolSelect}
+            schoolBoardFilter={schoolBoardFilter}
+            onSchoolBoardFilterChange={setSchoolBoardFilter}
+            city={city}
+            onCityChange={handleCityChange}
+            allListings={listingsWithCoords}
+            trendsAreaKeys={trendsAreaKeys}
+          />
+        </div>
+
+        {/* Toggle Filters Button — lg+ only (visible to all users) */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
+            showFilters ? 'left-72' : 'left-0'
+          )}
+          onClick={() => setShowFilters(!showFilters)}
+        >
+          {showFilters ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+
+        {/* Mobile Filters Sheet — below lg only (visible to all users) */}
+        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+          <SheetTrigger asChild>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="lg:hidden absolute top-3 left-3 z-10 gap-1.5 shadow-sm"
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 p-0">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Filters</SheetTitle>
+            </SheetHeader>
             <MapFilters
               filters={filters}
               onFiltersChange={handleFiltersChange}
@@ -256,58 +308,8 @@ export default function Index() {
               allListings={listingsWithCoords}
               trendsAreaKeys={trendsAreaKeys}
             />
-          </div>
-        )}
-
-        {/* Toggle Filters Button — lg+ only (authenticated only) */}
-        {isAuthenticated && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
-              showFilters ? 'left-72' : 'left-0'
-            )}
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            {showFilters ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </Button>
-        )}
-
-        {/* Mobile Filters Sheet — below lg only (authenticated only) */}
-        {isAuthenticated && (
-          <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="lg:hidden absolute top-3 left-3 z-10 gap-1.5 shadow-sm"
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                Filters
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
-              <SheetHeader className="sr-only">
-                <SheetTitle>Filters</SheetTitle>
-              </SheetHeader>
-              <MapFilters
-                filters={filters}
-                onFiltersChange={handleFiltersChange}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                selectedSchool={selectedSchool}
-                onSchoolSelect={handleSchoolSelect}
-                schoolBoardFilter={schoolBoardFilter}
-                onSchoolBoardFilterChange={setSchoolBoardFilter}
-                city={city}
-                onCityChange={handleCityChange}
-                allListings={listingsWithCoords}
-                trendsAreaKeys={trendsAreaKeys}
-              />
-            </SheetContent>
-          </Sheet>
-        )}
+          </SheetContent>
+        </Sheet>
 
         {/* Map Area */}
         <div className="flex-1 relative">
