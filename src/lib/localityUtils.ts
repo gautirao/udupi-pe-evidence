@@ -16,6 +16,13 @@ export const CITY_CONFIG: Record<string, CityConfig> = {
 export const DEFAULT_CITY = 'udupi';
 export const LOCALITY_CAP = 3;
 
+/** Maps the district segment (pipe-index 2) of an areaKey to its URL city slug. */
+export const DISTRICT_TO_CITY_SLUG: Record<string, string> = {
+  Bengaluru: 'bangalore',
+  Mangalore: 'mangalore',
+  Udupi: 'udupi',
+};
+
 // === Shared Locality Toggle ===
 /**
  * Toggle a locality in the selection. Returns the new localities array, or

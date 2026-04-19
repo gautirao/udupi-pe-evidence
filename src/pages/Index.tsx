@@ -15,7 +15,7 @@ import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
-import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY, DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
 import { NearbySchoolsBadge } from '@/components/listing/NearbySchoolsBadge';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -578,7 +578,8 @@ export default function Index() {
                       Posted {formatRelativeDate(selectedListing.created_at)}
                     </p>
                     {selectedListing.areaKey && (() => {
-                      const listingCity = selectedListing.areaKey.split('|')[2]?.toLowerCase() ?? DEFAULT_CITY;
+                      const district = selectedListing.areaKey.split('|')[2];
+                      const listingCity = (district && DISTRICT_TO_CITY_SLUG[district]) ?? DEFAULT_CITY;
                       return (
                         <Link
                           to={`/trends?city=${listingCity}&areaKey=${encodeURIComponent(selectedListing.areaKey)}`}

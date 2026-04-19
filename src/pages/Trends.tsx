@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, MapPin, Activity, Shield, AlertCircle, Info, ArrowRight,
@@ -37,13 +37,17 @@ export default function Trends() {
   const navigate = useNavigate();
 
   // URL is the single source of truth for area state
-  const city = searchParams.get('city') ?? 'udupi';
+  const city = searchParams.get('city') ?? 'bangalore';
   const rawAreaKeys = searchParams.getAll('areaKey');
   const urlAreaKeys = rawAreaKeys.slice(0, 3); // cap at 3
   const selectedKey = urlAreaKeys[0] ?? '';
 
   const [timeRange, setTimeRange] = useState('6m');
   const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981'];
+
+  // Tracks the most recently removed invalid key so the defaults effect does not
+  // immediately re-write it back from optionsData, which would create an infinite loop.
+  const lastRemovedKeyRef = useRef<string>('');
 
   // Normalize URL on mount: trim >3 areaKeys to canonical 3
   useEffect(() => {
@@ -53,15 +57,23 @@ export default function Trends() {
       urlAreaKeys.forEach(k => params.append('areaKey', k));
       setSearchParams(params, { replace: true });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps — intentional mount-only: normalizes initial URL before interaction
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only: normalizes initial URL before interaction
+  }, []);
 
   // Fetch backend defaults only when URL has no areaKeys
   const { data: optionsData, isLoading: optionsLoading } = useTrendsOptions(city, urlAreaKeys.length === 0);
 
-  // When no URL areaKeys and defaults arrive: write canonical URL so selectedKey derives correctly
+  // When no URL areaKeys and defaults arrive: write canonical URL so selectedKey derives correctly.
+  // Keys that were previously removed due to an API error are excluded to prevent a re-fetch loop:
+  // if the only backend defaults are the same invalid key that was just removed, we leave the URL
+  // empty so the error/empty state renders instead of cycling indefinitely.
   useEffect(() => {
     if (urlAreaKeys.length === 0 && optionsData?.defaultAreas && optionsData.defaultAreas.length > 0) {
-      const keys = optionsData.defaultAreas.map(a => a.areaKey).slice(0, 3);
+      const keys = optionsData.defaultAreas
+        .map(a => a.areaKey)
+        .filter(k => k !== lastRemovedKeyRef.current)
+        .slice(0, 3);
+      if (keys.length === 0) return; // all defaults are the known-bad key — do not re-populate
       const params = new URLSearchParams();
       params.set('city', city);
       keys.forEach(k => params.append('areaKey', k));
@@ -71,6 +83,25 @@ export default function Trends() {
 
   // Area data for currently selected key
   const { data, isLoading, isError } = useAreaOverview(selectedKey);
+
+  // Invalid areaKey silent recovery:
+  // When the selected (first) key returns an error, record it in lastRemovedKeyRef so
+  // the defaults effect will not re-populate it, then remove it from the URL.
+  // If remaining is empty, write a city-only URL so urlAreaKeys.length becomes 0
+  // which re-enables useTrendsOptions — the defaults effect will then populate
+  // only non-errored keys (guarded by lastRemovedKeyRef), breaking any loop.
+  useEffect(() => {
+    if (!isError || !selectedKey) return;
+    lastRemovedKeyRef.current = selectedKey;
+    const remaining = urlAreaKeys.filter(k => k !== selectedKey);
+    const params = new URLSearchParams();
+    params.set('city', city);
+    remaining.forEach(k => params.append('areaKey', k));
+    setSearchParams(params, { replace: true });
+  // Intentional: only fire when the error state or selected key changes.
+  // Including city/urlAreaKeys/setSearchParams would cause looping re-runs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isError, selectedKey]);
 
   // Dropdown change: selected area moves to position 0, others retained; URL updated
   const handleAreaChange = (newKey: string) => {
@@ -124,16 +155,34 @@ export default function Trends() {
       ]
     : [];
 
-  // Empty state: no area and not waiting for defaults from backend
+  // No area selected and options fetch has settled (not loading).
+  // Two sub-cases determined by whether the backend returned any defaults:
+  //   • defaultAreas empty → city has no trend data at all ("No areas available")
+  //   • defaultAreas non-empty but defaults effect hasn't written the URL yet,
+  //     or lastRemovedKeyRef blocked all defaults → invite the user to choose ("Select an area")
+  // Collapsing into one guard with an inner branch prevents silent mis-render if
+  // order of the two checks were ever swapped during refactoring.
   if (!selectedKey && !optionsLoading) {
+    const noAreasAvailable = optionsData !== undefined && (optionsData.defaultAreas ?? []).length === 0;
     return (
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <MapPin className="h-10 w-10 text-muted-foreground" />
-          <p className="text-lg font-medium text-foreground">Select an area to explore</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Choose a locality from the map to see price trends and market insights.
-          </p>
+          {noAreasAvailable ? (
+            <>
+              <p className="text-lg font-medium text-foreground">No areas available</p>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Trend data is not yet available for this city. Explore properties on the map instead.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-medium text-foreground">Select an area to explore</p>
+              <p className="text-sm text-muted-foreground max-w-xs">
+                Choose a locality from the map to see price trends and market insights.
+              </p>
+            </>
+          )}
           <Button asChild variant="default" size="sm">
             <Link to={`/discover?city=${city}`}>Explore on Map</Link>
           </Button>
@@ -142,8 +191,8 @@ export default function Trends() {
     );
   }
 
-  // Waiting for defaults or area data
-  if (!selectedKey || isLoading || !data) {
+  // Waiting for defaults or in-flight request
+  if (!selectedKey || isLoading) {
     return <LoadingSkeleton />;
   }
 
@@ -162,6 +211,11 @@ export default function Trends() {
         </div>
       </div>
     );
+  }
+
+  // data is undefined in non-error, non-loading states only if query hasn't run yet
+  if (!data) {
+    return <LoadingSkeleton />;
   }
 
   // Label for dropdown item — show resolved areaLabel for selected key, pipe-segment fallback for others

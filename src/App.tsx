@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate, useParams, useSearchParams } fr
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Loader2 } from "lucide-react";
+import { DISTRICT_TO_CITY_SLUG } from "@/lib/localityUtils";
 
 // Eagerly loaded — these are on the critical path for first paint
 import Index from "./pages/Index";
@@ -75,11 +76,31 @@ function BrokerBookingsRedirect() {
   return <Navigate to={`/broker/bookings${query ? `?${query}` : ''}`} replace />;
 }
 
-/** Redirect /area-overview?... → /trends?... preserving all query params */
+/** Infer city slug from the first areaKey param (pipe index 2 = district). */
+function inferCityFromAreaKey(areaKeys: string[]): string {
+  const first = areaKeys[0];
+  if (!first) return 'bangalore';
+  const district = first.split('|')[2];
+  return (district && DISTRICT_TO_CITY_SLUG[district]) ?? 'bangalore';
+}
+
+/**
+ * Redirect /area-overview?... → /trends?... preserving all areaKey params.
+ * If ?city is absent, infers it from the first areaKey's district segment.
+ * Falls back to 'bangalore' when no valid areaKey is present.
+ */
 function AreaOverviewRedirect() {
   const [searchParams] = useSearchParams();
-  const query = searchParams.toString();
-  return <Navigate to={`/trends${query ? `?${query}` : ''}`} replace />;
+  const areaKeys = searchParams.getAll('areaKey');
+  const cityParam = searchParams.get('city');
+
+  const city = cityParam ?? inferCityFromAreaKey(areaKeys);
+
+  const next = new URLSearchParams();
+  next.set('city', city);
+  areaKeys.forEach(k => next.append('areaKey', k));
+
+  return <Navigate to={`/trends?${next.toString()}`} replace />;
 }
 
 const App = () => (
