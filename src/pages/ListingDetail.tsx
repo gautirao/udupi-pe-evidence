@@ -33,6 +33,7 @@ import { RERACard } from '@/components/listing/RERACard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 import { NearbySchoolsCard } from '@/components/listing/NearbySchoolsCard';
+import { DISTRICT_TO_CITY_SLUG, DEFAULT_CITY } from '@/lib/localityUtils';
 
 const DIMENSION_LABELS: Record<string, string> = {
   IDENTITY: 'Identity Verified',
@@ -880,7 +881,8 @@ export default function ListingDetail() {
             {listing.areaKey && (() => {
               const parts = listing.areaKey.split('|');
               const localityName = parts.at(-1) ?? listing.areaKey;
-              const trendCity = parts[2]?.toLowerCase() ?? 'udupi';
+              // areaKey format: IN|KA|{district}|{locality} — parts[2] is the district
+              const trendCity = (parts[2] && DISTRICT_TO_CITY_SLUG[parts[2]]) ?? DEFAULT_CITY;
               return (
                 <Card>
                   <CardHeader className="pb-2">
