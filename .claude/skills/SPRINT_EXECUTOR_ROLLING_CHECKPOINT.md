@@ -136,6 +136,14 @@ Before the first PR:
    - These specs are the authoritative input to team-lead, qa-fast, and engineers for the rest of the sprint. Do NOT re-derive them per-PR.
    - When passing enriched spec context to any agent, read only the relevant issue's section from `sprint-enriched-specs.md` — do NOT load all specs.
 
+   **Issue completeness requirements (mandatory for all feature issues):**
+   Before execution begins, every feature issue spec must declare:
+   - User modes affected: Anonymous (yes/no) and Authenticated (yes/no)
+   - Canonical entry points: direct URL, upstream navigation, and any deep-link sources (e.g. listing card, detail page)
+   - Backend contract (if applicable): exact endpoint(s) to be consumed, and the source issue providing the contract
+
+   If any of these is missing from the enriched spec: treat as a spec gap, raise it in the team-lead pre-flight output, and pause execution until clarified or explicitly waived.
+
 4. **Invoke team-lead pre-flight analysis** — pass all issue IDs, titles, descriptions, AND enriched specs as context:
    > "Sprint issues: [paste all issue IDs + titles + descriptions + enriched specs]. Run Mode 1: Sprint Kickoff Analysis."
    - team-lead returns: recommended execution order, dependency warnings, file conflicts, pre-review flags, spec gaps.
@@ -282,6 +290,18 @@ PENDING  ← replaced with qa-fast output after step 4 runs
 
    Bug-fix tasks: reproduction is already confirmed in step 3. `ROUTE_AND_RUN` will not re-run it.
 
+   **Runtime awareness — verify during implementation, not just at QA:**
+   - Navigation works end-to-end from all specified entry points (direct URL, upstream nav, listing deep-link)
+   - URL params (`city`, `areaKey`, etc.) are passed, preserved, and read correctly across the full flow
+   - UI state reflects URL state and vice versa; two-way sync holds on hydration and on change
+   - Correct backend endpoint is used — no legacy endpoint calls (for epic-linked FE/BE work: explicitly map FE issue → endpoint → BE issue providing the contract; verify implementation uses that exact endpoint; mismatched or legacy endpoint is a blocking error)
+   - If the route is public: trace the anonymous path explicitly — verify it completes without auth fixtures
+
+   **Milestone journey awareness — apply when multiple issues form a user journey:**
+   - Identify the full journey (e.g. Home → Discover → Trends) at the start of each related issue
+   - Verify each step works in isolation AND that the accumulated journey is correct before closing the final journey issue
+   - Do not assume the journey is complete based on individual issues passing their own ACs in isolation
+
    **The E2E gate within ROUTE_AND_RUN is MANDATORY for Normal and High-risk PRs — run unconditionally. "Backend not running" is not a valid skip; if a server fails to start, surface as BLOCKED.**
 
    **Boundary rule:** `ROUTE_AND_RUN.md` owns change classification, reviewer/security retry loops, process-doc review, post-engineer materialization checks, spec invalidation, and E2E gate policy. `SPRINT_EXECUTOR_ROLLING_CHECKPOINT` records the outcomes of those gates in the checkpoint but does not restate, reinterpret, or override them here.
@@ -389,6 +409,22 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    5. `All gates satisfied: YES` is present in the emitted GSR
    6. **Fixlog findings gate:** if `.claude/state/current-pr-fixlog.md` exists, the Findings table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved findings to the user before proceeding. DEFERRED findings are allowed only if the Notes column for that row is non-empty (`defer: <reason> | agreed: <context>`) — a DEFERRED row with an empty Notes column is treated as STILL_OPEN for gate purposes regardless of its Status field. A missing or empty fixlog (Trivial/Doc-only, no code-reviewer ran) satisfies this condition.
    7. **QA Failures gate:** if the fixlog exists, the QA Failures table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved QA failures to the user before proceeding. DEFERRED failures are allowed only if the Notes column for that row is non-empty (`defer: <reason> | agreed: <context>`) — a DEFERRED row with an empty Notes column is treated as STILL_OPEN for gate purposes regardless of its Status field. A fixlog with no QA Failures rows (QA passed on cycle 1, or no QA ran) satisfies this condition.
+   8. **Runtime Verification (R0):** issue cannot be closed without runtime validation. Required checks — apply by scope:
+      - Public routes: anonymous journey completes without auth
+      - Routing: deep-link works; URL is canonical after load
+      - Data: correct endpoint used; correct params passed; no AC feature stubbed (hard-coded empty array, decorative state, wrong label)
+      - Entry points: all specified entry points (direct URL, upstream nav, listing link) verified
+      - Each AC verified against runtime behaviour (not inferred from code or UI presence)
+      - For the final issue in a multi-issue journey: verify the full end-to-end journey before closing
+      Evidence required (one record per entry point): entry point used, user mode (anonymous/authenticated), endpoint observed (if applicable), URL after navigation. If any check fails: mark PARTIAL, do not close the issue.
+
+   **E2E Integrity Check (HARD GATE):**
+   - `cat .e2e-passed` MUST match `git rev-parse HEAD` — a stale sentinel is invalid; existence alone is not a pass signal
+   - Tests must NOT contain: `test.skip(true)` called unconditionally, or conditional-pass patterns (branches where the test passes regardless of whether the feature works)
+   - If sentinel is stale: run `bash scripts/run-e2e-local.sh` and refresh `.e2e-passed` only after a verified green run against current HEAD
+   - If the route is public: at least one test must cover the anonymous journey (no `storageState`)
+   - Tests must assert correct navigation outcomes (URL after navigation), not only the absence of error messages
+   - Permissive assertions that pass on regression are equivalent to no coverage — treat as a gap requiring new tests
 
    If any condition is false, STOP. Resolve the gap before proceeding. Post-hoc GSR reconstruction (writing it after the PR is created) is **banned**.
 
@@ -421,6 +457,8 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    **Exception — do NOT close the issue if any of the following apply:**
    - ROUTE_AND_RUN's Gate Satisfaction Record shows `Spec invalidation: PARTIAL` — the issue has deferred ACs. Do NOT auto-close unless: (a) the remaining covered ACs satisfy the issue's minimum contract, OR (b) the user explicitly accepted partial completion during the ROUTE_AND_RUN run. If neither, add `partial` label and leave open.
    - The issue was quarantined (step 5a flakiness protocol) — issue stays open with a `flaky` label. Progress line shows `RE-NNN ⚠️` instead of `✅`.
+
+   **Definition of Done:** DONE = code merged + runtime verified (R0) + all ACs validated against live behaviour + full journey validated (if multi-issue).
 
 7. **Play chime + emit sprint progress line** — `afplay /System/Library/Sounds/Hero.aiff`
 

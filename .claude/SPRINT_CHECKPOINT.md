@@ -1,62 +1,50 @@
 === ROLLING CHECKPOINT START ===
-Sprint: 2-bugfix-routing
+Sprint: Discover & Trends Redesign
 Sprint identity: Model B — milestone-based
-  Milestone: 2-bugfix-routing (#8, open)
-  Sprint label: sprint-bugfix-routing
-  Project: RE Trends (PVT_kwHOAAVnaM4BSWI7) — item added, Sprint iteration waived
+  Milestone: Discover & Trends Redesign (#9, open)
+  Sprint label: sprint-discover-trends
+GitHub Project: RE Trends (project 1, PVT_kwHOAAVnaM4BSWI7)
 Current sprint iteration ID: WAIVED
-Project item IDs: #757 → PVTI_lAHOAAVnaM4BSWI7zgqPVv4
-Sprint issues: #757 Bugfix: missing area-key propagation + locality/map state desync in broker listing flow
-Execution order: PR1 (#757-routing-audit) → PR2 (#757-addresspicker-reconciliation)
-Dependencies: PR2 soft-depends on PR1 areaKey helper (speculative); serialised
-
+Project item IDs: NOT_IN_PROJECT (Model B — project tracking optional; all 9 sprint issues use milestone+label only)
+Sprint issues: #784 Layout parity decision (Option B) | #767 Route rename + URL support | #768 Trends page UI + Recharts | #765 Discover URL sync | #783 Anonymous Discover journey | #764 Home selector | #772 Listing → Trends deep link | #770 Blue/green palette | #773 E2E realignment
+Execution order: #784 | #767+#768 (combined) | #765 | #783 | #764 | #772 | #770 | #773
+Dependencies:
+- #768 must be combined with #767 [confirmed — same file rename; splitting leaves broken import]
+- #783 depends on #765 [confirmed — URL write-back fix is precondition for anon areaKey hydration]
+- #764 depends on #765 [confirmed — Home emits URL contract that Discover must read]
+- #772 depends on #767 [confirmed — /trends route must exist before listing cards link to it]
+- #770 depends on #768 [confirmed — Trends.tsx must exist at final path before palette migration]
+- #773 depends on all feature PRs [confirmed — must run last against final merged state]
+- #784 has no code dependencies [confirmed — doc-only]
 Enriched specs: SEE .claude/sprint-enriched-specs.md
 
-Last completed PR: #762 fix(frontend): AddressPicker reconciliation + forward geocode + title/locality gate (PR2 of #757)
-Previous PR: #761 feat(frontend): buildAreaKey helper + areaKey routing audit (PR1 of #757)
+Last completed PR: #773 — E2E realignment (→ GitHub PR #782, squash-merged)
+Current PR: N/A
 Status: SPRINT COMPLETE
-Integration validation: PASS
-
-Gate record: eng=PASS | cr=APPROVE (all 3 blocking + 2 advisory fixed) | sr=N/A | e2e-author=DONE | e2e=PASS | proc=N/A
-Evidence refs: eng=frontend-engineer | cr=code-reviewer | e2e=qa
-Tests passed: YES (5 unit + 6 smoke + 3 AR E2E)
-E2E passed: YES (6 smoke + AR1 + AR2 + AR3)
-
-Touched files (PR2):
-- src/components/broker/AddressPicker.tsx (modified — AC1–AC5, localityOverridden, onLocalityConfirmed, unmount cleanup, handleSelectResult fix)
-- src/pages/broker/EditListing.tsx (modified — D1 hybrid: titleManuallyEdited, confirmedLocality, step4 warning banner, step1Complete bugfix)
-- src/components/broker/__tests__/AddressPicker.test.tsx (new — 5 unit tests: AC14 forward-geocode, AC15 prop reconciliation)
-- e2e/broker-address-reconciliation.spec.ts (new — AR1, AR2, AR3)
-
-Touched files (PR1):
-- src/lib/areaKey.ts (new — buildAreaKey helper, widened signature)
-- src/lib/areaKey.test.ts (new — 13 unit tests)
-- e2e/area-overview.spec.ts (AO8 + AO9 added)
-
+Integration validation: COMPLETE
+Reverted PRs:
+- NONE
+PR record (all merged):
+- #784 → doc-only (epic body update, no code PR)
+- #767+#768 → PR #786 (trends route rename + Trends page UI + Recharts)
+- #765 → PR #787 (Discover URL sync — read/write city + areaKey params)
+- #783 → PR #788 (anonymous Discover journey — MapFilters + View Trends CTA without auth)
+- #764 → PR #789 (Home city + area selector with URL-aware Discover navigation)
+- #772 → PR #790 (Listing → Trends deep link — PropertyCard + ListingDetail)
+- #770 → PR #781 (blue/green palette — MapFilters chips blue, Trends tabs/metric cards, LandingPage hero CTA)
+- #773 → PR #782 (E2E realignment — area-overview.spec.ts trimmed, trends.spec.ts new)
 Key decisions:
-- geocodedRef as useRef<Set<string>> (not useState) — prevents stale closure + render cascade on cache update
-- async IIFE + cancelled flag (no setTimeout debounce) — compatible with React 18 act(async) in tests
-- Single unified useEffect on [initialLocality, initialLatitude, initialLongitude, toast] for AC1+AC2
-- localityOverridden is client-only component state (no Flyway migration)
-- handleSelectResult always updates query and resets localityOverridden (fix: prior guard left query stale)
-- step1Complete fixed to use priceRupees (local state) not listing.price (server state)
-- D1 gate: titleManuallyEdited + confirmedLocality; warning only in current session (by design — resets on reload)
-- AR3 E2E: beforeAll pre-confirms address (addressConfirmed=true) so step-3 indicator is enabled from step-2; test uses Change→search→pick flow to fire onLocalityConfirmed
-- buildAreaKey returns empty string for falsy/whitespace inputs — no malformed keys (PR1)
-- Pipe characters in input pass through (callers responsible; JSDoc documented) (PR1)
-- AO8/AO9 need [smoke] tag to be included in local E2E gate — follow-up (PR1, still pending)
-
+- #784: Option B — Discover retains existing layout; mockup applies to colour/component placement only; #785 filed for mockup reconciliation
+- #767+#768 combined into one PR (atomic file rename; splitting produces dangling import in App.tsx)
+- #783: Option A — remove auth gate on MapFilters sidebar, city label, chips, "View Trends" CTA; selected-listing preview remains gated
+- #770 PropertyCard scoping: colour changes on consumer pages only; broker/admin pages zero diff
 Sprint-level conventions:
-- CSS display-toggle for wizard panels (preserves image upload state — RE-31)
-- buildAreaKey produces raw pipe-separated string; callers encodeURIComponent() at call site
-- E2E: new spec file e2e/broker-address-reconciliation.spec.ts (AR tests for PR2)
-- buildAreaKey signature is string|null|undefined — geocoding callers may supply null
-
-Known temporary exceptions:
-- AO8/AO9 lack [smoke] tag — not exercised by local E2E gate; add tag as follow-up
-- D1 gate does NOT apply retroactively on page reload (titleManuallyEdited stays false) — by design for MVP
-
-Reverted PRs: NONE
-
-Next PR: NONE — Sprint complete. Issue #757 fully resolved via PR1 (#761) + PR2 (#762).
+- buildAreaKey: produces raw pipe-separated string; callers encodeURIComponent() at call site
+- URL params: city + repeated areaKey (URLSearchParams.getAll('areaKey')); max 3 params honoured
+- Auth gate removal (#783): only MapFilters sidebar + city label + chips + "View Trends" CTA; selected-listing preview card remains gated
+- DISTRICT_TO_CITY_SLUG: { Bengaluru: 'bangalore', Mangalore: 'mangalore', Udupi: 'udupi' } — used across LandingPage, ListingDetail, Trends, App.tsx
+Open blockers:
+- NONE
+Next PR:
+- N/A — SPRINT COMPLETE
 === ROLLING CHECKPOINT END ===

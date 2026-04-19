@@ -1,16 +1,16 @@
-# PR Fixlog — #749 feat(frontend): wire Trending Localities section on landing page
+# PR Fixlog — #770 Blue/green palette migration
 
 ## Counters
 | Field | Value |
 |-------|-------|
-| engineer-cycles | 1 |
-| code-review-cycles | 1 |
+| engineer-cycles | 0 |
+| code-review-cycles | 0 |
 | qa-verify-cycles | 0 |
 | qa-targeted-reruns | 0 |
 | qa-full-reruns | 0 |
 
 ## Reviewer Baseline
-baseline_sha: bfa69e2
+baseline_sha: TBD
 
 ## Findings
 | ID | Severity | File | Line | Status |
@@ -23,6 +23,3 @@ baseline_sha: bfa69e2
 ## Agent Ledger
 | Step | Agent | Action | Notes |
 |------|-------|--------|-------|
-| 1 | qa-fast | Pre-impl risk scan | formatPrice reusable (÷100); useAreaOverview hook pattern; guard medianPricePaise null; E2E YES |
-| 2 | frontend-engineer | Implement #749 | useTrendingAreas.ts + LandingPage.tsx TrendingLocalitiesSection; TS clean |
-| 3 | code-reviewer | Review | APPROVE WITH COMMENTS — no BLOCKING; ProtectedRoute on card links is intentional (signup funnel per AC) |
