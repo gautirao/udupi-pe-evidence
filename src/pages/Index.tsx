@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useTeaserListings, TeaserListing } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useTeaserListings, TeaserListing, useLocalities } from '@/hooks/usePropertyListings';
+import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
@@ -179,21 +180,32 @@ export default function Index() {
     return focusBounds;
   }, [focusBounds, fitTick]);
 
-  // Derive areaKeys for "View Trends" button — one key per selected locality.
-  // For authenticated users: uses the full unfiltered listing set so the CTA
-  // remains visible even when active filters produce zero results.
-  // For anonymous users: listings query is disabled, so fall back to the areaKey
-  // URL params directly — this ensures the CTA is visible when the page is opened
-  // with ?areaKey=... params (e.g. from the Home city/area selector).
+  // Locality options + trends options — used together for locality→areaKey mapping.
+  // Primary source: area_overview_stats via /api/trends/options (backend-authoritative, limit=50).
+  // Fallback: property_listings.area_key (sparse backfill from PR #745).
+  const { data: localityOptions = [] } = useLocalities(city);
+  const { data: trendsOpts } = useTrendsOptions(city, true, 50);
+  const localityToAreaKey = useMemo(() => {
+    const m = new Map<string, string>();
+    trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
+    localityOptions.forEach((o) => {
+      if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey);
+    });
+    return m;
+  }, [trendsOpts, localityOptions]);
+
+  // Derive areaKeys for "View Trends" button and URL write-back.
+  // For anonymous users: fall back to URL params (set on mount from Home navigation).
   const trendsAreaKeys = useMemo(() => {
     if (isAuthenticated) {
       if (!filters.localities || filters.localities.length === 0) return [];
-      return filters.localities
-        .map((locality) => listings.find((l) => l.locality === locality && l.areaKey)?.areaKey)
-        .filter((k): k is string => k != null && k.length > 0);
+      return filters.localities.flatMap((loc) => {
+        const k = localityToAreaKey.get(loc);
+        return k ? [k] : [];
+      });
     }
     return initialAnonAreaKeysRef.current.filter((k) => k.length > 0);
-  }, [isAuthenticated, filters.localities, listings]);
+  }, [isAuthenticated, filters.localities, localityToAreaKey]);
 
   // URL sync: write city + areaKey params whenever they change.
   // Declared before the read-mount effect so it fires first on initial render

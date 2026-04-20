@@ -221,29 +221,33 @@ test.describe('T4 — dropdown change updates URL', () => {
 test.describe('T5 — Discover → Trends navigation', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
-  test('T5 — "View Trends" button in MapFilters navigates to /trends with city param', async ({ page }) => {
-    // Navigate to Discover with a pre-selected locality via URL (relies on #765 URL sync)
-    // Use a real city so locality chips can be populated from real listings.
-    // Verify Trends link navigates correctly regardless of which locality is selected.
+  test('T5 — selecting a locality shows "View Trends" and navigates to /trends with areaKey', async ({ page }) => {
     await page.goto('/discover?city=udupi');
     await page.waitForLoadState('domcontentloaded');
 
-    // Wait for filter panel to render
     await expect(page.getByText('Filters')).toBeVisible({ timeout: 8_000 });
 
-    // If a "View Trends" button is visible (requires locality selection with an areaKey),
-    // click it and verify navigation. Otherwise verify the button is absent (no localities).
+    // Button must NOT be visible before any locality is selected
     const trendsBtn = page.getByRole('button', { name: /View Trends/i });
-    const count = await trendsBtn.count();
-    if (count > 0) {
-      await trendsBtn.click();
-      await expect(page).toHaveURL(/\/trends/, { timeout: 8_000 });
-      await expect(page).toHaveURL(/city=/, { timeout: 5_000 });
-      await expect(page).toHaveURL(/areaKey=/, { timeout: 5_000 });
-    } else {
-      // No localities selected yet — button correctly absent
-      await expect(trendsBtn).toHaveCount(0);
-    }
+    await expect(trendsBtn).toHaveCount(0, { timeout: 5_000 });
+
+    // Open the Locality combobox
+    const localityTrigger = page.locator('button[role="combobox"]').filter({ hasText: /localities/i });
+    await localityTrigger.click();
+
+    // Wait for the locality list to populate and pick the first enabled option
+    const firstOption = page.locator('[role="option"]:not([aria-disabled="true"])').first();
+    await expect(firstOption).toBeVisible({ timeout: 8_000 });
+    await firstOption.click();
+
+    // "View Trends" must now appear — proves areaKey resolved from useLocalities, not listing scan
+    await expect(trendsBtn).toBeVisible({ timeout: 8_000 });
+
+    // Click and verify navigation includes both city and areaKey
+    await trendsBtn.click();
+    await expect(page).toHaveURL(/\/trends/, { timeout: 8_000 });
+    await expect(page).toHaveURL(/[?&]city=udupi/, { timeout: 5_000 });
+    await expect(page).toHaveURL(/[?&]areaKey=/, { timeout: 5_000 });
   });
 });
 

@@ -353,10 +353,15 @@ export function usePropertyListings(filters?: PropertyFilters) {
   });
 }
 
+export interface LocalityOption {
+  locality: string;
+  areaKey: string | null;
+}
+
 export function useLocalities(city?: string) {
   return useQuery({
     queryKey: ['localities', city],
-    queryFn: async () => {
+    queryFn: async (): Promise<LocalityOption[]> => {
       const { data, error } = await supabase
         .from('property_listings')
         .select('locality, area_key')
@@ -380,9 +385,20 @@ export function useLocalities(city?: string) {
         }
       }
 
-      // Get unique localities
-      const localities = [...new Set(filtered.map((d) => d.locality).filter(Boolean))] as string[];
-      return localities.sort();
+      // Deduplicate by locality name, preserving first non-null area_key seen
+      const seen = new Map<string, string | null>();
+      for (const d of filtered) {
+        if (!d.locality) continue;
+        if (!seen.has(d.locality)) {
+          seen.set(d.locality, d.area_key ?? null);
+        } else if (seen.get(d.locality) === null && d.area_key) {
+          seen.set(d.locality, d.area_key);
+        }
+      }
+
+      return [...seen.entries()]
+        .map(([locality, areaKey]) => ({ locality, areaKey }))
+        .sort((a, b) => a.locality.localeCompare(b.locality));
     },
   });
 }

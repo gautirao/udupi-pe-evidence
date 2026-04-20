@@ -10,7 +10,8 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PropertyFilters, PropertyListing, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
+import { LocalityOption, PropertyFilters, PropertyListing, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
+import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { formatPrice } from '@/lib/formatters';
 import { toggleLocality, isAtCap, computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
 import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown, TrendingUp } from 'lucide-react';
@@ -63,9 +64,33 @@ export function MapFilters({
   trendsAreaKeys = [],
 }: MapFiltersProps) {
   const navigate = useNavigate();
-  const { data: localities = [] } = useLocalities(city);
+  const { data: localityOptions = [] } = useLocalities(city);
+  const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: priceRange } = usePriceRange();
   const [localityOpen, setLocalityOpen] = useState(false);
+
+  // Primary source: area_overview_stats via /api/trends/options (backend-authoritative).
+  // Fallback: property_listings.area_key (sparse — covers localities missing from stats).
+  const localityToAreaKey = useMemo(() => {
+    const m = new Map<string, string>();
+    trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
+    localityOptions.forEach((o) => {
+      if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey);
+    });
+    return m;
+  }, [trendsOpts, localityOptions]);
+
+  const localityNames = useMemo(() => localityOptions.map((o) => o.locality), [localityOptions]);
+
+  // areaKeys for selected localities — resolved from the merged map
+  const selectedAreaKeys = useMemo(
+    () =>
+      (filters.localities ?? []).flatMap((loc) => {
+        const k = localityToAreaKey.get(loc);
+        return k ? [k] : [];
+      }),
+    [filters.localities, localityToAreaKey]
+  );
 
   const handlePropertyTypeChange = (type: PropertyType, checked: boolean) => {
     const currentTypes = filters.propertyTypes || [];
@@ -93,11 +118,9 @@ export function MapFilters({
     if (nearby.length > 0) return nearby;
 
     // Fallback: show other available localities not already selected
-    const available = (localities ?? []).filter(
-      (loc) => !filters.localities?.includes(loc)
-    );
+    const available = localityNames.filter((loc) => !filters.localities?.includes(loc));
     return available.slice(0, 5);
-  }, [filters.localities, allListings, localities]);
+  }, [filters.localities, allListings, localityNames]);
 
   const handlePriceChange = (values: number[]) => {
     onFiltersChange({
@@ -164,13 +187,14 @@ export function MapFilters({
             </Button>
           )}
         </div>
-        {trendsAreaKeys.length > 0 && (
+        {(selectedAreaKeys.length > 0 || trendsAreaKeys.length > 0) && (
           <Button
             size="sm"
             className="w-full mt-2 gap-1.5 text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
+              const keysToUse = selectedAreaKeys.length > 0 ? selectedAreaKeys : trendsAreaKeys;
               const params = new URLSearchParams({ city });
-              trendsAreaKeys.slice(0, 3).forEach((k) => params.append('areaKey', k));
+              keysToUse.slice(0, 3).forEach((k) => params.append('areaKey', k));
               navigate(`/trends?${params.toString()}`);
             }}
           >
@@ -322,7 +346,7 @@ export function MapFilters({
                 <CommandList>
                   <CommandEmpty>No locality found.</CommandEmpty>
                   <CommandGroup>
-                    {localities.map((locality) => (
+                    {localityOptions.map(({ locality }) => (
                       <CommandItem
                         key={locality}
                         value={locality}

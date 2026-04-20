@@ -11,11 +11,14 @@ export interface TrendsOptionsResponse {
   defaultAreas: TrendsOption[];
 }
 
-export function useTrendsOptions(city: string, fetchEnabled = true) {
+export function useTrendsOptions(city: string, fetchEnabled = true, limit = 3) {
   return useQuery<TrendsOptionsResponse>({
-    queryKey: ['trends-options', city],
+    queryKey: ['trends-options', city, limit],
     queryFn: () =>
-      api.get<TrendsOptionsResponse>(`/api/trends/options?city=${encodeURIComponent(city)}`, { skipAuth: true }),
+      api.get<TrendsOptionsResponse>(
+        `/api/trends/options?city=${encodeURIComponent(city)}&limit=${limit}`,
+        { skipAuth: true }
+      ),
     enabled: city.length > 0 && fetchEnabled,
     staleTime: 300_000,
   });

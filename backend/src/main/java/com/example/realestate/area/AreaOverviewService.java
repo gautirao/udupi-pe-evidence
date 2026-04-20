@@ -197,7 +197,7 @@ public class AreaOverviewService {
     // -------------------------------------------------------------------------
 
     static final int OPTIONS_DEFAULT_LIMIT = 3;
-    static final int OPTIONS_MAX_LIMIT = 6;
+    static final int OPTIONS_MAX_LIMIT = 50;
 
     /**
      * Returns the top trending locality areas for the given city.
