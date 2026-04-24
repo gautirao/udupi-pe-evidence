@@ -17,11 +17,15 @@ export function computeFocusBounds(
 ): [[number, number], [number, number]] | null {
   if (localities.length === 0) return null;
   const matched = listingsWithCoords.filter(
-    (l) => l.locality && localities.includes(l.locality)
+    (l) =>
+      l.locality &&
+      localities.includes(l.locality) &&
+      l.latitude != null &&
+      l.longitude != null
   );
   if (matched.length === 0) return null;
-  const lats = matched.map((l) => l.latitude!);
-  const lngs = matched.map((l) => l.longitude!);
+  const lats = matched.map((l) => l.latitude as number);
+  const lngs = matched.map((l) => l.longitude as number);
   return [
     [Math.min(...lats), Math.min(...lngs)],
     [Math.max(...lats), Math.max(...lngs)],

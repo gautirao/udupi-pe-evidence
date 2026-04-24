@@ -56,6 +56,24 @@ export function isAtCap(localities: string[] | undefined, cap: number = LOCALITY
   return (localities?.length ?? 0) >= cap;
 }
 
+// === City Filtering ===
+/** Filter items to those whose district-level areaKey resolves to citySlug. */
+export function filterByCity<T extends { areaKey: string | null }>(
+  items: T[],
+  citySlug: string
+): T[] {
+  if (!CITY_CONFIG[citySlug]) return [];
+  return items.filter((item) => {
+    if (!item.areaKey) return false;
+    const sep = item.areaKey.indexOf(':');
+    if (sep < 0) return false;
+    return (
+      item.areaKey.slice(0, sep) === 'district' &&
+      DISTRICT_TO_CITY_SLUG[item.areaKey.slice(sep + 1)] === citySlug
+    );
+  });
+}
+
 // === Adjacency / Nearby ===
 interface LocalityWithCoords {
   locality: string;

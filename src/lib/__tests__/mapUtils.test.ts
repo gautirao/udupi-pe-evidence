@@ -54,6 +54,26 @@ describe('computeFocusBounds', () => {
   it('returns null when listings array is empty', () => {
     expect(computeFocusBounds([], ['Udupi'])).toBeNull();
   });
+
+  it('returns null when matched listings all have null coordinates', () => {
+    const listings = [
+      { latitude: null, longitude: null, locality: 'Udupi' },
+      { latitude: undefined, longitude: undefined, locality: 'Udupi' },
+    ];
+    expect(computeFocusBounds(listings, ['Udupi'])).toBeNull();
+  });
+
+  it('skips null-coord listings and computes bounds from valid ones', () => {
+    const listings = [
+      { latitude: null, longitude: null, locality: 'Udupi' },
+      { latitude: 13.3, longitude: 74.7, locality: 'Udupi' },
+      { latitude: 13.4, longitude: 74.8, locality: 'Udupi' },
+    ];
+    expect(computeFocusBounds(listings, ['Udupi'])).toEqual([
+      [13.3, 74.7],
+      [13.4, 74.8],
+    ]);
+  });
 });
 
 // ─── computeTopLocalities ─────────────────────────────────────────────────
