@@ -28,6 +28,9 @@ export const isNew = (createdAt: string | null | undefined): boolean => {
   return !isNaN(t) && Date.now() - t <= 7 * 24 * 60 * 60 * 1000;
 };
 
+/** Zoom-band threshold: area overview rings show at zoom ≤ this; individual listing clusters show above it. */
+const AREA_LAYER_MAX_ZOOM = 12;
+
 export default function Index() {
   const { user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -38,6 +41,7 @@ export default function Index() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [mapZoom, setMapZoom] = useState<number>(CITY_CONFIG[DEFAULT_CITY]?.zoom ?? 11);
 
   // School search state
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
@@ -48,6 +52,7 @@ export default function Index() {
   const handleCityChange = useCallback((newCity: string) => {
     setCity(newCity);
     setFilters((prev) => ({ ...prev, localities: undefined }));
+    setMapZoom(CITY_CONFIG[newCity]?.zoom ?? 11);
   }, []);
 
   // Restore school from URL params on mount
@@ -369,7 +374,7 @@ export default function Index() {
             </div>
           ) : (
             <PropertyMap
-              listings={listingsWithCoords}
+              listings={mapZoom > AREA_LAYER_MAX_ZOOM ? listingsWithCoords : []}
               selectedListing={selectedListing}
               onSelectListing={setSelectedListing}
               focusBounds={activeFocusBounds}
@@ -384,8 +389,9 @@ export default function Index() {
               } : undefined}
               cityCenter={CITY_CONFIG[city]?.center}
               cityZoom={CITY_CONFIG[city]?.zoom}
-              areas={discoverAreas}
+              areas={mapZoom <= AREA_LAYER_MAX_ZOOM ? discoverAreas : []}
               onAreaClick={handleAreaClick}
+              onZoomChange={setMapZoom}
             />
           )}
 

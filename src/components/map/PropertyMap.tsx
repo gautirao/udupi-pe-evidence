@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, useMapEvents, Circle, Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
@@ -8,6 +8,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
+import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { Card } from '@/components/ui/card';
 
 // Extended listing with images for map display
@@ -99,6 +100,8 @@ interface PropertyMapProps {
   areas?: AreaPoint[];
   /** Called when the user clicks an area marker. */
   onAreaClick?: (area: AreaPoint) => void;
+  /** Called whenever the map zoom level changes. Used for zoom-band layer switching. */
+  onZoomChange?: (zoom: number) => void;
 }
 
 function MapController({
@@ -139,6 +142,14 @@ function MapController({
     }
   }, [cityCenter, cityZoom, map]);
 
+  return null;
+}
+
+// Fires onZoomChange whenever the map zoom level settles, enabling zoom-band layer switching.
+function ZoomTracker({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
+  useMapEvents({
+    zoomend: (e) => { onZoomChange?.(e.target.getZoom()); },
+  });
   return null;
 }
 
@@ -230,7 +241,7 @@ const schoolMarkerIcon = L.divIcon({
   iconAnchor: [18, 18],
 });
 
-export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle, cityCenter, cityZoom, areas = [], onAreaClick }: PropertyMapProps) {
+export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle, cityCenter, cityZoom, areas = [], onAreaClick, onZoomChange }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -248,6 +259,7 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapController selectedListing={selectedListing} focusBounds={focusBounds} cityCenter={cityCenter} cityZoom={cityZoom} />
+        <ZoomTracker onZoomChange={onZoomChange} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {onPolygonDrawn && onPolygonCleared && (
           <DrawControl
