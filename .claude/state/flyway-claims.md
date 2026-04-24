@@ -10,7 +10,7 @@ Current ceiling (as of 2026-04-23): **V70** (`V70__add_area_overview_stats.sql`)
 |---|---|---|---|---|
 | V71 | Lane B (B-0, #799) | _pending_ | `cities` + `areas` base tables **with initial seed INSERTs** in one migration (schema + seed combined — see "Seed loading decision" below) | _pending_ |
 | V72 | Lane B (B-2) | _pending_ | `area_overview_stats` + `bbox` + `city_slug` + `geo_center_lat/lon` columns (follow-up; only if still needed after B-0) | _pending_ |
-| V73 | Lane D (D-2) | _pending_ | PostGIS extension + `geog` GENERATED column + GIST index | _pending_ |
+| V73 | Lane D (D-2) | 2026-04-24 | PostGIS extension + `geog` GENERATED column + GIST index | #817 |
 
 ## Seed loading decision (B-0)
 
