@@ -305,7 +305,7 @@ export function usePropertyListings(filters?: PropertyFilters) {
         }
       }
 
-      const { data, error } = await query;
+      const { data, error } = await query.limit(2000);
 
       if (error) throw error;
 

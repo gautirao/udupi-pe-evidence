@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, useMap, useMapEvents, Circle, Marker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
@@ -9,6 +9,7 @@ import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { ScaleHud } from '@/dev/ScaleHud';
 import { Card } from '@/components/ui/card';
 
 // Extended listing with images for map display
@@ -40,11 +41,14 @@ const propertyConfig: Record<PropertyType, { color: string; label: string; bgCla
   other: { color: '#6b7280', label: 'Other', bgClass: 'bg-gray-500' },
 };
 
-// Create custom marker icon
-const createMarkerIcon = (propertyType: PropertyType) => {
+// Module-level icon cache — avoids creating a new DivIcon object on every render.
+const iconCache = new Map<PropertyType, L.DivIcon>();
+
+const createMarkerIcon = (propertyType: PropertyType): L.DivIcon => {
+  const cached = iconCache.get(propertyType);
+  if (cached) return cached;
   const { color } = propertyConfig[propertyType];
-  
-  return L.divIcon({
+  const icon = L.divIcon({
     className: 'custom-marker',
     html: `
       <div style="
@@ -70,6 +74,8 @@ const createMarkerIcon = (propertyType: PropertyType) => {
     iconSize: [32, 32],
     iconAnchor: [16, 32],
   });
+  iconCache.set(propertyType, icon);
+  return icon;
 };
 
 export interface SchoolCircle {
@@ -96,12 +102,10 @@ interface PropertyMapProps {
   cityCenter?: [number, number];
   /** Override map zoom when city changes */
   cityZoom?: number;
-  /** Area markers from /api/discover/areas — renders trend-colored circles on the map. */
+  /** Area markers from the areas table (geo_center_lat/lon for placement, bbox for fitBounds). */
   areas?: AreaPoint[];
-  /** Called when the user clicks an area marker. */
+  /** Called when an area marker is clicked (in addition to the built-in bbox fitBounds). */
   onAreaClick?: (area: AreaPoint) => void;
-  /** Called whenever the map zoom level changes. Used for zoom-band layer switching. */
-  onZoomChange?: (zoom: number) => void;
 }
 
 function MapController({
@@ -145,26 +149,17 @@ function MapController({
   return null;
 }
 
-// Fires onZoomChange whenever the map zoom level settles, enabling zoom-band layer switching.
-function ZoomTracker({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
-  useMapEvents({
-    zoomend: (e) => { onZoomChange?.(e.target.getZoom()); },
-  });
-  return null;
-}
-
 // Marker cluster layer component
-function MarkerClusterLayer({ 
-  listings, 
-  onSelectListing 
-}: { 
-  listings: PropertyListingWithImages[]; 
+function MarkerClusterLayer({
+  listings,
+  onSelectListing,
+}: {
+  listings: PropertyListingWithImages[];
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
 }) {
   const map = useMap();
 
   useEffect(() => {
-    // Create cluster group with custom options
     const clusterGroup = L.markerClusterGroup({
       chunkedLoading: true,
       spiderfyOnMaxZoom: true,
@@ -176,7 +171,7 @@ function MarkerClusterLayer({
         const count = cluster.getChildCount();
         let size: 'small' | 'medium' | 'large' = 'small';
         let sizeNum = 36;
-        
+
         if (count > 50) {
           size = 'large';
           sizeNum = 52;
@@ -193,25 +188,22 @@ function MarkerClusterLayer({
       },
     });
 
-    // Add markers to cluster group
-    const validListings = listings.filter(l => l.latitude && l.longitude);
-    
+    const validListings = listings.filter((l) => l.latitude && l.longitude);
+
     validListings.forEach((listing) => {
-      const marker = L.marker(
-        [listing.latitude!, listing.longitude!],
-        { icon: createMarkerIcon(listing.property_type) }
-      );
-      
+      const marker = L.marker([listing.latitude!, listing.longitude!], {
+        icon: createMarkerIcon(listing.property_type),
+      });
+
       marker.on('click', () => {
         onSelectListing?.(listing);
       });
-      
+
       clusterGroup.addLayer(marker);
     });
 
     map.addLayer(clusterGroup);
 
-    // Cleanup
     return () => {
       map.removeLayer(clusterGroup);
     };
@@ -241,7 +233,20 @@ const schoolMarkerIcon = L.divIcon({
   iconAnchor: [18, 18],
 });
 
-export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle, cityCenter, cityZoom, areas = [], onAreaClick, onZoomChange }: PropertyMapProps) {
+export function PropertyMap({
+  listings,
+  selectedListing,
+  onSelectListing,
+  focusBounds,
+  polygon,
+  onPolygonDrawn,
+  onPolygonCleared,
+  schoolCircle,
+  cityCenter,
+  cityZoom,
+  areas = [],
+  onAreaClick,
+}: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -258,18 +263,23 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapController selectedListing={selectedListing} focusBounds={focusBounds} cityCenter={cityCenter} cityZoom={cityZoom} />
-        <ZoomTracker onZoomChange={onZoomChange} />
+        <MapController
+          selectedListing={selectedListing}
+          focusBounds={focusBounds}
+          cityCenter={cityCenter}
+          cityZoom={cityZoom}
+        />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+        {areas.length > 0 && (
+          <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} />
+        )}
+        <ScaleHud />
         {onPolygonDrawn && onPolygonCleared && (
           <DrawControl
             polygon={polygon}
             onPolygonDrawn={onPolygonDrawn}
             onPolygonCleared={onPolygonCleared}
           />
-        )}
-        {areas.length > 0 && (
-          <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} />
         )}
         {schoolCircle && (
           <>
