@@ -3,7 +3,9 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useTeaserListings, TeaserListing, useLocalities } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, PropertyType, useTeaserListings, TeaserListing, useLocalities } from '@/hooks/usePropertyListings';
+import { useDiscoverMarkers } from '@/hooks/useDiscoverMarkers';
+import { useListingDetail } from '@/hooks/useListingDetail';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -240,6 +242,75 @@ export default function Index() {
     navigate(`/trends?${params.toString()}`);
   }, [city, navigate]);
 
+  const { data: markersData } = useDiscoverMarkers(city);
+  const now = new Date().toISOString();
+  const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
+    if (!markersData?.markers) return [];
+    return markersData.markers.map((m) => ({
+      id: m.id,
+      latitude: m.lat,
+      longitude: m.lon,
+      property_type: 'other' as PropertyType,
+      price: m.pricePaise != null ? Math.round(m.pricePaise / 100) : null,
+      price_unit: null,
+      title: null,
+      locality: null,
+      land_area: null,
+      land_area_unit: null,
+      built_area: null,
+      built_area_unit: null,
+      bedrooms: null,
+      bathrooms: null,
+      contact_info: null,
+      contact_phone: null,
+      description: null,
+      confidence_score: null,
+      language_detected: null,
+      price_per_cent_paise: null,
+      is_valid: true,
+      is_duplicate: false,
+      status: 'LIVE',
+      created_at: now,
+      updated_at: now,
+      listing_purpose: '',
+      carpet_area: null,
+      carpet_area_unit: null,
+      floor_number: null,
+      total_floors: null,
+      furnishing_status: null,
+      washrooms: null,
+      parking_count: null,
+      road_frontage_ft: null,
+      commercial_usage: null,
+      number_of_units: null,
+      monthly_rent: null,
+      security_deposit_months: null,
+      lock_in_months: null,
+      seller_type: null,
+      raw_post_id: null,
+    }));
+  }, [markersData, now]);
+
+  const { data: listingDetail } = useListingDetail(selectedListing?.id);
+  const hydratedListing = useMemo((): (PropertyListing & { images?: PropertyImage[] }) | null => {
+    if (!selectedListing) return null;
+    if (!listingDetail) return selectedListing;
+    return {
+      ...selectedListing,
+      property_type: (listingDetail.propertyType ?? selectedListing.property_type) as PropertyType,
+      price: listingDetail.price ?? selectedListing.price,
+      title: listingDetail.title ?? selectedListing.title,
+      locality: listingDetail.locality ?? selectedListing.locality,
+      land_area: listingDetail.landArea ?? selectedListing.land_area,
+      land_area_unit: listingDetail.landAreaUnit ?? selectedListing.land_area_unit,
+      bedrooms: listingDetail.bedrooms ?? selectedListing.bedrooms,
+      created_at: listingDetail.createdAt ?? selectedListing.created_at,
+      updated_at: listingDetail.updatedAt ?? selectedListing.updated_at,
+      areaKey: listingDetail.areaKey ?? selectedListing.areaKey,
+      images: listingDetail.images ?? selectedListing.images,
+    };
+  }, [selectedListing, listingDetail]);
+
   // URL sync: write city + areaKey params whenever they change.
   // Declared before the read-mount effect so it fires first on initial render
   // (hasHydrated is still false → skipped), preventing it from overwriting URL
@@ -374,7 +445,7 @@ export default function Index() {
             </div>
           ) : (
             <PropertyMap
-              listings={mapZoom > AREA_LAYER_MAX_ZOOM ? listingsWithCoords : []}
+              listings={mapZoom > AREA_LAYER_MAX_ZOOM && isAuthenticated ? markerListings : []}
               selectedListing={selectedListing}
               onSelectListing={setSelectedListing}
               focusBounds={activeFocusBounds}
@@ -549,13 +620,13 @@ export default function Index() {
           })()}
 
           {/* Selected Listing Preview Card (authenticated only) */}
-          {isAuthenticated && selectedListing && (
+          {isAuthenticated && hydratedListing && (
             <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg overflow-hidden">
               {/* Thumbnail image */}
-              {selectedListing.images && selectedListing.images.length > 0 && (
+              {hydratedListing.images && hydratedListing.images.length > 0 && (
                 <div className="h-32 bg-muted">
                   <img
-                    src={selectedListing.images[0].url}
+                    src={hydratedListing.images[0].url}
                     alt="Property"
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -568,10 +639,10 @@ export default function Index() {
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <Badge variant="secondary" className="capitalize">
-                      {selectedListing.property_type}
+                      {hydratedListing.property_type}
                     </Badge>
-                    <NearbySchoolsBadge listingId={selectedListing.id} />
-                    {isNew(selectedListing.created_at) && (
+                    <NearbySchoolsBadge listingId={hydratedListing.id} />
+                    {isNew(hydratedListing.created_at) && (
                       <Badge className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium hover:bg-orange-500">
                         New
                       </Badge>
@@ -587,17 +658,17 @@ export default function Index() {
                   </Button>
                 </div>
 
-                {selectedListing.price && (
+                {hydratedListing.price && (
                   <div className="flex items-center gap-2 mb-2">
                     <p className="text-xl font-bold text-primary">
-                      {formatPrice(selectedListing.price, selectedListing.price_unit)}
+                      {formatPrice(hydratedListing.price, hydratedListing.price_unit)}
                     </p>
-                    {(selectedListing.trustTier === 'A' || selectedListing.trustTier === 'B') && (
+                    {(hydratedListing.trustTier === 'A' || hydratedListing.trustTier === 'B') && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-green-100 text-green-800">
-                        {selectedListing.trustTier}
+                        {hydratedListing.trustTier}
                       </span>
                     )}
-                    {selectedListing.trustTier === 'C' && (
+                    {hydratedListing.trustTier === 'C' && (
                       <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
                         C
                       </span>
@@ -605,7 +676,7 @@ export default function Index() {
                   </div>
                 )}
                 {(() => {
-                  const signal = getMarketSignal(selectedListing, areaMedians);
+                  const signal = getMarketSignal(hydratedListing, areaMedians);
                   return signal ? (
                     <p className="text-xs text-green-700 mb-2">
                       ✅ {signal.percent}% below market
@@ -613,24 +684,24 @@ export default function Index() {
                   ) : null;
                 })()}
 
-                {selectedListing.locality && (
+                {hydratedListing.locality && (
                   <p className="text-sm text-muted-foreground flex items-center gap-1.5 mb-2">
                     <MapPin className="h-3.5 w-3.5" />
-                    {selectedListing.locality}
+                    {hydratedListing.locality}
                   </p>
                 )}
 
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  {selectedListing.land_area && (
+                  {hydratedListing.land_area && (
                     <div>
                       <span className="text-muted-foreground">Area: </span>
-                      {formatArea(selectedListing.land_area, selectedListing.land_area_unit)}
+                      {formatArea(hydratedListing.land_area, hydratedListing.land_area_unit)}
                     </div>
                   )}
-                  {selectedListing.bedrooms && (
+                  {hydratedListing.bedrooms && (
                     <div>
                       <span className="text-muted-foreground">Beds: </span>
-                      {selectedListing.bedrooms} BHK
+                      {hydratedListing.bedrooms} BHK
                     </div>
                   )}
                 </div>
@@ -638,14 +709,14 @@ export default function Index() {
                 <div className="flex items-center justify-between mt-3 pt-3 border-t">
                   <div className="flex flex-col gap-0.5">
                     <p className="text-xs text-muted-foreground">
-                      Posted {formatRelativeDate(selectedListing.created_at)}
+                      Posted {formatRelativeDate(hydratedListing.created_at)}
                     </p>
-                    {selectedListing.areaKey && (() => {
-                      const district = selectedListing.areaKey.split('|')[2];
+                    {hydratedListing.areaKey && (() => {
+                      const district = hydratedListing.areaKey.split('|')[2];
                       const listingCity = (district && DISTRICT_TO_CITY_SLUG[district]) ?? DEFAULT_CITY;
                       return (
                         <Link
-                          to={`/trends?city=${listingCity}&areaKey=${encodeURIComponent(selectedListing.areaKey)}`}
+                          to={`/trends?city=${listingCity}&areaKey=${encodeURIComponent(hydratedListing.areaKey)}`}
                           className="text-xs text-primary hover:underline flex items-center gap-0.5"
                         >
                           <TrendingUp className="h-3 w-3" aria-hidden="true" />
@@ -656,7 +727,7 @@ export default function Index() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => handleViewDetails(selectedListing)}
+                    onClick={() => handleViewDetails(selectedListing!)}
                     className="gap-1.5"
                   >
                     <Eye className="h-3.5 w-3.5" />

@@ -106,6 +106,19 @@ interface PropertyMapProps {
   areas?: AreaPoint[];
   /** Called when an area marker is clicked (in addition to the built-in bbox fitBounds). */
   onAreaClick?: (area: AreaPoint) => void;
+  /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
+  onZoomChange?: (zoom: number) => void;
+}
+
+function ZoomWatcher({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!onZoomChange) return;
+    const handler = () => onZoomChange(map.getZoom());
+    map.on('zoomend', handler);
+    return () => { map.off('zoomend', handler); };
+  }, [map, onZoomChange]);
+  return null;
 }
 
 function MapController({
@@ -246,6 +259,7 @@ export function PropertyMap({
   cityZoom,
   areas = [],
   onAreaClick,
+  onZoomChange,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -269,6 +283,7 @@ export function PropertyMap({
           cityCenter={cityCenter}
           cityZoom={cityZoom}
         />
+        <ZoomWatcher onZoomChange={onZoomChange} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (
           <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} />

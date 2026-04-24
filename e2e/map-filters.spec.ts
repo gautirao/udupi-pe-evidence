@@ -129,52 +129,19 @@ test('M5 — Leaflet map renders at least one custom-marker pin when listings ha
 }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M5');
 
-  // Inject a single listing with coordinates so the marker renders regardless
-  // of live DB state.  All GET requests to the property_listings REST endpoint
-  // are intercepted; non-GET (e.g. realtime) are passed through.
-  await page.route('**/rest/v1/property_listings*', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
+  // C-switch: the map now sources markers from useDiscoverMarkers (GET /api/listings/markers)
+  // rather than the Supabase property_listings REST endpoint. Intercept the skinny-markers
+  // endpoint and return a single fixture marker with known coordinates.
+  await page.route('**/api/listings/markers*', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      headers: { 'Content-Range': '0-0/1' },
-      body: JSON.stringify([
-        {
-          id: 'e2e-m5-marker-fixture',
-          raw_post_id: null,
-          property_type: 'land',
-          status: 'LIVE',
-          title: 'E2E Test Land Plot',
-          locality: 'Udupi',
-          price: 5000000,
-          price_paise: 500000000,
-          price_unit: 'INR',
-          land_area: 10,
-          land_area_unit: 'cent',
-          built_area: null,
-          built_area_unit: null,
-          bedrooms: null,
-          bathrooms: null,
-          contact_info: null,
-          contact_phone: null,
-          description: null,
-          latitude: 13.3409,
-          longitude: 74.7421,
-          area_key: 'udupi',
-          area_label: 'Udupi',
-          confidence_score: 90,
-          language_detected: null,
-          price_per_cent_paise: null,
-          is_valid: true,
-          is_duplicate: false,
-          created_at: '2026-01-01T00:00:00+00:00',
-          updated_at: '2026-01-01T00:00:00+00:00',
-          raw_posts: null,
-        },
-      ]),
+      body: JSON.stringify({
+        city: 'udupi',
+        markers: [
+          { id: 'e2e-m5-marker-fixture', lat: 13.3409, lon: 74.7421, pricePaise: 500000000 },
+        ],
+      }),
     });
   });
 
@@ -186,6 +153,16 @@ test('M5 — Leaflet map renders at least one custom-marker pin when listings ha
 
   // Leaflet container must be present
   await expect(page.locator('div.leaflet-container')).toBeVisible({ timeout: 15_000 });
+
+  // C-switch: listing markers only render at zoom > 12 (AREA_LAYER_MAX_ZOOM). Default zoom
+  // is 11, so we must zoom in before asserting. Five clicks on the + control reaches zoom 16.
+  // force:true bypasses the filter-bar overlay (z-[1000]) that covers the Leaflet control.
+  const zoomIn = page.locator('.leaflet-control-zoom-in');
+  await expect(zoomIn).toBeVisible({ timeout: 5_000 });
+  for (let i = 0; i < 5; i++) {
+    await zoomIn.click({ force: true });
+    await page.waitForTimeout(300);
+  }
 
   // At least one custom-marker div must appear in the marker pane.
   // With a single listing and markercluster, one individual marker renders
