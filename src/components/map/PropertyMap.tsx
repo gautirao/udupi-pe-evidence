@@ -95,6 +95,10 @@ interface PropertyMapProps {
   cityCenter?: [number, number];
   /** Override map zoom when city changes */
   cityZoom?: number;
+  /** Area markers from /api/discover/areas — renders trend-colored circles on the map. */
+  areas?: AreaPoint[];
+  /** Called when the user clicks an area marker. */
+  onAreaClick?: (area: AreaPoint) => void;
 }
 
 function MapController({
@@ -226,7 +230,7 @@ const schoolMarkerIcon = L.divIcon({
   iconAnchor: [18, 18],
 });
 
-export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle, cityCenter, cityZoom }: PropertyMapProps) {
+export function PropertyMap({ listings, selectedListing, onSelectListing, focusBounds, polygon, onPolygonDrawn, onPolygonCleared, schoolCircle, cityCenter, cityZoom, areas = [], onAreaClick }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
@@ -251,6 +255,9 @@ export function PropertyMap({ listings, selectedListing, onSelectListing, focusB
             onPolygonDrawn={onPolygonDrawn}
             onPolygonCleared={onPolygonCleared}
           />
+        )}
+        {areas.length > 0 && (
+          <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} />
         )}
         {schoolCircle && (
           <>

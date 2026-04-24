@@ -5,6 +5,8 @@ import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useTeaserListings, TeaserListing, useLocalities } from '@/hooks/usePropertyListings';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
+import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
@@ -182,17 +184,22 @@ export default function Index() {
 
   // Locality options + trends options — used together for locality→areaKey mapping.
   // Primary source: area_overview_stats via /api/trends/options (backend-authoritative, limit=50).
+  // Secondary: /api/discover/areas (all seeded areas, including zero-listing).
   // Fallback: property_listings.area_key (sparse backfill from PR #745).
   const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
+  const { data: discoverAreasData } = useDiscoverAreas(city);
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
+    discoverAreasData?.areas.forEach((a) => {
+      if (!m.has(a.name)) m.set(a.name, a.areaKey);
+    });
     localityOptions.forEach((o) => {
       if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey);
     });
     return m;
-  }, [trendsOpts, localityOptions]);
+  }, [trendsOpts, discoverAreasData, localityOptions]);
 
   // Derive areaKeys for "View Trends" button and URL write-back.
   // For anonymous users: fall back to URL params (set on mount from Home navigation).
@@ -206,6 +213,27 @@ export default function Index() {
     }
     return initialAnonAreaKeysRef.current.filter((k) => k.length > 0);
   }, [isAuthenticated, filters.localities, localityToAreaKey]);
+
+  const discoverAreas = useMemo((): AreaPoint[] => {
+    if (!discoverAreasData?.areas) return [];
+    return discoverAreasData.areas.map((a) => ({
+      areaKey: a.areaKey,
+      areaLabel: a.name,
+      geo_center_lat: a.geoCenterLat,
+      geo_center_lon: a.geoCenterLon,
+      bbox: (a.minLat != null && a.minLon != null && a.maxLat != null && a.maxLon != null)
+        ? [[a.minLat, a.minLon] as [number, number], [a.maxLat, a.maxLon] as [number, number]]
+        : null,
+      listingCount: a.listingCount90d,
+      trendDirection: a.trendDirection as 'rising' | 'falling' | 'stable' | null | undefined,
+    }));
+  }, [discoverAreasData]);
+
+  const handleAreaClick = useCallback((area: AreaPoint) => {
+    const params = new URLSearchParams({ city });
+    params.append('areaKey', area.areaKey);
+    navigate(`/trends?${params.toString()}`);
+  }, [city, navigate]);
 
   // URL sync: write city + areaKey params whenever they change.
   // Declared before the read-mount effect so it fires first on initial render
@@ -356,6 +384,8 @@ export default function Index() {
               } : undefined}
               cityCenter={CITY_CONFIG[city]?.center}
               cityZoom={CITY_CONFIG[city]?.zoom}
+              areas={discoverAreas}
+              onAreaClick={handleAreaClick}
             />
           )}
 
