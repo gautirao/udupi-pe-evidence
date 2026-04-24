@@ -47,13 +47,13 @@ class TrendsOptionsServiceTest {
     // ==================== limit clamping ====================
 
     @Test
-    void getOptions_limitAboveMax_isClampedTo6() {
-        when(jdbcOperations.query(anyString(), any(RowMapper.class), anyString(), eq(6)))
+    void getOptions_limitAboveMax_isClampedTo50() {
+        when(jdbcOperations.query(anyString(), any(RowMapper.class), anyString(), eq(50)))
                 .thenReturn(List.of());
 
         service.getOptions("udupi", 100);
 
-        verify(jdbcOperations).query(anyString(), any(RowMapper.class), eq("udupi"), eq(6));
+        verify(jdbcOperations).query(anyString(), any(RowMapper.class), eq("udupi"), eq(50));
     }
 
     @Test
