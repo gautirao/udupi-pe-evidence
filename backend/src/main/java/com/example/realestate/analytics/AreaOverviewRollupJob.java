@@ -166,59 +166,59 @@ public class AreaOverviewRollupJob {
     // SQL constants
     // -------------------------------------------------------------------------
 
-    /** Pass 1a — UPSERT locality rows with price stats and centroids. */
+    /** Pass 1a — UPSERT locality rows with price stats and geo data. */
     private static final String LOCALITY_UPSERT_SQL = """
-            WITH centroid_cte AS (
-              SELECT area_key,
-                     AVG(latitude)  AS centroid_lat,
-                     AVG(longitude) AS centroid_lon
-              FROM property_listings
-              WHERE area_key IS NOT NULL
-                AND array_length(string_to_array(area_key, '|'), 1) = 4
-                AND is_duplicate = false
-                AND is_valid = true
-                AND status IN ('SCRAPED', 'LIVE')
-                AND created_at >= NOW() - INTERVAL '90 days'
-                AND latitude IS NOT NULL
-                AND longitude IS NOT NULL
-              GROUP BY area_key
-            ),
-            stats_cte AS (
+            WITH stats_cte AS (
               SELECT
-                pl.area_key,
-                'locality'                                                    AS area_level,
-                COUNT(*)                                                      AS listing_count_90d,
-                PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY pl.price_per_cent_paise) AS median_price_paise,
-                PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY pl.price_per_cent_paise) AS price_p10_paise,
-                PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY pl.price_per_cent_paise) AS price_p90_paise,
-                cc.centroid_lat,
-                cc.centroid_lon,
+                a.area_key,
+                'locality'                                                              AS area_level,
+                COUNT(p.id)                                                             AS listing_count_90d,
+                PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY p.price_per_cent_paise)   AS median_price_paise,
+                PERCENTILE_CONT(0.10) WITHIN GROUP (ORDER BY p.price_per_cent_paise)   AS price_p10_paise,
+                PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY p.price_per_cent_paise)   AS price_p90_paise,
+                AVG(p.latitude)                                                         AS centroid_lat,
+                AVG(p.longitude)                                                        AS centroid_lon,
+                a.geo_center_lat,
+                a.geo_center_lon,
+                a.min_lat,
+                a.min_lon,
+                a.max_lat,
+                a.max_lon,
+                c.slug                                                                  AS city_slug,
                 CONCAT(
-                  split_part(pl.area_key, '|', 1), '|',
-                  split_part(pl.area_key, '|', 2), '|',
-                  split_part(pl.area_key, '|', 3)
-                ) AS district_area_key
-              FROM property_listings pl
-              LEFT JOIN centroid_cte cc ON cc.area_key = pl.area_key
-              WHERE pl.area_key IS NOT NULL
-                AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
-                AND pl.price_per_cent_paise IS NOT NULL
-                AND pl.is_duplicate = false
-                AND pl.is_valid = true
-                AND pl.status IN ('SCRAPED', 'LIVE')
-                AND pl.created_at >= NOW() - INTERVAL '90 days'
-              GROUP BY pl.area_key, cc.centroid_lat, cc.centroid_lon
+                  split_part(a.area_key, '|', 1), '|',
+                  split_part(a.area_key, '|', 2), '|',
+                  split_part(a.area_key, '|', 3)
+                )                                                                       AS district_area_key
+              FROM areas a
+              JOIN cities c ON c.id = a.city_id
+              LEFT JOIN property_listings p
+                ON  p.area_key            = a.area_key
+                AND p.price_per_cent_paise IS NOT NULL
+                AND p.is_duplicate        = false
+                AND p.is_valid            = true
+                AND p.status              IN ('SCRAPED', 'LIVE')
+                AND p.created_at          >= NOW() - INTERVAL '90 days'
+              WHERE array_length(string_to_array(a.area_key, '|'), 1) = 4
+              GROUP BY a.area_key, a.geo_center_lat, a.geo_center_lon,
+                       a.min_lat, a.min_lon, a.max_lat, a.max_lon, c.slug
             )
             INSERT INTO area_overview_stats (
               area_key, area_level, listing_count_90d,
               median_price_paise, price_p10_paise, price_p90_paise,
-              centroid_lat, centroid_lon, district_area_key,
+              centroid_lat, centroid_lon,
+              geo_center_lat, geo_center_lon,
+              min_lat, min_lon, max_lat, max_lon,
+              city_slug, district_area_key,
               confidence_tier, updated_at
             )
             SELECT
               area_key, area_level, listing_count_90d,
               median_price_paise, price_p10_paise, price_p90_paise,
-              centroid_lat, centroid_lon, district_area_key,
+              centroid_lat, centroid_lon,
+              geo_center_lat, geo_center_lon,
+              min_lat, min_lon, max_lat, max_lon,
+              city_slug, district_area_key,
               CASE
                 WHEN listing_count_90d >= 20 THEN 'full'
                 WHEN listing_count_90d >= 5  THEN 'limited'
@@ -234,6 +234,13 @@ public class AreaOverviewRollupJob {
               price_p90_paise    = EXCLUDED.price_p90_paise,
               centroid_lat       = EXCLUDED.centroid_lat,
               centroid_lon       = EXCLUDED.centroid_lon,
+              geo_center_lat     = EXCLUDED.geo_center_lat,
+              geo_center_lon     = EXCLUDED.geo_center_lon,
+              min_lat            = EXCLUDED.min_lat,
+              min_lon            = EXCLUDED.min_lon,
+              max_lat            = EXCLUDED.max_lat,
+              max_lon            = EXCLUDED.max_lon,
+              city_slug          = EXCLUDED.city_slug,
               district_area_key  = EXCLUDED.district_area_key,
               confidence_tier    = EXCLUDED.confidence_tier,
               updated_at         = EXCLUDED.updated_at,
@@ -319,12 +326,15 @@ public class AreaOverviewRollupJob {
 
     /**
      * Pass 1d — UPDATE nearby_area_keys on locality rows using Euclidean distance
-     * approximation on stored centroids. Avoids PostGIS dependency; accurate enough
+     * approximation on stored geo_center coords. Avoids PostGIS dependency; accurate enough
      * for within-Karnataka area ordering.
      *
      * <p>Uses a single-pass ROW_NUMBER() window function instead of a correlated
      * subquery so the table is scanned once (O(N log N)) rather than once per
      * source row (O(N²)).
+     *
+     * <p>Uses geo_center_lat/lon (geometric polygon center) rather than centroid_lat/lon
+     * (listing average) so that zero-listing areas with no centroid still participate.
      */
     private static final String NEARBY_AREA_KEYS_SQL = """
             WITH ranked AS (
@@ -334,19 +344,18 @@ public class AreaOverviewRollupJob {
                 ROW_NUMBER() OVER (
                   PARTITION BY a.area_key
                   ORDER BY
-                    (a.centroid_lat - b.centroid_lat)^2 +
-                    (a.centroid_lon - b.centroid_lon)^2
+                    (a.geo_center_lat - b.geo_center_lat)^2 +
+                    (a.geo_center_lon - b.geo_center_lon)^2
                 ) AS rn
               FROM area_overview_stats a
               JOIN area_overview_stats b
                 ON a.area_key != b.area_key
                AND b.area_level = 'locality'
-               AND b.centroid_lat IS NOT NULL
-               AND b.centroid_lon IS NOT NULL
-               AND b.listing_count_90d >= 1
+               AND b.geo_center_lat IS NOT NULL
+               AND b.geo_center_lon IS NOT NULL
               WHERE a.area_level = 'locality'
-                AND a.centroid_lat IS NOT NULL
-                AND a.centroid_lon IS NOT NULL
+                AND a.geo_center_lat IS NOT NULL
+                AND a.geo_center_lon IS NOT NULL
             )
             UPDATE area_overview_stats aos
             SET nearby_area_keys = (
@@ -356,8 +365,8 @@ public class AreaOverviewRollupJob {
                 AND r.rn <= 4
             )
             WHERE aos.area_level = 'locality'
-              AND aos.centroid_lat IS NOT NULL
-              AND aos.centroid_lon IS NOT NULL
+              AND aos.geo_center_lat IS NOT NULL
+              AND aos.geo_center_lon IS NOT NULL
             """;
 
     /** Pass 2a — UPSERT district rows. */
@@ -384,27 +393,53 @@ public class AreaOverviewRollupJob {
                 AND pl.status IN ('SCRAPED', 'LIVE')
                 AND pl.created_at >= NOW() - INTERVAL '90 days'
               GROUP BY district_key
+            ),
+            district_geo AS (
+              SELECT
+                CONCAT(
+                  split_part(area_key, '|', 1), '|',
+                  split_part(area_key, '|', 2), '|',
+                  split_part(area_key, '|', 3)
+                )                        AS district_key,
+                MIN(min_lat)             AS min_lat,
+                MIN(min_lon)             AS min_lon,
+                MAX(max_lat)             AS max_lat,
+                MAX(max_lon)             AS max_lon,
+                AVG(geo_center_lat)      AS geo_center_lat,
+                AVG(geo_center_lon)      AS geo_center_lon,
+                MAX(city_slug)           AS city_slug
+              FROM area_overview_stats
+              WHERE area_level = 'locality'
+                AND geo_center_lat IS NOT NULL
+              GROUP BY district_key
             )
             INSERT INTO area_overview_stats (
               area_key, area_level, listing_count_90d,
               median_price_paise, price_p10_paise, price_p90_paise,
               centroid_lat, centroid_lon,
+              geo_center_lat, geo_center_lon,
+              min_lat, min_lon, max_lat, max_lon,
+              city_slug,
               district_area_key, nearby_area_keys,
               confidence_tier, updated_at
             )
             SELECT
-              district_key, area_level, listing_count_90d,
-              median_price_paise, price_p10_paise, price_p90_paise,
-              centroid_lat, centroid_lon,
+              ds.district_key, ds.area_level, ds.listing_count_90d,
+              ds.median_price_paise, ds.price_p10_paise, ds.price_p90_paise,
+              ds.centroid_lat, ds.centroid_lon,
+              dg.geo_center_lat, dg.geo_center_lon,
+              dg.min_lat, dg.min_lon, dg.max_lat, dg.max_lon,
+              dg.city_slug,
               NULL AS district_area_key,
               NULL AS nearby_area_keys,
               CASE
-                WHEN listing_count_90d >= 20 THEN 'full'
-                WHEN listing_count_90d >= 5  THEN 'limited'
+                WHEN ds.listing_count_90d >= 20 THEN 'full'
+                WHEN ds.listing_count_90d >= 5  THEN 'limited'
                 ELSE 'fallback'
               END AS confidence_tier,
               NOW() AS updated_at
-            FROM district_stats
+            FROM district_stats ds
+            LEFT JOIN district_geo dg ON dg.district_key = ds.district_key
             ON CONFLICT (area_key) DO UPDATE SET
               listing_count_90d  = EXCLUDED.listing_count_90d,
               median_price_paise = EXCLUDED.median_price_paise,
@@ -412,6 +447,13 @@ public class AreaOverviewRollupJob {
               price_p90_paise    = EXCLUDED.price_p90_paise,
               centroid_lat       = EXCLUDED.centroid_lat,
               centroid_lon       = EXCLUDED.centroid_lon,
+              geo_center_lat     = EXCLUDED.geo_center_lat,
+              geo_center_lon     = EXCLUDED.geo_center_lon,
+              min_lat            = EXCLUDED.min_lat,
+              min_lon            = EXCLUDED.min_lon,
+              max_lat            = EXCLUDED.max_lat,
+              max_lon            = EXCLUDED.max_lon,
+              city_slug          = EXCLUDED.city_slug,
               confidence_tier    = EXCLUDED.confidence_tier,
               updated_at         = EXCLUDED.updated_at,
               trend_direction    = NULL,
