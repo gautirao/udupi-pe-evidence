@@ -26,28 +26,38 @@ interface AreaMarkerLayerProps {
   onAreaClick?: (area: AreaPoint) => void;
 }
 
-const TREND_COLORS: Record<string, string> = {
-  rising: '#16a34a',
-  falling: '#dc2626',
-  stable: '#2563eb',
-};
+/**
+ * Produces a floating white card divIcon centered exactly on the geo point.
+ *
+ * Anchoring: iconAnchor=[0,0] places the icon container's top-left at the lat/lon.
+ * The inner div applies transform:translate(-50%,-50%) which shifts the visible card
+ * so its center aligns with the geo point, regardless of card width or text length.
+ */
+function makeAreaCard(area: AreaPoint): L.DivIcon {
+  const countHtml =
+    area.listingCount != null
+      ? `<div style="font-size:13px;color:#6b7280;margin-top:3px;">${area.listingCount.toLocaleString()} properties</div>`
+      : '';
 
-function makeAreaIcon(trendDirection?: 'rising' | 'falling' | 'stable' | null): L.DivIcon {
-  const color = TREND_COLORS[trendDirection ?? ''] ?? '#6b7280';
   return L.divIcon({
-    className: 'area-marker',
+    className: '',
     html: `<div style="
-      width:36px;height:36px;
-      background-color:${color};
-      border:3px solid white;
-      border-radius:50%;
-      box-shadow:0 2px 8px rgba(0,0,0,0.3);
-      display:flex;align-items:center;justify-content:center;
-      color:white;font-size:11px;font-weight:700;
-    ">▲</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -22],
+      display:inline-block;
+      transform:translate(-50%,-50%);
+      background:white;
+      border-radius:12px;
+      padding:10px 16px;
+      box-shadow:0 2px 12px rgba(0,0,0,0.15);
+      white-space:nowrap;
+      cursor:pointer;
+      user-select:none;
+      font-family:inherit;
+    ">
+      <div style="font-weight:700;font-size:15px;color:#111827;line-height:1.2;">${escapeHtml(area.areaLabel)}</div>
+      ${countHtml}
+    </div>`,
+    iconSize: undefined,
+    iconAnchor: [0, 0],
   });
 }
 
@@ -60,23 +70,21 @@ export function AreaMarkerLayer({ areas, onAreaClick }: AreaMarkerLayerProps) {
     for (const area of areas) {
       const marker = L.marker(
         [area.geo_center_lat, area.geo_center_lon],
-        { icon: makeAreaIcon(area.trendDirection) }
-      );
-
-      const countLine =
-        area.listingCount != null
-          ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;">${area.listingCount} listing${area.listingCount !== 1 ? 's' : ''}</div>`
-          : '';
-      marker.bindPopup(
-        `<div style="min-width:110px;"><div style="font-weight:600;font-size:13px;">${escapeHtml(area.areaLabel)}</div>${countLine}</div>`,
-        { maxWidth: 220, closeButton: false }
+        { icon: makeAreaCard(area) }
       );
 
       marker.on('click', () => {
         onAreaClick?.(area);
         if (area.bbox) {
-          map.fitBounds(area.bbox, { padding: [40, 40] });
+          map.fitBounds(area.bbox, { padding: [40, 40], maxZoom: 16 });
+        } else {
+          map.flyTo([area.geo_center_lat, area.geo_center_lon], 13);
         }
+        // If the bbox was too large to cross the area→listing zoom threshold (12),
+        // bump to 13 once the animation settles so listing markers appear.
+        map.once('zoomend', () => {
+          if (map.getZoom() <= 12) map.setZoom(13, { animate: true });
+        });
       });
 
       marker.addTo(map);

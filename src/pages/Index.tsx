@@ -9,6 +9,7 @@ import { useListingDetail } from '@/hooks/useListingDetail';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { CitySelect } from '@/components/discover/CitySelect';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
@@ -236,11 +237,11 @@ export default function Index() {
     }));
   }, [discoverAreasData]);
 
-  const handleAreaClick = useCallback((area: AreaPoint) => {
-    const params = new URLSearchParams({ city });
-    params.append('areaKey', area.areaKey);
-    navigate(`/trends?${params.toString()}`);
-  }, [city, navigate]);
+  const handleAreaClick = useCallback((_area: AreaPoint) => {
+    // Zoom and fitBounds are handled inside AreaMarkerLayer on click.
+    // Index intentionally does not navigate — the map zooms into the area
+    // and the zoom-band switch (AREA_LAYER_MAX_ZOOM) reveals listing markers.
+  }, []);
 
   const { data: markersData } = useDiscoverMarkers(city);
   const now = new Date().toISOString();
@@ -479,6 +480,39 @@ export default function Index() {
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* Area overview map overlays — city chip, city select, summary stat */}
+          {mapZoom <= AREA_LAYER_MAX_ZOOM && (
+            <>
+              {/* City chip — top-left */}
+              <div className="absolute top-4 left-4 z-[1000]">
+                <div className="flex items-center gap-1.5 bg-white rounded-full px-3 py-2 shadow-sm border border-border text-sm font-medium select-none">
+                  <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                  <span>{CITY_CONFIG[city]?.label ?? city}</span>
+                </div>
+              </div>
+
+              {/* City select — top-right */}
+              <div className="absolute top-4 right-4 z-[1000] w-44">
+                <CitySelect value={city} onChange={handleCityChange} className="bg-white shadow-sm" />
+              </div>
+
+              {/* Bottom-right summary — total listing count from area rollup */}
+              {discoverAreas.length > 0 && (
+                <div className="absolute bottom-16 right-4 z-[1000]">
+                  <div className="bg-white/95 rounded-lg px-4 py-2 shadow-sm text-sm border border-border">
+                    Showing{' '}
+                    <strong>
+                      {discoverAreas
+                        .reduce((sum, a) => sum + (a.listingCount ?? 0), 0)
+                        .toLocaleString()}
+                    </strong>{' '}
+                    properties
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {/* Locality Quick-Chips (authenticated only) */}
