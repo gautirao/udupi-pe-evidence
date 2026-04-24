@@ -32,15 +32,36 @@ public class ListingMarkersController {
      * Returns skinny markers (id, lat, lon, pricePaise) for LIVE/SCRAPED listings in the city.
      *
      * @param city city slug (e.g. {@code udupi}, {@code mangalore})
-     * @param bbox reserved for future viewport-clipping — accepted but currently unused
+     * @param bbox optional viewport clip — {@code "south,west,north,east"} decimal degrees
      */
     @GetMapping("/markers")
     public ResponseEntity<ListingMarkersResponse> getMarkers(
             @RequestParam(name = "city") String city,
             @RequestParam(name = "bbox", required = false) String bbox) {
 
-        log.debug("GET /api/listings/markers city={}", city);
-        ListingMarkersResponse response = listingMarkersService.getMarkersForCity(city);
+        log.debug("GET /api/listings/markers city={} bbox={}", city, bbox);
+        double[] b = parseBbox(bbox);
+        ListingMarkersResponse response = b != null
+                ? listingMarkersService.getMarkersForCityInBbox(city, b[0], b[1], b[2], b[3])
+                : listingMarkersService.getMarkersForCity(city);
         return ResponseEntity.ok(response);
+    }
+
+    /** Parses {@code "south,west,north,east"} → double[4], or returns null on invalid input. */
+    static double[] parseBbox(String bbox) {
+        if (bbox == null || bbox.isBlank()) return null;
+        String[] parts = bbox.split(",", -1);
+        if (parts.length != 4) return null;
+        try {
+            double south = Double.parseDouble(parts[0].trim());
+            double west  = Double.parseDouble(parts[1].trim());
+            double north = Double.parseDouble(parts[2].trim());
+            double east  = Double.parseDouble(parts[3].trim());
+            if (south >= north || west >= east) return null;
+            return new double[]{south, west, north, east};
+        } catch (NumberFormatException e) {
+            log.debug("Ignoring unparseable bbox={}", bbox);
+            return null;
+        }
     }
 }

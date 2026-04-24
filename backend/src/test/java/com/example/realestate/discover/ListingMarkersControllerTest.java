@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -87,15 +88,51 @@ class ListingMarkersControllerTest {
     }
 
     @Test
-    void getMarkers_bboxParamAcceptedButIgnored() throws Exception {
-        when(listingMarkersService.getMarkersForCity("udupi"))
-                .thenReturn(new ListingMarkersResponse("udupi", List.of()));
+    void getMarkers_validBbox_callsServiceWithBbox() throws Exception {
+        UUID id = UUID.fromString("33333333-3333-3333-3333-333333333333");
+        ListingMarker marker = new ListingMarker(id, 13.35, 74.79, null);
+        when(listingMarkersService.getMarkersForCityInBbox("udupi", 13.1, 74.6, 13.5, 75.0))
+                .thenReturn(new ListingMarkersResponse("udupi", List.of(marker)));
 
         mockMvc.perform(get("/api/listings/markers")
                         .param("city", "udupi")
                         .param("bbox", "13.1,74.6,13.5,75.0"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.city", is("udupi")))
+                .andExpect(jsonPath("$.markers", hasSize(1)));
+    }
+
+    @Test
+    void getMarkers_invalidBbox_fallsBackToCityOnly() throws Exception {
+        when(listingMarkersService.getMarkersForCity("udupi"))
+                .thenReturn(new ListingMarkersResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/listings/markers")
+                        .param("city", "udupi")
+                        .param("bbox", "not-a-bbox"))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.city", is("udupi")));
+    }
+
+    @Test
+    void parseBbox_validInput_returnsFourDoubles() {
+        double[] result = ListingMarkersController.parseBbox("13.1,74.6,13.5,75.0");
+        assertNotNull(result);
+        assertEquals(13.1, result[0], 1e-9);
+        assertEquals(74.6, result[1], 1e-9);
+        assertEquals(13.5, result[2], 1e-9);
+        assertEquals(75.0, result[3], 1e-9);
+    }
+
+    @Test
+    void parseBbox_invertedLatRange_returnsNull() {
+        assertNull(ListingMarkersController.parseBbox("13.5,74.6,13.1,75.0"));
+    }
+
+    @Test
+    void parseBbox_nullOrBlank_returnsNull() {
+        assertNull(ListingMarkersController.parseBbox(null));
+        assertNull(ListingMarkersController.parseBbox("  "));
     }
 
     @Test
