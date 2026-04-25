@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
@@ -156,7 +157,7 @@ function makeListing(overrides = {}) {
 
 function renderWithListing(listing: ReturnType<typeof makeListing> | null, loading = false) {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
 
   // Pre-populate TanStack Query cache to avoid network call.
@@ -396,5 +397,59 @@ describe('ListingDetail — anonymous teaser (RE-189)', () => {
   it('does not render the Posted Date section when createdAt is absent', () => {
     renderWithListing(makeTeaserListing());
     expect(screen.queryByText(/Posted/)).not.toBeInTheDocument();
+  });
+});
+
+// ── H. Anonymous gallery lock (issue #835) ─────────────────────────────────
+
+describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
+  const images = [
+    { url: 'https://example.com/img1.jpg', alt: 'Image 1' },
+    { url: 'https://example.com/img2.jpg', alt: 'Image 2' },
+    { url: 'https://example.com/img3.jpg', alt: 'Image 3' },
+  ];
+
+  beforeEach(() => {
+    mockUser.current = null;
+  });
+
+  afterEach(() => {
+    mockUser.current = null;
+  });
+
+  it('anon: first image visible — no locked overlay at index 0', () => {
+    renderWithListing(makeListing({ images }));
+    expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
+  });
+
+  it('anon: thumbnail strip not rendered', () => {
+    renderWithListing(makeListing({ images }));
+    expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+  });
+
+  it('anon: clicking next image shows locked overlay', async () => {
+    renderWithListing(makeListing({ images }));
+    await userEvent.click(screen.getByRole('button', { name: /next image/i }));
+    expect(screen.getByText('Sign in to view all photos')).toBeInTheDocument();
+  });
+
+  it('anon: locked overlay CTA links to /auth with returnTo', async () => {
+    renderWithListing(makeListing({ images }));
+    await userEvent.click(screen.getByRole('button', { name: /next image/i }));
+    const cta = screen.getByRole('link', { name: /sign in to continue/i });
+    expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
+  });
+
+  it('logged-in: thumbnail strip is rendered', () => {
+    mockUser.current = { id: 'user-1' };
+    renderWithListing(makeListing({ images }));
+    expect(screen.getAllByRole('tab').length).toBe(images.length);
+  });
+
+  it('logged-in: no locked overlay when navigating to image 2', async () => {
+    mockUser.current = { id: 'user-1' };
+    renderWithListing(makeListing({ images }));
+    await userEvent.click(screen.getByRole('button', { name: /next image/i }));
+    expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });
 });

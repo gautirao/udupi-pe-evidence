@@ -14,7 +14,8 @@ import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck,
-  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw, Lock
+  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw, Lock,
+  Eye, TrendingUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
@@ -367,6 +368,7 @@ export default function ListingDetail() {
                       size="icon"
                       className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
                       onClick={prevImage}
+                      aria-label="Previous image"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
@@ -375,6 +377,7 @@ export default function ListingDetail() {
                       size="icon"
                       className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
                       onClick={nextImage}
+                      aria-label="Next image"
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
@@ -384,6 +387,22 @@ export default function ListingDetail() {
                       {currentImageIndex + 1} / {images.length}
                     </div>
                   </>
+                )}
+
+                {/* Anonymous image lock overlay */}
+                {!user && currentImageIndex > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="max-w-sm px-6 text-center text-white">
+                      <Eye className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
+                      <h3 className="mb-2 text-xl font-semibold">Sign in to view all photos</h3>
+                      <p className="mb-4 text-sm text-gray-200">
+                        Get full access to property photos, broker details, and more
+                      </p>
+                      <Button variant="secondary" size="lg" asChild>
+                        <Link to={`/auth?returnTo=/listing/${id}`}>Sign In to Continue</Link>
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </>
             ) : (
@@ -397,7 +416,7 @@ export default function ListingDetail() {
           </div>
 
           {/* Thumbnail strip */}
-          {images.length > 1 && (
+          {!!user && images.length > 1 && (
             <div
               className="flex gap-2 p-3 overflow-x-auto bg-muted/30"
               role="tablist"
@@ -884,20 +903,20 @@ export default function ListingDetail() {
               // areaKey format: IN|KA|{district}|{locality} — parts[2] is the district
               const trendCity = (parts[2] && DISTRICT_TO_CITY_SLUG[parts[2]]) ?? DEFAULT_CITY;
               return (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Locality Insights</CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-4 pt-0">
-                    <Link
-                      to={`/trends?city=${trendCity}&areaKey=${encodeURIComponent(listing.areaKey)}`}
-                      className="text-sm text-primary hover:underline inline-flex items-center gap-1"
-                    >
-                      View Area Trends — {localityName}
-                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                <div className="rounded-lg border border-purple-200 bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-purple-600" aria-hidden="true" />
+                    <h3 className="font-semibold text-gray-900">Locality Insights</h3>
+                  </div>
+                  <p className="mb-3 text-sm text-gray-700">
+                    View market trends and insights for {localityName}
+                  </p>
+                  <Button variant="outline" size="sm" className="w-full" asChild>
+                    <Link to={`/trends?city=${trendCity}&areaKey=${encodeURIComponent(listing.areaKey!)}`}>
+                      View Trends
                     </Link>
-                  </CardContent>
-                </Card>
+                  </Button>
+                </div>
               );
             })()}
 

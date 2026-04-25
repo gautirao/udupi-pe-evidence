@@ -95,6 +95,61 @@ test('AT2 — listing detail: login gate CTA has correct returnTo', async ({ pag
 });
 
 // ---------------------------------------------------------------------------
+// AT2b — anon: first image visible, image 2 blocked with locked overlay
+// ---------------------------------------------------------------------------
+test('AT2b — anon: first image visible, image 2 blocked with locked overlay', async ({ page }) => {
+  test.skip(fixture === null, 'e2e/.test-listing-id not found — global-setup may have skipped');
+  test.skip(!fixture!.isLive, 'Test listing is not LIVE');
+
+  const { id: listingId } = fixture!;
+  await page.goto(`/listing/${listingId}`);
+  await page.waitForLoadState('domcontentloaded');
+
+  // No lock overlay at index 0
+  await expect(page.locator('text=Sign in to view all photos')).toHaveCount(0, { timeout: 5_000 });
+
+  // Skip gallery-lock assertion if listing has only one image
+  const nextBtn = page.getByRole('button', { name: /next image/i });
+  const hasMultiple = await nextBtn.isVisible({ timeout: 3_000 }).catch(() => false);
+  if (!hasMultiple) {
+    test.skip(true, 'Listing has only one image — gallery lock not testable');
+    return;
+  }
+
+  await nextBtn.click();
+  await expect(page.locator('text=Sign in to view all photos')).toBeVisible({ timeout: 5_000 });
+  const cta = page.locator(`a[href*="/auth?returnTo=/listing/${listingId}"]`).last();
+  await expect(cta).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// AT2c — logged-in: full gallery browsable
+// ---------------------------------------------------------------------------
+test.describe('AT2c — logged-in: full gallery browsable', () => {
+  test.use({ storageState: 'e2e/fixtures/user-auth.json' });
+
+  test('logged-in user can navigate to image 2 without locked overlay', async ({ page }) => {
+    test.skip(fixture === null, 'e2e/.test-listing-id not found — global-setup may have skipped');
+    test.skip(!fixture!.isLive, 'Test listing is not LIVE');
+
+    const { id: listingId } = fixture!;
+    await page.goto(`/listing/${listingId}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    const nextBtn = page.getByRole('button', { name: /next image/i });
+    const hasMultiple = await nextBtn.isVisible({ timeout: 3_000 }).catch(() => false);
+    if (!hasMultiple) {
+      test.skip(true, 'Listing has only one image — full gallery test not applicable');
+      return;
+    }
+
+    await nextBtn.click();
+    await expect(page.locator('text=Sign in to view all photos')).toHaveCount(0, { timeout: 3_000 });
+    await expect(page.getByRole('tab').first()).toBeVisible({ timeout: 3_000 });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AT3 — returnTo deep-link: login redirects back to listing
 // ---------------------------------------------------------------------------
 test('AT3 — returnTo deep-link: login redirects back to listing', async ({ page }) => {
