@@ -108,13 +108,10 @@ test('AT2b — anon: first image visible, image 2 blocked with locked overlay', 
   // No lock overlay at index 0
   await expect(page.locator('text=Sign in to view all photos')).toHaveCount(0, { timeout: 5_000 });
 
-  // Skip gallery-lock assertion if listing has only one image
+  // Skip if listing has only one image — next button absent means no gallery to lock
   const nextBtn = page.getByRole('button', { name: /next image/i });
   const hasMultiple = await nextBtn.isVisible({ timeout: 3_000 }).catch(() => false);
-  if (!hasMultiple) {
-    test.skip(true, 'Listing has only one image — gallery lock not testable');
-    return;
-  }
+  test.skip(!hasMultiple, 'Listing has only one image — gallery lock not testable');
 
   await nextBtn.click();
   await expect(page.locator('text=Sign in to view all photos')).toBeVisible({ timeout: 5_000 });
@@ -138,10 +135,7 @@ test.describe('AT2c — logged-in: full gallery browsable', () => {
 
     const nextBtn = page.getByRole('button', { name: /next image/i });
     const hasMultiple = await nextBtn.isVisible({ timeout: 3_000 }).catch(() => false);
-    if (!hasMultiple) {
-      test.skip(true, 'Listing has only one image — full gallery test not applicable');
-      return;
-    }
+    test.skip(!hasMultiple, 'Listing has only one image — full gallery test not applicable');
 
     await nextBtn.click();
     await expect(page.locator('text=Sign in to view all photos')).toHaveCount(0, { timeout: 3_000 });

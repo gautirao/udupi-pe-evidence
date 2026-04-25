@@ -430,13 +430,13 @@ describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
   it('anon: clicking next image shows locked overlay', async () => {
     renderWithListing(makeListing({ images }));
     await userEvent.click(screen.getByRole('button', { name: /next image/i }));
-    expect(screen.getByText('Sign in to view all photos')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /sign in to view all photos/i })).toBeInTheDocument();
   });
 
   it('anon: locked overlay CTA links to /auth with returnTo', async () => {
     renderWithListing(makeListing({ images }));
     await userEvent.click(screen.getByRole('button', { name: /next image/i }));
-    const cta = screen.getByRole('link', { name: /sign in to continue/i });
+    const cta = screen.getByRole('link', { name: /sign in to view all photos/i });
     expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
   });
 

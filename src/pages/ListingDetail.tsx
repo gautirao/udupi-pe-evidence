@@ -390,7 +390,7 @@ export default function ListingDetail() {
                 )}
 
                 {/* Anonymous image lock overlay */}
-                {!user && currentImageIndex > 0 && (
+                {!user && currentImageIndex >= 1 && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="max-w-sm px-6 text-center text-white">
                       <Eye className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
@@ -399,7 +399,7 @@ export default function ListingDetail() {
                         Get full access to property photos, broker details, and more
                       </p>
                       <Button variant="secondary" size="lg" asChild>
-                        <Link to={`/auth?returnTo=/listing/${id}`}>Sign In to Continue</Link>
+                        <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view all photos</Link>
                       </Button>
                     </div>
                   </div>
@@ -416,7 +416,7 @@ export default function ListingDetail() {
           </div>
 
           {/* Thumbnail strip */}
-          {!!user && images.length > 1 && (
+          {user && images.length > 1 && (
             <div
               className="flex gap-2 p-3 overflow-x-auto bg-muted/30"
               role="tablist"
