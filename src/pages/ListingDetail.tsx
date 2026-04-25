@@ -63,6 +63,10 @@ const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }
  */
 interface PublicListingDetail extends ListingResponse {
   images: PropertyImage[];
+  /** Present in teaser response (anonymous): URL of the first image. */
+  primaryImageUrl?: string | null;
+  /** Present in teaser response (anonymous): total image count including locked images. Always serialised by backend (int primitive, never null). */
+  imageCount?: number;
   /** Not in ListingController.ListingResponse — may be present on legacy Supabase-sourced listings */
   price_unit?: string | null;
   bathrooms?: number | null;
@@ -193,6 +197,7 @@ export default function ListingDetail() {
   const { data: trustData } = useTrustBadges(id);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [galleryLocked, setGalleryLocked] = useState(false);
   const [imageError, setImageError] = useState<Record<number, boolean>>({});
   const [copied, setCopied] = useState(false);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
@@ -235,14 +240,33 @@ export default function ListingDetail() {
 
   const propertyTypeKey = listing.propertyType as PropertyType;
   const { label, badgeClass } = propertyConfig[propertyTypeKey] ?? propertyConfig['other'];
-  const images = listing.images || [];
+  // Anonymous teaser returns only primaryImageUrl + imageCount (no images[]).
+  // Synthesize a 1-item gallery so the first photo renders; effectiveImageCount
+  // tells us how many are locked behind auth.
+  const rawImages = listing.images || [];
+  const images: PropertyImage[] = rawImages.length > 0
+    ? rawImages
+    : listing.primaryImageUrl
+      ? [{ url: listing.primaryImageUrl, alt: 'Property image' }]
+      : [];
   const hasImages = images.length > 0;
+  const effectiveImageCount = listing.imageCount ?? images.length;
+  const hasMoreLocked = !user && effectiveImageCount > images.length;
 
   const nextImage = () => {
+    if (hasMoreLocked && currentImageIndex === images.length - 1) {
+      setGalleryLocked(true);
+      return;
+    }
     setCurrentImageIndex((prev) => (prev + 1) % images.length);
   };
 
   const prevImage = () => {
+    if (galleryLocked) {
+      setCurrentImageIndex(0);
+      setGalleryLocked(false);
+      return;
+    }
     setCurrentImageIndex((prev) => (prev - 1 + images.length) % images.length);
   };
 
@@ -361,7 +385,7 @@ export default function ListingDetail() {
                   </div>
                 )}
                 
-                {images.length > 1 && (
+                {(images.length > 1 || hasMoreLocked) && (
                   <>
                     <Button
                       variant="secondary"
@@ -381,16 +405,16 @@ export default function ListingDetail() {
                     >
                       <ChevronRight className="h-4 w-4" />
                     </Button>
-                    
-                    {/* Image counter */}
+
+                    {/* Image counter — use effectiveImageCount so anon sees total */}
                     <div className="absolute top-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-sm">
-                      {currentImageIndex + 1} / {images.length}
+                      {currentImageIndex + 1} / {effectiveImageCount}
                     </div>
                   </>
                 )}
 
                 {/* Anonymous image lock overlay */}
-                {!user && currentImageIndex >= 1 && (
+                {!user && (currentImageIndex >= 1 || galleryLocked) && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="max-w-sm px-6 text-center text-white">
                       <Eye className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />

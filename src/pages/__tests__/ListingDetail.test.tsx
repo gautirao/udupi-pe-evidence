@@ -366,8 +366,8 @@ describe('ListingDetail — ListingTransparencyCard (RE-94)', () => {
 
 describe('ListingDetail — anonymous teaser (RE-189)', () => {
   /**
-   * The backend returns a teaser response with only 6 fields for anonymous users:
-   * id, primaryImageUrl, price, propertyType, locality, listingPurpose.
+   * The backend returns a teaser response with only 7 fields for anonymous users:
+   * id, primaryImageUrl, imageCount, price, propertyType, locality, listingPurpose.
    * Fields like createdAt, title, images, status are absent.
    * The component must not crash on this minimal shape.
    */
@@ -375,6 +375,7 @@ describe('ListingDetail — anonymous teaser (RE-189)', () => {
     return {
       id: 'listing-123',
       primaryImageUrl: null,
+      imageCount: 0,
       price: 500000,
       propertyType: 'land',
       locality: 'Udupi',
@@ -403,7 +404,17 @@ describe('ListingDetail — anonymous teaser (RE-189)', () => {
 // ── H. Anonymous gallery lock (issue #835) ─────────────────────────────────
 
 describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
-  const images = [
+  // Real teaser shape: backend returns primaryImageUrl + imageCount, no images[].
+  // The component synthesizes a 1-item gallery from primaryImageUrl; clicking
+  // "Next" when imageCount > 1 sets galleryLocked = true, showing the overlay.
+  const anonTeaser = {
+    images: [] as { url: string; alt: string }[],
+    primaryImageUrl: 'https://example.com/img1.jpg',
+    imageCount: 3,
+  };
+
+  // Full images shape returned for authenticated users.
+  const authImages = [
     { url: 'https://example.com/img1.jpg', alt: 'Image 1' },
     { url: 'https://example.com/img2.jpg', alt: 'Image 2' },
     { url: 'https://example.com/img3.jpg', alt: 'Image 3' },
@@ -418,23 +429,23 @@ describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
   });
 
   it('anon: first image visible — no locked overlay at index 0', () => {
-    renderWithListing(makeListing({ images }));
+    renderWithListing(makeListing(anonTeaser));
     expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });
 
   it('anon: thumbnail strip not rendered', () => {
-    renderWithListing(makeListing({ images }));
+    renderWithListing(makeListing(anonTeaser));
     expect(screen.queryByRole('tab')).not.toBeInTheDocument();
   });
 
   it('anon: clicking next image shows locked overlay', async () => {
-    renderWithListing(makeListing({ images }));
+    renderWithListing(makeListing(anonTeaser));
     await userEvent.click(screen.getByRole('button', { name: /next image/i }));
     expect(screen.getByRole('heading', { name: /sign in to view all photos/i })).toBeInTheDocument();
   });
 
   it('anon: locked overlay CTA links to /auth with returnTo', async () => {
-    renderWithListing(makeListing({ images }));
+    renderWithListing(makeListing(anonTeaser));
     await userEvent.click(screen.getByRole('button', { name: /next image/i }));
     const cta = screen.getByRole('link', { name: /sign in to view all photos/i });
     expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
@@ -442,13 +453,21 @@ describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
 
   it('logged-in: thumbnail strip is rendered', () => {
     mockUser.current = { id: 'user-1' };
-    renderWithListing(makeListing({ images }));
-    expect(screen.getAllByRole('tab').length).toBe(images.length);
+    renderWithListing(makeListing({ images: authImages }));
+    expect(screen.getAllByRole('tab').length).toBe(authImages.length);
+  });
+
+  it('anon: pressing prev after lock clears overlay', async () => {
+    renderWithListing(makeListing(anonTeaser));
+    await userEvent.click(screen.getByRole('button', { name: /next image/i }));
+    expect(screen.getByRole('heading', { name: /sign in to view all photos/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /previous image/i }));
+    expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });
 
   it('logged-in: no locked overlay when navigating to image 2', async () => {
     mockUser.current = { id: 'user-1' };
-    renderWithListing(makeListing({ images }));
+    renderWithListing(makeListing({ images: authImages }));
     await userEvent.click(screen.getByRole('button', { name: /next image/i }));
     expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });

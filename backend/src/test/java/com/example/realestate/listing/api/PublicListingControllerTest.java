@@ -141,7 +141,7 @@ class PublicListingControllerTest {
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
             return new ListingTeaserResponse(
-                    l.getId(), null, l.getPrice(),
+                    l.getId(), null, 0, l.getPrice(),
                     l.getPropertyType(), l.getLocality(), l.getListingPurpose());
         });
 
@@ -150,7 +150,7 @@ class PublicListingControllerTest {
             List<Listing> listings = inv.getArgument(0);
             return listings.stream()
                     .map(l -> new ListingTeaserResponse(
-                            l.getId(), null, l.getPrice(),
+                            l.getId(), null, 0, l.getPrice(),
                             l.getPropertyType(), l.getLocality(), l.getListingPurpose()))
                     .toList();
         });
@@ -180,6 +180,7 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.propertyType").value("house"))
                 .andExpect(jsonPath("$.locality").value("Udupi"))
                 .andExpect(jsonPath("$.listingPurpose").value("SALE"))
+                .andExpect(jsonPath("$.imageCount").value(0))
                 // sensitive fields absent from teaser
                 .andExpect(jsonPath("$.status").doesNotExist())
                 .andExpect(jsonPath("$.title").doesNotExist())

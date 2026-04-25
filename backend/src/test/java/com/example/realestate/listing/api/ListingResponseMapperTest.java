@@ -424,10 +424,10 @@ class ListingResponseMapperTest {
         assertThat(response.trustTier()).isNull();
     }
 
-    // ==================== toTeaserResponse — exactly 6 fields, correct values ====================
+    // ==================== toTeaserResponse — exactly 7 fields, correct values ====================
 
     @Test
-    void toTeaserResponse_includesOnly6Fields() {
+    void toTeaserResponse_includesOnly7Fields() {
         Listing l = buildListing("LIVE");
         l.setListingPurpose("SALE");
 
@@ -435,12 +435,13 @@ class ListingResponseMapperTest {
 
         assertThat(teaser.id()).isEqualTo(l.getId());
         assertThat(teaser.primaryImageUrl()).isNull(); // no images set up
+        assertThat(teaser.imageCount()).isEqualTo(0);  // no images set up
         assertThat(teaser.price()).isEqualTo(l.getPrice());
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // record has exactly 6 components — verify at compile time via record definition
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(6);
+        // record has exactly 7 components — verify at compile time via record definition
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(7);
     }
 
     @Test
@@ -449,13 +450,13 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // The teaser record must have exactly 6 components — no address, lat/lon, description, etc.
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(6);
+        // The teaser record must have exactly 7 components — no address, lat/lon, description, etc.
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(7);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
         assertThat(componentNames).containsExactly(
-                "id", "primaryImageUrl", "price", "propertyType", "locality", "listingPurpose");
+                "id", "primaryImageUrl", "imageCount", "price", "propertyType", "locality", "listingPurpose");
         // Sensitive names must not appear
         assertThat(componentNames).doesNotContain(
                 "latitude", "longitude", "address", "description",

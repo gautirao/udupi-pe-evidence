@@ -492,6 +492,8 @@ export function usePropertyImages(rawPostId: string | null) {
 export interface TeaserListing {
   id: string;
   primaryImageUrl: string | null;
+  /** Total number of images, including those behind the auth gate. */
+  imageCount: number;
   /** Price in rupees (backend serialises BigDecimal as number). */
   price: number | null;
   propertyType: string | null;

@@ -79,7 +79,7 @@ public class ListingResponseMapper {
                 .map(ListingImage::getUrl)
                 .orElse(null);
         return new ListingTeaserResponse(
-                l.getId(), primaryImageUrl, l.getPrice(),
+                l.getId(), primaryImageUrl, images.size(), l.getPrice(),
                 l.getPropertyType(), l.getLocality(), l.getListingPurpose());
     }
 
@@ -91,18 +91,23 @@ public class ListingResponseMapper {
         if (listings.isEmpty()) return List.of();
 
         List<UUID> ids = listings.stream().map(Listing::getId).toList();
-        Map<UUID, String> firstImageByListing = listingImageRepository
-                .findByListingIdInOrderByListingIdAscPositionAsc(ids)
-                .stream()
+        List<ListingImage> allImages = listingImageRepository
+                .findByListingIdInOrderByListingIdAscPositionAsc(ids);
+
+        Map<UUID, String> firstImageByListing = allImages.stream()
                 .collect(Collectors.toMap(
                         ListingImage::getListingId,
                         ListingImage::getUrl,
                         (existing, replacement) -> existing)); // keep first (lowest position)
 
+        Map<UUID, Long> imageCountByListing = allImages.stream()
+                .collect(Collectors.groupingBy(ListingImage::getListingId, Collectors.counting()));
+
         return listings.stream()
                 .map(l -> new ListingTeaserResponse(
                         l.getId(),
                         firstImageByListing.get(l.getId()),
+                        imageCountByListing.getOrDefault(l.getId(), 0L).intValue(),
                         l.getPrice(),
                         l.getPropertyType(),
                         l.getLocality(),
