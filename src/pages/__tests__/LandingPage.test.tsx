@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import LandingPage from '../LandingPage';
+import { usePublicListings } from '@/hooks/usePublicListings';
 
 // ─── Hoisted mock handles ──────────────────────────────────────
 const mockNavigate = vi.hoisted(() => vi.fn());
@@ -23,6 +24,10 @@ vi.mock('@/hooks/useTrendingAreas', () => ({
     isLoading: false,
     isError: false,
   })),
+}));
+
+vi.mock('@/hooks/usePublicListings', () => ({
+  usePublicListings: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -127,5 +132,55 @@ describe('LandingPage', () => {
     await user.click(toggle);
     expect(rightCol.className).toContain('lg:w-1/2');
     expect(rightCol.className).not.toContain('lg:w-0');
+  });
+
+  describe('Latest Listings section', () => {
+    it('does not render "Latest Listings" heading when hook returns empty array', () => {
+      vi.mocked(usePublicListings).mockReturnValue({ data: [], isLoading: false } as ReturnType<typeof usePublicListings>);
+      renderPage();
+      expect(screen.queryByRole('heading', { name: /Latest Listings/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render "Latest Listings" heading while loading', () => {
+      vi.mocked(usePublicListings).mockReturnValue({ data: [], isLoading: true } as ReturnType<typeof usePublicListings>);
+      renderPage();
+      expect(screen.queryByRole('heading', { name: /Latest Listings/i })).not.toBeInTheDocument();
+    });
+
+    it('renders listing cards with links to /listing/{id} when hook returns data', () => {
+      vi.mocked(usePublicListings).mockReturnValue({
+        data: [
+          {
+            id: 'abc-1',
+            primaryImageUrl: 'https://example.com/img1.jpg',
+            price: 5000000,
+            propertyType: 'apartment',
+            locality: 'Koramangala',
+            listingPurpose: 'SALE',
+          },
+          {
+            id: 'abc-2',
+            primaryImageUrl: null,
+            price: null,
+            propertyType: 'land',
+            locality: 'Indiranagar',
+            listingPurpose: 'RENT',
+          },
+        ],
+        isLoading: false,
+      } as ReturnType<typeof usePublicListings>);
+
+      renderPage();
+
+      expect(screen.getByRole('heading', { name: /Latest Listings/i })).toBeInTheDocument();
+
+      const links = screen.getAllByRole('link', { name: /Apartment|Plot \/ Land|Koramangala|Indiranagar/i });
+      const hrefs = links.map((l) => l.getAttribute('href'));
+      expect(hrefs).toContain('/listing/abc-1');
+      expect(hrefs).toContain('/listing/abc-2');
+
+      // AC3: null primaryImageUrl renders placeholder text
+      expect(screen.getByText('No image')).toBeInTheDocument();
+    });
   });
 });

@@ -14,6 +14,90 @@ import { AREA_DEFAULTS } from '@/constants/areaDefaults';
 import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
 import { HomepageFilterPanel } from '@/components/HomepageFilterPanel';
 import { CITIES, ANY_AREA_SENTINEL } from '@/constants/cities';
+import { usePublicListings } from '@/hooks/usePublicListings';
+
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  apartment: 'Apartment',
+  villa: 'Villa',
+  land: 'Plot / Land',
+  commercial: 'Commercial',
+  house: 'House',
+  plot: 'Plot / Land',
+};
+
+function humanizePropertyType(raw: string | null): string | null {
+  if (raw == null) return null;
+  return PROPERTY_TYPE_LABELS[raw.toLowerCase()] ?? raw;
+}
+
+function LatestListingsSection() {
+  const { data: publicListings = [] } = usePublicListings(6);
+
+  if (publicListings.length === 0) return null;
+
+  return (
+    <section className="container mx-auto px-4 py-16 max-w-7xl">
+      <h2 className="text-2xl font-semibold text-foreground mb-10">Latest Listings</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {publicListings.map((listing) => {
+          const typeLabel = humanizePropertyType(listing.propertyType);
+          const purposeLabel =
+            listing.listingPurpose === 'SALE'
+              ? 'For Sale'
+              : listing.listingPurpose === 'RENT'
+              ? 'For Rent'
+              : listing.listingPurpose != null
+              ? listing.listingPurpose
+              : null;
+
+          return (
+            <Link
+              key={listing.id}
+              to={`/listing/${listing.id}`}
+              aria-label={[
+                typeLabel,
+                listing.locality,
+                listing.price != null ? formatPrice(listing.price) : 'Price on request',
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            >
+              <Card className="overflow-hidden hover:shadow-md transition-shadow">
+                {listing.primaryImageUrl != null ? (
+                  <img
+                    src={listing.primaryImageUrl}
+                    alt={typeLabel ?? 'Property'}
+                    className="w-full h-48 object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-48 bg-muted flex items-center justify-center text-muted-foreground text-sm">
+                    No image
+                  </div>
+                )}
+                <CardContent className="p-4 flex flex-col gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {typeLabel != null && (
+                      <Badge variant="secondary">{typeLabel}</Badge>
+                    )}
+                    {purposeLabel != null && (
+                      <Badge variant="outline">{purposeLabel}</Badge>
+                    )}
+                  </div>
+                  {listing.locality != null && (
+                    <p className="text-sm text-muted-foreground">{listing.locality}</p>
+                  )}
+                  <p className="text-sm font-medium text-foreground">
+                    {listing.price != null ? formatPrice(listing.price) : 'Price on request'}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
   const { areas, isLoading, isError } = useTrendingAreas();
@@ -276,6 +360,11 @@ export default function LandingPage() {
           <HomepageFilterPanel />
         </div>
       </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Latest Listings */}
+      {/* ------------------------------------------------------------------ */}
+      <LatestListingsSection />
 
       {/* ------------------------------------------------------------------ */}
       {/* Why Choose ReTrends? */}
