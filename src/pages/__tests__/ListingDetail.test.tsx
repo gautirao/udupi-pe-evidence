@@ -472,3 +472,100 @@ describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
     expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });
 });
+
+// ── I. Gallery polish — issue #845 ─────────────────────────────
+
+describe('ListingDetail — gallery polish (issue #845)', () => {
+  beforeEach(() => {
+    mockUser.current = null;
+  });
+
+  afterEach(() => {
+    mockUser.current = null;
+  });
+
+  // I-1: Lock icon in overlay (not Eye)
+  it('overlay shows Lock icon SVG, not Eye, when anon navigates to locked image', async () => {
+    const { container } = renderWithListing(makeListing({
+      images: [] as { url: string; alt: string }[],
+      primaryImageUrl: 'https://example.com/img1.jpg',
+      imageCount: 3,
+    }));
+    await userEvent.click(screen.getByRole('button', { name: /next image/i }));
+    // The overlay heading confirms the lock overlay rendered
+    expect(screen.getByRole('heading', { name: /sign in to view all photos/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign in to view all photos/i })).toBeInTheDocument();
+    // Assert icon identity: lucide-react v0.462 renders class names, not data-lucide attrs.
+    // Lock SVG gets class "lucide-lock"; Eye SVG would get "lucide-eye".
+    const lockSvg = container.querySelector('svg.lucide-lock');
+    const eyeSvg = container.querySelector('svg.lucide-eye');
+    expect(lockSvg).not.toBeNull();
+    expect(eyeSvg).toBeNull();
+  });
+
+  // I-2: aspect-[4/3] class on gallery container
+  it('gallery container has aspect-[4/3] class', () => {
+    const { container } = renderWithListing(makeListing({
+      images: [] as { url: string; alt: string }[],
+      primaryImageUrl: 'https://example.com/img1.jpg',
+      imageCount: 1,
+    }));
+    // Find the div that is the direct gallery container (relative bg-muted)
+    const galleryDiv = container.querySelector('.aspect-\\[4\\/3\\]');
+    expect(galleryDiv).not.toBeNull();
+  });
+
+  it('gallery container does NOT have aspect-video class', () => {
+    const { container } = renderWithListing(makeListing({
+      images: [] as { url: string; alt: string }[],
+      primaryImageUrl: 'https://example.com/img1.jpg',
+      imageCount: 1,
+    }));
+    const videoDiv = container.querySelector('.aspect-video');
+    expect(videoDiv).toBeNull();
+  });
+
+  // I-3: Zero-preview locked placeholder (imageCount > 0, primaryImageUrl = null, user = null)
+  it('shows locked placeholder (not "No images available") when imageCount > 0 but primaryImageUrl is null and user is anonymous', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: null,
+      imageCount: 5,
+    }));
+    expect(screen.queryByText('No images available')).not.toBeInTheDocument();
+    // CTA link presence is asserted independently in I-4; no duplicate assertion needed here.
+  });
+
+  it('locked placeholder CTA links to /auth with returnTo', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: null,
+      imageCount: 5,
+    }));
+    const cta = screen.getByRole('link', { name: /sign in to view photos/i });
+    expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
+  });
+
+  // I-4: imageCount === 0 still shows "No images available" (unchanged)
+  it('shows "No images available" when imageCount is 0 and no images', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: null,
+      imageCount: 0,
+    }));
+    expect(screen.getByText('No images available')).toBeInTheDocument();
+    expect(screen.queryByText('Sign in to view photos')).not.toBeInTheDocument();
+  });
+
+  // I-5: Zero-preview branch does NOT fire when primaryImageUrl is non-null
+  it('does NOT show zero-preview placeholder when primaryImageUrl is non-null (normal teaser path)', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: 'https://example.com/img1.jpg',
+      imageCount: 3,
+    }));
+    // The synthesized image renders; neither placeholder should appear
+    expect(screen.queryByText('No images available')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sign in to view photos')).not.toBeInTheDocument();
+  });
+});

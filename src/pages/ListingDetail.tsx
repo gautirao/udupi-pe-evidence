@@ -15,7 +15,7 @@ import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck,
   Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw, Lock,
-  Eye, TrendingUp,
+  TrendingUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useState } from 'react';
@@ -250,7 +250,7 @@ export default function ListingDetail() {
       ? [{ url: listing.primaryImageUrl, alt: 'Property image' }]
       : [];
   const hasImages = images.length > 0;
-  const effectiveImageCount = listing.imageCount ?? images.length;
+  const effectiveImageCount = typeof listing.imageCount === 'number' ? listing.imageCount : images.length;
   const hasMoreLocked = !user && effectiveImageCount > images.length;
 
   const nextImage = () => {
@@ -366,7 +366,7 @@ export default function ListingDetail() {
 
         {/* Image Gallery */}
         <Card className="overflow-hidden mb-6">
-          <div className="relative bg-muted aspect-video">
+          <div className="relative bg-muted aspect-[4/3]">
             {hasImages ? (
               <>
                 {!imageError[currentImageIndex] ? (
@@ -417,7 +417,7 @@ export default function ListingDetail() {
                 {!user && (currentImageIndex >= 1 || galleryLocked) && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="max-w-sm px-6 text-center text-white">
-                      <Eye className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
+                      <Lock className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
                       <h3 className="mb-2 text-xl font-semibold">Sign in to view all photos</h3>
                       <p className="mb-4 text-sm text-gray-200">
                         Get full access to property photos, broker details, and more
@@ -429,6 +429,16 @@ export default function ListingDetail() {
                   </div>
                 )}
               </>
+            ) : !hasImages && effectiveImageCount > 0 && !user ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center text-muted-foreground">
+                  <Lock className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
+                  <p className="mb-4 text-sm">Sign in to view photos</p>
+                  <Button variant="secondary" size="lg" asChild>
+                    <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view photos</Link>
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center text-muted-foreground">
