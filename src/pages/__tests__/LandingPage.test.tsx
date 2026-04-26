@@ -133,6 +133,19 @@ describe('LandingPage', () => {
     expect(rightCol.className).toContain('lg:w-1/2');
   });
 
+  it('right column is hidden on mobile — has hidden and lg:flex classes', () => {
+    renderPage();
+    const rightCol = screen.getByTestId('filter-panel-col');
+    expect(rightCol.className).toContain('hidden');
+    expect(rightCol.className).toContain('lg:flex');
+  });
+
+  it('renders a mobile filter trigger button', () => {
+    renderPage();
+    expect(screen.getByTestId('mobile-filter-trigger')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /filters/i })).toBeInTheDocument();
+  });
+
   it('clicking toggle collapses the right panel then expands it again', async () => {
     const user = userEvent.setup();
     renderPage();

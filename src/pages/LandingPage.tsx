@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Map, ShieldCheck, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Map, ShieldCheck, BarChart2, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
@@ -233,6 +234,7 @@ export default function LandingPage() {
   const [selectedCity, setSelectedCity] = useState('bangalore');
   const [selectedAreaKey, setSelectedAreaKey] = useState(ANY_AREA_SENTINEL);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
   const cityAreas = areaOptions.filter((a) => {
@@ -330,6 +332,17 @@ export default function LandingPage() {
             <Button size="lg" onClick={handleExplore} className="bg-blue-600 hover:bg-blue-700 text-white">
               Explore on Map
             </Button>
+
+            {/* Mobile-only: open filter panel in a Sheet drawer */}
+            <Button
+              variant="outline"
+              data-testid="mobile-filter-trigger"
+              className="lg:hidden self-start"
+              onClick={() => setMobileFilterOpen(true)}
+            >
+              <SlidersHorizontal className="h-4 w-4 mr-2" />
+              Filters
+            </Button>
           </div>
         </div>
 
@@ -348,12 +361,12 @@ export default function LandingPage() {
           {panelOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </Button>
 
-        {/* Right column: scoped filter panel — CSS width collapse, always in DOM (AC3).
+        {/* Right column: scoped filter panel — hidden on mobile, CSS width collapse on lg+.
             min-w-0 allows lg:w-0 to override the Card's intrinsic min-content width. */}
         <div
           data-testid="filter-panel-col"
           className={cn(
-            'lg:flex-shrink-0 min-w-0 bg-muted/40 flex items-center justify-center overflow-hidden transition-all duration-300',
+            'hidden lg:flex lg:flex-shrink-0 min-w-0 bg-muted/40 items-center justify-center overflow-hidden transition-all duration-300',
             panelOpen ? 'lg:w-1/2 px-8 py-16' : 'lg:w-0 px-0 py-0',
           )}
         >
@@ -365,6 +378,23 @@ export default function LandingPage() {
           />
         </div>
       </div>
+
+      {/* Mobile filter Sheet — lg+ uses the right column above instead */}
+      <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+        <SheetContent side="right" className="w-full max-w-sm overflow-y-auto">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Property filters</SheetTitle>
+          </SheetHeader>
+          <div className="pt-8">
+            <HomepageFilterPanel
+              city={selectedCity}
+              areaKey={selectedAreaKey}
+              onCityChange={handleCityChange}
+              onAreaKeyChange={setSelectedAreaKey}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ------------------------------------------------------------------ */}
       {/* Latest Listings */}
