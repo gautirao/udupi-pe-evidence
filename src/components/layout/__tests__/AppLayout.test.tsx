@@ -241,6 +241,27 @@ describe('AppLayout — broker nav link hrefs', () => {
   });
 });
 
+describe('AppLayout — anonymous user menu', () => {
+  it('shows "Sign in" link and no avatar button when user is null', () => {
+    // mockAuth is already baseAuth() (user: null) from beforeEach
+    renderLayout();
+
+    expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/auth');
+    // No avatar trigger button (the fallback 'U' button must not be present)
+    expect(screen.queryByRole('button', { name: /^U$/i })).not.toBeInTheDocument();
+  });
+
+  it('does not show "Sign in" link when user is authenticated', () => {
+    mockAuth = baseAuth({ user: { email: 'user@test.com' }, userRole: 'user' });
+    renderLayout();
+
+    expect(screen.queryByRole('link', { name: /^sign in$/i })).not.toBeInTheDocument();
+    // Avatar button IS present
+    expect(screen.getByRole('button', { name: /^US$/i })).toBeInTheDocument();
+  });
+});
+
 describe('AppLayout — onboarding redirect for dealers', () => {
   it('dealer at /onboarding is redirected to /', () => {
     mockAuth = baseAuth({
