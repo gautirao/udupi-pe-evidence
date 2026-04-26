@@ -11,12 +11,8 @@ import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { formatPrice } from '@/lib/formatters';
 import { AREA_DEFAULTS } from '@/constants/areaDefaults';
 import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
-
-const CITIES = [
-  { value: 'bangalore', label: 'Bangalore' },
-  { value: 'mangalore', label: 'Mangalore' },
-  { value: 'udupi', label: 'Udupi' },
-];
+import { HomepageFilterPanel } from '@/components/HomepageFilterPanel';
+import { CITIES, ANY_AREA_SENTINEL } from '@/constants/cities';
 
 function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
   const { areas, isLoading, isError } = useTrendingAreas();
@@ -150,7 +146,7 @@ export default function LandingPage() {
   const { isLoading } = useAuth();
   const navigate = useNavigate();
   const [selectedCity, setSelectedCity] = useState('bangalore');
-  const [selectedAreaKey, setSelectedAreaKey] = useState('');
+  const [selectedAreaKey, setSelectedAreaKey] = useState(ANY_AREA_SENTINEL);
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
   const cityAreas = areaOptions.filter((a) => {
@@ -162,12 +158,13 @@ export default function LandingPage() {
 
   const handleCityChange = (city: string) => {
     setSelectedCity(city);
-    setSelectedAreaKey('');
+    setSelectedAreaKey(ANY_AREA_SENTINEL);
   };
 
   const handleExplore = () => {
     const params = new URLSearchParams({ city: selectedCity });
-    if (selectedAreaKey) params.set('areaKey', selectedAreaKey);
+    const resolvedArea = selectedAreaKey === ANY_AREA_SENTINEL ? '' : selectedAreaKey;
+    if (resolvedArea) params.set('areaKey', resolvedArea);
     navigate(`/discover?${params.toString()}`);
   };
 
@@ -196,56 +193,65 @@ export default function LandingPage() {
       </header>
 
       {/* ------------------------------------------------------------------ */}
-      {/* Hero */}
+      {/* Hero + Filter Panel — two-column at lg, stacked on mobile */}
       {/* ------------------------------------------------------------------ */}
-      <section className="container mx-auto px-4 py-20 max-w-7xl text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Find Your Perfect Home with Trust &amp; Clarity
-        </h1>
-        <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-          Explore properties through interactive maps, discover localities with real market trends,
-          and buy with confidence from verified listings.
-        </p>
-        <p className="mt-4 text-sm font-medium text-muted-foreground">
-          500+ Verified Listings · Trusted Brokers
-        </p>
+      <div className="flex flex-col lg:flex-row" data-testid="two-column-wrapper">
+        {/* Left column: hero copy + city/area selectors */}
+        <div className="lg:w-1/2 flex flex-col justify-center px-8 py-16">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+            Find Your Perfect Home with Trust &amp; Clarity
+          </h1>
+          <p className="mt-6 text-lg text-muted-foreground max-w-2xl">
+            Explore properties through interactive maps, discover localities with real market trends,
+            and buy with confidence from verified listings.
+          </p>
+          <p className="mt-4 text-sm font-medium text-muted-foreground">
+            500+ Verified Listings · Trusted Brokers
+          </p>
 
-        <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          <Select value={selectedCity} onValueChange={handleCityChange}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Select city" />
-            </SelectTrigger>
-            <SelectContent>
-              {CITIES.map((c) => (
-                <SelectItem key={c.value} value={c.value}>
-                  {c.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <Select value={selectedCity} onValueChange={handleCityChange}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="Select city" />
+              </SelectTrigger>
+              <SelectContent>
+                {CITIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={selectedAreaKey}
-            onValueChange={setSelectedAreaKey}
-            disabled={areasLoading && areasToShow.length === 0}
-          >
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Any area (optional)" />
-            </SelectTrigger>
-            <SelectContent>
-              {areasToShow.map((a) => (
-                <SelectItem key={a.areaKey} value={a.areaKey}>
-                  {a.areaLabel}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={selectedAreaKey}
+              onValueChange={setSelectedAreaKey}
+              disabled={areasLoading && areasToShow.length === 0}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder="Any area (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY_AREA_SENTINEL}>Any area</SelectItem>
+                {areasToShow.map((a) => (
+                  <SelectItem key={a.areaKey} value={a.areaKey}>
+                    {a.areaLabel}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Button size="lg" onClick={handleExplore} className="bg-blue-600 hover:bg-blue-700 text-white">
-            Explore on Map
-          </Button>
+            <Button size="lg" onClick={handleExplore} className="bg-blue-600 hover:bg-blue-700 text-white">
+              Explore on Map
+            </Button>
+          </div>
         </div>
-      </section>
+
+        {/* Right column: scoped filter panel */}
+        <div className="lg:w-1/2 bg-muted/40 flex items-center justify-center px-8 py-16">
+          <HomepageFilterPanel />
+        </div>
+      </div>
 
       {/* ------------------------------------------------------------------ */}
       {/* Why Choose ReTrends? */}
@@ -289,7 +295,7 @@ export default function LandingPage() {
             <Button asChild size="lg">
               <Link
                 to={`/discover?${new URLSearchParams(
-                  selectedAreaKey
+                  selectedAreaKey !== ANY_AREA_SENTINEL
                     ? { city: selectedCity, areaKey: selectedAreaKey }
                     : { city: selectedCity },
                 ).toString()}`}
