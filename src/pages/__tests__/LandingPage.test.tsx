@@ -96,4 +96,36 @@ describe('LandingPage', () => {
     await user.click(buttons[0]);
     expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('/discover?city=bangalore'));
   });
+
+  it('renders the panel toggle button', () => {
+    renderPage();
+    expect(screen.getByTestId('panel-toggle')).toBeInTheDocument();
+  });
+
+  it('panel is open by default — right column has lg:w-1/2 class', () => {
+    renderPage();
+    const rightCol = screen.getByTestId('filter-panel-col');
+    expect(rightCol.className).toContain('lg:w-1/2');
+  });
+
+  it('clicking toggle collapses the right panel then expands it again', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const toggle = screen.getByTestId('panel-toggle');
+    const rightCol = screen.getByTestId('filter-panel-col');
+
+    // Initially open
+    expect(rightCol.className).toContain('lg:w-1/2');
+    expect(rightCol.className).not.toContain('lg:w-0');
+
+    // Collapse
+    await user.click(toggle);
+    expect(rightCol.className).toContain('lg:w-0');
+    expect(rightCol.className).not.toContain('lg:w-1/2');
+
+    // Expand
+    await user.click(toggle);
+    expect(rightCol.className).toContain('lg:w-1/2');
+    expect(rightCol.className).not.toContain('lg:w-0');
+  });
 });

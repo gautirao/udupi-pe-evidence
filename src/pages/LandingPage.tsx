@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Map, ShieldCheck, BarChart2 } from 'lucide-react';
+import { Loader2, Map, ShieldCheck, BarChart2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { formatPrice } from '@/lib/formatters';
@@ -147,6 +148,7 @@ export default function LandingPage() {
   const navigate = useNavigate();
   const [selectedCity, setSelectedCity] = useState('bangalore');
   const [selectedAreaKey, setSelectedAreaKey] = useState(ANY_AREA_SENTINEL);
+  const [panelOpen, setPanelOpen] = useState(true);
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
   const cityAreas = areaOptions.filter((a) => {
@@ -195,9 +197,9 @@ export default function LandingPage() {
       {/* ------------------------------------------------------------------ */}
       {/* Hero + Filter Panel — two-column at lg, stacked on mobile */}
       {/* ------------------------------------------------------------------ */}
-      <div className="flex flex-col lg:flex-row" data-testid="two-column-wrapper">
+      <div className="flex flex-col lg:flex-row relative" data-testid="two-column-wrapper">
         {/* Left column: hero copy + city/area selectors */}
-        <div className="lg:w-1/2 flex flex-col justify-center px-8 py-16">
+        <div className={cn('flex flex-col justify-center px-8 py-16 transition-all duration-300', panelOpen ? 'lg:w-1/2' : 'lg:w-full')}>
           <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             Find Your Perfect Home with Trust &amp; Clarity
           </h1>
@@ -247,8 +249,30 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Right column: scoped filter panel */}
-        <div className="lg:w-1/2 bg-muted/40 flex items-center justify-center px-8 py-16">
+        {/* Toggle button — absolutely positioned at the left edge of the right panel, lg+ only */}
+        <Button
+          variant="ghost"
+          size="icon"
+          data-testid="panel-toggle"
+          aria-label={panelOpen ? 'Collapse filter panel' : 'Expand filter panel'}
+          className={cn(
+            'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
+            panelOpen ? 'left-1/2' : 'left-0',
+          )}
+          onClick={() => setPanelOpen(!panelOpen)}
+        >
+          {panelOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+
+        {/* Right column: scoped filter panel — CSS width collapse, always in DOM (AC3).
+            min-w-0 allows lg:w-0 to override the Card's intrinsic min-content width. */}
+        <div
+          data-testid="filter-panel-col"
+          className={cn(
+            'lg:flex-shrink-0 min-w-0 bg-muted/40 flex items-center justify-center overflow-hidden transition-all duration-300',
+            panelOpen ? 'lg:w-1/2 px-8 py-16' : 'lg:w-0 px-0 py-0',
+          )}
+        >
           <HomepageFilterPanel />
         </div>
       </div>
