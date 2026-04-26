@@ -569,3 +569,99 @@ describe('ListingDetail — gallery polish (issue #845)', () => {
     expect(screen.queryByText('Sign in to view photos')).not.toBeInTheDocument();
   });
 });
+
+// ── J. Anonymous gallery teaser flow (issue #844) ─────────────────────────────
+//
+// Covers the three ACs not yet exercised by describe blocks H and I:
+//   AC2 — synthetic images array contains exactly 1 item for anon
+//   AC3 — nav arrows are shown when imageCount > 1
+//   AC7 — image counter shows "1 / N" where N comes from the backend imageCount
+
+describe('anonymous gallery teaser flow (issue #844)', () => {
+  const PRIMARY_URL = 'https://example.com/photo.jpg';
+
+  beforeEach(() => {
+    mockUser.current = null;
+  });
+
+  afterEach(() => {
+    mockUser.current = null;
+  });
+
+  // AC2: Synthetic array has exactly 1 item (the primaryImageUrl) for anon users.
+  // We verify this indirectly: the rendered <img> shows the primary URL, and after
+  // clicking Next the lock overlay fires (not a second real image), proving the
+  // array held only 1 real item.
+  it('AC2: anon gallery uses exactly 1 synthetic image (next click locks, not advances)', async () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: PRIMARY_URL,
+      imageCount: 3,
+    }));
+
+    // Image 1 is the primary URL
+    const img = screen.getByRole('img', { name: /property image/i });
+    expect(img).toHaveAttribute('src', PRIMARY_URL);
+
+    // Clicking Next locks rather than navigating to a second image, proving the
+    // synthetic array has only 1 entry (otherwise the index would advance).
+    await userEvent.click(screen.getByRole('button', { name: /next image/i }));
+    expect(screen.getByRole('heading', { name: /sign in to view all photos/i })).toBeInTheDocument();
+
+    // Gallery image still shows image 1 — no navigation occurred
+    const imgAfter = screen.getByRole('img', { name: /property image/i });
+    expect(imgAfter).toHaveAttribute('src', PRIMARY_URL);
+  });
+
+  // AC3: Nav arrows appear when imageCount > 1 for anon (hasMoreLocked = true).
+  it('AC3: prev and next nav arrows are rendered when imageCount > 1', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: PRIMARY_URL,
+      imageCount: 3,
+    }));
+
+    expect(screen.getByRole('button', { name: /next image/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /previous image/i })).toBeInTheDocument();
+  });
+
+  // AC3 edge: nav arrows NOT rendered when hasMoreLocked is false.
+  // hasMoreLocked = !user && effectiveImageCount > images.length.
+  // When imageCount === 1 and primaryImageUrl is set, images.length === 1, so
+  // effectiveImageCount (1) > images.length (1) is false → hasMoreLocked = false,
+  // and images.length > 1 is also false → no arrows.
+  it('AC3: nav arrows are NOT rendered when hasMoreLocked is false (imageCount equals synthetic array length)', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: PRIMARY_URL,
+      imageCount: 1,
+    }));
+
+    expect(screen.queryByRole('button', { name: /next image/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /previous image/i })).not.toBeInTheDocument();
+  });
+
+  // AC7: Counter shows "1 / N" where N = imageCount from the backend, not
+  // the length of the local images array (which is 1 for anon).
+  it('AC7: image counter shows "1 / 3" using backend imageCount, not local array length', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: PRIMARY_URL,
+      imageCount: 3,
+    }));
+
+    // The counter text "1 / 3" confirms N comes from backend imageCount, not local array length (1)
+    expect(screen.getByText(/^1 \/ 3$/)).toBeInTheDocument();
+  });
+
+  // AC7 edge: counter not rendered when only 1 image and no locked images.
+  it('AC7: counter is NOT rendered when imageCount === 1 (no nav needed)', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: PRIMARY_URL,
+      imageCount: 1,
+    }));
+
+    expect(screen.queryByText(/^1 \/ 1$/)).not.toBeInTheDocument();
+  });
+});
