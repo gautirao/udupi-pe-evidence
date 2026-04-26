@@ -341,7 +341,7 @@ export default function LandingPage() {
           aria-label={panelOpen ? 'Collapse filter panel' : 'Expand filter panel'}
           className={cn(
             'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
-            panelOpen ? 'left-1/2' : 'left-0',
+            panelOpen ? 'left-1/2' : 'right-0',
           )}
           onClick={() => setPanelOpen(!panelOpen)}
         >

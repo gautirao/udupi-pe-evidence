@@ -107,6 +107,26 @@ describe('LandingPage', () => {
     expect(screen.getByTestId('panel-toggle')).toBeInTheDocument();
   });
 
+  it('toggle button is at left-1/2 when panel is open and right-0 when collapsed', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const toggle = screen.getByTestId('panel-toggle');
+
+    // Open state: toggle sits at the seam between columns
+    expect(toggle.className).toContain('left-1/2');
+    expect(toggle.className).not.toContain('right-0');
+
+    // Collapsed state: toggle moves to right edge so user can find it to re-expand
+    await user.click(toggle);
+    expect(toggle.className).toContain('right-0');
+    expect(toggle.className).not.toContain('left-1/2');
+
+    // Re-expanded: back to seam
+    await user.click(toggle);
+    expect(toggle.className).toContain('left-1/2');
+    expect(toggle.className).not.toContain('right-0');
+  });
+
   it('panel is open by default — right column has lg:w-1/2 class', () => {
     renderPage();
     const rightCol = screen.getByTestId('filter-panel-col');
