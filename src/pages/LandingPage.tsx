@@ -357,7 +357,12 @@ export default function LandingPage() {
             panelOpen ? 'lg:w-1/2 px-8 py-16' : 'lg:w-0 px-0 py-0',
           )}
         >
-          <HomepageFilterPanel />
+          <HomepageFilterPanel
+            city={selectedCity}
+            areaKey={selectedAreaKey}
+            onCityChange={handleCityChange}
+            onAreaKeyChange={setSelectedAreaKey}
+          />
         </div>
       </div>
 

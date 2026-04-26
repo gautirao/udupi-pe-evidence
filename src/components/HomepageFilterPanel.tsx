@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -14,10 +13,20 @@ import { AREA_DEFAULTS } from '@/constants/areaDefaults';
 import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
 import { CITIES, ANY_AREA_SENTINEL } from '@/constants/cities';
 
-export function HomepageFilterPanel() {
+interface HomepageFilterPanelProps {
+  city: string;
+  areaKey: string;
+  onCityChange: (city: string) => void;
+  onAreaKeyChange: (areaKey: string) => void;
+}
+
+export function HomepageFilterPanel({
+  city,
+  areaKey,
+  onCityChange,
+  onAreaKeyChange,
+}: HomepageFilterPanelProps) {
   const navigate = useNavigate();
-  const [city, setCity] = useState('bangalore');
-  const [areaKey, setAreaKey] = useState(ANY_AREA_SENTINEL);
 
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
@@ -29,8 +38,8 @@ export function HomepageFilterPanel() {
   const areasToShow = cityAreas.length > 0 ? cityAreas : (AREA_DEFAULTS[city] ?? []);
 
   const handleCityChange = (value: string) => {
-    setCity(value);
-    setAreaKey(ANY_AREA_SENTINEL);
+    onCityChange(value);
+    // areaKey reset is handled by LandingPage's onCityChange (handleCityChange)
   };
 
   const handleExplore = () => {
@@ -66,7 +75,7 @@ export function HomepageFilterPanel() {
 
           <Select
             value={areaKey}
-            onValueChange={setAreaKey}
+            onValueChange={onAreaKeyChange}
             disabled={areasLoading && areasToShow.length === 0}
           >
             <SelectTrigger aria-label="Select area">
