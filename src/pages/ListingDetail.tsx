@@ -435,12 +435,15 @@ export default function ListingDetail() {
                 )}
               </>
             ) : !hasImages && effectiveImageCount > 0 && !user ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="max-w-sm px-6 text-center text-white">
                   <Lock className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
-                  <p className="mb-4 text-sm">Sign in to view photos</p>
+                  <h3 className="mb-2 text-xl font-semibold">Sign in to view all photos</h3>
+                  <p className="mb-4 text-sm text-gray-200">
+                    Get full access to property photos, broker details, and more
+                  </p>
                   <Button variant="secondary" size="lg" asChild>
-                    <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view photos</Link>
+                    <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view all photos</Link>
                   </Button>
                 </div>
               </div>

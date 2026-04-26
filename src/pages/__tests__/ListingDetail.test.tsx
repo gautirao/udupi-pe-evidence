@@ -542,7 +542,7 @@ describe('ListingDetail — gallery polish (issue #845)', () => {
       primaryImageUrl: null,
       imageCount: 5,
     }));
-    const cta = screen.getByRole('link', { name: /sign in to view photos/i });
+    const cta = screen.getByRole('link', { name: /sign in to view all photos/i });
     expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
   });
 
@@ -554,7 +554,7 @@ describe('ListingDetail — gallery polish (issue #845)', () => {
       imageCount: 0,
     }));
     expect(screen.getByText('No images available')).toBeInTheDocument();
-    expect(screen.queryByText('Sign in to view photos')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });
 
   // I-5: Zero-preview branch does NOT fire when primaryImageUrl is non-null
@@ -566,7 +566,7 @@ describe('ListingDetail — gallery polish (issue #845)', () => {
     }));
     // The synthesized image renders; neither placeholder should appear
     expect(screen.queryByText('No images available')).not.toBeInTheDocument();
-    expect(screen.queryByText('Sign in to view photos')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sign in to view all photos')).not.toBeInTheDocument();
   });
 });
 
