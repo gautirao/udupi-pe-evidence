@@ -33,7 +33,7 @@ test.describe('N1 — user-authenticated', () => {
   test('N1 — user role (owner): Trends, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {
     test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping N1');
 
-    await page.goto('/');
+    await page.goto('/discover');
     // Wait for auth context to settle so nav renders with the correct role
     await page.waitForTimeout(2_000);
 
@@ -63,7 +63,7 @@ test.describe('N2 — admin-authenticated', () => {
   test('N2 — admin role: Admin dropdown visible; admin nav links present; no dealer links', async ({ page }) => {
     test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping N2');
 
-    await page.goto('/');
+    await page.goto('/discover');
     await page.waitForTimeout(2_000);
 
     // On desktop, admin nav renders as a dropdown behind an "Admin" button trigger.

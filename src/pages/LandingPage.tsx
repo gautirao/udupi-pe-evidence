@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -147,7 +147,7 @@ const FEATURE_CARDS: FeatureCard[] = [
 ];
 
 export default function LandingPage() {
-  const { user, isLoading } = useAuth();
+  const { isLoading } = useAuth();
   const navigate = useNavigate();
   const [selectedCity, setSelectedCity] = useState('bangalore');
   const [selectedAreaKey, setSelectedAreaKey] = useState('');
@@ -171,16 +171,14 @@ export default function LandingPage() {
     navigate(`/discover?${params.toString()}`);
   };
 
+  // Wait for auth to resolve before rendering to avoid a Sign-in link flash
+  // for users who are already logged in (Supabase restores session from localStorage).
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
-  }
-
-  if (user !== null) {
-    return <Navigate to="/discover" replace />;
   }
 
   return (

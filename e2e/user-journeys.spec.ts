@@ -260,8 +260,8 @@ test.describe('UJ1 — Browse → Detail → Request Viewing → My Bookings', (
     const { id } = fixture!;
     const tomorrowDate = new Date(Date.now() + 86_400_000).toISOString().split('T')[0]!;
 
-    // ── Step 1: Navigate to home page and verify it loads ──────────────
-    await page.goto('/');
+    // ── Step 1: Navigate to discover page and verify auth nav renders ──
+    await page.goto('/discover');
     await page.waitForLoadState('domcontentloaded');
     // Wait for listings to finish loading
     await page.waitForSelector('text=Loading listings...', { state: 'hidden', timeout: 15_000 }).catch(() => {});
