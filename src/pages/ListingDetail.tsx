@@ -387,19 +387,21 @@ export default function ListingDetail() {
                 
                 {(images.length > 1 || hasMoreLocked) && (
                   <>
+                    {/* z-10 keeps nav buttons above the absolute-inset-0 lock overlay */}
                     <Button
                       variant="secondary"
                       size="icon"
-                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background"
                       onClick={prevImage}
                       aria-label="Previous image"
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
+                    {/* z-10 keeps nav buttons above the absolute-inset-0 lock overlay */}
                     <Button
                       variant="secondary"
                       size="icon"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-background/80 hover:bg-background"
                       onClick={nextImage}
                       aria-label="Next image"
                     >
@@ -407,7 +409,10 @@ export default function ListingDetail() {
                     </Button>
 
                     {/* Image counter — use effectiveImageCount so anon sees total */}
-                    <div className="absolute top-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-sm">
+                    <div
+                      data-testid="gallery-counter"
+                      className="absolute top-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-sm"
+                    >
                       {currentImageIndex + 1} / {effectiveImageCount}
                     </div>
                   </>
