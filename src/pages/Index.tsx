@@ -1,29 +1,25 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, PropertyType, useTeaserListings, TeaserListing, useLocalities } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, PropertyType, useLocalities } from '@/hooks/usePropertyListings';
 import { useDiscoverMarkers } from '@/hooks/useDiscoverMarkers';
-import { useListingDetail } from '@/hooks/useListingDetail';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
-import { useDiscoverAreaListings } from '@/hooks/useDiscoverAreaListings';
+import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, X, Eye, PenTool, GraduationCap, LogIn, Maximize2, TrendingUp } from 'lucide-react';
-import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
+import { Loader2, MapPin, X, PenTool, GraduationCap, LogIn, Maximize2 } from 'lucide-react';
+import { formatPrice } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
-import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
-import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY, DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
-import { NearbySchoolsBadge } from '@/components/listing/NearbySchoolsBadge';
+import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const isNew = (createdAt: string | null | undefined): boolean => {
@@ -37,10 +33,8 @@ const AREA_LAYER_MAX_ZOOM = 12;
 
 export default function Index() {
   const { user, isLoading: authLoading } = useAuth();
-  const navigate = useNavigate();
   const [urlParams, setUrlParams] = useSearchParams();
   const [filters, setFilters] = useState<PropertyFilters>({});
-  const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -135,10 +129,7 @@ export default function Index() {
     });
   }, []);
 
-  // Both hooks are called unconditionally (Rules of Hooks). Data is selected
-  // based on auth state below.
   const { data: listings = [], isLoading: listingsLoading, error: listingsError } = usePropertyListings(filters);
-  const { data: teaserListings = [], isLoading: teaserLoading, error: teaserError } = useTeaserListings();
 
   const singleLocality = filters.localities?.length === 1 ? filters.localities[0] : undefined;
   const singlePropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
@@ -153,12 +144,8 @@ export default function Index() {
 
   const isAuthenticated = !authLoading && user !== null;
 
-  const listingDataLoading = isAuthenticated
-    ? (debouncedSearch ? searchLoading : listingsLoading)
-    : teaserLoading;
-  const error = isAuthenticated
-    ? (debouncedSearch ? searchError : listingsError)
-    : teaserError;
+  const listingDataLoading = isAuthenticated && (debouncedSearch ? searchLoading : listingsLoading);
+  const error = isAuthenticated ? (debouncedSearch ? searchError : listingsError) : null;
   const filteredListings = isAuthenticated
     ? (debouncedSearch ? (searchResults ?? []) : listings)
     : [];
@@ -170,8 +157,6 @@ export default function Index() {
 
   const hasHydrated = useRef(false);
   const initialAnonAreaKeysRef = useRef<string[]>([]);
-
-  const areaMedians = useMemo(() => computeAreaMedians(filteredListings), [filteredListings]);
 
   const topLocalities = useMemo(
     () => computeTopLocalities(listingsWithCoords),
@@ -198,8 +183,11 @@ export default function Index() {
   const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(city);
-  const { data: areaListingsData, isLoading: isLoadingAreaListings } =
-    useDiscoverAreaListings(selectedArea?.areaKey ?? '', 0, 5);
+  const { data: cityListingsData, isLoading: isLoadingAreaListings } = useDiscoverCityListings(
+    city,
+    selectedArea ? [selectedArea.areaKey] : [],
+    5,
+  );
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
@@ -321,31 +309,6 @@ export default function Index() {
     }));
   }, [markersData, now]);
 
-  const handleListingSelect = useCallback((listingId: string) => {
-    const match = markerListings.find((l) => l.id === listingId) ?? null;
-    setSelectedListing(match); // null if not found → silent no-op on map
-  }, [markerListings]);
-
-  const { data: listingDetail } = useListingDetail(selectedListing?.id);
-  const hydratedListing = useMemo((): (PropertyListing & { images?: PropertyImage[] }) | null => {
-    if (!selectedListing) return null;
-    if (!listingDetail) return selectedListing;
-    return {
-      ...selectedListing,
-      property_type: (listingDetail.propertyType ?? selectedListing.property_type) as PropertyType,
-      price: listingDetail.price ?? selectedListing.price,
-      title: listingDetail.title ?? selectedListing.title,
-      locality: listingDetail.locality ?? selectedListing.locality,
-      land_area: listingDetail.landArea ?? selectedListing.land_area,
-      land_area_unit: listingDetail.landAreaUnit ?? selectedListing.land_area_unit,
-      bedrooms: listingDetail.bedrooms ?? selectedListing.bedrooms,
-      created_at: listingDetail.createdAt ?? selectedListing.created_at,
-      updated_at: listingDetail.updatedAt ?? selectedListing.updated_at,
-      areaKey: listingDetail.areaKey ?? selectedListing.areaKey,
-      images: listingDetail.images ?? selectedListing.images,
-    };
-  }, [selectedListing, listingDetail]);
-
   // URL sync: write city + areaKey params whenever they change.
   // Declared before the read-mount effect so it fires first on initial render
   // (hasHydrated is still false → skipped), preventing it from overwriting URL
@@ -386,10 +349,6 @@ export default function Index() {
     hasHydrated.current = true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleViewDetails = (listing: PropertyListing & { images?: PropertyImage[] }) => {
-    navigate(`/listing/${listing.id}`);
-  };
-
   const filtersContent = (
     <MapFilters
       filters={filters}
@@ -429,8 +388,6 @@ export default function Index() {
           ) : (
             <PropertyMap
               listings={mapZoom > AREA_LAYER_MAX_ZOOM && isAuthenticated ? markerListings : []}
-              selectedListing={selectedListing}
-              onSelectListing={setSelectedListing}
               focusBounds={activeFocusBounds}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
@@ -636,195 +593,15 @@ export default function Index() {
             );
           })()}
 
-          {/* Selected Listing Preview Card (authenticated only) */}
-          {isAuthenticated && hydratedListing && (
-            <Card className="absolute bottom-4 right-4 z-[1000] w-80 bg-card/95 backdrop-blur shadow-lg overflow-hidden">
-              {/* Thumbnail image */}
-              {hydratedListing.images && hydratedListing.images.length > 0 && (
-                <div className="h-32 bg-muted">
-                  <img
-                    src={hydratedListing.images[0].url}
-                    alt="Property"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Badge variant="secondary" className="capitalize">
-                      {hydratedListing.property_type}
-                    </Badge>
-                    <NearbySchoolsBadge listingId={hydratedListing.id} />
-                    {isNew(hydratedListing.created_at) && (
-                      <Badge className="bg-orange-500 text-white text-xs px-1.5 py-0.5 rounded font-medium hover:bg-orange-500">
-                        New
-                      </Badge>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 -mr-2 -mt-1"
-                    onClick={() => setSelectedListing(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                {hydratedListing.price && (
-                  <div className="flex items-center gap-2 mb-2">
-                    <p className="text-xl font-bold text-primary">
-                      {formatPrice(hydratedListing.price, hydratedListing.price_unit)}
-                    </p>
-                    {(hydratedListing.trustTier === 'A' || hydratedListing.trustTier === 'B') && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-green-100 text-green-800">
-                        {hydratedListing.trustTier}
-                      </span>
-                    )}
-                    {hydratedListing.trustTier === 'C' && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
-                        C
-                      </span>
-                    )}
-                  </div>
-                )}
-                {(() => {
-                  const signal = getMarketSignal(hydratedListing, areaMedians);
-                  return signal ? (
-                    <p className="text-xs text-green-700 mb-2">
-                      ✅ {signal.percent}% below market
-                    </p>
-                  ) : null;
-                })()}
-
-                {hydratedListing.locality && (
-                  <p className="text-sm text-muted-foreground flex items-center gap-1.5 mb-2">
-                    <MapPin className="h-3.5 w-3.5" />
-                    {hydratedListing.locality}
-                  </p>
-                )}
-
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {hydratedListing.land_area && (
-                    <div>
-                      <span className="text-muted-foreground">Area: </span>
-                      {formatArea(hydratedListing.land_area, hydratedListing.land_area_unit)}
-                    </div>
-                  )}
-                  {hydratedListing.bedrooms && (
-                    <div>
-                      <span className="text-muted-foreground">Beds: </span>
-                      {hydratedListing.bedrooms} BHK
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-xs text-muted-foreground">
-                      Posted {formatRelativeDate(hydratedListing.created_at)}
-                    </p>
-                    {hydratedListing.areaKey && (() => {
-                      const district = hydratedListing.areaKey.split('|')[2];
-                      const listingCity = (district && DISTRICT_TO_CITY_SLUG[district]) ?? DEFAULT_CITY;
-                      return (
-                        <Link
-                          to={`/trends?city=${listingCity}&areaKey=${encodeURIComponent(hydratedListing.areaKey)}`}
-                          className="text-xs text-primary hover:underline flex items-center gap-0.5"
-                        >
-                          <TrendingUp className="h-3 w-3" aria-hidden="true" />
-                          View Area Trends
-                        </Link>
-                      );
-                    })()}
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={() => handleViewDetails(selectedListing!)}
-                    className="gap-1.5"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    View Details
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Teaser listing cards — anonymous only */}
-          {!isAuthenticated && !isLoading && !error && teaserListings.length > 0 && (
-            <div className="absolute bottom-4 left-4 right-4 z-[1000]">
-              <div className="overflow-x-auto scrollbar-none">
-                <div className="flex gap-3 flex-nowrap pb-1">
-                  {teaserListings.slice(0, 12).map((listing: TeaserListing) => (
-                    <Card
-                      key={listing.id}
-                      className="flex-shrink-0 w-52 bg-card/95 backdrop-blur shadow-md overflow-hidden"
-                    >
-                      <div className="h-28 bg-muted">
-                        {listing.primaryImageUrl ? (
-                          <img
-                            src={listing.primaryImageUrl}
-                            alt="Property"
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <MapPin className="h-8 w-8 text-muted-foreground/40" />
-                          </div>
-                        )}
-                      </div>
-                      <CardContent className="p-3">
-                        <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                          {listing.propertyType && (
-                            <Badge variant="secondary" className="capitalize text-xs">
-                              {listing.propertyType}
-                            </Badge>
-                          )}
-                          {listing.listingPurpose && (
-                            <Badge variant="outline" className="capitalize text-xs">
-                              {listing.listingPurpose.toLowerCase()}
-                            </Badge>
-                          )}
-                        </div>
-                        {listing.price !== null && (
-                          <p className="text-base font-bold text-primary leading-tight">
-                            {formatPrice(listing.price, 'INR')}
-                          </p>
-                        )}
-                        {listing.locality && (
-                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                            <MapPin className="h-3 w-3 flex-shrink-0" />
-                            {listing.locality}
-                          </p>
-                        )}
-                        <Button asChild size="sm" variant="outline" className="w-full mt-2 text-xs h-7">
-                          <Link to={`/auth?returnTo=/listing/${listing.id}`}>Sign in to view</Link>
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <DiscoverRightPanel
           areas={discoverAreas}
           selectedArea={selectedArea}
-          areaListings={areaListingsData?.listings ?? []}
+          areaListings={cityListingsData?.areas.find(a => a.areaKey === selectedArea?.areaKey)?.listings ?? []}
           isLoadingListings={isLoadingAreaListings}
           onAreaSelect={handleAreaSelect}
           onBack={handleAreaBack}
-          onListingSelect={handleListingSelect}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
         />

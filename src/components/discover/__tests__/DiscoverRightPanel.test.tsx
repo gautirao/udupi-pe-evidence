@@ -5,7 +5,13 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { DiscoverAreaListingItem } from '@/hooks/useDiscoverAreaListings';
+import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 const makeArea = (areaKey: string, areaLabel: string, listingCount: number): AreaPoint => ({
   areaKey,
@@ -74,6 +80,29 @@ describe('DiscoverRightPanel', () => {
     expect(screen.getAllByTestId('listing-skeleton').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('shows skeletons (not stale cards) when isLoadingListings=true with previous areaListings', () => {
+    // keepPreviousData means areaListings can be non-empty while a new fetch is in flight.
+    // The panel must show skeletons, not stale listing cards, during this transition.
+    const area = makeArea('k1', 'Manipal', 5);
+    const staleListings: DiscoverCityListingItem[] = [{
+      id: 'stale1',
+      pricePaise: 1000000 * 100,
+      propertyType: 'apartment',
+      locality: 'Manipal',
+      primaryImageUrl: null,
+    }];
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={staleListings}
+        isLoadingListings={true}
+      />
+    );
+    expect(screen.getAllByTestId('listing-skeleton').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('listing-card')).not.toBeInTheDocument();
+  });
+
   it('shows empty state when areaListings is empty and not loading', () => {
     const area = makeArea('k1', 'Manipal', 5);
     renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} />);
@@ -82,7 +111,7 @@ describe('DiscoverRightPanel', () => {
 
   it('renders listing cards with price and locality', () => {
     const area = makeArea('k1', 'Manipal', 5);
-    const listings: DiscoverAreaListingItem[] = [{
+    const listings: DiscoverCityListingItem[] = [{
       id: 'l1',
       pricePaise: 500000 * 100,
       propertyType: 'apartment',
@@ -92,6 +121,8 @@ describe('DiscoverRightPanel', () => {
     renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={listings} isLoadingListings={false} />);
     expect(screen.getAllByTestId('listing-card').length).toBe(1);
     expect(screen.getAllByText('Manipal').length).toBeGreaterThanOrEqual(1);
+    // pricePaise 500000*100 → Math.round(50_000_000/100)=500000 → formatPrice → '₹5 L'
+    expect(screen.getByText('₹5 L')).toBeInTheDocument();
   });
 
   it('back button calls onBack', async () => {
@@ -103,22 +134,20 @@ describe('DiscoverRightPanel', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  it('listing card click calls onListingSelect with listing id', async () => {
+  it('listing card click navigates to /listing/:id', async () => {
     const user = userEvent.setup();
-    const onListingSelect = vi.fn();
     const area = makeArea('k1', 'Manipal', 5);
-    const listings: DiscoverAreaListingItem[] = [{ id: 'l1', pricePaise: 5000000, propertyType: 'apartment', locality: 'Manipal', primaryImageUrl: null }];
+    const listings: DiscoverCityListingItem[] = [{ id: 'l1', pricePaise: 5000000, propertyType: 'apartment', locality: 'Manipal', primaryImageUrl: null }];
     renderPanel(
       <DiscoverRightPanel
         areas={[area]}
         selectedArea={area}
         areaListings={listings}
         isLoadingListings={false}
-        onListingSelect={onListingSelect}
       />
     );
     await user.click(screen.getByTestId('listing-card'));
-    expect(onListingSelect).toHaveBeenCalledWith('l1');
+    expect(mockNavigate).toHaveBeenCalledWith('/listing/l1');
   });
 
   it('shows Trends button in listings mode when trendsHref is provided', () => {

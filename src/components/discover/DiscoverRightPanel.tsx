@@ -1,20 +1,21 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, MapPin, SlidersHorizontal, TrendingUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { DiscoverAreaListingItem } from '@/hooks/useDiscoverAreaListings';
+import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { formatPrice } from '@/lib/formatters';
 
 interface DiscoverRightPanelProps {
   areas: AreaPoint[];
   selectedArea?: AreaPoint | null;
-  areaListings?: DiscoverAreaListingItem[];
+  areaListings?: DiscoverCityListingItem[];
   isLoadingListings?: boolean;
   onAreaSelect?: (area: AreaPoint) => void;
   onBack?: () => void;
-  onListingSelect?: (listingId: string) => void;
   filtersContent?: React.ReactNode;
   trendsHref?: string;
 }
@@ -26,10 +27,11 @@ export function DiscoverRightPanel({
   isLoadingListings,
   onAreaSelect,
   onBack,
-  onListingSelect,
   filtersContent,
   trendsHref,
 }: DiscoverRightPanelProps) {
+  const navigate = useNavigate();
+
   return (
     <div
       className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-1 lg:order-2"
@@ -134,13 +136,14 @@ export function DiscoverRightPanel({
           {/* Listings body */}
           <div className="flex-1 overflow-y-auto">
             {isLoadingListings ? (
-              <div>
+              <div className="space-y-3 p-4">
                 {[0, 1, 2].map((i) => (
-                  <div
-                    key={i}
-                    data-testid="listing-skeleton"
-                    className="animate-pulse h-16 bg-muted rounded mx-4 my-3"
-                  />
+                  <div key={i} data-testid="listing-skeleton">
+                    <Skeleton className="w-full aspect-video rounded-md mb-2" />
+                    <Skeleton className="h-4 w-1/3 mb-1" />
+                    <Skeleton className="h-5 w-1/2 mb-1" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
                 ))}
               </div>
             ) : !areaListings || areaListings.length === 0 ? (
@@ -154,10 +157,11 @@ export function DiscoverRightPanel({
                   <div
                     key={listing.id}
                     data-testid="listing-card"
-                    className="px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
-                    onClick={() => onListingSelect?.(listing.id)}
+                    className="p-4 hover:bg-accent/50 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/listing/${listing.id}`)}
                   >
-                    <div className="h-20 bg-muted rounded mb-2 overflow-hidden">
+                    {/* Full-width image */}
+                    <div className="w-full aspect-video h-36 bg-muted rounded-md mb-3 overflow-hidden">
                       {listing.primaryImageUrl ? (
                         <img
                           src={listing.primaryImageUrl}
@@ -166,20 +170,26 @@ export function DiscoverRightPanel({
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <MapPin className="h-6 w-6 text-muted-foreground/40" />
+                          <MapPin className="h-8 w-8 text-muted-foreground/40" />
                         </div>
                       )}
                     </div>
+
+                    {/* Property type badge */}
                     {listing.propertyType && (
-                      <p className="text-xs text-muted-foreground capitalize">
+                      <Badge variant="secondary" className="capitalize mb-1.5">
                         {listing.propertyType}
-                      </p>
+                      </Badge>
                     )}
+
+                    {/* Price */}
                     {listing.pricePaise != null && (
                       <p className="text-sm font-semibold text-foreground">
                         {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
                       </p>
                     )}
+
+                    {/* Locality */}
                     {listing.locality && (
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                         <MapPin className="h-3 w-3" />

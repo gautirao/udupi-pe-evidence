@@ -1,4 +1,27 @@
 import { defineConfig } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+
+// Load .env.e2e so that `npx playwright test` run directly (without the
+// run-e2e-local.sh wrapper) picks up PLAYWRIGHT_BASE_URL and other vars.
+// Variables already set in the environment (e.g. from CI) take precedence.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const envE2ePath = path.resolve(__dirname, '.env.e2e');
+if (fs.existsSync(envE2ePath)) {
+  const lines = fs.readFileSync(envE2ePath, 'utf-8').split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx < 1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim();
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
+}
 
 export default defineConfig({
   testDir: './e2e',
