@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -74,10 +74,17 @@ describe('LandingPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows a spinner while auth is loading and does not render the two-column wrapper', () => {
-    mockIsLoading = true;
-    renderPage();
-    expect(screen.queryByTestId('two-column-wrapper')).not.toBeInTheDocument();
+  it('shows a spinner while auth is loading and does not render the two-column wrapper', async () => {
+    vi.useFakeTimers();
+    try {
+      mockIsLoading = true;
+      renderPage();
+      // Advance past the 200 ms delayed-show threshold and flush the React state update
+      await act(() => { vi.advanceTimersByTime(201); });
+      expect(screen.queryByTestId('two-column-wrapper')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders the header with ReTrends brand and Sign in link', () => {

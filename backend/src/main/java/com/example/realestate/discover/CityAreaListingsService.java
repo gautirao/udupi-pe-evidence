@@ -49,12 +49,20 @@ public class CityAreaListingsService {
      * @param city         city slug (case-insensitive)
      * @param areaKeys     requested area keys, must be non-empty (caller enforces)
      * @param rawLimit     client-requested limit per area (may be null → default 5)
+     * @param minPrice     optional minimum price in paise (inclusive); null = no filter
+     * @param maxPrice     optional maximum price in paise (inclusive); null = no filter
+     * @param bedrooms     optional bedroom count; values >= 4 treated as "4 or more"; null = no filter
+     * @param propertyType optional property type string (case-insensitive); null/blank = no filter
      * @throws ResponseStatusException 400 "unknown_city" when city slug is not in cities table
      */
     @Transactional(readOnly = true)
     public CityAreaListingsResponse getAreaListings(String city,
                                                     List<String> areaKeys,
-                                                    Integer rawLimit) {
+                                                    Integer rawLimit,
+                                                    Long minPrice,
+                                                    Long maxPrice,
+                                                    Integer bedrooms,
+                                                    String propertyType) {
 
         int limit = clampLimit(rawLimit);
 
@@ -71,13 +79,36 @@ public class CityAreaListingsService {
         // Build IN-clause placeholders
         String placeholders = String.join(", ", Collections.nCopies(areaKeys.size(), "?"));
 
+        // Build optional filter clauses placed on the LEFT JOIN ON condition — NOT in the inner
+        // WHERE. Placing them in WHERE would convert the LEFT JOIN to an implicit inner join,
+        // dropping areas that have zero LIVE listings matching the filter (they would not appear
+        // in the response at all instead of returning listings: []). Placing them in ON means
+        // only matching listings are joined; the area row itself always survives.
+        StringBuilder joinFilterClauses = new StringBuilder();
+        if (minPrice != null) {
+            joinFilterClauses.append("\n                        AND pl.price_paise >= ?");
+        }
+        if (maxPrice != null) {
+            joinFilterClauses.append("\n                        AND pl.price_paise <= ?");
+        }
+        if (bedrooms != null) {
+            if (bedrooms >= 4) {
+                joinFilterClauses.append("\n                        AND pl.bedrooms >= 4");
+            } else {
+                joinFilterClauses.append("\n                        AND pl.bedrooms = ?");
+            }
+        }
+        if (propertyType != null && !propertyType.isBlank()) {
+            joinFilterClauses.append("\n                        AND LOWER(pl.property_type) = LOWER(?)");
+        }
+
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images
         // Row shape: area_key, area_name, listing_id (nullable), price_paise, property_type,
         //            locality, primary_image_url, listing_purpose
         //
-        // The LEFT JOIN on property_listings means an area with no LIVE listings still returns
-        // one row with listing_id = NULL. The LATERAL join for image is a correlated subquery
-        // that returns NULL when no image exists.
+        // The LEFT JOIN on property_listings means an area with no LIVE listings (or no listings
+        // matching the active filter) still returns one row with listing_id = NULL. Filter clauses
+        // are in the ON condition so they never hide an area from the response.
         //
         // ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) is used to
         // limit listings per area without a separate round-trip.
@@ -110,7 +141,8 @@ public class CityAreaListingsService {
                     JOIN cities c ON c.id = a.city_id
                     LEFT JOIN property_listings pl
                         ON  pl.area_key = a.area_key
-                        AND pl.status   = 'LIVE'
+                        AND pl.status   = 'LIVE'""" + joinFilterClauses + """
+
                     WHERE c.slug    = ?
                       AND a.area_key IN (""" + placeholders + """
                 )
@@ -119,8 +151,11 @@ public class CityAreaListingsService {
                 ORDER BY sub.area_key, sub.rn
                 """;
 
-        // Parameters: city, areaKey×N, limit
-        Object[] params = buildParams(city.toLowerCase(), areaKeys, limit);
+        // Parameters: [filter params in ON-clause order], city, areaKey×N, limit
+        // Filter params appear first because the LEFT JOIN ON clause precedes the WHERE clause
+        // in the SQL text; JDBC binds ? positionally left-to-right.
+        Object[] params = buildParams(city.toLowerCase(), areaKeys, limit,
+                minPrice, maxPrice, bedrooms, propertyType);
 
         // area_key → list of cards; LinkedHashMap preserves insertion (sorted) order per key
         Map<String, List<AreaListingCard>> cardsByArea = new LinkedHashMap<>();
@@ -178,13 +213,29 @@ public class CityAreaListingsService {
         return Math.min(raw, MAX_LIMIT);
     }
 
-    private static Object[] buildParams(String city, List<String> areaKeys, int limit) {
-        Object[] params = new Object[1 + areaKeys.size() + 1];
-        params[0] = city;
-        for (int i = 0; i < areaKeys.size(); i++) {
-            params[1 + i] = areaKeys.get(i);
+    private static Object[] buildParams(String city, List<String> areaKeys, int limit,
+                                        Long minPrice, Long maxPrice,
+                                        Integer bedrooms, String propertyType) {
+        List<Object> params = new ArrayList<>();
+        // Filter params first — they bind to ? placeholders in the LEFT JOIN ON clause,
+        // which appears before the WHERE clause in the SQL text.
+        // NOTE: bedrooms >= 4 uses a literal 4 in SQL (no placeholder), so no param added.
+        if (minPrice != null) {
+            params.add(minPrice);
         }
-        params[1 + areaKeys.size()] = limit;
-        return params;
+        if (maxPrice != null) {
+            params.add(maxPrice);
+        }
+        if (bedrooms != null && bedrooms < 4) {
+            params.add(bedrooms);
+        }
+        if (propertyType != null && !propertyType.isBlank()) {
+            params.add(propertyType);
+        }
+        // WHERE clause params: city, areaKeys, then the outer WHERE rn limit
+        params.add(city);
+        params.addAll(areaKeys);
+        params.add(limit);
+        return params.toArray();
     }
 }

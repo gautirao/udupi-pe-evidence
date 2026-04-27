@@ -192,11 +192,23 @@ export default function Index() {
   const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(city);
-  const { data: cityListingsData, isLoading: isLoadingAreaListings } = useDiscoverCityListings(
+  // Map filter state to discover listing params.
+  // priceMin/priceMax in PropertyFilters are rupees; backend expects paise.
+  const discoverMinPrice = filters.priceMin != null ? filters.priceMin * 100 : undefined;
+  const discoverMaxPrice = filters.priceMax != null ? filters.priceMax * 100 : undefined;
+  // bedrooms/propertyType: only forward when a single value is selected (backend takes one).
+  const discoverBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
+  const discoverPropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
+
+  const { data: cityListingsData, isLoading: isLoadingAreaListings } = useDiscoverCityListings({
     city,
-    selectedArea ? [selectedArea.areaKey] : [],
-    5,
-  );
+    areaKeys: selectedArea ? [selectedArea.areaKey] : [],
+    limitPerArea: 5,
+    minPrice: discoverMinPrice,
+    maxPrice: discoverMaxPrice,
+    bedrooms: discoverBedrooms,
+    propertyType: discoverPropertyType,
+  });
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
@@ -244,10 +256,13 @@ export default function Index() {
   const handleAreaClick = useCallback((area: AreaPoint) => {
     // AreaMarkerLayer owns fitBounds on marker click — do NOT set panToArea here.
     // We only set selectedArea so the right panel switches to listings mode.
+    // Reset filters so the discover listings query starts fresh for the new area (AC6).
+    setFilters({});
     setSelectedArea(area);
   }, []);
 
   const handleAreaSelect = useCallback((area: AreaPoint) => {
+    setFilters({});
     setSelectedArea(area);
     setPanToArea(area); // Panel card click → drive the map via AreaPanner
   }, []);
