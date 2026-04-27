@@ -156,7 +156,7 @@ export default function Index() {
 
   const isAuthenticated = !authLoading && user !== null;
 
-  const isLoading = isAuthenticated
+  const listingDataLoading = isAuthenticated
     ? (debouncedSearch ? searchLoading : listingsLoading)
     : teaserLoading;
   const error = isAuthenticated
@@ -200,7 +200,7 @@ export default function Index() {
   // Fallback: property_listings.area_key (sparse backfill from PR #745).
   const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
-  const { data: discoverAreasData } = useDiscoverAreas(city);
+  const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(city);
   const { data: areaListingsData, isLoading: isLoadingAreaListings } =
     useDiscoverAreaListings(selectedArea?.areaKey ?? '', 0, 20);
   const localityToAreaKey = useMemo(() => {
@@ -258,7 +258,20 @@ export default function Index() {
     setSelectedArea(null);
   }, []);
 
-  const { data: markersData } = useDiscoverMarkers(city);
+  const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city);
+
+  // True page readiness: auth settled + area cards loaded + (at high zoom, markers loaded).
+  // listingDataLoading covers authenticated listing search and anonymous teaser fetch.
+  // areasLoading is always included — area cards are the primary visual at low zoom.
+  // markersLoading is added only when authenticated and zoomed past the area layer threshold,
+  // because that is the only state where markers are the primary visible content.
+  // Background refetch (isFetching) intentionally excluded — must not block visible UI.
+  const isLoading =
+    authLoading
+    || areasLoading
+    || listingDataLoading
+    || (isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM && markersLoading);
+
   const now = new Date().toISOString();
   const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!markersData?.markers) return [];
@@ -454,7 +467,7 @@ export default function Index() {
             <div className="absolute inset-0 flex items-center justify-center bg-background/50">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">Loading listings...</p>
+                <p className="text-sm text-muted-foreground">Loading map...</p>
               </div>
             </div>
           ) : error ? (
