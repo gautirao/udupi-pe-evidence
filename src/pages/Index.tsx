@@ -17,8 +17,7 @@ import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Loader2, MapPin, X, ChevronLeft, ChevronRight, Eye, SlidersHorizontal, PenTool, GraduationCap, LogIn, Maximize2, TrendingUp } from 'lucide-react';
+import { Loader2, MapPin, X, Eye, PenTool, GraduationCap, LogIn, Maximize2, TrendingUp } from 'lucide-react';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeAreaMedians, getMarketSignal } from '@/lib/priceAnalysis';
@@ -42,10 +41,8 @@ export default function Index() {
   const [urlParams, setUrlParams] = useSearchParams();
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
   const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [mapZoom, setMapZoom] = useState<number>(CITY_CONFIG[DEFAULT_CITY]?.zoom ?? 11);
@@ -202,7 +199,7 @@ export default function Index() {
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(city);
   const { data: areaListingsData, isLoading: isLoadingAreaListings } =
-    useDiscoverAreaListings(selectedArea?.areaKey ?? '', 0, 20);
+    useDiscoverAreaListings(selectedArea?.areaKey ?? '', 0, 5);
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
@@ -242,6 +239,10 @@ export default function Index() {
       trendDirection: a.trendDirection as 'rising' | 'falling' | 'stable' | null | undefined,
     }));
   }, [discoverAreasData]);
+
+  const trendsHref = selectedArea
+    ? `/trends?city=${city}&areaKey=${encodeURIComponent(selectedArea.areaKey)}`
+    : undefined;
 
   const handleAreaClick = useCallback((area: AreaPoint) => {
     // AreaMarkerLayer owns fitBounds on marker click — do NOT set panToArea here.
@@ -389,80 +390,28 @@ export default function Index() {
     navigate(`/listing/${listing.id}`);
   };
 
+  const filtersContent = (
+    <MapFilters
+      filters={filters}
+      onFiltersChange={handleFiltersChange}
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      selectedSchool={selectedSchool}
+      onSchoolSelect={handleSchoolSelect}
+      schoolBoardFilter={schoolBoardFilter}
+      onSchoolBoardFilterChange={setSchoolBoardFilter}
+      city={city}
+      onCityChange={handleCityChange}
+      allListings={listingsWithCoords}
+      trendsAreaKeys={trendsAreaKeys}
+    />
+  );
+
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-3.5rem)] flex relative">
-        {/* Filters Panel — lg+ inline sidebar (visible to all users) */}
-        <div
-          className={cn(
-            'hidden lg:block h-full border-r border-border bg-card transition-all duration-300 flex-shrink-0',
-            showFilters ? 'w-72' : 'w-0 overflow-hidden'
-          )}
-        >
-          <MapFilters
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            selectedSchool={selectedSchool}
-            onSchoolSelect={handleSchoolSelect}
-            schoolBoardFilter={schoolBoardFilter}
-            onSchoolBoardFilterChange={setSchoolBoardFilter}
-            city={city}
-            onCityChange={handleCityChange}
-            allListings={listingsWithCoords}
-            trendsAreaKeys={trendsAreaKeys}
-          />
-        </div>
-
-        {/* Toggle Filters Button — lg+ only (visible to all users) */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className={cn(
-            'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
-            showFilters ? 'left-72' : 'left-0'
-          )}
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          {showFilters ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-
-        {/* Mobile Filters Sheet — below lg only (visible to all users) */}
-        <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-          <SheetTrigger asChild>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="lg:hidden absolute top-3 left-3 z-10 gap-1.5 shadow-sm"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
-            <SheetHeader className="sr-only">
-              <SheetTitle>Filters</SheetTitle>
-            </SheetHeader>
-            <MapFilters
-              filters={filters}
-              onFiltersChange={handleFiltersChange}
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              selectedSchool={selectedSchool}
-              onSchoolSelect={handleSchoolSelect}
-              schoolBoardFilter={schoolBoardFilter}
-              onSchoolBoardFilterChange={setSchoolBoardFilter}
-              city={city}
-              onCityChange={handleCityChange}
-              allListings={listingsWithCoords}
-              trendsAreaKeys={trendsAreaKeys}
-            />
-          </SheetContent>
-        </Sheet>
-
+      <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
         {/* Map Area */}
-        <div className="flex-1 relative">
+        <div className="lg:w-1/2 h-64 lg:h-full relative order-2 lg:order-1">
           {isLoading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-background/50">
               <div className="flex flex-col items-center gap-3">
@@ -876,6 +825,8 @@ export default function Index() {
           onAreaSelect={handleAreaSelect}
           onBack={handleAreaBack}
           onListingSelect={handleListingSelect}
+          filtersContent={filtersContent}
+          trendsHref={trendsHref}
         />
       </div>
     </AppLayout>

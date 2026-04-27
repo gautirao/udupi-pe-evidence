@@ -1,4 +1,8 @@
-import { ChevronLeft, MapPin } from 'lucide-react';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { ChevronLeft, MapPin, SlidersHorizontal, TrendingUp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverAreaListingItem } from '@/hooks/useDiscoverAreaListings';
 import { formatPrice } from '@/lib/formatters';
@@ -11,6 +15,8 @@ interface DiscoverRightPanelProps {
   onAreaSelect?: (area: AreaPoint) => void;
   onBack?: () => void;
   onListingSelect?: (listingId: string) => void;
+  filtersContent?: React.ReactNode;
+  trendsHref?: string;
 }
 
 export function DiscoverRightPanel({
@@ -21,54 +27,67 @@ export function DiscoverRightPanel({
   onAreaSelect,
   onBack,
   onListingSelect,
+  filtersContent,
+  trendsHref,
 }: DiscoverRightPanelProps) {
-  const mode = selectedArea ? 'listings' : 'areas';
-
   return (
     <div
-      className="hidden lg:flex flex-col w-96 border-l border-border bg-card flex-shrink-0"
+      className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-1 lg:order-2"
       data-testid="discover-right-panel"
     >
-      {mode === 'areas' ? (
+      {!selectedArea ? (
         <>
-          {/* Areas header */}
-          <div className="px-4 py-3 border-b border-border flex-shrink-0">
-            <h2 className="text-sm font-semibold">Areas</h2>
-            {areas.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {areas.length} areas
-              </p>
+          {/* Empty-state header */}
+          <div className="px-4 py-3 border-b border-border flex-shrink-0 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Properties</h2>
+            {filtersContent && (
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <SlidersHorizontal className="h-4 w-4" />
+                    Filters
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-80 p-0">
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>Filters</SheetTitle>
+                  </SheetHeader>
+                  {filtersContent}
+                </SheetContent>
+              </Sheet>
             )}
           </div>
 
-          {/* Areas body */}
-          <div className="flex-1 overflow-y-auto">
-            {areas.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">No areas found</p>
+          {/* Empty state body */}
+          <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="h-8 w-8 text-muted-foreground/40" />
               </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {areas.map((area) => (
-                  <div
-                    key={area.areaKey}
-                    className={`px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer${
-                      area.areaKey === selectedArea?.areaKey ? ' bg-accent' : ''
-                    }`}
-                    data-testid="area-card"
-                    onClick={() => onAreaSelect?.(area)}
-                  >
-                    <p className="text-sm font-medium text-foreground">{area.areaLabel}</p>
-                    {area.listingCount != null && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {area.listingCount.toLocaleString()} properties
-                      </p>
-                    )}
+              <h3 className="font-semibold text-base text-foreground mb-2">
+                Select an area to explore
+              </h3>
+              <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
+                Click on an area marker on the map to see available properties
+              </p>
+              {areas.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Quick select:</p>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {areas.slice(0, 4).map((area) => (
+                      <button
+                        key={area.areaKey}
+                        data-testid="quick-select-chip"
+                        onClick={() => onAreaSelect?.(area)}
+                        className="text-sm px-3 py-1.5 bg-card border border-border rounded-lg hover:border-primary/60 hover:bg-accent transition-colors"
+                      >
+                        {area.areaLabel}
+                      </button>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </>
       ) : (
@@ -83,7 +102,33 @@ export function DiscoverRightPanel({
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <h2 className="text-sm font-semibold truncate">{selectedArea!.areaLabel}</h2>
+            <h2 className="text-sm font-semibold truncate flex-1">{selectedArea.areaLabel}</h2>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {trendsHref && (
+                <Button asChild variant="ghost" size="sm" className="gap-1.5 text-xs h-7 px-2">
+                  <Link to={trendsHref}>
+                    <TrendingUp className="h-3.5 w-3.5" />
+                    Trends
+                  </Link>
+                </Button>
+              )}
+              {filtersContent && (
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="icon" className="h-7 w-7">
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      <span className="sr-only">Filters</span>
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-80 p-0">
+                    <SheetHeader className="sr-only">
+                      <SheetTitle>Filters</SheetTitle>
+                    </SheetHeader>
+                    {filtersContent}
+                  </SheetContent>
+                </Sheet>
+              )}
+            </div>
           </div>
 
           {/* Listings body */}

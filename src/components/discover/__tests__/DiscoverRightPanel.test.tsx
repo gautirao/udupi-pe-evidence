@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverAreaListingItem } from '@/hooks/useDiscoverAreaListings';
@@ -15,68 +16,67 @@ const makeArea = (areaKey: string, areaLabel: string, listingCount: number): Are
   listingCount,
 });
 
+const renderPanel = (ui: React.ReactElement) =>
+  render(<MemoryRouter>{ui}</MemoryRouter>);
+
 describe('DiscoverRightPanel', () => {
   it('renders the panel with data-testid', () => {
-    render(<DiscoverRightPanel areas={[]} />);
+    renderPanel(<DiscoverRightPanel areas={[]} />);
     expect(screen.getByTestId('discover-right-panel')).toBeInTheDocument();
   });
 
-  it('shows "No areas found" when areas is empty', () => {
-    render(<DiscoverRightPanel areas={[]} />);
-    expect(screen.getByText('No areas found')).toBeInTheDocument();
+  it('shows empty-state placeholder when no area is selected', () => {
+    renderPanel(<DiscoverRightPanel areas={[]} />);
+    expect(screen.getByText('Select an area to explore')).toBeInTheDocument();
   });
 
-  it('renders area cards with name and listing count', () => {
+  it('shows quick-select chips for up to 4 areas in empty state', () => {
     const areas = [
-      makeArea('IN|KA|Udupi|Manipal', 'Manipal', 42),
-      makeArea('IN|KA|Udupi|Malpe', 'Malpe', 7),
+      makeArea('k1', 'Manipal', 42),
+      makeArea('k2', 'Malpe', 7),
+      makeArea('k3', 'Udupi', 15),
+      makeArea('k4', 'Brahmavar', 3),
+      makeArea('k5', 'Kundapur', 9),
     ];
-    render(<DiscoverRightPanel areas={areas} />);
-    expect(screen.getByText('Manipal')).toBeInTheDocument();
-    expect(screen.getByText('42 properties')).toBeInTheDocument();
-    expect(screen.getByText('Malpe')).toBeInTheDocument();
-    expect(screen.getByText('7 properties')).toBeInTheDocument();
-    expect(screen.getAllByTestId('area-card')).toHaveLength(2);
+    renderPanel(<DiscoverRightPanel areas={areas} />);
+    const chips = screen.getAllByTestId('quick-select-chip');
+    expect(chips).toHaveLength(4);
+    expect(chips[0]).toHaveTextContent('Manipal');
+    expect(chips[3]).toHaveTextContent('Brahmavar');
   });
 
-  it('shows area count in the header', () => {
-    const areas = [makeArea('k1', 'Manipal', 5), makeArea('k2', 'Malpe', 3)];
-    render(<DiscoverRightPanel areas={areas} />);
-    expect(screen.getByText('2 areas')).toBeInTheDocument();
+  it('does not show quick-select section when areas is empty', () => {
+    renderPanel(<DiscoverRightPanel areas={[]} />);
+    expect(screen.queryByText('Quick select:')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('quick-select-chip')).not.toBeInTheDocument();
   });
 
-  it('does not render listing count when listingCount is null', () => {
-    const area: AreaPoint = { areaKey: 'k1', areaLabel: 'Manipal', geo_center_lat: 13, geo_center_lon: 74, bbox: null, listingCount: null };
-    render(<DiscoverRightPanel areas={[area]} />);
-    expect(screen.queryByText(/properties/)).not.toBeInTheDocument();
-  });
-
-  it('renders area cards with onClick handler', async () => {
+  it('quick-select chip click calls onAreaSelect with the area', async () => {
     const user = userEvent.setup();
     const onAreaSelect = vi.fn();
     const areas = [makeArea('k1', 'Manipal', 5)];
-    render(<DiscoverRightPanel areas={areas} onAreaSelect={onAreaSelect} />);
-    await user.click(screen.getByTestId('area-card'));
+    renderPanel(<DiscoverRightPanel areas={areas} onAreaSelect={onAreaSelect} />);
+    await user.click(screen.getByTestId('quick-select-chip'));
     expect(onAreaSelect).toHaveBeenCalledWith(expect.objectContaining({ areaKey: 'k1' }));
   });
 
   it('switches to listings mode when selectedArea is set', () => {
     const area = makeArea('k1', 'Manipal', 5);
-    render(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} />);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} />);
     expect(screen.getByTestId('back-button')).toBeInTheDocument();
     expect(screen.getByText('Manipal')).toBeInTheDocument();
-    expect(screen.queryByTestId('area-card')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('quick-select-chip')).not.toBeInTheDocument();
   });
 
   it('shows loading skeletons while isLoadingListings', () => {
     const area = makeArea('k1', 'Manipal', 5);
-    render(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={true} />);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={true} />);
     expect(screen.getAllByTestId('listing-skeleton').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows empty state when areaListings is empty and not loading', () => {
     const area = makeArea('k1', 'Manipal', 5);
-    render(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} />);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} />);
     expect(screen.getByText('No listings in this area yet')).toBeInTheDocument();
   });
 
@@ -89,9 +89,8 @@ describe('DiscoverRightPanel', () => {
       locality: 'Manipal',
       primaryImageUrl: null,
     }];
-    render(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={listings} isLoadingListings={false} />);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={listings} isLoadingListings={false} />);
     expect(screen.getAllByTestId('listing-card').length).toBe(1);
-    // 'Manipal' appears in both the header and the locality field
     expect(screen.getAllByText('Manipal').length).toBeGreaterThanOrEqual(1);
   });
 
@@ -99,7 +98,7 @@ describe('DiscoverRightPanel', () => {
     const user = userEvent.setup();
     const onBack = vi.fn();
     const area = makeArea('k1', 'Manipal', 5);
-    render(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} onBack={onBack} />);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} onBack={onBack} />);
     await user.click(screen.getByTestId('back-button'));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
@@ -109,7 +108,7 @@ describe('DiscoverRightPanel', () => {
     const onListingSelect = vi.fn();
     const area = makeArea('k1', 'Manipal', 5);
     const listings: DiscoverAreaListingItem[] = [{ id: 'l1', pricePaise: 5000000, propertyType: 'apartment', locality: 'Manipal', primaryImageUrl: null }];
-    render(
+    renderPanel(
       <DiscoverRightPanel
         areas={[area]}
         selectedArea={area}
@@ -120,5 +119,25 @@ describe('DiscoverRightPanel', () => {
     );
     await user.click(screen.getByTestId('listing-card'));
     expect(onListingSelect).toHaveBeenCalledWith('l1');
+  });
+
+  it('shows Trends button in listings mode when trendsHref is provided', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        trendsHref="/trends?city=udupi&areaKey=k1"
+      />
+    );
+    expect(screen.getByText('Trends')).toBeInTheDocument();
+  });
+
+  it('does not show Trends button when trendsHref is absent', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={[]} isLoadingListings={false} />);
+    expect(screen.queryByText('Trends')).not.toBeInTheDocument();
   });
 });
