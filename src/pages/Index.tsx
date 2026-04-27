@@ -10,6 +10,7 @@ import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { CitySelect } from '@/components/discover/CitySelect';
+import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card, CardContent } from '@/components/ui/card';
@@ -833,6 +834,8 @@ export default function Index() {
             </div>
           )}
         </div>
+
+        <DiscoverRightPanel areas={discoverAreas} />
       </div>
     </AppLayout>
   );
