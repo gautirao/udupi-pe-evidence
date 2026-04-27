@@ -108,6 +108,8 @@ interface PropertyMapProps {
   onAreaClick?: (area: AreaPoint) => void;
   /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
   onZoomChange?: (zoom: number) => void;
+  /** When set, pans/fits the map to this area. Driven by right-panel card clicks only — never set by marker clicks. */
+  panToArea?: AreaPoint | null;
 }
 
 function ZoomWatcher({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
@@ -118,6 +120,19 @@ function ZoomWatcher({ onZoomChange }: { onZoomChange?: (zoom: number) => void }
     map.on('zoomend', handler);
     return () => { map.off('zoomend', handler); };
   }, [map, onZoomChange]);
+  return null;
+}
+
+function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!panToArea) return;
+    if (panToArea.bbox) {
+      map.fitBounds(panToArea.bbox, { padding: [40, 40], maxZoom: 16 });
+    } else {
+      map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], 13);
+    }
+  }, [panToArea, map]);
   return null;
 }
 
@@ -260,6 +275,7 @@ export function PropertyMap({
   areas = [],
   onAreaClick,
   onZoomChange,
+  panToArea,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -284,6 +300,7 @@ export function PropertyMap({
           cityZoom={cityZoom}
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
+        <AreaPanner panToArea={panToArea} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (
           <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} />

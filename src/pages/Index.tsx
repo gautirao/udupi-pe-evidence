@@ -8,6 +8,7 @@ import { useDiscoverMarkers } from '@/hooks/useDiscoverMarkers';
 import { useListingDetail } from '@/hooks/useListingDetail';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+import { useDiscoverAreaListings } from '@/hooks/useDiscoverAreaListings';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
@@ -42,6 +43,8 @@ export default function Index() {
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedListing, setSelectedListing] = useState<(PropertyListing & { images?: PropertyImage[] }) | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
+  const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -198,6 +201,8 @@ export default function Index() {
   const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: discoverAreasData } = useDiscoverAreas(city);
+  const { data: areaListingsData, isLoading: isLoadingAreaListings } =
+    useDiscoverAreaListings(selectedArea?.areaKey ?? '', 0, 20);
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
@@ -238,10 +243,19 @@ export default function Index() {
     }));
   }, [discoverAreasData]);
 
-  const handleAreaClick = useCallback((_area: AreaPoint) => {
-    // Zoom and fitBounds are handled inside AreaMarkerLayer on click.
-    // Index intentionally does not navigate — the map zooms into the area
-    // and the zoom-band switch (AREA_LAYER_MAX_ZOOM) reveals listing markers.
+  const handleAreaClick = useCallback((area: AreaPoint) => {
+    // AreaMarkerLayer owns fitBounds on marker click — do NOT set panToArea here.
+    // We only set selectedArea so the right panel switches to listings mode.
+    setSelectedArea(area);
+  }, []);
+
+  const handleAreaSelect = useCallback((area: AreaPoint) => {
+    setSelectedArea(area);
+    setPanToArea(area); // Panel card click → drive the map via AreaPanner
+  }, []);
+
+  const handleAreaBack = useCallback(() => {
+    setSelectedArea(null);
   }, []);
 
   const { data: markersData } = useDiscoverMarkers(city);
@@ -465,6 +479,7 @@ export default function Index() {
               areas={mapZoom <= AREA_LAYER_MAX_ZOOM ? discoverAreas : []}
               onAreaClick={handleAreaClick}
               onZoomChange={setMapZoom}
+              panToArea={panToArea}
             />
           )}
 
@@ -835,7 +850,14 @@ export default function Index() {
           )}
         </div>
 
-        <DiscoverRightPanel areas={discoverAreas} />
+        <DiscoverRightPanel
+          areas={discoverAreas}
+          selectedArea={selectedArea}
+          areaListings={areaListingsData?.listings ?? []}
+          isLoadingListings={isLoadingAreaListings}
+          onAreaSelect={handleAreaSelect}
+          onBack={handleAreaBack}
+        />
       </div>
     </AppLayout>
   );
