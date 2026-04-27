@@ -297,7 +297,8 @@ export default function LandingPage() {
             500+ Verified Listings · Trusted Brokers
           </p>
 
-          <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          {/* On lg+ the HomepageFilterPanel right column owns city/area/CTA — hide duplicates here */}
+          <div className="mt-8 lg:hidden flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             <Select value={selectedCity} onValueChange={handleCityChange}>
               <SelectTrigger className="w-44">
                 <SelectValue placeholder="Select city" />
