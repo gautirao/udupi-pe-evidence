@@ -3,24 +3,26 @@
 <!-- Claude-managed. Tracks where the session is and how to resume.
      NOT a source of project/product truth — decisions live in docs/ and .claude/ARCHITECTURE.md -->
 
-Last updated: 2026-04-19
+Last updated: 2026-04-26
 
 ## Current Position
-- Active sprint: Discover & Trends Redesign
-- Sprint identity: Model B — milestone "Discover & Trends Redesign" (#9) + label "sprint-discover-trends"
-- Sprint status: COMPLETE — all 9 issues merged (PRs #781, #782, #786, #787, #788, #789, #790 + doc #784)
-- Phase: done
+- Active milestone: discover-trends-redesign-2-parity-fixes (GitHub milestone #11)
+- Sprint identity: Model B — milestone "discover-trends-redesign-2-parity-fixes" (no sprint label)
+- Status: ✅ COMPLETE · 6/6
+- Phase: idle
 
 ## Blockers
 - NONE
 
-## Recent Completions (last 5)
-- Discover & Trends Redesign COMPLETE — all 9 issues merged (2026-04-19)
-- #773 E2E realignment → PR #782 (2026-04-19)
-- #770 Blue/green palette → PR #781 (2026-04-19)
-- #772 Listing → Trends deep link → PR #790 (2026-04-19)
-- #764 Home city + area selector → PR #789 (2026-04-19)
+## Recent Completions (last 6)
+- #858 toggle position → PR #863 merged (2026-04-26)
+- #859 state sync → PR #864 merged (2026-04-26)
+- #857 mobile filter panel → PR #865 merged (2026-04-26)
+- #860 zero-preview copy → PR #866 merged (2026-04-26)
+- #862 anonymous AppLayout email → PR #867 merged (2026-04-26)
+- #861 E2E strengthening → PR #868 merged (2026-04-26)
 
 ## Session Continuity
-- Last session: 2026-04-19 — Discover & Trends Redesign sprint completed all PRs
-- Resume action: Sprint complete — start next sprint or run /resume-sprint for status
+- Last session: 2026-04-26 — parity milestone complete; all 6/6 issues merged
+- Resume action: Milestone complete — await next sprint or user direction
+- Checkpoint file: .claude/MILESTONE_CHECKPOINT.md (status: COMPLETE)

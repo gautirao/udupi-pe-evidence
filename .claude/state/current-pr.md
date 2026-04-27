@@ -1,25 +1,42 @@
 # Current PR Capsule
 
-PR: #772
-Title: feat(listing): add Listing → Trends deep link on listing cards and detail page
+PR: #847
+Title: [E2E] Anonymous vs authenticated gallery behaviour
 
-## Acceptance Criteria
+## Acceptance Criteria — Anonymous
+- [ ] AC-A1: imageCount >= 2 listing: first image renders, nav arrows visible
+- [ ] AC-A2: Clicking Next triggers lock overlay — image does not advance
+- [ ] AC-A3: Lock overlay contains Lock icon and "Sign in to view all photos" text
+- [ ] AC-A4: Clicking Prev from locked state dismisses overlay, returns to image 1
+- [ ] AC-A5: Thumbnail strip is NOT rendered
+- [ ] AC-A6: Image counter reads "1 / N" where N = imageCount from backend
 
-- [ ] `PropertyCard` renders "View Area Trends" link when `showTrendsLink=true` AND `listing.areaKey` is non-empty; target: `/trends?city={city}&areaKey={encodeURIComponent(listing.areaKey)}`
-- [ ] No link and no crash when `listing.areaKey` is null/undefined/empty or `showTrendsLink=false`
-- [ ] `ListingDetail` "Locality Insights" section link updated from `/area-overview` to `/trends?city={city}&areaKey={encodeURIComponent(listing.areaKey)}`; section hidden when `areaKey` absent
-- [ ] Both entry points land on Trends with the listing's area already selected
-- [ ] No regression on existing listing card actions; no regression on other Listing Detail sections
+## Acceptance Criteria — Authenticated
+- [ ] AC-B1: All images navigable freely — no lock overlay at any index
+- [ ] AC-B2: Thumbnail strip renders; clicking a thumbnail updates main image
+- [ ] AC-B3: Image counter advances correctly through full set
 
-## Key decisions
-- City field: use `listing.city` (not URL city)
-- Anonymous teaser `areaKey`: hide trends link when field absent (safe fallback)
-- Broker-facing card instances: NOT changed (showTrendsLink=false is the default)
+## Test fixture requirements
+- One listing with imageCount >= 2 and at least 2 real image URLs in images[]
+- Anonymous session (no cookies / Supabase session)
+- Authenticated seed user for auth assertions
 
 ## Out of Scope
-- Backend changes to compute areaKey
-- Broker-facing card instances
+- Homepage changes
+- Backend changes
+- Unit tests (already in describe blocks H, I, J)
 
 ## Touched Files Hint
-- src/components/listing/PropertyCard.tsx — add showTrendsLink prop + conditional link
-- src/components/listing/ListingDetail.tsx (or similar) — update /area-overview → /trends link
+- e2e/gallery-behaviour.spec.ts — NEW: anonymous + authenticated gallery E2E spec
+
+Key selectors:
+- Nav arrows: getByRole('button', { name: /next image/i }) / /previous image/i
+- Lock overlay: getByRole('heading', { name: /sign in to view all photos/i })
+- Lock icon: SVG with class lucide-lock
+- Image counter: getByText(/^\d+ \/ \d+$/)
+- Thumbnail strip: getByRole('tablist') or getByRole('tab')
+- Main image: getByRole('img', { name: /property image/i })
+
+Guards required:
+- test.skip if listing fixture not LIVE
+- test.skip if user creds absent for authenticated block

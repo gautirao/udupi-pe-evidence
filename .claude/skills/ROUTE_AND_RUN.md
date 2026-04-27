@@ -110,6 +110,77 @@ If any checklist item fails or any required scenario produces an unexpected resu
 
 ---
 
+## EXECUTION MODE — EVIDENCE REQUIRED (HARD RULE)
+
+Applies to every issue execution, every classification tier, every agent. No exceptions.
+
+### Forbidden completion claims
+
+The orchestrator MUST NOT emit — and MUST reject from any agent — the following terms when unaccompanied by the mandatory evidence blocks defined in this section:
+
+> `done` · `implemented` · `verified` · `tests pass` · `matches mock` · `complete`
+
+If any such claim appears without the mandatory evidence: output `Status: PARTIAL — evidence missing` for the missing field and re-invoke the responsible agent.
+
+### Preflight Output Block (REQUIRED — no implementation before this)
+
+Before any engineer writes a single line of code, the orchestrator MUST confirm the following block exists in the engineer's output. No implementation is permitted until it is present.
+
+```text
+Preflight:
+  Issue: <issue number + title>
+  Scope: <what is in scope; what is explicitly not>
+  Files affected: <list of files expected to change>
+  Reuse opportunities: <existing components, hooks, utilities, services to reuse — or NONE>
+  Risks: <top 3 — e.g. API contract mismatch, state leakage, cross-layer coupling>
+  Test plan: <how the change will be tested — unit, integration, E2E, manual>
+```
+
+A missing Preflight block is a protocol violation. The orchestrator must reject the agent output and re-invoke with explicit instruction to produce the block first.
+
+### Mandatory Issue Completion Output Format
+
+Every issue execution MUST end with this block, output by the implementing engineer. The orchestrator MUST verify each field is populated before emitting `All gates satisfied: YES` in the GSR.
+
+```text
+Implementation Summary: <1–3 bullets describing what was built>
+Files changed: <exact file paths>
+Quality Report:
+  Frontend (if applicable):
+    Reuse: <components/hooks reused — or created fresh + why>
+    State management: <approach — local state, TanStack Query, context>
+    Duplication avoided: <YES — explain | NO — explain why new code was needed>
+  Backend (if applicable):
+    API contract: <endpoint + response shape confirmed>
+    Service vs controller: <business logic in service layer YES|NO>
+    Validation: <input validation present YES|NO + location>
+    Backward compatibility: <YES — no breaking changes | NO — breaking change + reason>
+  Database (if applicable):
+    Indexes: <new indexes added YES|NO + which columns>
+    Query pattern: <query type — point lookup, range scan, join>
+    Scaling risk: <LOW|MED|HIGH — reason>
+Scalability Report: <behaviour at 10x / 100x data or traffic — or N/A>
+Verification: <exact test command(s) run + pass/fail result>
+Screenshots: <attached | N/A — no UI changes>
+Known gaps: <list or NONE>
+Claim status: DONE | PARTIAL (<list what is incomplete>) | BLOCKED (<list what is blocking>)
+```
+
+**Claim status rules:**
+- `PARTIAL` or `BLOCKED` → issue MUST NOT be closed; GSR MUST NOT show `All gates satisfied: YES`.
+- `DONE` → all fields above must be populated; Verification must show actual command output, not a narrative.
+
+### Orchestrator quality checks (after engineer returns)
+
+| Field | Failure condition | Action |
+|---|---|---|
+| `Verification:` | Present but shows no command or shows only "tests pass" | `Status: PARTIAL — evidence missing` + re-invoke engineer |
+| `Screenshots:` | Blank when UI was touched | `Status: PARTIAL — evidence missing` + re-invoke engineer |
+| `Claim status:` | Missing, or DONE despite open gaps | `Status: PARTIAL — evidence missing` + re-invoke engineer |
+| `Files changed:` | Does not match Preflight `Files affected:` with no explanation | Flag discrepancy; engineer must justify delta |
+
+---
+
 ## Step 1C — Execution Mode (v2)
 
 Execution mode is **derived** from classification and sprint context. It controls token spend and routing intensity. It does **not** alter classification criteria, gate requirements, or any High-risk behavior.
@@ -798,7 +869,10 @@ Test results: [X passed / Y failed / Z skipped]
 Failures: [details or NONE]
 AC coverage:
 | AC | COVERED? | file:line |
+Claim status: DONE | PARTIAL (<list what is incomplete>) | BLOCKED (<list what is blocking>)
 ```
+
+> **Evidence gate (orchestrator):** If `Claim status` is not `DONE`, or if `Tests run` is absent/narrative-only, or if `Screenshots` is blank for a UI change — the orchestrator MUST output `Status: PARTIAL — evidence missing` and re-invoke the engineer before proceeding to code-reviewer.
 
 ### Code-reviewer output (required for Normal/High-risk)
 ```

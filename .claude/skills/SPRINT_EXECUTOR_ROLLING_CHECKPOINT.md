@@ -407,6 +407,14 @@ SPRINT_EXECUTOR's only obligation before every cycle-2+ reviewer runs: capture a
    3. No gate in the GSR shows FAIL
    4. No gate uses an invalid or vague SKIPPED reason (e.g. `SKIPPED(no E2E infra)`, `SKIPPED(server not running)`, `SKIPPED(not needed)` — see ROUTE_AND_RUN Step 3 invalid skip reasons)
    5. `All gates satisfied: YES` is present in the emitted GSR
+   5a. **Evidence Gate (BLOCKING):** The engineer's output MUST contain ALL of the following before this PR can proceed. If any field is absent or shows a forbidden claim without evidence, STOP — do NOT mark the issue complete, do NOT proceed to commit/push/PR:
+      - `Claim status:` field is present and is one of: `DONE`, `PARTIAL (<reason>)`, `BLOCKED (<reason>)`. A blank or missing field is treated as PARTIAL.
+      - `Verification:` field shows an exact test command and its pass/fail output — not a narrative ("tests pass"). Narrative-only verification is treated as missing.
+      - `Screenshots:` field is either attached evidence or explicitly `N/A — no UI changes`. Blank is treated as missing when any UI file was touched.
+      - `Files changed:` field lists at least one file for a Normal or High-risk code task.
+      - `Claim status: DONE` is not asserted when any `Known gaps:` item is unresolved, any AC row shows `MISSING`, or any fixlog row is OPEN/STILL_OPEN.
+
+      **If `Claim status` is PARTIAL or BLOCKED:** do NOT close the issue. Do NOT emit `SPRINT COMPLETE`. Progress line shows `RE-NNN ⚠️` instead of `✅`. Create a follow-up issue for the incomplete work before advancing.
    6. **Fixlog findings gate:** if `.claude/state/current-pr-fixlog.md` exists, the Findings table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved findings to the user before proceeding. DEFERRED findings are allowed only if the Notes column for that row is non-empty (`defer: <reason> | agreed: <context>`) — a DEFERRED row with an empty Notes column is treated as STILL_OPEN for gate purposes regardless of its Status field. A missing or empty fixlog (Trivial/Doc-only, no code-reviewer ran) satisfies this condition.
    7. **QA Failures gate:** if the fixlog exists, the QA Failures table must contain NO rows with Status=OPEN, STILL_OPEN, or NEW. If any such rows exist: STOP — surface the unresolved QA failures to the user before proceeding. DEFERRED failures are allowed only if the Notes column for that row is non-empty (`defer: <reason> | agreed: <context>`) — a DEFERRED row with an empty Notes column is treated as STILL_OPEN for gate purposes regardless of its Status field. A fixlog with no QA Failures rows (QA passed on cycle 1, or no QA ran) satisfies this condition.
    8. **Runtime Verification (R0):** issue cannot be closed without runtime validation. Required checks — apply by scope:
