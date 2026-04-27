@@ -10,6 +10,7 @@ interface DiscoverRightPanelProps {
   isLoadingListings?: boolean;
   onAreaSelect?: (area: AreaPoint) => void;
   onBack?: () => void;
+  onListingSelect?: (listingId: string) => void;
 }
 
 export function DiscoverRightPanel({
@@ -19,6 +20,7 @@ export function DiscoverRightPanel({
   isLoadingListings,
   onAreaSelect,
   onBack,
+  onListingSelect,
 }: DiscoverRightPanelProps) {
   const mode = selectedArea ? 'listings' : 'areas';
 
@@ -107,7 +109,8 @@ export function DiscoverRightPanel({
                   <div
                     key={listing.id}
                     data-testid="listing-card"
-                    className="px-4 py-3 hover:bg-accent/50 transition-colors"
+                    className="px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
+                    onClick={() => onListingSelect?.(listing.id)}
                   >
                     <div className="h-20 bg-muted rounded mb-2 overflow-hidden">
                       {listing.primaryImageUrl ? (

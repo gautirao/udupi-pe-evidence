@@ -103,4 +103,22 @@ describe('DiscoverRightPanel', () => {
     await user.click(screen.getByTestId('back-button'));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
+
+  it('listing card click calls onListingSelect with listing id', async () => {
+    const user = userEvent.setup();
+    const onListingSelect = vi.fn();
+    const area = makeArea('k1', 'Manipal', 5);
+    const listings: DiscoverAreaListingItem[] = [{ id: 'l1', pricePaise: 5000000, propertyType: 'apartment', locality: 'Manipal', primaryImageUrl: null }];
+    render(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={listings}
+        isLoadingListings={false}
+        onListingSelect={onListingSelect}
+      />
+    );
+    await user.click(screen.getByTestId('listing-card'));
+    expect(onListingSelect).toHaveBeenCalledWith('l1');
+  });
 });

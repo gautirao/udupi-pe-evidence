@@ -307,6 +307,11 @@ export default function Index() {
     }));
   }, [markersData, now]);
 
+  const handleListingSelect = useCallback((listingId: string) => {
+    const match = markerListings.find((l) => l.id === listingId) ?? null;
+    setSelectedListing(match); // null if not found → silent no-op on map
+  }, [markerListings]);
+
   const { data: listingDetail } = useListingDetail(selectedListing?.id);
   const hydratedListing = useMemo((): (PropertyListing & { images?: PropertyImage[] }) | null => {
     if (!selectedListing) return null;
@@ -857,6 +862,7 @@ export default function Index() {
           isLoadingListings={isLoadingAreaListings}
           onAreaSelect={handleAreaSelect}
           onBack={handleAreaBack}
+          onListingSelect={handleListingSelect}
         />
       </div>
     </AppLayout>
