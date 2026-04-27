@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
@@ -110,6 +110,22 @@ interface PropertyMapProps {
   onZoomChange?: (zoom: number) => void;
   /** When set, pans/fits the map to this area. Driven by right-panel card clicks only — never set by marker clicks. */
   panToArea?: AreaPoint | null;
+  /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
+  onReady?: () => void;
+}
+
+/**
+ * Fires `onReady` once when the Leaflet map has mounted and is ready.
+ * Must be rendered inside a MapContainer so useMap() resolves.
+ */
+function MapReadySignal({ onReady }: { onReady?: () => void }) {
+  useMap(); // ensures we're inside MapContainer — the hook itself resolves the instance
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  useEffect(() => {
+    onReadyRef.current?.();
+  }, []); // empty deps: fire once on mount; ref always holds the current callback
+  return null;
 }
 
 function ZoomWatcher({ onZoomChange }: { onZoomChange?: (zoom: number) => void }) {
@@ -276,6 +292,7 @@ export function PropertyMap({
   onAreaClick,
   onZoomChange,
   panToArea,
+  onReady,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -293,6 +310,7 @@ export function PropertyMap({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+        <MapReadySignal onReady={onReady} />
         <MapController
           selectedListing={selectedListing}
           focusBounds={focusBounds}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -237,6 +237,19 @@ export default function LandingPage() {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
   const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
 
+  // Delayed-show: only render the auth spinner if it takes > 200 ms to resolve.
+  // Supabase restores sessions from localStorage synchronously on most warm loads,
+  // so without this gate the spinner would flicker briefly before the page renders.
+  const [showAuthLoader, setShowAuthLoader] = useState(false);
+  useEffect(() => {
+    if (!isLoading) {
+      setShowAuthLoader(false);
+      return;
+    }
+    const t = setTimeout(() => setShowAuthLoader(true), 200);
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
   const cityAreas = areaOptions.filter((a) => {
     const district = a.areaKey.split('|')[2] ?? '';
     return (DISTRICT_TO_CITY_SLUG[district] ?? district.toLowerCase()) === selectedCity;
@@ -258,13 +271,15 @@ export default function LandingPage() {
 
   // Wait for auth to resolve before rendering to avoid a Sign-in link flash
   // for users who are already logged in (Supabase restores session from localStorage).
-  if (isLoading) {
+  // showAuthLoader uses the 200 ms delayed-show gate to suppress flicker on fast loads.
+  if (showAuthLoader) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
+
 
   return (
     <div className="min-h-screen bg-background">

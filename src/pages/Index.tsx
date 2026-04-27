@@ -41,6 +41,15 @@ export default function Index() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [mapZoom, setMapZoom] = useState<number>(CITY_CONFIG[DEFAULT_CITY]?.zoom ?? 11);
 
+  // Map readiness: set to true once Leaflet's MapContainer has initialised.
+  // Prevents the loader from disappearing the moment the map DOM mounts,
+  // before area marker data has arrived.
+  const [mapReady, setMapReady] = useState(false);
+
+  // Delayed-show: only render the full-screen spinner if the load takes > 200 ms.
+  // This prevents a visible flicker on fast loads / warm cache hits.
+  const [showLoader, setShowLoader] = useState(false);
+
   // School search state
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
   const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
@@ -249,7 +258,9 @@ export default function Index() {
 
   const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city);
 
-  // True page readiness: auth settled + area cards loaded + (at high zoom, markers loaded).
+  // True page readiness: auth settled + map mounted + area cards loaded + (at high zoom, markers loaded).
+  // mapReady gates on Leaflet initialisation — avoids an empty-map flash where the DOM
+  // mounts before area marker data arrives.
   // listingDataLoading covers authenticated listing search and anonymous teaser fetch.
   // areasLoading is always included — area cards are the primary visual at low zoom.
   // markersLoading is added only when authenticated and zoomed past the area layer threshold,
@@ -257,9 +268,21 @@ export default function Index() {
   // Background refetch (isFetching) intentionally excluded — must not block visible UI.
   const isLoading =
     authLoading
+    || !mapReady
     || areasLoading
     || listingDataLoading
     || (isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM && markersLoading);
+
+  // Delayed-show effect: only surface the full-screen spinner when the load takes > 200 ms.
+  // This prevents a flicker on fast loads where isLoading resolves before the threshold.
+  useEffect(() => {
+    if (!isLoading) {
+      setShowLoader(false);
+      return;
+    }
+    const t = setTimeout(() => setShowLoader(true), 200);
+    return () => clearTimeout(t);
+  }, [isLoading]);
 
   const now = new Date().toISOString();
   const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
@@ -371,14 +394,18 @@ export default function Index() {
       <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
         {/* Map Area */}
         <div className="lg:w-1/2 h-64 lg:h-full relative order-2 lg:order-1">
-          {isLoading ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+          {/* Full-screen loader: only shown after 200 ms to prevent flicker on fast loads.
+              The PropertyMap is always rendered (below the overlay) so that the Leaflet
+              instance can initialise and fire onReady, which clears the mapReady gate. */}
+          {showLoader && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">Loading map...</p>
               </div>
             </div>
-          ) : error ? (
+          )}
+          {error ? (
             <div className="absolute inset-0 flex items-center justify-center">
               <Card className="p-6 text-center max-w-sm">
                 <p className="text-destructive font-medium">Failed to load listings</p>
@@ -404,6 +431,7 @@ export default function Index() {
               onAreaClick={handleAreaClick}
               onZoomChange={setMapZoom}
               panToArea={panToArea}
+              onReady={() => setMapReady(true)}
             />
           )}
 

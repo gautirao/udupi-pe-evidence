@@ -39,6 +39,14 @@ vi.mock('react-leaflet', () => ({
     removeLayer: vi.fn(),
     flyTo: vi.fn(),
     fitBounds: vi.fn(),
+    getBounds: vi.fn(() => ({ getNorth: vi.fn(() => 14), getSouth: vi.fn(() => 13), getEast: vi.fn(() => 75), getWest: vi.fn(() => 74) })),
+    getZoom: vi.fn(() => 12),
+    getContainer: vi.fn(() => document.body),
+  })),
+  useMapEvents: vi.fn(() => ({
+    getBounds: vi.fn(() => ({ getNorth: vi.fn(() => 14), getSouth: vi.fn(() => 13), getEast: vi.fn(() => 75), getWest: vi.fn(() => 74) })),
+    getZoom: vi.fn(() => 12),
+    getContainer: vi.fn(() => document.body),
   })),
 }));
 
