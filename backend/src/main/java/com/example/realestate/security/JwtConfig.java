@@ -53,6 +53,8 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas").permitAll()
                         // Public area listings endpoint — no auth required (C-2)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas/*/listings").permitAll()
+                        // Public city-first area listings endpoint — no auth required (#886)
+                        .requestMatchers(HttpMethod.GET, "/api/discover/cities/*/listings").permitAll()
                         // Public Trends endpoints — no auth required (#771)
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         .anyRequest().authenticated()
