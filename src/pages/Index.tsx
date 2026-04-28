@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -16,11 +16,11 @@ import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, MapPin, X, PenTool, GraduationCap, Maximize2 } from 'lucide-react';
-import { formatPrice } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
 import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 
 export const isNew = (createdAt: string | null | undefined): boolean => {
   if (!createdAt) return false;
@@ -33,7 +33,9 @@ const AREA_LAYER_MAX_ZOOM = 12;
 
 export default function Index() {
   const { user, isLoading: authLoading } = useAuth();
-  const [urlParams, setUrlParams] = useSearchParams();
+  // useDiscoverUrlState owns ALL URL read/write for this page, including school params.
+  const [urlState, urlActions] = useDiscoverUrlState();
+
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
@@ -54,25 +56,34 @@ export default function Index() {
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
   const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
 
-  // City state — lazy initializer reads URL on first render so isCityValid is correct before any effect fires
-  const [city, setCity] = useState(() => urlParams.get('city') ?? DEFAULT_CITY);
+  // City state — lazy initializer reads from useDiscoverUrlState (which reads URL on first render)
+  const [city, setCity] = useState(() => urlState.city || DEFAULT_CITY);
   const isCityValid = city in CITY_CONFIG;
+
+  // pendingAreaKey: holds the areaKey from URL until discoverAreasData has loaded.
+  // On mount, if ?areaKey= is present we cannot resolve it until area data arrives.
+  const pendingAreaKeyRef = useRef<string | null>(urlState.areaKey);
+
   const handleCityChange = useCallback((newCity: string) => {
     setCity(newCity);
     setFilters((prev) => ({ ...prev, localities: undefined }));
     setMapZoom(CITY_CONFIG[newCity]?.zoom ?? 11);
-  }, []);
+    setSelectedArea(null);
+    setPanToArea(null);
+    // PUSH: city change is a major navigation destination
+    urlActions.setCity(newCity);
+  }, [urlActions]);
 
-  // Restore school from URL params on mount
-  const urlSchoolId = urlParams.get('schoolId');
-  const urlRadiusKm = urlParams.get('radiusKm');
+  // Restore school from URL params on mount (schoolId/radiusKm still read directly from URL)
+  const urlSchoolId = urlState.schoolId;
+  const urlRadiusKm = urlState.radiusKm;
   const { data: schoolSearchResults } = useSchoolSearch(urlSchoolId ?? '');
 
   useEffect(() => {
     if (urlSchoolId && schoolSearchResults && schoolSearchResults.length > 0 && !selectedSchool) {
       const match = schoolSearchResults.find((s) => s.id === urlSchoolId);
       if (match) {
-        const radius = urlRadiusKm ? parseInt(urlRadiusKm, 10) || 2 : 2;
+        const radius = urlRadiusKm ?? 2;
         setSelectedSchool(match);
         setFilters((prev) => ({
           ...prev,
@@ -94,39 +105,39 @@ export default function Index() {
         schoolLon: school.longitude,
         schoolRadiusKm: radiusKm,
       }));
-      setUrlParams((prev) => {
-        prev.set('schoolId', school.id);
-        prev.set('radiusKm', String(radiusKm));
-        return prev;
-      });
+      urlActions.setSchoolParams({ schoolId: school.id, radiusKm });
     } else {
       setFilters((prev) => {
         const { schoolLat: _a, schoolLon: _b, schoolRadiusKm: _c, ...rest } = prev;
         return rest;
       });
-      setUrlParams((prev) => {
-        prev.delete('schoolId');
-        prev.delete('radiusKm');
-        return prev;
-      });
+      urlActions.setSchoolParams(null);
     }
-  }, [filters.schoolRadiusKm, setUrlParams]);
+  }, [filters.schoolRadiusKm, urlActions]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
 
-  /** Wraps setFilters to keep radiusKm URL param in sync when school filter is active. */
+  /**
+   * Wraps setFilters to keep radiusKm URL param in sync (school) and write
+   * discover filter params to URL as a live (replace/debounced) update.
+   */
   const handleFiltersChange = useCallback((next: PropertyFilters) => {
     setFilters(next);
     if (next.schoolRadiusKm != null && selectedSchool) {
-      setUrlParams((prev) => {
-        prev.set('radiusKm', String(next.schoolRadiusKm));
-        return prev;
-      });
+      urlActions.setSchoolParams({ schoolId: selectedSchool.id, radiusKm: next.schoolRadiusKm });
     }
-  }, [selectedSchool, setUrlParams]);
+    // Write discover filter params to URL (live/debounced replace — not a committed apply)
+    urlActions.setFiltersLive({
+      propertyTypes: next.propertyTypes,
+      bedrooms: next.bedrooms,
+      priceMin: next.priceMin,
+      priceMax: next.priceMax,
+      sellerType: next.sellerTypes?.length === 1 ? next.sellerTypes[0] : undefined,
+    });
+  }, [selectedSchool, urlActions]);
 
   const handlePolygonDrawn = useCallback((polygon: [number, number][]) => {
     setFilters((prev) => ({ ...prev, polygon }));
@@ -165,8 +176,8 @@ export default function Index() {
     ? filteredListings.filter((l) => l.latitude && l.longitude)
     : [];
 
-  const hasHydrated = useRef(false);
-  const initialAnonAreaKeysRef = useRef<string[]>([]);
+  // pendingAreaKeyRef is initialised at the top of Index with the URL areaKey.
+  // It is cleared once we've successfully resolved and selected the area.
 
   const topLocalities = useMemo(
     () => computeTopLocalities(listingsWithCoords),
@@ -225,9 +236,12 @@ export default function Index() {
     return m;
   }, [trendsOpts, discoverAreasData, localityOptions]);
 
-  // Derive areaKeys for "View Trends" button and URL write-back.
-  // For anonymous users: fall back to URL params (set on mount from Home navigation).
+  // Derive areaKeys for "View Trends" button.
+  // selectedArea is now the single source of truth for the selected area.
+  // For locality-filter chips (authenticated), map locality names → areaKeys.
   const trendsAreaKeys = useMemo(() => {
+    // If an area card is selected, use it directly — highest precedence
+    if (selectedArea) return [selectedArea.areaKey];
     if (isAuthenticated) {
       if (!filters.localities || filters.localities.length === 0) return [];
       return filters.localities.flatMap((loc) => {
@@ -235,8 +249,8 @@ export default function Index() {
         return k ? [k] : [];
       });
     }
-    return initialAnonAreaKeysRef.current.filter((k) => k.length > 0);
-  }, [isAuthenticated, filters.localities, localityToAreaKey]);
+    return [];
+  }, [selectedArea, isAuthenticated, filters.localities, localityToAreaKey]);
 
   const discoverAreas = useMemo((): AreaPoint[] => {
     if (!discoverAreasData?.areas) return [];
@@ -263,19 +277,26 @@ export default function Index() {
     // Reset filters so the discover listings query starts fresh for the new area (AC6).
     setFilters({});
     setSelectedArea(area);
-  }, []);
+    // PUSH: area selection is a deliberate navigation action
+    urlActions.selectArea(area.areaKey);
+  }, [urlActions]);
 
   const handleAreaSelect = useCallback((area: AreaPoint) => {
     setFilters({});
     setSelectedArea(area);
     setPanToArea(area); // Panel card click → drive the map via AreaPanner
-  }, []);
+    // PUSH: area selection is a deliberate navigation action
+    urlActions.selectArea(area.areaKey);
+  }, [urlActions]);
 
   const handleAreaBack = useCallback(() => {
     setSelectedArea(null);
     setPanToArea(null);
     setResetMapTick((t) => t + 1);
-  }, []);
+    // REPLACE: deselection is not a new destination; removes areaKey without pushing history.
+    // Must NOT call navigate(-1) because user may have arrived via bookmarked URL.
+    urlActions.deselectArea();
+  }, [urlActions]);
 
   const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city);
 
@@ -412,43 +433,43 @@ export default function Index() {
       }));
   }, [selectedArea, areaListings, now]);
 
-  // URL sync: write city + areaKey params whenever they change.
-  // Declared before the read-mount effect so it fires first on initial render
-  // (hasHydrated is still false → skipped), preventing it from overwriting URL
-  // params before they have been read.
+  // Deferred areaKey hydration: resolve pendingAreaKey once discoverAreas have loaded.
+  // On mount, if ?areaKey= is present, pendingAreaKeyRef holds it. Once areasLoading
+  // is false and discoverAreas is populated, we look up the matching AreaPoint and
+  // set selectedArea. If no match, we silently remove the invalid areaKey from the URL.
+  const { deselectArea } = urlActions;
   useEffect(() => {
-    if (!hasHydrated.current) return;
-    // Skip write-back while listings are still loading — prevents overwriting URL
-    // areaKey params before the resolved listing set is available.
-    if (listingsLoading) return;
-    setUrlParams(
-      (prev) => {
-        prev.set('city', city);
-        prev.delete('areaKey');
-        trendsAreaKeys.forEach((k) => prev.append('areaKey', k));
-        return prev;
-      },
-      { replace: true }
-    );
-  }, [city, trendsAreaKeys, setUrlParams, listingsLoading]);
+    if (areasLoading) return; // wait for area data
+    const pending = pendingAreaKeyRef.current;
+    if (!pending) return; // nothing to resolve
+    pendingAreaKeyRef.current = null; // consume — only resolve once
 
-  // Read city + areaKey from URL on mount only; must be declared AFTER the
-  // write-back effect so the write-back fires (and skips) before this sets
-  // hasHydrated = true.
-  useEffect(() => {
-    const urlAreaKeys = urlParams.getAll('areaKey').slice(0, 3);
-    initialAnonAreaKeysRef.current = urlAreaKeys;
-    if (urlAreaKeys.length > 0) {
-      const localityNames = urlAreaKeys
-        .filter((k) => k.split('|').length >= 2)
-        .map((k) => k.split('|').pop())
-        .filter((n): n is string => Boolean(n));
-      if (localityNames.length > 0) {
-        setFilters((prev) => ({ ...prev, localities: localityNames }));
-      }
+    const match = discoverAreas.find((a) => a.areaKey === pending);
+    if (match) {
+      setSelectedArea(match);
+    } else {
+      // Invalid areaKey — remove it from URL silently
+      deselectArea();
     }
-    hasHydrated.current = true;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // discoverAreas reference changes when areasLoading → false; that's the trigger we want.
+  // deselectArea is a stable useCallback (only changes when setUrlParams changes, i.e. never).
+  // urlActions itself is a plain object literal re-created each render and must not be listed.
+  }, [areasLoading, discoverAreas, deselectArea]);
+
+  // Sync selectedArea with URL areaKey for browser Back/Forward navigation.
+  // When the user presses Back after selecting an area, useSearchParams reflects the
+  // updated URL (areaKey gone) but selectedArea React state is NOT cleared automatically
+  // because handleAreaBack() was never called. This effect closes that gap:
+  // if areaKey disappears from the URL while selectedArea is set, clear selectedArea.
+  // We do NOT write to the URL here — the URL has already changed via popstate.
+  const urlAreaKey = urlState.areaKey;
+  useEffect(() => {
+    if (!urlAreaKey && selectedArea !== null) {
+      setSelectedArea(null);
+      setPanToArea(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlAreaKey]);
 
   // Unknown city slug: render "not supported" fallback instead of the full map UI
   if (!isCityValid) {
@@ -544,6 +565,7 @@ export default function Index() {
               areas={mapZoom <= AREA_LAYER_MAX_ZOOM ? discoverAreas : []}
               onAreaClick={handleAreaClick}
               onZoomChange={setMapZoom}
+              onViewportChange={urlActions.reportViewport}
               panToArea={panToArea}
               resetMapTick={resetMapTick}
               onReady={() => setMapReady(true)}
@@ -602,16 +624,18 @@ export default function Index() {
                       onClick={() => {
                         const result = toggleLocality(filters.localities, locality);
                         if (!result) return;
-                        setFilters((prev) => ({ ...prev, localities: result }));
-                        const newAreaKeys = result
-                          .map((loc) => listings.find((l) => l.locality === loc && l.areaKey)?.areaKey)
-                          .filter((k): k is string => k != null && k.length > 0);
-                        setUrlParams((prev) => {
-                          prev.set('city', city);
-                          prev.delete('areaKey');
-                          newAreaKeys.forEach((k) => prev.append('areaKey', k));
-                          return prev;
-                        }, { replace: true });
+                        const next = { ...filters, localities: result };
+                        setFilters(next);
+                        // Write locality-driven filter changes as live (debounced replace).
+                        // areaKey URL param is managed by area card selection only —
+                        // locality chip toggling does not affect the single selectedArea URL param.
+                        urlActions.setFiltersLive({
+                          propertyTypes: next.propertyTypes,
+                          bedrooms: next.bedrooms,
+                          priceMin: next.priceMin,
+                          priceMax: next.priceMax,
+                          sellerType: next.sellerTypes?.length === 1 ? next.sellerTypes[0] : undefined,
+                        });
                       }}
                     >
                       {locality}

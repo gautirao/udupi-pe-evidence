@@ -1,10 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
 import Index from '../Index';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+
+// ─── Area fixture used in areaKey hydration tests ──────────────
+const FAKE_AREAS_RESPONSE = {
+  city: 'udupi',
+  areas: [
+    {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.3528,
+      geoCenterLon: 74.7917,
+      listingCount90d: 12,
+      trendDirection: 'rising',
+    },
+    {
+      areaKey: 'IN|KA|Udupi|Karkala',
+      name: 'Karkala',
+      geoCenterLat: 13.2024,
+      geoCenterLon: 74.9991,
+      listingCount90d: 5,
+      trendDirection: null,
+    },
+  ],
+};
 
 // ─── Hoisted mock handles ──────────────────────────────────────
 const mockNavigate = vi.hoisted(() => vi.fn());
@@ -118,6 +141,20 @@ function renderAuthenticatedWithCity(city: string) {
   );
 }
 
+// ─── Helper: render with city + areaKey ───────────────────────
+function renderWithCityAndAreaKey(city: string, areaKey: string) {
+  const encoded = encodeURIComponent(areaKey);
+  return render(
+    <QueryClientProvider client={makeQC()}>
+      <MemoryRouter initialEntries={[`/discover?city=${city}&areaKey=${encoded}`]}>
+        <Routes>
+          <Route path="/discover" element={<Index />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
 // ─── Tests ────────────────────────────────────────────────────
 describe('Index page — city validity guard', () => {
   beforeEach(() => {
@@ -185,5 +222,69 @@ describe('Index page — city validity guard', () => {
 
     // Stats bar is rendered for authenticated users
     expect(screen.getByText(/on map/i)).toBeInTheDocument();
+  });
+});
+
+describe('Index page — areaKey URL hydration', () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
+    // Reset discover areas mock to default (empty) before each test
+    vi.mocked(useDiscoverAreas).mockReturnValue({ data: undefined, isLoading: false } as ReturnType<typeof useDiscoverAreas>);
+  });
+
+  it('does not show fallback UI when valid areaKey is in URL', () => {
+    vi.mocked(useDiscoverAreas).mockReturnValue({
+      data: FAKE_AREAS_RESPONSE,
+      isLoading: false,
+    } as ReturnType<typeof useDiscoverAreas>);
+
+    renderWithCityAndAreaKey('udupi', 'IN|KA|Udupi|Manipal');
+
+    // Should render the map UI, not the "city not supported" fallback
+    expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
+    // CitySelect should be present
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  it('does not crash when areas are still loading on mount', () => {
+    vi.mocked(useDiscoverAreas).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    } as ReturnType<typeof useDiscoverAreas>);
+
+    renderWithCityAndAreaKey('udupi', 'IN|KA|Udupi|Manipal');
+
+    // Should render the map UI without error even if areas haven't loaded yet
+    expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
+  });
+
+  it('resolves areaKey once areas finish loading', async () => {
+    // Simulate areas loading completing after initial render
+    vi.mocked(useDiscoverAreas)
+      .mockReturnValueOnce({ data: undefined, isLoading: true } as ReturnType<typeof useDiscoverAreas>)
+      .mockReturnValue({ data: FAKE_AREAS_RESPONSE, isLoading: false } as ReturnType<typeof useDiscoverAreas>);
+
+    renderWithCityAndAreaKey('udupi', 'IN|KA|Udupi|Manipal');
+
+    // After areas load, the page should not be in fallback/error state
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('renders correctly with an invalid city even when areaKey is present', () => {
+    renderWithCityAndAreaKey('notacity', 'IN|KA|Udupi|Manipal');
+
+    // Invalid city guard still fires — areaKey does not bypass it
+    expect(screen.getByRole('heading', { name: /city not supported/i })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('renders the main discover UI when city is valid and areaKey is absent', () => {
+    renderWithCity('udupi');
+
+    expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 });

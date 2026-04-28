@@ -108,6 +108,12 @@ interface PropertyMapProps {
   onAreaClick?: (area: AreaPoint) => void;
   /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
   onZoomChange?: (zoom: number) => void;
+  /**
+   * Called after every map moveend/zoomend with the current center + zoom.
+   * Intended for debounced URL viewport writes — the caller is responsible for debouncing.
+   * Reports { lat, lon, zoom } rounded to map precision (not pre-rounded here).
+   */
+  onViewportChange?: (viewport: { lat: number; lon: number; zoom: number }) => void;
   /** When set, pans/fits the map to this area. Driven by right-panel card clicks only — never set by marker clicks. */
   panToArea?: AreaPoint | null;
   /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
@@ -138,6 +144,37 @@ function ZoomWatcher({ onZoomChange }: { onZoomChange?: (zoom: number) => void }
     map.on('zoomend', handler);
     return () => { map.off('zoomend', handler); };
   }, [map, onZoomChange]);
+  return null;
+}
+
+/**
+ * Fires onViewportChange after every moveend or zoomend.
+ * The callback receives raw center + zoom; the caller (Index) debounces before writing to URL.
+ */
+function ViewportWatcher({
+  onViewportChange,
+}: {
+  onViewportChange?: (vp: { lat: number; lon: number; zoom: number }) => void;
+}) {
+  const map = useMap();
+  useEffect(() => {
+    if (!onViewportChange) return;
+    const handler = () => {
+      const center = map.getCenter();
+      onViewportChange({ lat: center.lat, lon: center.lng, zoom: map.getZoom() });
+    };
+    // Note: pinch-zoom and programmatic zoom fire BOTH zoomend and moveend in sequence
+    // (zoomend first, then moveend as Leaflet recenters), so the handler runs twice for
+    // those gestures. Scroll-wheel zoom only fires zoomend (no moveend), so it fires once.
+    // The caller's debounce (reportViewport → 300 ms) collapses any double-fire into one
+    // URL write, so the extra call has no visible effect.
+    map.on('moveend', handler);
+    map.on('zoomend', handler);
+    return () => {
+      map.off('moveend', handler);
+      map.off('zoomend', handler);
+    };
+  }, [map, onViewportChange]);
   return null;
 }
 
@@ -309,6 +346,7 @@ export function PropertyMap({
   areas = [],
   onAreaClick,
   onZoomChange,
+  onViewportChange,
   panToArea,
   resetMapTick,
   onReady,
@@ -338,6 +376,7 @@ export function PropertyMap({
           resetMapTick={resetMapTick}
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
+        <ViewportWatcher onViewportChange={onViewportChange} />
         <AreaPanner panToArea={panToArea} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (
