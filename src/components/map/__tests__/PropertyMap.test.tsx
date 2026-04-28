@@ -235,3 +235,137 @@ describe('Trust tier badge chip — listing preview card', () => {
     expect(container.firstChild).toBeNull();
   });
 });
+
+// ─── MapController reset-zoom behaviour (AC7 / #894) ─────────────────────────
+// Verifies the handledTickRef guard:
+//   - tick=0 on mount → no flyTo from the reset path
+//   - tick increments to 1 → flyTo fires once
+//   - city changes with tick still=1 → flyTo does NOT fire again (double-flyTo bug)
+//
+// The useMap mock factory creates a new map object per call, so we intercept
+// the mock at the module level and replace it with a stable object that all
+// MapController useEffect hooks share.
+
+describe('PropertyMap — reset zoom on area deselection (#894)', () => {
+  const stableMap = {
+    addLayer: vi.fn(),
+    removeLayer: vi.fn(),
+    flyTo: vi.fn(),
+    fitBounds: vi.fn(),
+    getBounds: vi.fn(() => ({
+      getNorth: vi.fn(() => 14),
+      getSouth: vi.fn(() => 13),
+      getEast: vi.fn(() => 75),
+      getWest: vi.fn(() => 74),
+    })),
+    getZoom: vi.fn(() => 12),
+    getContainer: vi.fn(() => document.body),
+    on: vi.fn(),
+    off: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    stableMap.flyTo.mockClear();
+    // Override useMap to return the stable object for this describe block
+    const reactLeaflet = await import('react-leaflet');
+    (reactLeaflet.useMap as ReturnType<typeof vi.fn>).mockReturnValue(stableMap);
+  });
+
+  it('does not call flyTo from the reset path on initial render (resetMapTick=0)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    // Render without cityCenter so neither the cityCenter effect nor the reset
+    // effect can produce a flyTo call — isolates the reset path guard entirely.
+    render(
+      <PropertyMap
+        listings={[]}
+        resetMapTick={0}
+      />
+    );
+
+    expect(stableMap.flyTo).not.toHaveBeenCalled();
+  });
+
+  it('calls flyTo with cityCenter and cityZoom when resetMapTick increments from 0 to 1', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    // Use a stable reference so the cityCenter effect does not re-fire on rerender
+    // (inline array literals create a new reference each render, causing a spurious dep change).
+    const udupiCenter: [number, number] = [13.34, 74.74];
+
+    const { rerender } = render(
+      <PropertyMap
+        listings={[]}
+        cityCenter={udupiCenter}
+        cityZoom={11}
+        resetMapTick={0}
+        panToArea={null}
+      />
+    );
+
+    // Clear after initial render (cityCenter effect fires once on mount)
+    stableMap.flyTo.mockClear();
+
+    rerender(
+      <PropertyMap
+        listings={[]}
+        cityCenter={udupiCenter}
+        cityZoom={11}
+        resetMapTick={1}
+        panToArea={null}
+      />
+    );
+
+    // Reset effect fires — flyTo must be called exactly once with city coords
+    expect(stableMap.flyTo).toHaveBeenCalledTimes(1);
+    expect(stableMap.flyTo).toHaveBeenCalledWith(udupiCenter, 11, { duration: 1 });
+  });
+
+  it('does not call flyTo again when city changes but resetMapTick stays the same', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const { rerender } = render(
+      <PropertyMap
+        listings={[]}
+        cityCenter={[13.34, 74.74]}
+        cityZoom={11}
+        resetMapTick={1}
+        panToArea={null}
+      />
+    );
+
+    // After mount with tick=1: reset effect fires (handledTickRef becomes 1).
+    // Clear the mock to observe only subsequent calls.
+    stableMap.flyTo.mockClear();
+
+    // Simulate a city change (cityCenter/cityZoom change) with the same tick=1.
+    // The deps array includes cityCenter/cityZoom so the effect re-evaluates,
+    // but tick (1) <= handledTickRef (1) → must return early, no flyTo.
+    rerender(
+      <PropertyMap
+        listings={[]}
+        cityCenter={[12.97, 77.59]}
+        cityZoom={12}
+        resetMapTick={1}
+        panToArea={null}
+      />
+    );
+
+    // cityCenter effect fires once (expected for city switch),
+    // but the reset effect must NOT fire a second time.
+    // Only one call allowed — from the cityCenter effect, not the reset path.
+    const resetPathCalls = stableMap.flyTo.mock.calls.filter(
+      (call) => call[2]?.duration === 1 && JSON.stringify(call[0]) === JSON.stringify([12.97, 77.59])
+    );
+    // The cityCenter effect will call flyTo with the new city (that's fine).
+    // What must NOT happen: a second call at the old city coords [13.34, 74.74].
+    const oldCityCalls = stableMap.flyTo.mock.calls.filter(
+      (call) => JSON.stringify(call[0]) === JSON.stringify([13.34, 74.74])
+    );
+    expect(oldCityCalls).toHaveLength(0);
+    // Total calls must be exactly 1 (the cityCenter effect), not 2.
+    expect(stableMap.flyTo).toHaveBeenCalledTimes(1);
+    // Confirm it was the cityCenter effect that fired, not a ghost reset call.
+    expect(resetPathCalls).toHaveLength(1);
+  });
+});

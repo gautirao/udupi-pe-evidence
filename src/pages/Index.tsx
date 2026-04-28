@@ -179,6 +179,9 @@ export default function Index() {
 
   // Tick counter to force map refit when "Fit to selected areas" is clicked
   const [fitTick, setFitTick] = useState(0);
+
+  // Tick counter to trigger map zoom reset on area deselection
+  const [resetMapTick, setResetMapTick] = useState(0);
   const activeFocusBounds = useMemo(() => {
     // fitTick is in the dep array solely to force a new reference on refit clicks
     void fitTick;
@@ -269,6 +272,8 @@ export default function Index() {
 
   const handleAreaBack = useCallback(() => {
     setSelectedArea(null);
+    setPanToArea(null);
+    setResetMapTick((t) => t + 1);
   }, []);
 
   const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city);
@@ -446,6 +451,7 @@ export default function Index() {
               onAreaClick={handleAreaClick}
               onZoomChange={setMapZoom}
               panToArea={panToArea}
+              resetMapTick={resetMapTick}
               onReady={() => setMapReady(true)}
             />
           )}

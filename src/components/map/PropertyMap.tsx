@@ -110,6 +110,8 @@ interface PropertyMapProps {
   onZoomChange?: (zoom: number) => void;
   /** When set, pans/fits the map to this area. Driven by right-panel card clicks only — never set by marker clicks. */
   panToArea?: AreaPoint | null;
+  /** Incrementing tick that triggers a zoom reset to cityCenter/cityZoom. Incremented by handleAreaBack. */
+  resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
   onReady?: () => void;
 }
@@ -157,11 +159,13 @@ function MapController({
   focusBounds,
   cityCenter,
   cityZoom,
+  resetMapTick,
 }: {
   selectedListing?: PropertyListing | null;
   focusBounds?: [[number, number], [number, number]] | null;
   cityCenter?: [number, number];
   cityZoom?: number;
+  resetMapTick?: number;
 }) {
   const map = useMap();
 
@@ -189,6 +193,20 @@ function MapController({
       map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
     }
   }, [cityCenter, cityZoom, map]);
+
+  // Reset zoom to city overview when area is deselected (Back button).
+  // handledTickRef tracks the last tick value we acted on so that a city change
+  // (which also updates cityCenter/cityZoom deps) does not re-fire when the tick
+  // has not changed. Only fires when tick strictly exceeds the last handled value.
+  const handledTickRef = useRef(0);
+  useEffect(() => {
+    const tick = resetMapTick ?? 0;
+    if (tick === 0 || tick <= handledTickRef.current) return;
+    handledTickRef.current = tick;
+    if (cityCenter) {
+      map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
+    }
+  }, [resetMapTick, map, cityCenter, cityZoom]);
 
   return null;
 }
@@ -292,6 +310,7 @@ export function PropertyMap({
   onAreaClick,
   onZoomChange,
   panToArea,
+  resetMapTick,
   onReady,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
@@ -316,6 +335,7 @@ export function PropertyMap({
           focusBounds={focusBounds}
           cityCenter={cityCenter}
           cityZoom={cityZoom}
+          resetMapTick={resetMapTick}
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
         <AreaPanner panToArea={panToArea} />
