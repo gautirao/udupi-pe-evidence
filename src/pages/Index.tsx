@@ -54,8 +54,9 @@ export default function Index() {
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
   const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
 
-  // City state
-  const [city, setCity] = useState(DEFAULT_CITY);
+  // City state — lazy initializer reads URL on first render so isCityValid is correct before any effect fires
+  const [city, setCity] = useState(() => urlParams.get('city') ?? DEFAULT_CITY);
+  const isCityValid = city in CITY_CONFIG;
   const handleCityChange = useCallback((newCity: string) => {
     setCity(newCity);
     setFilters((prev) => ({ ...prev, localities: undefined }));
@@ -194,7 +195,7 @@ export default function Index() {
   // Fallback: property_listings.area_key (sparse backfill from PR #745).
   const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
-  const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(city);
+  const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(isCityValid ? city : '');
   // Map filter state to discover listing params.
   // priceMin/priceMax in PropertyFilters are rupees; backend expects paise.
   const discoverMinPrice = filters.priceMin != null ? filters.priceMin * 100 : undefined;
@@ -376,10 +377,8 @@ export default function Index() {
   // write-back effect so the write-back fires (and skips) before this sets
   // hasHydrated = true.
   useEffect(() => {
-    const urlCity = urlParams.get('city');
     const urlAreaKeys = urlParams.getAll('areaKey').slice(0, 3);
     initialAnonAreaKeysRef.current = urlAreaKeys;
-    if (urlCity) setCity(urlCity);
     if (urlAreaKeys.length > 0) {
       const localityNames = urlAreaKeys
         .filter((k) => k.split('|').length >= 2)
@@ -391,6 +390,35 @@ export default function Index() {
     }
     hasHydrated.current = true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Unknown city slug: render "not supported" fallback instead of the full map UI
+  if (!isCityValid) {
+    return (
+      <AppLayout>
+        <div className="h-[calc(100vh-3.5rem)] flex items-center justify-center">
+          <div className="text-center max-w-sm px-4">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+              <MapPin className="h-8 w-8 text-muted-foreground/40" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">City not supported</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              We don&apos;t have data for &ldquo;<strong>{city}</strong>&rdquo; yet.
+            </p>
+            <Button asChild className="mb-3">
+              <Link to={`/discover?city=${DEFAULT_CITY}`}>
+                Explore {CITY_CONFIG[DEFAULT_CITY]?.label ?? DEFAULT_CITY}
+              </Link>
+            </Button>
+            <div>
+              <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
+                ← Go Home
+              </Link>
+            </div>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   const filtersContent = (
     <MapFilters
