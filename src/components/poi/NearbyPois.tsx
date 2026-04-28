@@ -459,7 +459,7 @@ function CommercialMode({ pois }: { pois: PoiResponse[] }) {
 export function NearbyPois({ listingId, propertyType }: NearbyPoisProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['pois', listingId],
-    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`),
+    queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`, { skipAuth: true }),
   });
 
   const headingByType: Record<string, string> = {
