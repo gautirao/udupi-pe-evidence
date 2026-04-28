@@ -20,6 +20,8 @@ export interface DiscoverCityListingItem {
   furnishingStatus?: string | null;
   createdAt?: string | null;
   trustTier?: string | null;
+  lat?: number | null;
+  lon?: number | null;
 }
 
 interface DiscoverCityAreaResult {

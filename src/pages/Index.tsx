@@ -353,6 +353,65 @@ export default function Index() {
     }));
   }, [markersData, now]);
 
+  const areaListings = useMemo(
+    () => cityListingsData?.areas.find((a) => a.areaKey === selectedArea?.areaKey)?.listings ?? [],
+    [cityListingsData, selectedArea],
+  );
+
+  // Convert area listings that have coordinates into marker-compatible objects.
+  // MarkerClusterLayer only reads latitude, longitude, and property_type for rendering;
+  // all other required PropertyListing fields are set to null/default as with markerListings.
+  // property_type: DiscoverCityListingItem.propertyType is string | undefined — cast to
+  // PropertyType with 'other' fallback since the map icon lookup is best-effort display logic.
+  const areaMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
+    if (!selectedArea || areaListings.length === 0) return [];
+    return areaListings
+      .filter((l) => l.lat != null && l.lon != null)
+      .map((l) => ({
+        id: l.id,
+        latitude: l.lat as number,
+        longitude: l.lon as number,
+        property_type: (l.propertyType ?? 'other') as PropertyType,
+        price: l.pricePaise != null ? Math.round(l.pricePaise / 100) : null,
+        price_unit: null,
+        title: l.title ?? null,
+        locality: l.locality ?? null,
+        land_area: l.landArea ?? null,
+        land_area_unit: l.landAreaUnit ?? null,
+        built_area: l.builtArea ?? null,
+        built_area_unit: l.builtAreaUnit ?? null,
+        bedrooms: l.bedrooms ?? null,
+        bathrooms: l.bathrooms ?? null,
+        contact_info: null,
+        contact_phone: null,
+        description: null,
+        confidence_score: null,
+        language_detected: null,
+        price_per_cent_paise: null,
+        is_valid: true,
+        is_duplicate: false,
+        status: 'LIVE',
+        created_at: now,
+        updated_at: now,
+        listing_purpose: l.listingPurpose ?? '',
+        carpet_area: null,
+        carpet_area_unit: null,
+        floor_number: null,
+        total_floors: l.totalFloors ?? null,
+        furnishing_status: l.furnishingStatus ?? null,
+        washrooms: null,
+        parking_count: l.parkingCount ?? null,
+        road_frontage_ft: null,
+        commercial_usage: null,
+        number_of_units: null,
+        monthly_rent: null,
+        security_deposit_months: null,
+        lock_in_months: null,
+        seller_type: null,
+        raw_post_id: null,
+      }));
+  }, [selectedArea, areaListings, now]);
+
   // URL sync: write city + areaKey params whenever they change.
   // Declared before the read-mount effect so it fires first on initial render
   // (hasHydrated is still false → skipped), preventing it from overwriting URL
@@ -462,7 +521,14 @@ export default function Index() {
             </div>
           ) : (
             <PropertyMap
-              listings={mapZoom > AREA_LAYER_MAX_ZOOM && isAuthenticated ? markerListings : []}
+              listings={mapZoom > AREA_LAYER_MAX_ZOOM
+                ? (selectedArea
+                    ? (isLoadingAreaListings
+                        ? []
+                        // city-wide public fallback when area listings lack coordinates
+                        : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings))
+                    : (isAuthenticated ? markerListings : []))
+                : []}
               focusBounds={activeFocusBounds}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
@@ -660,7 +726,7 @@ export default function Index() {
         <DiscoverRightPanel
           areas={discoverAreas}
           selectedArea={selectedArea}
-          areaListings={cityListingsData?.areas.find(a => a.areaKey === selectedArea?.areaKey)?.listings ?? []}
+          areaListings={areaListings}
           isLoadingListings={isLoadingAreaListings}
           isAuthenticated={isAuthenticated}
           onAreaSelect={handleAreaSelect}

@@ -25,6 +25,8 @@ import java.util.UUID;
  * @param furnishingStatus  "furnished", "semi-furnished", "unfurnished", or null (residential rent)
  * @param createdAt         ISO-8601 timestamp when listing was first saved, or null
  * @param trustTier         backend trust score: A, B, C, or D; null for legacy rows
+ * @param latitude          geo-coordinate latitude, or null when not geocoded
+ * @param longitude         geo-coordinate longitude, or null when not geocoded
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AreaListingCard(
@@ -45,5 +47,7 @@ public record AreaListingCard(
         Integer parkingCount,
         String furnishingStatus,
         String createdAt,
-        String trustTier
+        String trustTier,
+        Double latitude,
+        Double longitude
 ) {}

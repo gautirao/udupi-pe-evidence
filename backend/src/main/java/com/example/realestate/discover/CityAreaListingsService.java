@@ -137,7 +137,9 @@ public class CityAreaListingsService {
                     sub.parking_count,
                     sub.furnishing_status,
                     sub.created_at,
-                    sub.trust_tier
+                    sub.trust_tier,
+                    sub.latitude,
+                    sub.longitude
                 FROM (
                     SELECT
                         a.area_key,
@@ -164,6 +166,8 @@ public class CityAreaListingsService {
                         pl.furnishing_status,
                         pl.created_at,
                         pl.trust_tier,
+                        pl.latitude,
+                        pl.longitude,
                         ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) AS rn
                     FROM areas a
                     JOIN cities c ON c.id = a.city_id
@@ -204,6 +208,8 @@ public class CityAreaListingsService {
                 Double landArea = rs.getObject("land_area") != null ? rs.getDouble("land_area") : null;
                 Timestamp createdTs = rs.getTimestamp("created_at");
                 String createdAt = createdTs != null ? createdTs.toInstant().toString() : null;
+                Double latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
+                Double longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
                 cardsByArea.get(areaKey).add(new AreaListingCard(
                         UUID.fromString(rawId),
                         pricePaise,
@@ -222,7 +228,9 @@ public class CityAreaListingsService {
                         rs.getObject("parking_count") != null ? rs.getInt("parking_count") : null,
                         rs.getString("furnishing_status"),
                         createdAt,
-                        rs.getString("trust_tier")
+                        rs.getString("trust_tier"),
+                        latitude,
+                        longitude
                 ));
             }
             // if rawId is null: area exists but has no LIVE listings — leave the list empty
