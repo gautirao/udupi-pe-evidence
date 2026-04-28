@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -104,7 +105,10 @@ public class CityAreaListingsService {
 
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images
         // Row shape: area_key, area_name, listing_id (nullable), price_paise, property_type,
-        //            locality, primary_image_url, listing_purpose, bedrooms
+        //            locality, primary_image_url, listing_purpose, bedrooms,
+        //            title, bathrooms, built_area, built_area_unit,
+        //            land_area, land_area_unit, total_floors, parking_count, furnishing_status,
+        //            created_at, trust_tier
         //
         // The LEFT JOIN on property_listings means an area with no LIVE listings (or no listings
         // matching the active filter) still returns one row with listing_id = NULL. Filter clauses
@@ -122,7 +126,18 @@ public class CityAreaListingsService {
                     sub.locality,
                     sub.primary_image_url,
                     sub.listing_purpose,
-                    sub.bedrooms
+                    sub.bedrooms,
+                    sub.title,
+                    sub.bathrooms,
+                    sub.built_area,
+                    sub.built_area_unit,
+                    sub.land_area,
+                    sub.land_area_unit,
+                    sub.total_floors,
+                    sub.parking_count,
+                    sub.furnishing_status,
+                    sub.created_at,
+                    sub.trust_tier
                 FROM (
                     SELECT
                         a.area_key,
@@ -138,6 +153,17 @@ public class CityAreaListingsService {
                          LIMIT 1)                                                               AS primary_image_url,
                         pl.listing_purpose,
                         pl.bedrooms,
+                        pl.title,
+                        pl.bathrooms,
+                        pl.built_area,
+                        pl.built_area_unit,
+                        pl.land_area,
+                        pl.land_area_unit,
+                        pl.total_floors,
+                        pl.parking_count,
+                        pl.furnishing_status,
+                        pl.created_at,
+                        pl.trust_tier,
                         ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) AS rn
                     FROM areas a
                     JOIN cities c ON c.id = a.city_id
@@ -174,6 +200,10 @@ public class CityAreaListingsService {
                 // listing row present
                 Long pricePaise = rs.getObject("price_paise") != null
                         ? rs.getLong("price_paise") : null;
+                Double builtArea = rs.getObject("built_area") != null ? rs.getDouble("built_area") : null;
+                Double landArea = rs.getObject("land_area") != null ? rs.getDouble("land_area") : null;
+                Timestamp createdTs = rs.getTimestamp("created_at");
+                String createdAt = createdTs != null ? createdTs.toInstant().toString() : null;
                 cardsByArea.get(areaKey).add(new AreaListingCard(
                         UUID.fromString(rawId),
                         pricePaise,
@@ -181,7 +211,18 @@ public class CityAreaListingsService {
                         rs.getString("locality"),
                         rs.getString("primary_image_url"),
                         rs.getString("listing_purpose"),
-                        rs.getObject("bedrooms") != null ? rs.getInt("bedrooms") : null
+                        rs.getObject("bedrooms") != null ? rs.getInt("bedrooms") : null,
+                        rs.getString("title"),
+                        rs.getObject("bathrooms") != null ? rs.getInt("bathrooms") : null,
+                        builtArea,
+                        rs.getString("built_area_unit"),
+                        landArea,
+                        rs.getString("land_area_unit"),
+                        rs.getObject("total_floors") != null ? rs.getInt("total_floors") : null,
+                        rs.getObject("parking_count") != null ? rs.getInt("parking_count") : null,
+                        rs.getString("furnishing_status"),
+                        createdAt,
+                        rs.getString("trust_tier")
                 ));
             }
             // if rawId is null: area exists but has no LIVE listings — leave the list empty

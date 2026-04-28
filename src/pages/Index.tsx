@@ -677,6 +677,7 @@ export default function Index() {
           selectedArea={selectedArea}
           areaListings={cityListingsData?.areas.find(a => a.areaKey === selectedArea?.areaKey)?.listings ?? []}
           isLoadingListings={isLoadingAreaListings}
+          isAuthenticated={isAuthenticated}
           onAreaSelect={handleAreaSelect}
           onBack={handleAreaBack}
           filtersContent={filtersContent}

@@ -118,11 +118,25 @@ describe('DiscoverRightPanel', () => {
       locality: 'Manipal',
       primaryImageUrl: null,
     }];
-    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={listings} isLoadingListings={false} />);
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={listings} isLoadingListings={false} isAuthenticated={true} />);
     expect(screen.getAllByTestId('listing-card').length).toBe(1);
     expect(screen.getAllByText('Manipal').length).toBeGreaterThanOrEqual(1);
     // pricePaise 500000*100 → Math.round(50_000_000/100)=500000 → formatPrice → '₹5 L'
     expect(screen.getByText('₹5 L')).toBeInTheDocument();
+  });
+
+  it('shows blurred price gate for anonymous users', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    const listings: DiscoverCityListingItem[] = [{
+      id: 'l1',
+      pricePaise: 500000 * 100,
+      propertyType: 'apartment',
+      locality: 'Manipal',
+      primaryImageUrl: null,
+    }];
+    renderPanel(<DiscoverRightPanel areas={[area]} selectedArea={area} areaListings={listings} isLoadingListings={false} isAuthenticated={false} />);
+    expect(screen.getByText(/sign in to view price/i)).toBeInTheDocument();
+    expect(screen.queryByText('₹5 L')).not.toBeInTheDocument();
   });
 
   it('back button calls onBack', async () => {

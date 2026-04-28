@@ -69,7 +69,10 @@ class CityAreaListingsControllerTest {
     void ac1_happyPath_returns200WithCorrectShape() throws Exception {
         UUID id = UUID.randomUUID();
         AreaListingCard card = new AreaListingCard(id, 4_500_000L, "apartment", "Malpe",
-                "https://example.com/img.jpg", "sale", 2);
+                "https://example.com/img.jpg", "sale", 2,
+                "Spacious 2BHK near beach", 2, 850.0, "sq ft",
+                null, null, null, null, null,
+                "2024-01-15T10:30:00Z", "A");
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Malpe", "Malpe", null,
                 List.of(card));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
@@ -90,7 +93,11 @@ class CityAreaListingsControllerTest {
                 .andExpect(jsonPath("$.areas[0].listings[0].pricePaise", is(4_500_000)))
                 .andExpect(jsonPath("$.areas[0].listings[0].propertyType", is("apartment")))
                 .andExpect(jsonPath("$.areas[0].listings[0].listingPurpose", is("sale")))
-                .andExpect(jsonPath("$.areas[0].listings[0].bedrooms", is(2)));
+                .andExpect(jsonPath("$.areas[0].listings[0].bedrooms", is(2)))
+                .andExpect(jsonPath("$.areas[0].listings[0].title", is("Spacious 2BHK near beach")))
+                .andExpect(jsonPath("$.areas[0].listings[0].bathrooms", is(2)))
+                .andExpect(jsonPath("$.areas[0].listings[0].createdAt", is("2024-01-15T10:30:00Z")))
+                .andExpect(jsonPath("$.areas[0].listings[0].trustTier", is("A")));
     }
 
     // ── AC2: only LIVE listings (enforced in service/SQL — tested via service unit test) ─
@@ -103,8 +110,10 @@ class CityAreaListingsControllerTest {
     void ac3_multipleListings_preservesServiceOrder() throws Exception {
         UUID id1 = UUID.randomUUID();
         UUID id2 = UUID.randomUUID();
-        AreaListingCard card1 = new AreaListingCard(id1, 1_000_000L, "house", "Malpe", null, "sale", null);
-        AreaListingCard card2 = new AreaListingCard(id2, 2_000_000L, "apartment", "Malpe", null, "rent", 3);
+        AreaListingCard card1 = new AreaListingCard(id1, 1_000_000L, "house", "Malpe", null, "sale", null,
+                null, null, null, null, null, null, null, null, null, null, null);
+        AreaListingCard card2 = new AreaListingCard(id2, 2_000_000L, "apartment", "Malpe", null, "rent", 3,
+                null, 2, null, null, null, null, null, null, null, null, null);
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Malpe", "Malpe", null,
                 List.of(card1, card2));
         when(service.getAreaListings(eq("udupi"), any(), any(), any(), any(), any(), any()))

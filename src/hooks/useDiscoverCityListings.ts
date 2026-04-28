@@ -9,6 +9,17 @@ export interface DiscoverCityListingItem {
   primaryImageUrl?: string | null;
   listingPurpose?: string;
   bedrooms?: number | null;
+  title?: string | null;
+  bathrooms?: number | null;
+  builtArea?: number | null;
+  builtAreaUnit?: string | null;
+  landArea?: number | null;
+  landAreaUnit?: string | null;
+  totalFloors?: number | null;
+  parkingCount?: number | null;
+  furnishingStatus?: string | null;
+  createdAt?: string | null;
+  trustTier?: string | null;
 }
 
 interface DiscoverCityAreaResult {
