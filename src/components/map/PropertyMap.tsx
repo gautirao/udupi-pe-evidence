@@ -98,6 +98,15 @@ interface PropertyMapProps {
   onPolygonCleared?: () => void;
   /** When set, displays a circle around the selected school on the map. */
   schoolCircle?: SchoolCircle;
+  /**
+   * Initial map center from URL (?lat=/?lon=). Used as the MapContainer's one-time
+   * `center` prop to restore a bookmarked viewport. Distinct from `cityCenter`, which
+   * drives post-mount flyTo on city change. When present, takes precedence over cityCenter
+   * for the initial render.
+   */
+  initialCenter?: [number, number];
+  /** Initial map zoom from URL (?zoom=). Paired with initialCenter. */
+  initialZoom?: number;
   /** Override map center when city changes */
   cityCenter?: [number, number];
   /** Override map zoom when city changes */
@@ -225,7 +234,22 @@ function MapController({
     }
   }, [focusBounds, map]);
 
+  // hasMountedRef: skip the first effect run so we don't immediately fly to
+  // cityCenter on mount and overwrite a URL-specified initial viewport.
+  // Only fly when the user actively changes city (post-mount cityCenter change).
+  //
+  // Cross-component coupling: MapContainer (parent) already positions the map at
+  // initialCenter/initialZoom on mount — these are the one-time Leaflet props driven
+  // by the URL's ?lat/?lon/?zoom= params. MapController must NOT call flyTo(cityCenter)
+  // on the initial render, otherwise it clobbers whatever viewport the URL specified.
+  // hasMountedRef enforces this invariant without MapController needing to know about
+  // initialCenter/initialZoom directly.
+  const hasMountedRef = useRef(false);
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
     if (cityCenter) {
       map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
     }
@@ -341,6 +365,8 @@ export function PropertyMap({
   onPolygonDrawn,
   onPolygonCleared,
   schoolCircle,
+  initialCenter,
+  initialZoom,
   cityCenter,
   cityZoom,
   areas = [],
@@ -358,8 +384,8 @@ export function PropertyMap({
   return (
     <div className="w-full h-full relative">
       <MapContainer
-        center={cityCenter ?? UDUPI_CENTER}
-        zoom={cityZoom ?? DEFAULT_ZOOM}
+        center={initialCenter ?? cityCenter ?? UDUPI_CENTER}
+        zoom={initialZoom ?? cityZoom ?? DEFAULT_ZOOM}
         className="w-full h-full rounded-lg z-0"
         scrollWheelZoom
       >

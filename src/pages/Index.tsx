@@ -41,7 +41,14 @@ export default function Index() {
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [mapZoom, setMapZoom] = useState<number>(CITY_CONFIG[DEFAULT_CITY]?.zoom ?? 11);
+  // Initialize mapZoom from URL viewport when present so the correct zoom band
+  // (area markers vs listing markers) is applied from the very first render.
+  // Use the URL city's default zoom as the fallback, not DEFAULT_CITY, so that
+  // ?city=kundapur without an explicit ?zoom= starts at Kundapur's zoom (12),
+  // not Udupi's (11) — wrong zoom would show the wrong marker layer on first render.
+  const [mapZoom, setMapZoom] = useState<number>(
+    urlState.viewport?.zoom ?? CITY_CONFIG[urlState.city || DEFAULT_CITY]?.zoom ?? 11,
+  );
 
   // Map readiness: set to true once Leaflet's MapContainer has initialised.
   // Prevents the loader from disappearing the moment the map DOM mounts,
@@ -60,9 +67,21 @@ export default function Index() {
   const [city, setCity] = useState(() => urlState.city || DEFAULT_CITY);
   const isCityValid = city in CITY_CONFIG;
 
+  // Stabilize cityCenter/cityZoom so they only produce a new reference when `city`
+  // actually changes. Without memoization, CITY_CONFIG[city]?.center is a new array
+  // literal on every render, which causes MapController's cityCenter effect to fire
+  // on every parent state update (areasLoading clearing, mapReady flipping, etc.) —
+  // not just genuine city switches — and clobbers any URL-specified viewport.
+  const cityCenter = useMemo(() => CITY_CONFIG[city]?.center, [city]);
+  const cityZoom = useMemo(() => CITY_CONFIG[city]?.zoom, [city]);
+
   // pendingAreaKey: holds the areaKey from URL until discoverAreasData has loaded.
   // On mount, if ?areaKey= is present we cannot resolve it until area data arrives.
   const pendingAreaKeyRef = useRef<string | null>(urlState.areaKey);
+  // Capture the initial viewport at mount time. Used in the deferred areaKey hydration
+  // effect below to decide whether to pan the map — avoiding adding mutable urlState
+  // to the effect dep array (it's a plain object literal re-created each render).
+  const initialViewportRef = useRef(urlState.viewport);
 
   const handleCityChange = useCallback((newCity: string) => {
     setCity(newCity);
@@ -447,6 +466,13 @@ export default function Index() {
     const match = discoverAreas.find((a) => a.areaKey === pending);
     if (match) {
       setSelectedArea(match);
+      // Only pan to the area when there is no bookmarked viewport (?lat/?lon/?zoom) in
+      // the URL. When a viewport IS present, MapContainer already positions the map via
+      // initialCenter/initialZoom — calling setPanToArea would trigger AreaPanner's
+      // fitBounds and silently discard the bookmarked zoom level.
+      if (!initialViewportRef.current) {
+        setPanToArea(match);
+      }
     } else {
       // Invalid areaKey — remove it from URL silently
       deselectArea();
@@ -560,8 +586,10 @@ export default function Index() {
                 radiusKm: filters.schoolRadiusKm ?? 2,
                 name: selectedSchool.name,
               } : undefined}
-              cityCenter={CITY_CONFIG[city]?.center}
-              cityZoom={CITY_CONFIG[city]?.zoom}
+              initialCenter={urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] : undefined}
+              initialZoom={urlState.viewport?.zoom}
+              cityCenter={cityCenter}
+              cityZoom={cityZoom}
               areas={mapZoom <= AREA_LAYER_MAX_ZOOM ? discoverAreas : []}
               onAreaClick={handleAreaClick}
               onZoomChange={setMapZoom}

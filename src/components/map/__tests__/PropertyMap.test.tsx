@@ -236,6 +236,92 @@ describe('Trust tier badge chip — listing preview card', () => {
   });
 });
 
+// ─── MapController hasMountedRef guard — URL viewport fix (#910 bug) ─────────
+// Verifies that the cityCenter effect does NOT fire on the initial mount, so a
+// URL-specified viewport (initialCenter/initialZoom on MapContainer) is not
+// immediately overwritten by a flyTo to the city center.
+// After the first render, subsequent cityCenter changes DO trigger flyTo (city switch).
+
+describe('PropertyMap — cityCenter effect skips initial mount (URL viewport fix)', () => {
+  const stableMapVpFix = {
+    addLayer: vi.fn(),
+    removeLayer: vi.fn(),
+    flyTo: vi.fn(),
+    fitBounds: vi.fn(),
+    getBounds: vi.fn(() => ({
+      getNorth: vi.fn(() => 14),
+      getSouth: vi.fn(() => 13),
+      getEast: vi.fn(() => 75),
+      getWest: vi.fn(() => 74),
+    })),
+    getZoom: vi.fn(() => 11),
+    getContainer: vi.fn(() => document.body),
+    on: vi.fn(),
+    off: vi.fn(),
+  };
+
+  beforeEach(async () => {
+    stableMapVpFix.flyTo.mockClear();
+    const reactLeaflet = await import('react-leaflet');
+    (reactLeaflet.useMap as ReturnType<typeof vi.fn>).mockReturnValue(stableMapVpFix);
+  });
+
+  it('does NOT call flyTo on initial mount when cityCenter is provided — URL viewport is preserved', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(
+      <PropertyMap
+        listings={[]}
+        cityCenter={[13.3409, 74.7421]}
+        cityZoom={11}
+        // Simulate URL viewport being used as initial MapContainer center
+        initialCenter={[13.2169, 74.7456]}
+        initialZoom={14}
+      />
+    );
+
+    // cityCenter effect must NOT fire on mount — flyTo must not be called
+    // (MapContainer already renders at initialCenter/initialZoom; a flyTo here
+    // would override the URL-specified viewport).
+    expect(stableMapVpFix.flyTo).not.toHaveBeenCalled();
+  });
+
+  it('calls flyTo with new cityCenter when city is switched post-mount', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const udupiCenter: [number, number] = [13.3409, 74.7421];
+    const kundapurCenter: [number, number] = [13.6218, 74.6943];
+
+    const { rerender } = render(
+      <PropertyMap
+        listings={[]}
+        cityCenter={udupiCenter}
+        cityZoom={11}
+      />
+    );
+
+    // Assert mount was correctly skipped BEFORE clearing the mock.
+    // If the hasMountedRef guard were removed, flyTo would have been called here
+    // and the URL-specified viewport would have been silently clobbered.
+    expect(stableMapVpFix.flyTo).not.toHaveBeenCalled();
+
+    // Reset call count so the subsequent rerender assertion counts only post-mount calls.
+    stableMapVpFix.flyTo.mockClear();
+
+    // User switches city — cityCenter changes, hasMountedRef is true → flyTo fires
+    rerender(
+      <PropertyMap
+        listings={[]}
+        cityCenter={kundapurCenter}
+        cityZoom={12}
+      />
+    );
+
+    expect(stableMapVpFix.flyTo).toHaveBeenCalledTimes(1);
+    expect(stableMapVpFix.flyTo).toHaveBeenCalledWith(kundapurCenter, 12, { duration: 1 });
+  });
+});
+
 // ─── MapController reset-zoom behaviour (AC7 / #894) ─────────────────────────
 // Verifies the handledTickRef guard:
 //   - tick=0 on mount → no flyTo from the reset path
