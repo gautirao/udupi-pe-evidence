@@ -13,6 +13,7 @@ import java.util.UUID;
  * @param locality        locality label from the listing record
  * @param primaryImageUrl URL of the lowest-position image, or null if none uploaded
  * @param listingPurpose  "sale" or "rent"
+ * @param bedrooms        bedroom count, or null when not set
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AreaListingCard(
@@ -21,5 +22,6 @@ public record AreaListingCard(
         String propertyType,
         String locality,
         String primaryImageUrl,
-        String listingPurpose
+        String listingPurpose,
+        Integer bedrooms
 ) {}

@@ -34,7 +34,7 @@ export function DiscoverRightPanel({
 
   return (
     <div
-      className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-1 lg:order-2"
+      className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
       {!selectedArea ? (
@@ -139,7 +139,7 @@ export function DiscoverRightPanel({
               <div className="space-y-3 p-4">
                 {[0, 1, 2].map((i) => (
                   <div key={i} data-testid="listing-skeleton">
-                    <Skeleton className="w-full aspect-video rounded-md mb-2" />
+                    <Skeleton className="w-full h-36 rounded-md mb-2" />
                     <Skeleton className="h-4 w-1/3 mb-1" />
                     <Skeleton className="h-5 w-1/2 mb-1" />
                     <Skeleton className="h-4 w-2/3" />
@@ -160,8 +160,8 @@ export function DiscoverRightPanel({
                     className="p-4 hover:bg-accent/50 transition-colors cursor-pointer"
                     onClick={() => navigate(`/listing/${listing.id}`)}
                   >
-                    {/* Full-width image */}
-                    <div className="w-full aspect-video h-36 bg-muted rounded-md mb-3 overflow-hidden">
+                    {/* Full-width image — fixed height, no aspect-video to avoid height conflict */}
+                    <div className="w-full h-36 bg-muted rounded-md mb-3 overflow-hidden">
                       {listing.primaryImageUrl ? (
                         <img
                           src={listing.primaryImageUrl}
@@ -169,18 +169,30 @@ export function DiscoverRightPanel({
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <MapPin className="h-8 w-8 text-muted-foreground/40" />
+                        <div className="w-full h-full flex items-center justify-center bg-muted/60">
+                          <MapPin className="h-8 w-8 text-muted-foreground/30" />
                         </div>
                       )}
                     </div>
 
-                    {/* Property type badge */}
-                    {listing.propertyType && (
-                      <Badge variant="secondary" className="capitalize mb-1.5">
-                        {listing.propertyType}
-                      </Badge>
-                    )}
+                    {/* Badges row: property type + listing purpose */}
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      {listing.propertyType && (
+                        <Badge variant="secondary" className="capitalize text-xs">
+                          {listing.propertyType}
+                        </Badge>
+                      )}
+                      {listing.listingPurpose && (
+                        <Badge variant="outline" className="text-xs">
+                          {listing.listingPurpose === 'sale' ? 'For Sale' : listing.listingPurpose === 'rent' ? 'For Rent' : listing.listingPurpose}
+                        </Badge>
+                      )}
+                      {listing.bedrooms != null && (
+                        <Badge variant="outline" className="text-xs">
+                          {listing.bedrooms} BHK
+                        </Badge>
+                      )}
+                    </div>
 
                     {/* Price */}
                     {listing.pricePaise != null && (
@@ -196,6 +208,9 @@ export function DiscoverRightPanel({
                         {listing.locality}
                       </p>
                     )}
+
+                    {/* View details link */}
+                    <p className="text-xs text-primary mt-1.5">View details →</p>
                   </div>
                 ))}
               </div>

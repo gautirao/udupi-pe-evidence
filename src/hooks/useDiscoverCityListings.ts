@@ -8,6 +8,7 @@ export interface DiscoverCityListingItem {
   locality?: string;
   primaryImageUrl?: string | null;
   listingPurpose?: string;
+  bedrooms?: number | null;
 }
 
 interface DiscoverCityAreaResult {

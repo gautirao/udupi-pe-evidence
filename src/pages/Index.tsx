@@ -441,7 +441,7 @@ export default function Index() {
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
         {/* Map Area */}
-        <div className="lg:w-1/2 h-64 lg:h-full relative order-2 lg:order-1">
+        <div className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1">
           {/* Full-screen loader: only shown after 200 ms to prevent flicker on fast loads.
               The PropertyMap is always rendered (below the overlay) so that the Leaflet
               instance can initialise and fire onReady, which clears the mapReady gate. */}

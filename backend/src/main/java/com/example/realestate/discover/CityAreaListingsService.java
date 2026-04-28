@@ -104,7 +104,7 @@ public class CityAreaListingsService {
 
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images
         // Row shape: area_key, area_name, listing_id (nullable), price_paise, property_type,
-        //            locality, primary_image_url, listing_purpose
+        //            locality, primary_image_url, listing_purpose, bedrooms
         //
         // The LEFT JOIN on property_listings means an area with no LIVE listings (or no listings
         // matching the active filter) still returns one row with listing_id = NULL. Filter clauses
@@ -121,7 +121,8 @@ public class CityAreaListingsService {
                     sub.property_type,
                     sub.locality,
                     sub.primary_image_url,
-                    sub.listing_purpose
+                    sub.listing_purpose,
+                    sub.bedrooms
                 FROM (
                     SELECT
                         a.area_key,
@@ -136,6 +137,7 @@ public class CityAreaListingsService {
                          ORDER BY li.position ASC, li.id ASC
                          LIMIT 1)                                                               AS primary_image_url,
                         pl.listing_purpose,
+                        pl.bedrooms,
                         ROW_NUMBER() OVER (PARTITION BY a.area_key ORDER BY pl.created_at DESC) AS rn
                     FROM areas a
                     JOIN cities c ON c.id = a.city_id
@@ -178,7 +180,8 @@ public class CityAreaListingsService {
                         rs.getString("property_type"),
                         rs.getString("locality"),
                         rs.getString("primary_image_url"),
-                        rs.getString("listing_purpose")
+                        rs.getString("listing_purpose"),
+                        rs.getObject("bedrooms") != null ? rs.getInt("bedrooms") : null
                 ));
             }
             // if rawId is null: area exists but has no LIVE listings — leave the list empty
