@@ -15,7 +15,7 @@ import { useListingSearch } from '@/hooks/useListingSearch';
 import { SchoolResult, useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, X, PenTool, GraduationCap, LogIn, Maximize2 } from 'lucide-react';
+import { Loader2, MapPin, X, PenTool, GraduationCap, Maximize2 } from 'lucide-react';
 import { formatPrice } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
@@ -484,41 +484,26 @@ export default function Index() {
             />
           )}
 
-          {/* Anonymous login CTA — overlaid above map */}
-          {!isAuthenticated && !authLoading && (
-            <div className="absolute top-4 left-4 right-4 z-[1000] flex justify-center">
-              <div className="flex items-center gap-3 px-5 py-3 bg-card/95 backdrop-blur border border-border rounded-lg shadow-md">
-                <LogIn className="h-5 w-5 text-primary flex-shrink-0" />
-                <p className="text-sm text-foreground">
-                  Sign in to see full details and contact brokers
-                </p>
-                <Button asChild size="sm" className="flex-shrink-0">
-                  <Link to="/auth">Sign in</Link>
-                </Button>
-              </div>
+          {/* City chip — top-left, always visible */}
+          <div className="absolute top-4 left-4 z-[1000]">
+            <div className="flex items-center gap-1.5 bg-card rounded-full px-3 py-2 shadow-sm border border-border text-sm font-medium select-none">
+              <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+              <span>{CITY_CONFIG[city]?.label ?? city}</span>
             </div>
-          )}
+          </div>
 
-          {/* Area overview map overlays — city chip, city select, summary stat */}
+          {/* City select — top-right, always visible */}
+          <div className="absolute top-4 right-4 z-[1000] w-44">
+            <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
+          </div>
+
+          {/* Area overview map overlays — summary stat (zoom-gated) */}
           {mapZoom <= AREA_LAYER_MAX_ZOOM && (
             <>
-              {/* City chip — top-left */}
-              <div className="absolute top-4 left-4 z-[1000]">
-                <div className="flex items-center gap-1.5 bg-white rounded-full px-3 py-2 shadow-sm border border-border text-sm font-medium select-none">
-                  <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                  <span>{CITY_CONFIG[city]?.label ?? city}</span>
-                </div>
-              </div>
-
-              {/* City select — top-right */}
-              <div className="absolute top-4 right-4 z-[1000] w-44">
-                <CitySelect value={city} onChange={handleCityChange} className="bg-white shadow-sm" />
-              </div>
-
               {/* Bottom-right summary — total listing count from area rollup */}
               {discoverAreas.length > 0 && (
                 <div className="absolute bottom-16 right-4 z-[1000]">
-                  <div className="bg-white/95 rounded-lg px-4 py-2 shadow-sm text-sm border border-border">
+                  <div className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-sm border border-border">
                     Showing{' '}
                     <strong>
                       {discoverAreas
@@ -534,7 +519,7 @@ export default function Index() {
 
           {/* Locality Quick-Chips (authenticated only) */}
           {isAuthenticated && !isLoading && topLocalities.length > 0 && (
-            <div className="absolute top-3 left-16 right-36 z-[1000] lg:left-3 overflow-x-auto scrollbar-none">
+            <div className="absolute top-3 left-16 right-52 z-[1000] lg:left-3 overflow-x-auto scrollbar-none">
               <div className="flex gap-1.5 flex-nowrap pb-1">
                 {topLocalities.map(({ locality, count }) => {
                   const isActive = filters.localities?.includes(locality) ?? false;
@@ -592,7 +577,7 @@ export default function Index() {
 
           {/* Stats Bar (authenticated only) */}
           {isAuthenticated && (
-            <div className="absolute top-4 right-4 z-[1000]">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000]">
               <Card className="px-3 py-2 bg-card/95 backdrop-blur">
                 <div className="flex items-center gap-4 text-sm">
                   {filters.polygon && (

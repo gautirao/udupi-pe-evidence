@@ -8,10 +8,13 @@ import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 
 // ─── Hoisted mock handles ──────────────────────────────────────
 const mockNavigate = vi.hoisted(() => vi.fn());
+const mockUseAuth = vi.hoisted(() =>
+  vi.fn(() => ({ user: null, isLoading: false, isAdmin: false, isDealer: false })),
+);
 
 // ─── Mocks ────────────────────────────────────────────────────
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: null, isLoading: false, isAdmin: false, isDealer: false }),
+  useAuth: (...args: unknown[]) => mockUseAuth(...args),
 }));
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({
@@ -97,10 +100,29 @@ function renderNoCity() {
   );
 }
 
+function renderAuthenticatedWithCity(city: string) {
+  mockUseAuth.mockReturnValue({
+    user: { id: 'user-1', email: 'test@example.com' },
+    isLoading: false,
+    isAdmin: false,
+    isDealer: true,
+  });
+  return render(
+    <QueryClientProvider client={makeQC()}>
+      <MemoryRouter initialEntries={[`/discover?city=${city}`]}>
+        <Routes>
+          <Route path="/discover" element={<Index />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
 // ─── Tests ────────────────────────────────────────────────────
 describe('Index page — city validity guard', () => {
   beforeEach(() => {
     mockNavigate.mockReset();
+    mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
   });
 
   it('renders fallback UI when an unknown city slug is given', () => {
@@ -134,13 +156,34 @@ describe('Index page — city validity guard', () => {
     renderWithCity('bangalore');
 
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
-    // Normal-path UI should render: anonymous login CTA is always visible to unauthenticated users
-    expect(screen.getByText(/sign in to see full details/i)).toBeInTheDocument();
+    // Normal-path UI should render: city chip is always visible on the map page
+    expect(screen.getAllByText('Bangalore').length).toBeGreaterThan(0);
   });
 
   it('does NOT render fallback UI when no city param is present (defaults to udupi)', () => {
     renderNoCity();
 
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
+  });
+
+  it('authenticated layout: city chip and city select are both present (no occlusion)', () => {
+    // Regression: stats bar was at absolute top-4 right-4, same anchor as CitySelect,
+    // completely occluding the city switcher for authenticated users (AC2 violation).
+    // Stats bar is now centred (left-1/2 -translate-x-1/2) so both elements can coexist.
+    renderAuthenticatedWithCity('udupi');
+
+    // City chip (top-left, always visible — read-only label) and CitySelect both show the
+    // city name; there will be at least 2 occurrences when neither element is suppressed.
+    expect(screen.getAllByText('Udupi').length).toBeGreaterThanOrEqual(2);
+
+    // CitySelect trigger must be present and interactive — rendered regardless of auth state (AC2).
+    // SelectTrigger wraps Radix SelectPrimitive.Trigger which renders a <button role="combobox">.
+    // This assertion fails if CitySelect is hidden, removed, or refactored to an aria-only node.
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+
+    expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
+
+    // Stats bar is rendered for authenticated users
+    expect(screen.getByText(/on map/i)).toBeInTheDocument();
   });
 });
