@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MapFilters } from '../MapFilters';
-import { isNew } from '@/pages/Index';
+import { isNew } from '@/pages/MapDiscovery';
 
 // jsdom doesn't provide ResizeObserver (used by Radix primitives)
 class ResizeObserverStub {

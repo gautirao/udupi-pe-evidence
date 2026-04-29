@@ -10,7 +10,7 @@ import { Loader2 } from "lucide-react";
 import { DISTRICT_TO_CITY_SLUG } from "@/lib/localityUtils";
 
 // Eagerly loaded — these are on the critical path for first paint
-import Index from "./pages/Index";
+import MapDiscovery from "./pages/MapDiscovery";
 import LandingPage from "./pages/LandingPage";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
@@ -115,7 +115,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/" element={<LandingPage />} />
-              <Route path="/discover" element={<Index />} />
+              <Route path="/discover" element={<MapDiscovery />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
               <Route path="/insights" element={<Navigate to="/trends" replace />} />
               <Route path="/trends" element={<Trends />} />

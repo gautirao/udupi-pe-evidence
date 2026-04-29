@@ -16,13 +16,13 @@ import { CITY_CONFIG } from '@/lib/localityUtils';
 import { Card } from '@/components/ui/card';
 import { Loader2, MapPin } from 'lucide-react';
 
-// Re-exported so existing test imports from '@/pages/Index' continue to resolve.
+// Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
 
 /** Zoom-band threshold: area overview rings show at zoom ≤ this; individual listing clusters show above it. */
 const AREA_LAYER_MAX_ZOOM = 12;
 
-export default function Index() {
+export default function MapDiscovery() {
   const { user, isLoading: authLoading } = useAuth();
   const [urlState, urlActions] = useDiscoverUrlState();
   const isAuthenticated = !authLoading && user !== null;
