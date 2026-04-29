@@ -1,6 +1,44 @@
-# Sprint Enriched Specs — Discover & Trends Redesign
+# Sprint Enriched Specs — discover-trends-redesign-2-parity-fixes
+# Model B: milestone "discover-trends-redesign-2-parity-fixes" (#11) — sprint label N/A (single-issue sprint)
+# Enriched: 2026-04-29 (lightweight mode — description has detailed ACs + implementation plan)
+
+---
+
+## [#931] [FE][AUDIT+EPIC] Global UI theme alignment — migrate to mock design system
+
+User modes affected: Anonymous (yes — homepage/Discover visible without auth), Authenticated (yes)
+Entry points: all pages (global token cascade)
+Backend contract: none — frontend-only CSS token change
+
+AC:
+- [ ] `src/index.css` `:root --primary` changes from `16 65% 45%` (terracotta) to dark navy `244 81% 4%` (mock's `#030213`)
+- [ ] `src/index.css` `:root --primary-foreground` changes to white `0 0% 100%`
+- [ ] `src/index.css` `:root --ring` changes from `16 65% 45%` (orange) to neutral gray `0 0% 71%`
+- [ ] `src/index.css` `:root --sidebar-primary` + `--sidebar-ring` updated to dark navy / neutral gray
+- [ ] `.dark` block: `--primary`, `--primary-foreground`, `--ring`, `--sidebar-primary`, `--sidebar-ring` updated to match mock dark-mode values
+- [ ] `--pin-house` remains `16 65% 45%` (intentional orange for house map pins)
+- [ ] `--chart-1` remains `16 65% 45%` (chart data color, semantically independent)
+- [ ] `rg 'text-orange-|bg-orange-|border-orange-' src/` returns only property-type legend hits (already satisfied — no new usages to remove)
+- [ ] No regression on homepage appearance (verified via E2E smoke)
+- [ ] Buttons, chips, focus rings, marker clusters render in dark navy instead of terracotta
+
+Out of scope:
+- TSX/component file changes (cascade handles it — all shadcn components already token-driven)
+- `--accent` (coastal teal) — not orange, no change
+- `--secondary` (sandy beige) — not orange, no change
+- Typography or spacing changes
+- Dark mode visual polish beyond primary/ring/sidebar tokens
+
+Key unknowns (all resolved from codebase investigation):
+- Exact blue value: confirmed `#030213` from `mockup/ReTrends/src/styles/theme.css` (authoritative mock)
+- Ring policy: `--ring` currently equals `--primary` (orange) — changes to neutral gray per mock
+- Property-type legends: all 9 hardcoded `orange-*` usages confirmed intentional (house=orange, plot=orange, commercial in legend maps)
+
+---
+
+# Previous sprint specs (Discover & Trends Redesign — archived)
 # Model B: milestone "Discover & Trends Redesign" (#9) + label "sprint-discover-trends"
-# Enriched: 2026-04-19 (lightweight mode — all issues had 200+ char descriptions with explicit ACs)
+# Enriched: 2026-04-19
 
 ---
 
