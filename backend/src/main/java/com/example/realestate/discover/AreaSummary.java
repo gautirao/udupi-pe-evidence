@@ -12,7 +12,7 @@ public record AreaSummary(
         Double minLon,
         Double maxLat,
         Double maxLon,
-        long listingCount90d,
+        long listingCount,
         Long medianPricePaise,
         String trendDirection,
         String confidenceTier

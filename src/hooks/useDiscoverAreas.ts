@@ -10,7 +10,7 @@ export interface DiscoverArea {
   minLon?: number;
   maxLat?: number;
   maxLon?: number;
-  listingCount90d: number;
+  listingCount: number;
   medianPricePaise?: number;
   trendDirection?: string;
   confidenceTier?: string;

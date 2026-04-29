@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -63,6 +63,11 @@ export default function MapDiscovery() {
   const isLoading =
     authLoading || !mapReady || areasLoading || listingDataLoading
     || (isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM && markersLoading);
+
+  const cityTotal = useMemo(
+    () => discoverAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0),
+    [discoverAreas],
+  );
 
   // Delayed-show spinner: only show after 200 ms to prevent flicker on fast loads.
   useEffect(() => {
@@ -212,20 +217,17 @@ export default function MapDiscovery() {
             />
           )}
 
-          {isAuthenticated && (
+          {isAuthenticated && (filters.polygon || !!selectedSchool) && (
             <MapStatsBar
               filters={filters} selectedSchool={selectedSchool}
-              listingsWithCoords={listingsWithCoords} filteredListings={filteredListings}
               onPolygonClear={handlePolygonCleared}
             />
           )}
 
-          {isAuthenticated && (
-            <MapEmptyGuidance
-              listingsWithCoords={listingsWithCoords}
-              filters={filters} city={city} isLoading={isLoading}
-            />
-          )}
+          <MapEmptyGuidance
+            cityTotal={cityTotal}
+            filters={filters} city={city} isLoading={isLoading}
+          />
         </div>
 
         <DiscoverRightPanel

@@ -75,7 +75,7 @@ class AreaSummaryControllerTest {
                 .andExpect(jsonPath("$.areas", hasSize(1)))
                 .andExpect(jsonPath("$.areas[0].areaKey", is("IN|KA|Udupi|Manipal")))
                 .andExpect(jsonPath("$.areas[0].name", is("Manipal")))
-                .andExpect(jsonPath("$.areas[0].listingCount90d", is(5)))
+                .andExpect(jsonPath("$.areas[0].listingCount", is(5)))
                 .andExpect(jsonPath("$.areas[0].trendDirection", is("rising")));
     }
 
@@ -103,7 +103,7 @@ class AreaSummaryControllerTest {
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.areas[0].listingCount90d", is(0)))
+                .andExpect(jsonPath("$.areas[0].listingCount", is(0)))
                 .andExpect(jsonPath("$.areas[0].medianPricePaise").doesNotExist());
     }
 }

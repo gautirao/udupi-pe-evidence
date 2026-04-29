@@ -152,7 +152,7 @@ export function useDiscoverMapData({
         a.minLat != null && a.minLon != null && a.maxLat != null && a.maxLon != null
           ? ([[a.minLat, a.minLon], [a.maxLat, a.maxLon]] as [[number, number], [number, number]])
           : null,
-      listingCount: a.listingCount90d,
+      listingCount: a.listingCount,
       trendDirection: a.trendDirection as 'rising' | 'falling' | 'stable' | null | undefined,
     }));
   }, [discoverAreasData]);

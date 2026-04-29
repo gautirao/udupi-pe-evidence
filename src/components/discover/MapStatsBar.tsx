@@ -1,14 +1,12 @@
-import { MapPin, PenTool, GraduationCap, X } from 'lucide-react';
+import { PenTool, GraduationCap, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
 
 interface MapStatsBarProps {
   filters: PropertyFilters;
   selectedSchool: SchoolResult | null;
-  listingsWithCoords: (PropertyListing & { images?: PropertyImage[] })[];
-  filteredListings: (PropertyListing & { images?: PropertyImage[] })[];
   onPolygonClear: () => void;
 }
 
@@ -19,8 +17,6 @@ interface MapStatsBarProps {
 export function MapStatsBar({
   filters,
   selectedSchool,
-  listingsWithCoords,
-  filteredListings,
   onPolygonClear,
 }: MapStatsBarProps) {
   return (
@@ -43,18 +39,8 @@ export function MapStatsBar({
                 <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
                 <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 2} km)</span>
               </div>
-              <div className="text-muted-foreground">|</div>
             </>
           )}
-          <div className="flex items-center gap-1.5">
-            <MapPin className="h-4 w-4 text-primary" />
-            <span className="font-medium">{listingsWithCoords.length}</span>
-            <span className="text-muted-foreground">on map</span>
-          </div>
-          <div className="text-muted-foreground">|</div>
-          <div className="text-muted-foreground">
-            {filteredListings.length} total listings
-          </div>
           {filters.polygon && (
             <>
               <div className="text-muted-foreground">|</div>

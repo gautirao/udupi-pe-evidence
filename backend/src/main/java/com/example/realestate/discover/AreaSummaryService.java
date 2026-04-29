@@ -31,7 +31,7 @@ public class AreaSummaryService {
                         nullableDouble(rs.getObject("min_lon")),
                         nullableDouble(rs.getObject("max_lat")),
                         nullableDouble(rs.getObject("max_lon")),
-                        rs.getLong("listing_count_90d"),
+                        rs.getLong("listing_count"),
                         nullableLong(rs.getObject("median_price_paise")),
                         rs.getString("trend_direction"),
                         rs.getString("confidence_tier")
@@ -60,7 +60,7 @@ public class AreaSummaryService {
                 a.min_lon,
                 a.max_lat,
                 a.max_lon,
-                COALESCE(aos.listing_count_90d, 0)  AS listing_count_90d,
+                COALESCE(pl.listing_count, 0)        AS listing_count,
                 aos.median_price_paise,
                 aos.trend_direction,
                 aos.confidence_tier
@@ -69,8 +69,16 @@ public class AreaSummaryService {
             LEFT JOIN area_overview_stats aos
                 ON  aos.area_key   = a.area_key
                 AND aos.area_level = 'locality'
+            LEFT JOIN (
+                SELECT area_key, COUNT(*) AS listing_count
+                FROM property_listings
+                WHERE status = 'LIVE'
+                  AND archived_at IS NULL
+                  AND is_duplicate = false
+                GROUP BY area_key
+            ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
-            ORDER BY COALESCE(aos.listing_count_90d, 0) DESC, a.name
+            ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
             """;
 }

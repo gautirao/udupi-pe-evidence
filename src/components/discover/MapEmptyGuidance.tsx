@@ -1,8 +1,8 @@
-import { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 
 interface MapEmptyGuidanceProps {
-  listingsWithCoords: (PropertyListing & { images?: PropertyImage[] })[];
+  cityTotal: number;
   filters: PropertyFilters;
   city: string;
   isLoading: boolean;
@@ -14,26 +14,23 @@ interface MapEmptyGuidanceProps {
  * after the initial load has completed.
  */
 export function MapEmptyGuidance({
-  listingsWithCoords,
+  cityTotal,
   filters,
   city,
   isLoading,
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
-  const visibleCount = listingsWithCoords.length;
   const cityLabel = CITY_CONFIG[city]?.label ?? city;
   const hasLocalities = (filters.localities?.length ?? 0) > 0;
 
   let message: string | null = null;
 
-  if (visibleCount === 0 && hasLocalities) {
+  if (cityTotal === 0 && hasLocalities) {
     message =
       'No properties found in the selected areas. Try removing a filter or selecting different localities.';
-  } else if (visibleCount === 0) {
+  } else if (cityTotal === 0) {
     message = `No properties listed in ${cityLabel} yet. Try switching to a different city.`;
-  } else if (visibleCount <= 2 && !hasLocalities) {
-    message = `Properties in ${cityLabel} are concentrated in specific areas. Select a locality to zoom in.`;
   }
 
   if (!message) return null;
