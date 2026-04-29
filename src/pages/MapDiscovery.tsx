@@ -64,6 +64,10 @@ export default function MapDiscovery() {
     authLoading || !mapReady || areasLoading || listingDataLoading
     || (isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM && markersLoading);
 
+  // Discover count source of truth: /api/discover/areas (public, no auth).
+  // cityTotal is the sum of per-area listingCount (live LIVE+not-archived+not-duplicate).
+  // Do NOT use auth-gated Supabase arrays (listingsWithCoords / filteredListings)
+  // for public Discover empty-state or city count display.
   const cityTotal = useMemo(
     () => discoverAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0),
     [discoverAreas],
