@@ -56,6 +56,7 @@ export default function MapDiscovery() {
   } = useDiscoverMapData({
     city, selectedArea, filters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
+    markersEnabled: isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM,
   });
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).

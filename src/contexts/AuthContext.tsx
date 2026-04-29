@@ -64,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('*')
+        .select('insights_access_until')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -96,6 +96,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+
+        // INITIAL_SESSION fires on listener setup when a session already exists.
+        // getSession().then() below handles the initial role/profile fetch and owns
+        // isLoading — skip here to avoid a duplicate Supabase call on every page load.
+        if (event === 'INITIAL_SESSION') return;
 
         // Defer role + profile fetch to avoid Supabase client deadlock
         if (session?.user) {

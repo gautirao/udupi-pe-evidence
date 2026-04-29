@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
-import Index from '../Index';
+import MapDiscovery from '../MapDiscovery';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 
 // ─── Area fixture used in areaKey hydration tests ──────────────
@@ -54,7 +54,6 @@ vi.mock('@/hooks/useDiscoverCityListings', () => ({
 
 vi.mock('@/hooks/usePropertyListings', () => ({
   usePropertyListings: vi.fn(() => ({ data: [], isLoading: false, error: null })),
-  useLocalities: vi.fn(() => ({ data: [] })),
 }));
 
 vi.mock('@/hooks/useTrendsOptions', () => ({
@@ -104,7 +103,7 @@ function renderWithCity(city: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[`/discover?city=${city}`]}>
         <Routes>
-          <Route path="/discover" element={<Index />} />
+          <Route path="/discover" element={<MapDiscovery />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -116,7 +115,7 @@ function renderNoCity() {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={['/discover']}>
         <Routes>
-          <Route path="/discover" element={<Index />} />
+          <Route path="/discover" element={<MapDiscovery />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -134,7 +133,7 @@ function renderAuthenticatedWithCity(city: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[`/discover?city=${city}`]}>
         <Routes>
-          <Route path="/discover" element={<Index />} />
+          <Route path="/discover" element={<MapDiscovery />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -148,7 +147,7 @@ function renderWithCityAndAreaKey(city: string, areaKey: string) {
     <QueryClientProvider client={makeQC()}>
       <MemoryRouter initialEntries={[`/discover?city=${city}&areaKey=${encoded}`]}>
         <Routes>
-          <Route path="/discover" element={<Index />} />
+          <Route path="/discover" element={<MapDiscovery />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

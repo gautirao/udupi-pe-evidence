@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useLocalities } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
 import { useDiscoverMarkers } from '@/hooks/useDiscoverMarkers';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas, DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
@@ -21,6 +21,8 @@ export interface UseDiscoverMapDataParams {
   isAuthenticated: boolean;
   /** fitTick is threaded in so activeFocusBounds reacts to refit clicks */
   fitTick: number;
+  /** Pre-computed gate: true only when authenticated AND zoom > AREA_LAYER_MAX_ZOOM. */
+  markersEnabled: boolean;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -56,6 +58,7 @@ export function useDiscoverMapData({
   urlSchoolId,
   isAuthenticated,
   fitTick,
+  markersEnabled,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -92,10 +95,9 @@ export function useDiscoverMapData({
     bedrooms: singleBedrooms,
   });
 
-  const { data: localityOptions = [] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(isCityValid ? city : '');
-  const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city);
+  const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city, null, markersEnabled);
 
   // Map filter state to discover listing params.
   // priceMin/priceMax in PropertyFilters are rupees; backend expects paise.
@@ -195,18 +197,14 @@ export function useDiscoverMapData({
   // ── Derived: locality → areaKey map ──────────────────────────────────────
   // Primary source: area_overview_stats via /api/trends/options (backend-authoritative, limit=50).
   // Secondary: /api/discover/areas (all seeded areas, including zero-listing).
-  // Fallback: property_listings.area_key (sparse backfill).
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
     discoverAreasData?.areas.forEach((a) => {
       if (!m.has(a.name)) m.set(a.name, a.areaKey);
     });
-    localityOptions.forEach((o) => {
-      if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey);
-    });
     return m;
-  }, [trendsOpts, discoverAreasData, localityOptions]);
+  }, [trendsOpts, discoverAreasData]);
 
   // ── Derived: trendsAreaKeys ───────────────────────────────────────────────
   const trendsAreaKeys = useMemo(() => {

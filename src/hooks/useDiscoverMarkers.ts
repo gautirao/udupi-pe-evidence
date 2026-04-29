@@ -30,6 +30,7 @@ function snapBbox(
 export function useDiscoverMarkers(
   city: string,
   bbox?: [number, number, number, number] | null,
+  enabled = true,
 ) {
   const snapped = bbox ? snapBbox(bbox) : null;
 
@@ -43,7 +44,7 @@ export function useDiscoverMarkers(
       }
       return api.get<DiscoverMarkersResponse>(url, { skipAuth: true, signal });
     },
-    enabled: city.length > 0,
+    enabled: enabled && city.length > 0,
     staleTime: 300_000,
   });
 }
