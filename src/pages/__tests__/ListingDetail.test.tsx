@@ -448,7 +448,7 @@ describe('ListingDetail — anonymous gallery lock (issue #835)', () => {
     renderWithListing(makeListing(anonTeaser));
     await userEvent.click(screen.getByRole('button', { name: /next image/i }));
     const cta = screen.getByRole('link', { name: /sign in to view all photos/i });
-    expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
+    expect(cta).toHaveAttribute('href', '/auth?returnTo=%2Flisting%2Flisting-123');
   });
 
   it('logged-in: thumbnail strip is rendered', () => {
@@ -543,7 +543,7 @@ describe('ListingDetail — gallery polish (issue #845)', () => {
       imageCount: 5,
     }));
     const cta = screen.getByRole('link', { name: /sign in to view all photos/i });
-    expect(cta).toHaveAttribute('href', '/auth?returnTo=/listing/listing-123');
+    expect(cta).toHaveAttribute('href', '/auth?returnTo=%2Flisting%2Flisting-123');
   });
 
   // I-4: imageCount === 0 still shows "No images available" (unchanged)
