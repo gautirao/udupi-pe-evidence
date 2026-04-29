@@ -10,6 +10,73 @@ import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { PropertyCard } from './PropertyCard';
 
+interface RightPanelHeaderProps {
+  title: string;
+  onBack?: () => void;
+  filtersContent?: React.ReactNode;
+  actions?: React.ReactNode;
+}
+
+function RightPanelHeader({ title, onBack, filtersContent, actions }: RightPanelHeaderProps) {
+  const hasBack = onBack != null;
+
+  return (
+    <div
+      className={`px-4 py-3 border-b border-border flex-shrink-0 flex items-center ${
+        hasBack ? 'gap-2' : 'justify-between'
+      }`}
+    >
+      {hasBack && (
+        <button
+          onClick={onBack}
+          data-testid="back-button"
+          aria-label="Back to areas"
+          className="p-1 rounded hover:bg-accent/50 transition-colors flex-shrink-0"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+      )}
+      <h2 className={`text-sm font-semibold ${hasBack ? 'truncate flex-1' : ''}`}>{title}</h2>
+      <div className={hasBack ? 'flex items-center gap-1.5 flex-shrink-0' : undefined}>
+        {actions}
+        {filtersContent && (
+          hasBack ? (
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="h-7 w-7">
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span className="sr-only">Filters</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80 p-0">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Filters</SheetTitle>
+                </SheetHeader>
+                {filtersContent}
+              </SheetContent>
+            </Sheet>
+          ) : (
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <SlidersHorizontal className="h-4 w-4" />
+                  Filters
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80 p-0">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Filters</SheetTitle>
+                </SheetHeader>
+                {filtersContent}
+              </SheetContent>
+            </Sheet>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface DiscoverRightPanelProps {
   areas: AreaPoint[];
   selectedArea?: AreaPoint | null;
@@ -43,25 +110,10 @@ export function DiscoverRightPanel({
       {!selectedArea ? (
         <>
           {/* Empty-state header */}
-          <div className="px-4 py-3 border-b border-border flex-shrink-0 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Properties</h2>
-            {filtersContent && (
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" size="sm" className="gap-1.5">
-                    <SlidersHorizontal className="h-4 w-4" />
-                    Filters
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-80 p-0">
-                  <SheetHeader className="sr-only">
-                    <SheetTitle>Filters</SheetTitle>
-                  </SheetHeader>
-                  {filtersContent}
-                </SheetContent>
-              </Sheet>
-            )}
-          </div>
+          <RightPanelHeader
+            title="Properties"
+            filtersContent={filtersContent}
+          />
 
           {/* Empty state body */}
           <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4">
@@ -98,43 +150,19 @@ export function DiscoverRightPanel({
       ) : (
         <>
           {/* Listings header */}
-          <div className="px-4 py-3 border-b border-border flex-shrink-0 flex items-center gap-2">
-            <button
-              onClick={() => onBack?.()}
-              data-testid="back-button"
-              aria-label="Back to areas"
-              className="p-1 rounded hover:bg-accent/50 transition-colors flex-shrink-0"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <h2 className="text-sm font-semibold truncate flex-1">{selectedArea.areaLabel}</h2>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {trendsHref && (
-                <Button asChild variant="ghost" size="sm" className="gap-1.5 text-xs h-7 px-2">
-                  <Link to={trendsHref}>
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Trends
-                  </Link>
-                </Button>
-              )}
-              {filtersContent && (
-                <Sheet>
-                  <SheetTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-7 w-7">
-                      <SlidersHorizontal className="h-3.5 w-3.5" />
-                      <span className="sr-only">Filters</span>
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="right" className="w-80 p-0">
-                    <SheetHeader className="sr-only">
-                      <SheetTitle>Filters</SheetTitle>
-                    </SheetHeader>
-                    {filtersContent}
-                  </SheetContent>
-                </Sheet>
-              )}
-            </div>
-          </div>
+          <RightPanelHeader
+            title={selectedArea.areaLabel}
+            onBack={onBack}
+            filtersContent={filtersContent}
+            actions={trendsHref && (
+              <Button asChild variant="ghost" size="sm" className="gap-1.5 text-xs h-7 px-2">
+                <Link to={trendsHref}>
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Trends
+                </Link>
+              </Button>
+            )}
+          />
 
           {/* Listings body */}
           <div className="flex-1 overflow-y-auto">

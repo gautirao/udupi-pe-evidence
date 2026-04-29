@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, PropertyType, useLocalities } from '@/hooks/usePropertyListings';
+import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage, useLocalities } from '@/hooks/usePropertyListings';
 import { useDiscoverMarkers } from '@/hooks/useDiscoverMarkers';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
@@ -21,6 +21,7 @@ import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
 import { toggleLocality, isAtCap, CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { markerToPropertyListing, cityListingToPropertyListing } from '@/lib/discoverMappers';
 
 export const isNew = (createdAt: string | null | undefined): boolean => {
   if (!createdAt) return false;
@@ -345,53 +346,11 @@ export default function Index() {
     return () => clearTimeout(t);
   }, [isLoading]);
 
-  const now = new Date().toISOString();
   const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!markersData?.markers) return [];
-    return markersData.markers.map((m) => ({
-      id: m.id,
-      latitude: m.lat,
-      longitude: m.lon,
-      property_type: 'other' as PropertyType,
-      price: m.pricePaise != null ? Math.round(m.pricePaise / 100) : null,
-      price_unit: null,
-      title: null,
-      locality: null,
-      land_area: null,
-      land_area_unit: null,
-      built_area: null,
-      built_area_unit: null,
-      bedrooms: null,
-      bathrooms: null,
-      contact_info: null,
-      contact_phone: null,
-      description: null,
-      confidence_score: null,
-      language_detected: null,
-      price_per_cent_paise: null,
-      is_valid: true,
-      is_duplicate: false,
-      status: 'LIVE',
-      created_at: now,
-      updated_at: now,
-      listing_purpose: '',
-      carpet_area: null,
-      carpet_area_unit: null,
-      floor_number: null,
-      total_floors: null,
-      furnishing_status: null,
-      washrooms: null,
-      parking_count: null,
-      road_frontage_ft: null,
-      commercial_usage: null,
-      number_of_units: null,
-      monthly_rent: null,
-      security_deposit_months: null,
-      lock_in_months: null,
-      seller_type: null,
-      raw_post_id: null,
-    }));
-  }, [markersData, now]);
+    const now = new Date().toISOString();
+    return markersData.markers.map((m) => markerToPropertyListing(m, now));
+  }, [markersData]);
 
   const areaListings = useMemo(
     () => cityListingsData?.areas.find((a) => a.areaKey === selectedArea?.areaKey)?.listings ?? [],
@@ -405,52 +364,11 @@ export default function Index() {
   // PropertyType with 'other' fallback since the map icon lookup is best-effort display logic.
   const areaMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!selectedArea || areaListings.length === 0) return [];
+    const now = new Date().toISOString();
     return areaListings
-      .filter((l) => l.lat != null && l.lon != null)
-      .map((l) => ({
-        id: l.id,
-        latitude: l.lat as number,
-        longitude: l.lon as number,
-        property_type: (l.propertyType ?? 'other') as PropertyType,
-        price: l.pricePaise != null ? Math.round(l.pricePaise / 100) : null,
-        price_unit: null,
-        title: l.title ?? null,
-        locality: l.locality ?? null,
-        land_area: l.landArea ?? null,
-        land_area_unit: l.landAreaUnit ?? null,
-        built_area: l.builtArea ?? null,
-        built_area_unit: l.builtAreaUnit ?? null,
-        bedrooms: l.bedrooms ?? null,
-        bathrooms: l.bathrooms ?? null,
-        contact_info: null,
-        contact_phone: null,
-        description: null,
-        confidence_score: null,
-        language_detected: null,
-        price_per_cent_paise: null,
-        is_valid: true,
-        is_duplicate: false,
-        status: 'LIVE',
-        created_at: now,
-        updated_at: now,
-        listing_purpose: l.listingPurpose ?? '',
-        carpet_area: null,
-        carpet_area_unit: null,
-        floor_number: null,
-        total_floors: l.totalFloors ?? null,
-        furnishing_status: l.furnishingStatus ?? null,
-        washrooms: null,
-        parking_count: l.parkingCount ?? null,
-        road_frontage_ft: null,
-        commercial_usage: null,
-        number_of_units: null,
-        monthly_rent: null,
-        security_deposit_months: null,
-        lock_in_months: null,
-        seller_type: null,
-        raw_post_id: null,
-      }));
-  }, [selectedArea, areaListings, now]);
+      .filter((l): l is typeof l & { lat: number; lon: number } => l.lat != null && l.lon != null)
+      .map((l) => cityListingToPropertyListing(l, now));
+  }, [selectedArea, areaListings]);
 
   // Deferred areaKey hydration: resolve pendingAreaKey once discoverAreas have loaded.
   // On mount, if ?areaKey= is present, pendingAreaKeyRef holds it. Once areasLoading

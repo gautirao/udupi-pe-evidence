@@ -14,7 +14,7 @@ import { formatListingId } from '@/lib/listing-id';
 import {
   AlertTriangle, ArrowLeft, MapPin, Ruler, Home, Phone, Calendar, ChevronLeft, ChevronRight,
   ExternalLink, Bath, Building, ImageOff, Share2, Copy, Check, ShieldCheck,
-  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw, Lock,
+  Layers, ParkingCircle, Armchair, Store, IndianRupee, Archive, RotateCcw,
   TrendingUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -34,16 +34,9 @@ import { RERACard } from '@/components/listing/RERACard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 import { NearbySchoolsCard } from '@/components/listing/NearbySchoolsCard';
+import { TrustBadgeCard, DIMENSION_LABELS } from '@/components/listing/TrustBadgeCard';
 import { DISTRICT_TO_CITY_SLUG, DEFAULT_CITY } from '@/lib/localityUtils';
-
-const DIMENSION_LABELS: Record<string, string> = {
-  IDENTITY: 'Identity Verified',
-  LOCATION: 'Location Verified',
-  PHOTOS: 'Photos Verified',
-  AUTHORITY: 'Authority Verified',
-  FIELD: 'Field Verified',
-  DOCUMENTS: 'Documents Reviewed',
-};
+import { SignInGateCard } from '@/components/auth/SignInGateCard';
 
 const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
   land: { label: 'Land', badgeClass: 'bg-green-100 text-green-800 border-0' },
@@ -420,33 +413,23 @@ export default function ListingDetail() {
 
                 {/* Anonymous image lock overlay */}
                 {!user && (currentImageIndex >= 1 || galleryLocked) && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="max-w-sm px-6 text-center text-white">
-                      <Lock className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
-                      <h3 className="mb-2 text-xl font-semibold">Sign in to view all photos</h3>
-                      <p className="mb-4 text-sm text-gray-200">
-                        Get full access to property photos, broker details, and more
-                      </p>
-                      <Button variant="secondary" size="lg" asChild>
-                        <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view all photos</Link>
-                      </Button>
-                    </div>
-                  </div>
+                  <SignInGateCard
+                    variant="overlay"
+                    heading="Sign in to view all photos"
+                    description="Get full access to property photos, broker details, and more"
+                    ctaLabel="Sign in to view all photos"
+                    returnTo={`/listing/${id}`}
+                  />
                 )}
               </>
             ) : !hasImages && effectiveImageCount > 0 && !user ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <div className="max-w-sm px-6 text-center text-white">
-                  <Lock className="mx-auto mb-4 h-12 w-12" aria-hidden="true" />
-                  <h3 className="mb-2 text-xl font-semibold">Sign in to view all photos</h3>
-                  <p className="mb-4 text-sm text-gray-200">
-                    Get full access to property photos, broker details, and more
-                  </p>
-                  <Button variant="secondary" size="lg" asChild>
-                    <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view all photos</Link>
-                  </Button>
-                </div>
-              </div>
+              <SignInGateCard
+                variant="overlay"
+                heading="Sign in to view all photos"
+                description="Get full access to property photos, broker details, and more"
+                ctaLabel="Sign in to view all photos"
+                returnTo={`/listing/${id}`}
+              />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <div className="text-center text-muted-foreground">
@@ -800,70 +783,9 @@ export default function ListingDetail() {
             />
 
             {/* Trust badges (RE-156) */}
-            {trustData && trustData.badges.length > 0 && (() => {
-              const DIMENSION_TOOLTIPS: Record<string, string> = {
-                IDENTITY: 'The person marketing this property has verified their phone number with us.',
-                LOCATION: 'The listing agent visited this property and confirmed its location within 200m.',
-                PHOTOS: 'Photos of this property were captured on-site and checked for duplicates.',
-                AUTHORITY: 'The agent has confirmed their authorisation to market this property.',
-                FIELD: 'A field agent physically visited this property.',
-                DOCUMENTS: 'Supporting documents for this property have been reviewed.',
-              };
-              const REALNESS_TYPES = new Set(['LOCATION', 'PHOTOS', 'FIELD']);
-              const AUTHORISATION_TYPES = new Set(['IDENTITY', 'AUTHORITY', 'DOCUMENTS']);
-              const realnessBadges = trustData.badges.filter((b) => REALNESS_TYPES.has(b.dimensionType));
-              const authorisationBadges = trustData.badges.filter((b) => AUTHORISATION_TYPES.has(b.dimensionType));
-
-              const BadgeChip = ({ badge }: { badge: typeof trustData.badges[0] }) => (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 cursor-default"
-                      >
-                        {DIMENSION_LABELS[badge.dimensionType] ?? badge.dimensionType}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="max-w-xs">
-                        {DIMENSION_TOOLTIPS[badge.dimensionType] ?? 'This aspect of the listing has been verified.'}
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              );
-
-              return (
-                <Card>
-                  <CardContent className="p-4">
-                    <h3 className="font-semibold mb-3 flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-green-600" aria-hidden="true" />
-                      Verified by Udupi Properties
-                    </h3>
-                    {realnessBadges.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Has this listing been verified to exist?</p>
-                        <div className="flex flex-wrap gap-2">
-                          {realnessBadges.map((badge) => (
-                            <BadgeChip key={badge.dimensionType} badge={badge} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {authorisationBadges.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground mb-1.5">Has this person been verified as authorised to market it?</p>
-                        <div className="flex flex-wrap gap-2">
-                          {authorisationBadges.map((badge) => (
-                            <BadgeChip key={badge.dimensionType} badge={badge} />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })()}
+            {trustData && trustData.badges.length > 0 && (
+              <TrustBadgeCard badges={trustData.badges} />
+            )}
 
             {/* Land listings show location panel above photos — skip here */}
             {listing.propertyType !== 'land' && (
@@ -927,15 +849,12 @@ export default function ListingDetail() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-primary/20 bg-primary/5">
-                <CardContent className="p-4 text-center">
-                  <Lock className="h-6 w-6 mx-auto mb-2 text-primary/60" aria-hidden="true" />
-                  <p className="text-sm text-muted-foreground mb-3">Sign in to view full details</p>
-                  <Button className="w-full" asChild>
-                    <Link to={`/auth?returnTo=/listing/${id}`}>Sign in to view full details</Link>
-                  </Button>
-                </CardContent>
-              </Card>
+              <SignInGateCard
+                variant="card"
+                description="Sign in to view full details"
+                ctaLabel="Sign in to view full details"
+                returnTo={`/listing/${id}`}
+              />
             )}
 
             {/* Locality Insights */}
