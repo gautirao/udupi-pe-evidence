@@ -1,25 +1,23 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Slider } from '@/components/ui/slider';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LocalityOption, PropertyFilters, PropertyListing, PropertyType, useLocalities, usePriceRange } from '@/hooks/usePropertyListings';
+import { PropertyFilters, PropertyListing, LocalityOption, useLocalities } from '@/hooks/usePropertyListings';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
-import { formatPrice } from '@/lib/formatters';
-import { toggleLocality, isAtCap, computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
-import { CalendarIcon, Filter, MapPin, Search, X, ChevronDown, TrendingUp } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+import { computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
+import { Filter, Search, TrendingUp, X } from 'lucide-react';
 import { SchoolSearchFilter } from '@/components/map/SchoolSearchFilter';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
+import { PropertyTypeFilter } from './filters/PropertyTypeFilter';
+import { BedroomFilter } from './filters/BedroomFilter';
+import { SellerTypeFilter } from './filters/SellerTypeFilter';
+import { LocalityFilter } from './filters/LocalityFilter';
+import { PriceRangeFilter } from './filters/PriceRangeFilter';
+import { ListingStatusFilter } from './filters/ListingStatusFilter';
+import { DateRangeFilter } from './filters/DateRangeFilter';
 
 interface MapFiltersProps {
   filters: PropertyFilters;
@@ -33,21 +31,9 @@ interface MapFiltersProps {
   city: string;
   onCityChange: (city: string) => void;
   allListings: PropertyListing[];
-  /** areaKey values for all selected localities that have a listing with a non-null areaKey.
-   *  Controls visibility of the "View Trends" button (shown when ≥1 key present). */
+  /** areaKey values for selected localities. Controls "View Trends" button visibility. */
   trendsAreaKeys?: string[];
 }
-
-const propertyTypes: { value: PropertyType; label: string }[] = [
-  { value: 'land', label: 'Land' },
-  { value: 'house', label: 'House' },
-  { value: 'apartment', label: 'Apartment' },
-  { value: 'commercial', label: 'Commercial' },
-  { value: 'commercial_building', label: 'Comm. Building' },
-  { value: 'warehouse', label: 'Warehouse' },
-  { value: 'commercial_land', label: 'Comm. Land' },
-  { value: 'other', label: 'Other' },
-];
 
 export function MapFilters({
   filters,
@@ -64,97 +50,34 @@ export function MapFilters({
   trendsAreaKeys = [],
 }: MapFiltersProps) {
   const navigate = useNavigate();
-  const { data: localityOptions = [] } = useLocalities(city);
+  const { data: localityOptions = [] as LocalityOption[] } = useLocalities(city);
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
-  const { data: priceRange } = usePriceRange();
-  const [localityOpen, setLocalityOpen] = useState(false);
 
-  // Primary source: area_overview_stats via /api/trends/options (backend-authoritative).
-  // Fallback: property_listings.area_key (sparse — covers localities missing from stats).
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
-    localityOptions.forEach((o) => {
-      if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey);
-    });
+    localityOptions.forEach((o) => { if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey); });
     return m;
   }, [trendsOpts, localityOptions]);
 
   const localityNames = useMemo(() => localityOptions.map((o) => o.locality), [localityOptions]);
 
-  // areaKeys for selected localities — resolved from the merged map
   const selectedAreaKeys = useMemo(
-    () =>
-      (filters.localities ?? []).flatMap((loc) => {
-        const k = localityToAreaKey.get(loc);
-        return k ? [k] : [];
-      }),
-    [filters.localities, localityToAreaKey]
+    () => (filters.localities ?? []).flatMap((loc) => { const k = localityToAreaKey.get(loc); return k ? [k] : []; }),
+    [filters.localities, localityToAreaKey],
   );
-
-  const handlePropertyTypeChange = (type: PropertyType, checked: boolean) => {
-    const currentTypes = filters.propertyTypes || [];
-    const newTypes = checked
-      ? [...currentTypes, type]
-      : currentTypes.filter((t) => t !== type);
-    onFiltersChange({ ...filters, propertyTypes: newTypes.length > 0 ? newTypes : undefined });
-  };
-
-  const handleLocalitySelect = (locality: string) => {
-    const result = toggleLocality(filters.localities, locality);
-    if (result === null) return; // at cap, toast already shown
-    onFiltersChange({ ...filters, localities: result });
-  };
 
   const nearbyLocalities = useMemo(() => {
     if (!filters.localities || filters.localities.length === 0) return [];
     const lastSelected = filters.localities[filters.localities.length - 1];
-
-    // Try haversine-based nearby first (30km radius)
     const nearby = computeNearbyLocalities(allListings, lastSelected, 30).filter(
-      (loc) => !filters.localities?.includes(loc)
+      (loc) => !filters.localities?.includes(loc),
     );
-
     if (nearby.length > 0) return nearby;
-
-    // Fallback: show other available localities not already selected
-    const available = localityNames.filter((loc) => !filters.localities?.includes(loc));
-    return available.slice(0, 5);
+    return localityNames.filter((loc) => !filters.localities?.includes(loc)).slice(0, 5);
   }, [filters.localities, allListings, localityNames]);
 
-  const handlePriceChange = (values: number[]) => {
-    onFiltersChange({
-      ...filters,
-      priceMin: values[0] > (priceRange?.min || 0) ? values[0] : undefined,
-      priceMax: values[1] < (priceRange?.max || 10000000) ? values[1] : undefined,
-    });
-  };
-
-  const clearFilters = () => {
-    onFiltersChange({});
-  };
-
-  const handleBedroomToggle = (value: number) => {
-    const current = filters.bedrooms || [];
-    const next = current.includes(value) ? current.filter((b) => b !== value) : [...current, value];
-    onFiltersChange({ ...filters, bedrooms: next.length > 0 ? next : undefined });
-  };
-
-  const handleSellerTypeToggle = (value: string) => {
-    const current = filters.sellerTypes || [];
-    // "Broker" toggle controls both 'broker' and 'builder' seller types
-    const valuesToToggle = value === 'broker' ? ['broker', 'builder'] : [value];
-    const isActive = valuesToToggle.some((v) => current.includes(v));
-    const next = isActive
-      ? current.filter((s) => !valuesToToggle.includes(s))
-      : [...current, ...valuesToToggle];
-    onFiltersChange({ ...filters, sellerTypes: next.length > 0 ? next : undefined });
-  };
-
-  const handleListingStatusToggle = (key: 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove') => {
-    onFiltersChange({ ...filters, [key]: filters[key] ? undefined : true });
-  };
-
+  // 16-condition predicate — kept centralized so the polygon check is never silently lost.
   const hasActiveFilters =
     !!searchQuery ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
@@ -181,16 +104,14 @@ export function MapFilters({
             Filters
           </CardTitle>
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={() => { clearFilters(); onSearchChange(''); onSchoolSelect(null); onSchoolBoardFilterChange([]); }} className="h-8 px-2">
+            <Button variant="ghost" size="sm" onClick={() => { onFiltersChange({}); onSearchChange(''); onSchoolSelect(null); onSchoolBoardFilterChange([]); }} className="h-8 px-2">
               <X className="h-3.5 w-3.5 mr-1" />
               Clear
             </Button>
           )}
         </div>
         {(selectedAreaKeys.length > 0 || trendsAreaKeys.length > 0) && (
-          <Button
-            size="sm"
-            className="w-full mt-2 gap-1.5 text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
+          <Button size="sm" className="w-full mt-2 gap-1.5 text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               const keysToUse = selectedAreaKeys.length > 0 ? selectedAreaKeys : trendsAreaKeys;
               const params = new URLSearchParams({ city });
@@ -205,13 +126,10 @@ export function MapFilters({
       </CardHeader>
 
       <CardContent className="flex-1 overflow-y-auto scrollbar-thin space-y-6">
-        {/* City Switcher */}
         <div className="space-y-2">
           <Label className="text-sm font-medium">City</Label>
           <Select value={city} onValueChange={onCityChange}>
-            <SelectTrigger className="w-full h-9 text-sm">
-              <SelectValue placeholder="Select city" />
-            </SelectTrigger>
+            <SelectTrigger className="w-full h-9 text-sm"><SelectValue placeholder="Select city" /></SelectTrigger>
             <SelectContent>
               {Object.entries(CITY_CONFIG).map(([key, config]) => (
                 <SelectItem key={key} value={key}>{config.label}</SelectItem>
@@ -220,288 +138,32 @@ export function MapFilters({
           </Select>
         </div>
 
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search listings..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-8 h-9 text-sm"
-          />
+          <Input placeholder="Search listings..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} className="pl-8 h-9 text-sm" />
           {searchQuery && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
-              onClick={() => onSearchChange('')}
-            >
+            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6" onClick={() => onSearchChange('')}>
               <X className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>
 
-        {/* School Search */}
         <SchoolSearchFilter
           selectedSchool={selectedSchool}
           onSchoolSelect={onSchoolSelect}
           radiusKm={filters.schoolRadiusKm ?? 2}
-          onRadiusChange={(radius) =>
-            onFiltersChange({ ...filters, schoolRadiusKm: radius })
-          }
+          onRadiusChange={(radius) => onFiltersChange({ ...filters, schoolRadiusKm: radius })}
           boardFilter={schoolBoardFilter}
           onBoardFilterChange={onSchoolBoardFilterChange}
         />
 
-        {/* Property Type */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Property Type</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {propertyTypes.map((type) => (
-              <div key={type.value} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`type-${type.value}`}
-                  checked={filters.propertyTypes?.includes(type.value) || false}
-                  onCheckedChange={(checked) =>
-                    handlePropertyTypeChange(type.value, checked as boolean)
-                  }
-                />
-                <Label
-                  htmlFor={`type-${type.value}`}
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  {type.label}
-                </Label>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bedrooms (BHK) */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Bedrooms (BHK)</Label>
-          <div className="flex gap-2 flex-wrap">
-            {[{ label: '1', value: 1 }, { label: '2', value: 2 }, { label: '3', value: 3 }, { label: '4+', value: 4 }].map(({ label, value }) => {
-              const active = filters.bedrooms?.includes(value) || false;
-              return (
-                <Button
-                  key={value}
-                  variant={active ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-8 px-3 text-sm"
-                  onClick={() => handleBedroomToggle(value)}
-                >
-                  {label}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Listed By */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Listed By</Label>
-          <div className="flex gap-2 flex-wrap">
-            {[{ label: 'Owner', value: 'owner' }, { label: 'Broker', value: 'broker' }].map(({ label, value }) => {
-              const active = value === 'broker'
-                ? (filters.sellerTypes?.includes('broker') || filters.sellerTypes?.includes('dealer') || false)
-                : (filters.sellerTypes?.includes(value) || false);
-              return (
-                <Button
-                  key={value}
-                  variant={active ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-8 px-3 text-sm"
-                  aria-pressed={active}
-                  onClick={() => handleSellerTypeToggle(value)}
-                >
-                  {label}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Locality */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Locality</Label>
-          <Popover open={localityOpen} onOpenChange={setLocalityOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                role="combobox"
-                className="w-full justify-between h-9 text-sm"
-              >
-                <span className="truncate">
-                  {filters.localities && filters.localities.length > 0
-                    ? `${filters.localities.length} selected`
-                    : 'Select localities'}
-                </span>
-                <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[250px] p-0" align="start">
-              <Command>
-                <CommandInput placeholder="Search localities..." className="h-9" />
-                <CommandList>
-                  <CommandEmpty>No locality found.</CommandEmpty>
-                  <CommandGroup>
-                    {localityOptions.map(({ locality }) => (
-                      <CommandItem
-                        key={locality}
-                        value={locality}
-                        disabled={isAtCap(filters.localities) && !filters.localities?.includes(locality)}
-                        onSelect={() => handleLocalitySelect(locality)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={filters.localities?.includes(locality) || false}
-                            className="pointer-events-none"
-                          />
-                          <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="truncate">{locality}</span>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-          {filters.localities && filters.localities.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {filters.localities.map((locality) => (
-                <Badge
-                  key={locality}
-                  className="text-xs cursor-pointer bg-blue-100 text-blue-700 hover:bg-blue-200 border-0"
-                  onClick={() => handleLocalitySelect(locality)}
-                >
-                  {locality}
-                  <X className="h-3 w-3 ml-1" />
-                </Badge>
-              ))}
-            </div>
-          )}
-          {filters.localities && filters.localities.length > 0 && nearbyLocalities.length > 0 && (
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground mb-1">Suggested areas</p>
-              <div className="flex flex-wrap gap-1">
-                {nearbyLocalities.map((loc) => (
-                  <Button
-                    key={loc}
-                    variant="outline"
-                    size="sm"
-                    className="h-6 text-xs"
-                    disabled={isAtCap(filters.localities)}
-                    onClick={() => handleLocalitySelect(loc)}
-                  >
-                    {loc}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Price Range */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Price Range</Label>
-          {priceRange && (
-            <>
-              <Slider
-                min={priceRange.min}
-                max={priceRange.max}
-                step={Math.max(1, Math.floor((priceRange.max - priceRange.min) / 100))}
-                value={[filters.priceMin ?? priceRange.min, filters.priceMax ?? priceRange.max]}
-                onValueChange={handlePriceChange}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{formatPrice(filters.priceMin ?? priceRange.min)}</span>
-                <span>{formatPrice(filters.priceMax ?? priceRange.max)}</span>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Listing Status */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Listing Status</Label>
-          <div className="flex gap-2 flex-wrap">
-            {([
-              { key: 'newToMarket' as const, label: 'New to Market' },
-              { key: 'backOnMarket' as const, label: 'Back on Market' },
-              { key: 'reraRegistered' as const, label: 'RERA Registered' },
-              { key: 'readyToMove' as const, label: 'Ready to Move' },
-            ]).map(({ key, label }) => {
-              const active = !!filters[key];
-              return (
-                <Button
-                  key={key}
-                  variant={active ? 'default' : 'outline'}
-                  size="sm"
-                  className="h-8 px-3 text-sm"
-                  aria-pressed={active}
-                  onClick={() => handleListingStatusToggle(key)}
-                >
-                  {label}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Date Range */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Date Posted</Label>
-          <div className="grid grid-cols-2 gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'h-9 text-xs justify-start text-left font-normal',
-                    !filters.dateFrom && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {filters.dateFrom ? format(filters.dateFrom, 'MMM d') : 'From'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={filters.dateFrom}
-                  onSelect={(date) => onFiltersChange({ ...filters, dateFrom: date })}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    'h-9 text-xs justify-start text-left font-normal',
-                    !filters.dateTo && 'text-muted-foreground'
-                  )}
-                >
-                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {filters.dateTo ? format(filters.dateTo, 'MMM d') : 'To'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={filters.dateTo}
-                  onSelect={(date) => onFiltersChange({ ...filters, dateTo: date })}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-        </div>
+        <PropertyTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
+        <BedroomFilter filters={filters} onFiltersChange={onFiltersChange} />
+        <SellerTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
+        <LocalityFilter filters={filters} onFiltersChange={onFiltersChange} localityOptions={localityOptions} nearbyLocalities={nearbyLocalities} />
+        <PriceRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
+        <ListingStatusFilter filters={filters} onFiltersChange={onFiltersChange} />
+        <DateRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
       </CardContent>
     </Card>
   );
