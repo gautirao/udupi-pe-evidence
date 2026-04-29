@@ -40,8 +40,8 @@ function makeAreaCard(area: AreaPoint): L.DivIcon {
       : '';
 
   return L.divIcon({
-    className: '',
-    html: `<div style="
+    className: 'area-marker',
+    html: `<div data-testid="area-marker" style="
       display:inline-block;
       transform:translate(-50%,-50%);
       background:white;

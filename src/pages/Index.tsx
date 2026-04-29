@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -37,7 +37,7 @@ export default function Index() {
   const {
     filters, selectedArea, panToArea, mapZoom, mapReady, showLoader,
     selectedSchool, schoolBoardFilter, city, fitTick, resetMapTick,
-    pendingAreaKeyRef, initialViewportRef,
+    pendingAreaKeyRef, initialViewportRef, resolveSignal,
     setFilters, setSelectedArea, setPanToArea, setMapReady, setMapZoom,
     setFitTick, setShowLoader, setSchoolBoardFilter, setSelectedSchool,
     handleCityChange, handleSchoolSelect, handleFiltersChange,
@@ -84,6 +84,13 @@ export default function Index() {
     }
   }, [urlSchoolId, urlRadiusKm, schoolSearchResults, selectedSchool, setSelectedSchool, setFilters]);
 
+  // Refs kept current every render so the resolution effect can read them without
+  // adding unstable objects to its dep array.
+  const cityRef = useRef(city);
+  cityRef.current = city;
+  const urlCityRef = useRef(urlState.city ?? city);
+  urlCityRef.current = urlState.city ?? city;
+
   // Deferred areaKey hydration — resolve once area data loads (Rule 2).
   // Lives here because it references refs from useDiscoverPageState AND data from useDiscoverMapData.
   const { deselectArea } = urlActions;
@@ -96,11 +103,15 @@ export default function Index() {
     if (match) {
       setSelectedArea(match);
       if (!initialViewportRef.current) setPanToArea(match);
+    } else if (cityRef.current !== urlCityRef.current) {
+      // Local city (drives the areas query) hasn't synced with the URL city yet —
+      // discoverAreas may be stale. Re-arm and wait for the re-fetch to complete.
+      pendingAreaKeyRef.current = pending;
     } else {
       deselectArea();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areasLoading, discoverAreas, deselectArea]);
+  }, [areasLoading, discoverAreas, deselectArea, resolveSignal]);
 
   if (!isCityValid) return <CityNotSupported city={city} />;
 

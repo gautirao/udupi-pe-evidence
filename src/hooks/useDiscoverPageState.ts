@@ -27,6 +27,7 @@ export interface UseDiscoverPageStateResult {
   // Refs exposed for orchestration use in Index.tsx
   pendingAreaKeyRef: React.MutableRefObject<string | null>;
   initialViewportRef: React.MutableRefObject<DiscoverUrlState['viewport']>;
+  resolveSignal: number;
 
   // Setters needed by Index.tsx (deferred areaKey hydration and school restore live there)
   setSelectedArea: React.Dispatch<React.SetStateAction<AreaPoint | null>>;
@@ -84,6 +85,10 @@ export function useDiscoverPageState({
 
   // pendingAreaKey: holds the areaKey from URL until discoverAreasData has loaded.
   const pendingAreaKeyRef = useRef<string | null>(urlState.areaKey);
+  // Incremented whenever pendingAreaKeyRef is re-armed (Forward/popstate nav) so the
+  // Index.tsx resolution effect re-fires without putting urlState.areaKey in its deps
+  // (which would cause a race: effect fires before the new city's discoverAreas loads).
+  const [resolveSignal, setResolveSignal] = useState(0);
 
   // Capture the initial viewport at mount time. Used in the deferred areaKey hydration
   // effect in Index.tsx to decide whether to pan the map — avoiding adding mutable
@@ -92,15 +97,33 @@ export function useDiscoverPageState({
 
   // ── Effects ──────────────────────────────────────────────────────────────
 
+  // Sync local city state with URL city on browser Back/Forward navigation.
+  // handleCityChange keeps them in sync on user-driven changes; this covers popstate
+  // so that useDiscoverMapData re-fetches for the correct city after history traversal.
+  useEffect(() => {
+    const urlCity = urlState.city || DEFAULT_CITY;
+    if (urlCity !== city) {
+      setCity(urlCity);
+      setMapZoom(CITY_CONFIG[urlCity]?.zoom ?? 11);
+      setFilters((prev) => ({ ...prev, localities: undefined }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.city]);
+
   // Sync selectedArea with URL areaKey for browser Back/Forward navigation.
-  // When the user presses Back after selecting an area, useSearchParams reflects the
-  // updated URL (areaKey gone) but selectedArea React state is NOT cleared automatically
-  // because handleAreaBack() was never called. This effect closes that gap.
+  // Back (areaKey removed): clear selectedArea. Forward (areaKey restored): re-arm
+  // pendingAreaKeyRef so the Index.tsx resolution effect can re-match it against areas data.
   const urlAreaKey = urlState.areaKey;
   useEffect(() => {
-    if (!urlAreaKey && selectedArea !== null) {
-      setSelectedArea(null);
-      setPanToArea(null);
+    if (!urlAreaKey) {
+      if (selectedArea !== null) {
+        setSelectedArea(null);
+        setPanToArea(null);
+      }
+      pendingAreaKeyRef.current = null;
+    } else if (urlAreaKey !== selectedArea?.areaKey) {
+      pendingAreaKeyRef.current = urlAreaKey;
+      setResolveSignal((s) => s + 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlAreaKey]);
@@ -211,6 +234,7 @@ export function useDiscoverPageState({
     resetMapTick,
     pendingAreaKeyRef,
     initialViewportRef,
+    resolveSignal,
     setFilters,
     setSelectedArea,
     setPanToArea,
