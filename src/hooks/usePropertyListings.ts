@@ -93,7 +93,15 @@ export interface PropertyListing {
 export interface PropertyFilters {
   propertyTypes?: PropertyType[];
   localities?: string[];
-  /** City filter for scoping localities (e.g. 'udupi', 'kundapur', 'mangalore') */
+  /**
+   * City filter — lowercase slug (e.g. 'udupi', 'bangalore', 'kundapur').
+   * When set, listings whose areaKey is null OR whose city segment
+   * (areaKey.split('|')[2]) does not match are excluded. This is intentional:
+   * listings without a populated areaKey have no city attribution and must not
+   * appear in per-city UI (e.g. Discover locality chips).
+   * Do NOT add a sparse-coverage fallback — cross-city data is worse than empty.
+   * Requires areaKey to be populated for all LIVE listings in the target city.
+   */
   city?: string;
   priceMin?: number;
   priceMax?: number;
@@ -345,6 +353,21 @@ export function usePropertyListings(filters?: PropertyFilters) {
         results = results.filter((l) => {
           if (l.latitude == null || l.longitude == null) return false;
           return haversineKm(schoolLat, schoolLon, l.latitude, l.longitude) <= radiusKm;
+        });
+      }
+
+      // City filter: scope listings to the selected city using the area_key format.
+      // area_key format: country|region|city|locality (e.g. IN|KA|Udupi|Manipal).
+      // Listings with null areaKey are intentionally excluded — they have no city
+      // attribution and including them would re-introduce cross-city UI leakage.
+      // Do NOT copy the sparse-coverage fallback from useLocalities here: for Discover
+      // chips, returning nothing is correct; returning wrong-city data is not.
+      if (filters?.city) {
+        const targetCity = filters.city.toLowerCase();
+        results = results.filter((l) => {
+          if (!l.areaKey) return false;
+          const parts = l.areaKey.split('|');
+          return (parts[2] ?? '').toLowerCase() === targetCity;
         });
       }
 

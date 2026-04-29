@@ -64,12 +64,18 @@ export function useDiscoverMapData({
   const cityCenter = useMemo(() => CITY_CONFIG[city]?.center, [city]);
   const cityZoom = useMemo(() => CITY_CONFIG[city]?.zoom, [city]);
 
+  // Merge city into filters so the React Query key changes on city switch and the
+  // client-side city filter in usePropertyListings scopes results correctly.
+  // `filters` is a stable useState ref from useDiscoverPageState — only changes
+  // on user-driven filter actions, so this memo does not fire on every render.
+  const filtersWithCity = useMemo(() => ({ ...filters, city }), [filters, city]);
+
   // ── Data hooks ───────────────────────────────────────────────────────────
   const {
     data: listings = [],
     isLoading: listingsLoading,
     error: listingsError,
-  } = usePropertyListings(filters);
+  } = usePropertyListings(filtersWithCity);
 
   const singleLocality = filters.localities?.length === 1 ? filters.localities[0] : undefined;
   const singlePropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
