@@ -151,6 +151,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "command": "INPUT=$(cat); CMD=$(printf '%s' \"$INPUT\" | jq -r '.tool_input.command // \"\"'); if ! printf '%s' \"$CMD\" | grep -qE '(^|[[:space:]])gh pr merge '; then exit 0; fi; PR=$(printf '%s' \"$CMD\" | sed 's/.*gh pr merge[[:space:]]*//' | grep -oE '^[0-9]+'); if [ -z \"$PR\" ]; then exit 0; fi; DATE=$(date +%Y-%m-%d); ISSUE=$(gh pr view \"$PR\" --json closingIssuesReferences --jq '.closingIssuesReferences[0].number | tostring' 2>/dev/null || echo \"UNKNOWN\"); LINES=$(gh pr view \"$PR\" --json additions,deletions --jq '(.additions + .deletions)' 2>/dev/null || echo \"UNKNOWN\"); LOG=\"/Users/gouthamrao/Documents/workspaces/lovable/udupi-property-explorer/.claude/TOKEN_EFFICIENCY_LOG.md\"; printf '| %s | #%s | #%s | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | %s | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |\\n' \"$DATE\" \"$ISSUE\" \"$PR\" \"$LINES\" >> \"$LOG\" 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "matcher": "",
