@@ -4,6 +4,7 @@ import {
   ChevronLeft, MapPin, SlidersHorizontal, TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -117,16 +118,11 @@ export function DiscoverRightPanel({
 
           {/* Empty state body */}
           <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                <MapPin className="h-8 w-8 text-muted-foreground/40" />
-              </div>
-              <h3 className="font-semibold text-base text-foreground mb-2">
-                Select an area to explore
-              </h3>
-              <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
-                Click on an area marker on the map to see available properties
-              </p>
+            <EmptyState
+              icon={<MapPin className="h-8 w-8 text-muted-foreground/40" />}
+              heading="Select an area to explore"
+              description="Click on an area marker on the map to see available properties"
+            >
               {areas.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">Quick select:</p>
@@ -144,7 +140,7 @@ export function DiscoverRightPanel({
                   </div>
                 </div>
               )}
-            </div>
+            </EmptyState>
           </div>
         </>
       ) : (
