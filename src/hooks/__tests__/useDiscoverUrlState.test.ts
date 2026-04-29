@@ -163,6 +163,51 @@ describe('useDiscoverUrlState — deselectArea', () => {
 
     expect(result.current[0].areaKey).toBeNull();
   });
+
+  it('clears lat, lon, and zoom when deselecting an area', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal&lat=13.34090&lon=74.74210&zoom=14',
+      ),
+    });
+
+    // Confirm the initial viewport is present
+    expect(result.current[0].viewport).not.toBeNull();
+
+    act(() => {
+      result.current[1].deselectArea();
+    });
+
+    // After deselection, viewport must be cleared
+    expect(result.current[0].viewport).toBeNull();
+    expect(result.current[0].areaKey).toBeNull();
+  });
+
+  it('cancels a pending viewportTimer so it cannot re-write stale viewport after deselectArea', () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useDiscoverUrlState(), {
+        wrapper: wrapper(
+          '/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal&lat=13.34090&lon=74.74210&zoom=14',
+        ),
+      });
+
+      act(() => {
+        // Enqueue a viewport update (debounced 300 ms) — simulates user panning
+        // just before clicking Back
+        result.current[1].reportViewport({ lat: 13.34, lon: 74.74, zoom: 14 });
+        // Immediately deselect — must cancel the pending timer
+        result.current[1].deselectArea();
+        // Fire any remaining timers — the viewport timer must already be cancelled
+        vi.runAllTimers();
+      });
+
+      // Viewport must remain null — the cancelled timer must not have re-written it
+      expect(result.current[0].viewport).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('useDiscoverUrlState — setFiltersCommitted', () => {

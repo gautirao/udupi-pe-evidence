@@ -230,10 +230,26 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   );
 
   const deselectArea = useCallback(() => {
+    // Cancel any pending viewport debounce so it cannot re-write stale lat/lon/zoom
+    // back into the URL after we clear them below (race: user was panning just before
+    // clicking Back → timer fires ~300 ms later and undoes the clear).
+    if (viewportTimer.current) {
+      clearTimeout(viewportTimer.current);
+      viewportTimer.current = null;
+    }
     setUrlParams(
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete('areaKey');
+        // Clear zoomed-in viewport coords atomically. ViewportWatcher's onMoveEnd
+        // will fire ~300 ms later (when the map animation to city center completes)
+        // and re-populate lat/lon/zoom with correct city-level values. Clearing here
+        // ensures that any URL copied/shared immediately after Back is usable:
+        // a shared URL with zoom=14 would be above the area-markers threshold and
+        // would show no area rings on fresh load.
+        next.delete('lat');
+        next.delete('lon');
+        next.delete('zoom');
         return next;
       },
       { replace: true }, // REPLACE — not a new destination; restores "no area" state

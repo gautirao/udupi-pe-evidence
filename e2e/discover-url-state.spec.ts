@@ -183,13 +183,19 @@ test.describe('Discover — URL-backed state (#910)', () => {
    * (not navigate(-1)). This means clicking Back on the panel does NOT pop the
    * history stack — the user stays on /discover regardless of where they came from.
    */
-  test('AC14 — panel Back button from bookmarked URL removes areaKey, resets panel, stays on Discover', async ({
+  test('AC14 — panel Back button from bookmarked URL removes areaKey, clears viewport params, resets panel, stays on Discover', async ({
     page,
   }) => {
     await mockDiscoverApis(page);
 
-    // Simulate arriving from a bookmarked URL (no prior history entry on this page)
-    await page.goto(`/discover?city=udupi&areaKey=${ENCODED_AREA_KEY}`);
+    // Simulate arriving from a bookmarked URL that also carries zoomed-in viewport coords
+    // (the real regression: deselectArea must clear lat/lon/zoom too)
+    const lat = '13.34090';
+    const lon = '74.74210';
+    const zoom = '14';
+    await page.goto(
+      `/discover?city=udupi&areaKey=${ENCODED_AREA_KEY}&lat=${lat}&lon=${lon}&zoom=${zoom}`,
+    );
     await page.waitForLoadState('domcontentloaded');
 
     const rightPanel = page.getByTestId('discover-right-panel');
@@ -207,6 +213,15 @@ test.describe('Discover — URL-backed state (#910)', () => {
 
     // (a) URL must no longer contain areaKey
     await expect(page).toHaveURL(/^(?!.*areaKey).*$/, { timeout: 8_000 });
+
+    // (a-ii) URL must also no longer contain lat, lon, or zoom — deselectArea clears
+    // the zoomed-in viewport atomically to prevent stale coords being bookmarked/shared.
+    // This also guards against the regression where a pending viewport debounce re-writes
+    // the params back 300 ms after Back is clicked.
+    const urlAfterBack = new URL(page.url());
+    expect(urlAfterBack.searchParams.has('lat'), 'lat must be absent after Back').toBe(false);
+    expect(urlAfterBack.searchParams.has('lon'), 'lon must be absent after Back').toBe(false);
+    expect(urlAfterBack.searchParams.has('zoom'), 'zoom must be absent after Back').toBe(false);
 
     // (b) Right panel must show instructional state — this is the key business assertion:
     // the panel resets to the empty state after panel Back, not just URL removal
