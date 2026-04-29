@@ -2,7 +2,7 @@
 
 Best-effort bookkeeping. Missing values → `UNKNOWN`. Log failure does not block any gate.
 
-Written by: SPRINT_EXECUTOR step 9b item 3 (sprint mode) · ROUTE_AND_RUN Execution Rules (standalone mode)
+Written by: PostToolUse Bash hook in `.claude/settings.json` — fires automatically on every `gh pr merge` command.
 
 ## Columns
 
@@ -29,3 +29,4 @@ Written by: SPRINT_EXECUTOR step 9b item 3 (sprint mode) · ROUTE_AND_RUN Execut
 | date | issue | pr | tier | mode | cost_route | agents | sonnet_out | haiku_out | cost_usd | changed_lines | review_cycles | qa_cycles | e2e | quality_regression |
 |------|-------|----|------|------|------------|--------|-----------|----------|---------|--------------|--------------|---------|-----|--------------------|
 | 2026-04-29 | #916 | #927 | normal | Standard | SONNET | frontend-engineer | UNKNOWN | UNKNOWN | UNKNOWN | +249/-1 | 0 | 1 | PASS | NO |
+| 2026-04-29 | #null | #928 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | 94 | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN |
