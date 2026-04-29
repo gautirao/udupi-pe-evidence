@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    /* Earthy, warm palette inspired by Karnataka's coastal landscape */
+    /* Udupi property explorer design tokens */
     --background: 45 20% 97%;
     --foreground: 220 25% 15%;
 
@@ -16,9 +16,9 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 15%;
 
-    /* Terracotta-inspired primary */
-    --primary: 16 65% 45%;
-    --primary-foreground: 45 30% 98%;
+    /* Action primary */
+    --primary: 244 81% 4%;
+    --primary-foreground: 0 0% 100%;
 
     /* Sandy beige secondary */
     --secondary: 35 30% 90%;
@@ -44,7 +44,7 @@
 
     --border: 35 25% 88%;
     --input: 35 25% 88%;
-    --ring: 16 65% 45%;
+    --ring: 0 0% 40%;
 
     --radius: 0.625rem;
 
@@ -53,6 +53,8 @@
     --pin-house: 16 65% 45%;
     --pin-commercial: 220 65% 50%;
     --pin-other: 220 15% 50%;
+    --pin-cluster: 175 45% 40%;
+    --pin-cluster-foreground: 0 0% 100%;
 
     /* Chart colors */
     --chart-1: 16 65% 45%;
@@ -64,12 +66,12 @@
     /* Sidebar */
     --sidebar-background: 35 25% 96%;
     --sidebar-foreground: 220 25% 25%;
-    --sidebar-primary: 16 65% 45%;
-    --sidebar-primary-foreground: 45 30% 98%;
+    --sidebar-primary: 244 81% 4%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 35 30% 92%;
     --sidebar-accent-foreground: 220 25% 15%;
     --sidebar-border: 35 25% 88%;
-    --sidebar-ring: 16 65% 45%;
+    --sidebar-ring: 0 0% 40%;
   }
 
   .dark {
@@ -82,9 +84,9 @@
     --popover: 220 25% 14%;
     --popover-foreground: 45 20% 95%;
 
-    /* Brighter terracotta for dark mode */
-    --primary: 16 70% 55%;
-    --primary-foreground: 220 25% 10%;
+    /* Action primary — inverted for dark mode */
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 21%;
 
     --secondary: 220 20% 22%;
     --secondary-foreground: 45 20% 95%;
@@ -107,17 +109,20 @@
 
     --border: 220 20% 22%;
     --input: 220 20% 22%;
-    --ring: 16 70% 55%;
+    --ring: 0 0% 44%;
+
+    --pin-cluster: 175 55% 50%;
+    --pin-cluster-foreground: 0 0% 100%;
 
     /* Sidebar dark */
     --sidebar-background: 220 25% 12%;
     --sidebar-foreground: 45 20% 90%;
-    --sidebar-primary: 16 70% 55%;
-    --sidebar-primary-foreground: 220 25% 10%;
+    --sidebar-primary: 264 58% 38%;
+    --sidebar-primary-foreground: 0 0% 98%;
     --sidebar-accent: 220 20% 18%;
     --sidebar-accent-foreground: 45 20% 95%;
     --sidebar-border: 220 20% 22%;
-    --sidebar-ring: 16 70% 55%;
+    --sidebar-ring: 0 0% 44%;
   }
 }
 
@@ -152,7 +157,10 @@
   }
 
   .custom-marker-cluster {
-    @apply bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center font-semibold shadow-lg border-2 border-primary-foreground/30;
+    background-color: hsl(var(--pin-cluster) / 0.9);
+    color: hsl(var(--pin-cluster-foreground));
+    border-color: hsl(var(--pin-cluster-foreground) / 0.3);
+    @apply rounded-full flex items-center justify-center font-semibold shadow-lg border-2;
     animation: cluster-pulse 2s ease-in-out infinite;
   }
 
