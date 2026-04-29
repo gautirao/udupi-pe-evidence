@@ -80,18 +80,18 @@ beforeEach(() => {
 });
 
 describe('AppLayout — nav links by role', () => {
-  it('logged-out: shows only Home link, no role-specific links', () => {
+  it('logged-out: shows only Discover link, no role-specific links', () => {
     renderLayout();
 
-    expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /discover/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /notifications/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
   });
 
-  it('user role: shows Home, Insights, My Saved Areas, My Listings, New Listing, My Bookings, Notifications — no admin/dealer-only links', () => {
+  it('user role: shows Discover, Trends, Saved, My Listings, New Listing, My Bookings, Notifications — no admin/dealer-only links', () => {
     mockAuth = baseAuth({
       user: { email: 'user@test.com' },
       userRole: 'user',
@@ -99,9 +99,9 @@ describe('AppLayout — nav links by role', () => {
     renderLayout();
 
     // Owner navigation items (superset of old user nav + listing management)
-    expect(screen.getAllByRole('link', { name: /home/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /insights/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /my saved areas/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /^discover$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /^trends$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /^saved$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /my listings/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /new listing/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /my bookings/i }).length).toBeGreaterThan(0);
@@ -133,7 +133,7 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
   });
 
-  it('admin role: shows Map, Insights and "Admin" dropdown trigger — no dealer/user links', async () => {
+  it('admin role: shows Discover, Trends and "Admin" dropdown trigger — no dealer/user links', async () => {
     mockAuth = baseAuth({
       user: { email: 'admin@test.com' },
       userRole: 'admin',
@@ -143,8 +143,8 @@ describe('AppLayout — nav links by role', () => {
     renderLayout();
 
     // Primary (admin) nav
-    expect(screen.getAllByRole('link', { name: /^map$/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /insights/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /^discover$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /^trends$/i }).length).toBeGreaterThan(0);
 
     // Admin dropdown trigger is rendered (button containing "Admin" text)
     const adminTrigger = screen.getByRole('button', { name: /admin/i });

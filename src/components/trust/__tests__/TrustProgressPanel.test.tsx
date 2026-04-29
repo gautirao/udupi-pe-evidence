@@ -286,16 +286,18 @@ describe('TrustProgressPanel — PHOTOS badge AVAILABLE', () => {
   });
 
   it('non-PHOTOS AVAILABLE badge shows "Verification coming soon" text, not a button', async () => {
+    // IDENTITY AVAILABLE triggers the IdentityEvidenceForm CTA (not "Verification coming soon").
+    // Use LOCATION — a non-PHOTOS, non-IDENTITY dimension — to verify the fallback copy path.
     vi.mocked(api.get).mockResolvedValue({
       badges: [
         {
-          dimensionType: 'IDENTITY' as const,
+          dimensionType: 'LOCATION' as const,
           badgeState: 'AVAILABLE' as const,
           grantedAt: null,
           autoGranted: null,
         },
       ],
-      cta: 'IDENTITY',
+      cta: 'LOCATION',
     });
 
     renderPanel({ variant: 'full' });

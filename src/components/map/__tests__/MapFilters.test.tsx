@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MapFilters } from '../MapFilters';
 import { isNew } from '@/pages/Index';
 
@@ -35,7 +36,31 @@ vi.mock('@/lib/formatters', () => ({
   formatPrice: (v: number) => `₹${v}`,
 }));
 
+// Supabase client calls localStorage.getItem at module-load time in jsdom,
+// producing an unhandled rejection that aborts all tests before they run.
+// Mock the module in hoisted scope so no real client is ever constructed.
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      })),
+    },
+  },
+}));
+
+// useTrendsOptions calls useQuery internally; mock it so MapFilters renders
+// without a real QueryClient for that hook.
+vi.mock('@/hooks/useTrendsOptions', () => ({
+  useTrendsOptions: vi.fn(() => ({ data: undefined, isLoading: false })),
+}));
+
 // ─── Helpers ──────────────────────────────────────────────────
+
+function makeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
 
 const defaultProps = {
   filters: {},
@@ -52,7 +77,11 @@ const defaultProps = {
 };
 
 function renderFilters(props: React.ComponentProps<typeof MapFilters> = defaultProps) {
-  return render(<MapFilters {...props} />);
+  return render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <MapFilters {...props} />
+    </QueryClientProvider>,
+  );
 }
 
 // ─── Tests ────────────────────────────────────────────────────
@@ -69,23 +98,21 @@ describe('MapFilters — property type checkboxes', () => {
     expect(screen.getByText('Other')).toBeInTheDocument();
   });
 
-  it('renders checkbox with id type-apartment', () => {
+  it('renders checkbox for Apartment type', () => {
     renderFilters();
-    expect(document.querySelector('#type-apartment')).not.toBeNull();
+    expect(screen.getByRole('checkbox', { name: /apartment/i })).toBeInTheDocument();
   });
 
-  it('renders checkboxes for all 5 types by id', () => {
+  it('renders checkboxes for all 5 types', () => {
     renderFilters();
-    for (const type of ['land', 'house', 'apartment', 'commercial', 'other']) {
-      expect(document.querySelector(`#type-${type}`)).not.toBeNull();
+    for (const label of ['Land', 'House', 'Apartment', 'Commercial', 'Other']) {
+      expect(screen.getByRole('checkbox', { name: label, exact: true })).toBeInTheDocument();
     }
   });
 
-  it('Apartment label is linked to type-apartment checkbox via htmlFor', () => {
+  it('Apartment label text is correct', () => {
     renderFilters();
-    const label = document.querySelector('label[for="type-apartment"]');
-    expect(label).not.toBeNull();
-    expect(label!.textContent).toBe('Apartment');
+    expect(screen.getByLabelText(/apartment/i)).toBeInTheDocument();
   });
 });
 
@@ -163,20 +190,22 @@ describe('MapFilters — View Trends button (F3)', () => {
   it('renders the button and navigates with city + encoded areaKeys when trendsAreaKeys is set', async () => {
     const user = userEvent.setup();
     render(
-      <MapFilters
-        filters={{}}
-        onFiltersChange={vi.fn()}
-        searchQuery=""
-        onSearchChange={vi.fn()}
-        selectedSchool={null}
-        onSchoolSelect={vi.fn()}
-        schoolBoardFilter={[]}
-        onSchoolBoardFilterChange={vi.fn()}
-        city="udupi"
-        onCityChange={vi.fn()}
-        allListings={[]}
-        trendsAreaKeys={['IN|KA|Udupi|Manipal']}
-      />
+      <QueryClientProvider client={makeQueryClient()}>
+        <MapFilters
+          filters={{}}
+          onFiltersChange={vi.fn()}
+          searchQuery=""
+          onSearchChange={vi.fn()}
+          selectedSchool={null}
+          onSchoolSelect={vi.fn()}
+          schoolBoardFilter={[]}
+          onSchoolBoardFilterChange={vi.fn()}
+          city="udupi"
+          onCityChange={vi.fn()}
+          allListings={[]}
+          trendsAreaKeys={['IN|KA|Udupi|Manipal']}
+        />
+      </QueryClientProvider>,
     );
     const btn = screen.getByRole('button', { name: /view trends/i });
     expect(btn).toBeInTheDocument();
@@ -189,20 +218,22 @@ describe('MapFilters — View Trends button (F3)', () => {
   it('includes all keys in URL when multiple trendsAreaKeys provided', async () => {
     const user = userEvent.setup();
     render(
-      <MapFilters
-        filters={{}}
-        onFiltersChange={vi.fn()}
-        searchQuery=""
-        onSearchChange={vi.fn()}
-        selectedSchool={null}
-        onSchoolSelect={vi.fn()}
-        schoolBoardFilter={[]}
-        onSchoolBoardFilterChange={vi.fn()}
-        city="udupi"
-        onCityChange={vi.fn()}
-        allListings={[]}
-        trendsAreaKeys={['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala']}
-      />
+      <QueryClientProvider client={makeQueryClient()}>
+        <MapFilters
+          filters={{}}
+          onFiltersChange={vi.fn()}
+          searchQuery=""
+          onSearchChange={vi.fn()}
+          selectedSchool={null}
+          onSchoolSelect={vi.fn()}
+          schoolBoardFilter={[]}
+          onSchoolBoardFilterChange={vi.fn()}
+          city="udupi"
+          onCityChange={vi.fn()}
+          allListings={[]}
+          trendsAreaKeys={['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala']}
+        />
+      </QueryClientProvider>,
     );
     const btn = screen.getByRole('button', { name: /view trends/i });
     await user.click(btn);
