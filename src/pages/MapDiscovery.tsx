@@ -197,12 +197,12 @@ export default function MapDiscovery() {
             <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
           </div>
 
-          {/* Area listing count — bottom-right, zoom-gated */}
-          {mapZoom <= AREA_LAYER_MAX_ZOOM && discoverAreas.length > 0 && (
+          {/* City listing count — bottom-right */}
+          {discoverAreas.length > 0 && (
             <div className="absolute bottom-16 right-4 z-[1000]">
               <div className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-sm border border-border">
                 Showing{' '}
-                <strong>{discoverAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0).toLocaleString()}</strong>
+                <strong>{cityTotal.toLocaleString()}</strong>
                 {' '}properties
               </div>
             </div>
