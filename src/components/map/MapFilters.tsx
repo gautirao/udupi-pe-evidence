@@ -1,10 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
-import { Filter, Loader2, Search, TrendingUp, X } from 'lucide-react';
+import { Filter, Loader2, TrendingUp, X } from 'lucide-react';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PropertyTypeFilter } from './filters/PropertyTypeFilter';
 import { BedroomFilter } from './filters/BedroomFilter';
@@ -16,8 +15,6 @@ import { DateRangeFilter } from './filters/DateRangeFilter';
 interface MapFiltersProps {
   filters: PropertyFilters;
   onFiltersChange: (filters: PropertyFilters) => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
   selectedSchool: SchoolResult | null;
   onSchoolSelect: (school: SchoolResult | null) => void;
   schoolBoardFilter: string[];
@@ -32,8 +29,6 @@ interface MapFiltersProps {
 export function MapFilters({
   filters,
   onFiltersChange,
-  searchQuery,
-  onSearchChange,
   selectedSchool,
   onSchoolSelect,
   schoolBoardFilter,
@@ -44,9 +39,8 @@ export function MapFilters({
 }: MapFiltersProps) {
   const navigate = useNavigate();
 
-  // 15-condition predicate — kept centralized so the polygon check is never silently lost.
+  // 14-condition predicate — kept centralized so the polygon check is never silently lost.
   const hasActiveFilters =
-    !!searchQuery ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
     (filters.bedrooms && filters.bedrooms.length > 0) ||
     (filters.sellerTypes && filters.sellerTypes.length > 0) ||
@@ -107,8 +101,6 @@ export function MapFilters({
   if (filters.reraRegistered) chips.push({ key: 'rera', label: 'RERA Registered', onRemove: () => onFiltersChange({ ...filters, reraRegistered: undefined }) });
   if (filters.readyToMove) chips.push({ key: 'rtm', label: 'Ready to Move', onRemove: () => onFiltersChange({ ...filters, readyToMove: undefined }) });
 
-  if (searchQuery) chips.push({ key: 'search', label: `"${searchQuery}"`, onRemove: () => onSearchChange('') });
-
   if (filters.schoolLat !== undefined) {
     chips.push({
       key: 'school',
@@ -145,7 +137,7 @@ export function MapFilters({
             )}
           </CardTitle>
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={() => { onFiltersChange({}); onSearchChange(''); onSchoolSelect(null); onSchoolBoardFilterChange([]); }} className="h-8 px-2">
+            <Button variant="ghost" size="sm" onClick={() => { onFiltersChange({}); onSchoolSelect(null); onSchoolBoardFilterChange([]); }} className="h-8 px-2">
               <X className="h-3.5 w-3.5 mr-1" />
               Clear
             </Button>
@@ -186,16 +178,6 @@ export function MapFilters({
             ))}
           </div>
         )}
-
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-          <Input placeholder="Search listings..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} className="pl-8 h-9 text-sm" />
-          {searchQuery && (
-            <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6" onClick={() => onSearchChange('')}>
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
 
         <PropertyTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
         <BedroomFilter filters={filters} onFiltersChange={onFiltersChange} />

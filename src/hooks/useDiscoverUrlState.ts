@@ -19,6 +19,9 @@
  *   schoolId   – school id (already in use; threaded through for completeness)
  *   radiusKm   – school radius (already in use; threaded through for completeness)
  *
+ * Search params:
+ *   q          – free-text search query (empty string when no search)
+ *
  * History semantics (per issue #910 spec):
  *   City change          → push
  *   Area selection       → push
@@ -55,6 +58,8 @@ export interface DiscoverUrlState {
   /** School params — read-only here; school writes handled by existing handleSchoolSelect in Index */
   schoolId: string | null;
   radiusKm: number | null;
+  /** Free-text search query. Empty string when no search is active. */
+  q: string;
 }
 
 export interface DiscoverUrlActions {
@@ -76,6 +81,8 @@ export interface DiscoverUrlActions {
    * useSearchParams instance for school writes.
    */
   setSchoolParams: (params: { schoolId: string; radiusKm: number } | null) => void;
+  /** Set the free-text search query — debounced replace. Empty string removes the param. */
+  setSearchQuery: (q: string) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -148,12 +155,14 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // Debounce timers
   const viewportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const filtersLiveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (viewportTimer.current) clearTimeout(viewportTimer.current);
       if (filtersLiveTimer.current) clearTimeout(filtersLiveTimer.current);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, []);
 
@@ -185,6 +194,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const radiusKmRaw = urlParams.get('radiusKm');
   const radiusKm = radiusKmRaw ? parseInt(radiusKmRaw, 10) : null;
 
+  const q = urlParams.get('q') ?? '';
+
   const state: DiscoverUrlState = {
     city,
     areaKey,
@@ -192,6 +203,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     filters,
     schoolId,
     radiusKm,
+    q,
   };
 
   // ─── Actions ─────────────────────────────────────────────────────────────
@@ -329,6 +341,27 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  const setSearchQuery = useCallback(
+    (newQ: string) => {
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+      searchTimer.current = setTimeout(() => {
+        setUrlParams(
+          (prev) => {
+            const next = new URLSearchParams(prev);
+            if (newQ) {
+              next.set('q', newQ);
+            } else {
+              next.delete('q');
+            }
+            return next;
+          },
+          { replace: true }, // REPLACE — search query is not a history destination
+        );
+      }, DEBOUNCE_MS);
+    },
+    [setUrlParams],
+  );
+
   const actions: DiscoverUrlActions = {
     setCity,
     selectArea,
@@ -337,6 +370,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setFiltersLive,
     setFiltersCommitted,
     setSchoolParams,
+    setSearchQuery,
   };
 
   return [state, actions];

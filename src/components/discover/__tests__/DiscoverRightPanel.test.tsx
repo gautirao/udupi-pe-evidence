@@ -184,3 +184,84 @@ describe('DiscoverRightPanel', () => {
     expect(screen.queryByText('Trends')).not.toBeInTheDocument();
   });
 });
+
+describe('DiscoverRightPanel — search input (#952)', () => {
+  const area = makeArea('k1', 'Manipal', 5);
+
+  it('renders search input in listings mode when onSearchChange is provided', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        searchQuery=""
+        onSearchChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByPlaceholderText('Search listings by keyword')).toBeInTheDocument();
+  });
+
+  it('reflects searchQuery value in the input', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        searchQuery="foo"
+        onSearchChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByPlaceholderText('Search listings by keyword')).toHaveValue('foo');
+  });
+
+  it('typing in the input fires onSearchChange', async () => {
+    const user = userEvent.setup();
+    const onSearchChange = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        searchQuery=""
+        onSearchChange={onSearchChange}
+      />,
+    );
+    await user.type(screen.getByPlaceholderText('Search listings by keyword'), 'a');
+    // Each keystroke fires onSearchChange with the current input value.
+    expect(onSearchChange).toHaveBeenCalledWith('a');
+  });
+
+  it('clear button appears when searchQuery is non-empty and clicking it calls onSearchChange("")', async () => {
+    const user = userEvent.setup();
+    const onSearchChange = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        searchQuery="lakeside"
+        onSearchChange={onSearchChange}
+      />,
+    );
+    const clearBtn = screen.getByRole('button', { name: /clear search/i });
+    expect(clearBtn).toBeInTheDocument();
+    await user.click(clearBtn);
+    expect(onSearchChange).toHaveBeenCalledWith('');
+  });
+
+  it('does not render search input when onSearchChange is not provided', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+      />,
+    );
+    expect(screen.queryByPlaceholderText('Search listings by keyword')).not.toBeInTheDocument();
+  });
+});

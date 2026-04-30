@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -29,13 +29,31 @@ export default function MapDiscovery() {
   const [urlState, urlActions] = useDiscoverUrlState();
   const isAuthenticated = !authLoading && user !== null;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState(() => urlState.q);
+  const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
+
+  // Sync local searchQuery when the URL `q` param changes (e.g. browser back/forward).
+  useEffect(() => {
+    if (urlState.q !== searchQuery) {
+      setSearchQuery(urlState.q);
+    }
+    // Only react to URL changes, not local state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.q]);
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  const handleSearchChange = useCallback(
+    (q: string) => {
+      setSearchQuery(q);
+      urlActions.setSearchQuery(q);
+    },
+    [urlActions],
+  );
 
   const {
     filters, selectedArea, panToArea, mapZoom, mapReady, showLoader,
@@ -139,7 +157,6 @@ export default function MapDiscovery() {
   const filtersContent = (
     <MapFilters
       filters={filters} onFiltersChange={handleFiltersChange}
-      searchQuery={searchQuery} onSearchChange={setSearchQuery}
       selectedSchool={selectedSchool} onSchoolSelect={handleSchoolSelect}
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={setSchoolBoardFilter}
       city={city}
@@ -268,6 +285,8 @@ export default function MapDiscovery() {
           trendsHref={trendsHref}
           isFetching={isFetching}
           isInitialLoading={isLoading}
+          searchQuery={searchQuery}
+          onSearchChange={handleSearchChange}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

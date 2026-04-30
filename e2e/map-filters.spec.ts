@@ -2,9 +2,9 @@
  * Map Filters — map page load, BHK filter, text search, insights page
  *
  * Covers:
- *   M1 — Map page loads; filter panel and search input visible
+ *   M1 — Map page loads; filter panel visible (search input now in listings panel after area select)
  *   M2 — BHK filter button activates Clear, then Clear resets state
- *   M3 — Text search accepts query and Clear resets it
+ *   M3 — Text search input visible in listings panel header after selecting an area
  *   M4 — Insights page loads with heading and no error boundary
  *
  * Run locally:
@@ -25,9 +25,9 @@ const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
 // ---------------------------------------------------------------------------
-// M1 — Map page loads; filter panel and search input visible
+// M1 — Map page loads; filter panel visible
 // ---------------------------------------------------------------------------
-test('M1 — map page loads with filter panel and search input', async ({ page }) => {
+test('M1 — map page loads with filter panel visible', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M1');
 
   await page.goto('/');
@@ -39,8 +39,9 @@ test('M1 — map page loads with filter panel and search input', async ({ page }
   // Filters card heading
   await expect(page.getByText('Filters').first()).toBeVisible({ timeout: 10_000 });
 
-  // Search input
-  await expect(page.getByPlaceholder('Search listings...')).toBeVisible({ timeout: 10_000 });
+  // Search input is now in the listings panel header — not visible until an area is selected.
+  // Confirm it is NOT in the filter panel.
+  await expect(page.getByPlaceholder('Search listings...')).toHaveCount(0);
 
   // Property type section — at least the "Land" label is present
   await expect(page.locator('label[for="type-land"]')).toBeVisible({ timeout: 10_000 });
@@ -82,9 +83,9 @@ test('M2 — BHK filter toggle activates Clear button, Clear resets state', asyn
 });
 
 // ---------------------------------------------------------------------------
-// M3 — Text search accepts query and Clear resets it
+// M3 — Text search input visible in listings panel header after area selection
 // ---------------------------------------------------------------------------
-test('M3 — text search accepts query and Clear resets it', async ({ page }) => {
+test('M3 — text search accepts query and clear button resets it (listings panel header)', async ({ page }) => {
   test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping M3');
 
   await page.goto('/');
@@ -93,23 +94,26 @@ test('M3 — text search accepts query and Clear resets it', async ({ page }) =>
     .waitForSelector('p:has-text("Loading...")', { state: 'hidden', timeout: 15_000 })
     .catch(() => {});
 
-  const searchInput = page.getByPlaceholder('Search listings...');
+  // Select an area via quick-select chip so the listings panel (with search input) appears.
+  const chip = page.getByTestId('quick-select-chip').first();
+  await expect(chip).toBeVisible({ timeout: 15_000 });
+  await chip.click();
+
+  // Search input now appears in the listings panel header.
+  const searchInput = page.getByPlaceholder('Search listings by keyword');
   await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
   // Type a query
   await searchInput.fill('udupi');
   await expect(searchInput).toHaveValue('udupi');
 
-  // Clear button appears (searchQuery is now set → hasActiveFilters = true)
-  const clearBtn = page.getByRole('button', { name: /clear/i }).first();
+  // Clear button (aria-label="Clear search") appears when query is non-empty.
+  const clearBtn = page.getByRole('button', { name: /clear search/i });
   await expect(clearBtn).toBeVisible({ timeout: 5_000 });
 
-  // Click Clear — resets search
+  // Click Clear — resets search input to empty.
   await clearBtn.click();
   await expect(searchInput).toHaveValue('', { timeout: 5_000 });
-
-  // Clear button must disappear
-  await expect(page.getByRole('button', { name: /clear/i })).toHaveCount(0, { timeout: 5_000 });
 });
 
 // ---------------------------------------------------------------------------

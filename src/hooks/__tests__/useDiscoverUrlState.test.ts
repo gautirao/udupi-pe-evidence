@@ -320,6 +320,85 @@ describe('useDiscoverUrlState — reportViewport (debounced)', () => {
   });
 });
 
+describe('useDiscoverUrlState — q (search query) in URL state', () => {
+  it('reads q from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?q=foo'),
+    });
+    expect(result.current[0].q).toBe('foo');
+  });
+
+  it('returns empty string when q is absent from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].q).toBe('');
+  });
+});
+
+describe('useDiscoverUrlState — setSearchQuery (debounced)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('does not update q immediately', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setSearchQuery('bar');
+    });
+
+    expect(result.current[0].q).toBe('');
+  });
+
+  it('writes q to URL after debounce delay', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setSearchQuery('bar');
+      vi.runAllTimers();
+    });
+
+    expect(result.current[0].q).toBe('bar');
+  });
+
+  it('deletes q param from URL when empty string is passed', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&q=bar'),
+    });
+
+    act(() => {
+      result.current[1].setSearchQuery('');
+      vi.runAllTimers();
+    });
+
+    expect(result.current[0].q).toBe('');
+  });
+
+  it('debounces rapid calls — only last value wins', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setSearchQuery('a');
+      result.current[1].setSearchQuery('ab');
+      result.current[1].setSearchQuery('abc');
+      vi.runAllTimers();
+    });
+
+    expect(result.current[0].q).toBe('abc');
+  });
+});
+
 describe('useDiscoverUrlState — setFiltersLive (debounced)', () => {
   beforeEach(() => {
     vi.useFakeTimers();

@@ -58,8 +58,6 @@ function makeQueryClient() {
 const defaultProps = {
   filters: {},
   onFiltersChange: vi.fn(),
-  searchQuery: '',
-  onSearchChange: vi.fn(),
   selectedSchool: null,
   onSchoolSelect: vi.fn(),
   schoolBoardFilter: [] as string[],
@@ -107,15 +105,10 @@ describe('MapFilters — property type checkboxes', () => {
   });
 });
 
-describe('MapFilters — search input', () => {
-  it('renders search input with correct placeholder', () => {
+describe('MapFilters — search input removed (#952)', () => {
+  it('does not render a search input inside the filter panel', () => {
     renderFilters();
-    expect(screen.getByPlaceholderText('Search listings...')).toBeInTheDocument();
-  });
-
-  it('reflects searchQuery value', () => {
-    renderFilters({ ...defaultProps, searchQuery: 'udupi' });
-    expect(screen.getByPlaceholderText('Search listings...')).toHaveValue('udupi');
+    expect(screen.queryByPlaceholderText(/search listings/i)).not.toBeInTheDocument();
   });
 });
 
@@ -158,11 +151,6 @@ describe('MapFilters — clear button visibility', () => {
       ...defaultProps,
       filters: { propertyTypes: ['apartment'] },
     });
-    expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
-  });
-
-  it('shows Clear button when searchQuery is set', () => {
-    renderFilters({ ...defaultProps, searchQuery: 'test' });
     expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
   });
 });
@@ -209,8 +197,6 @@ describe('MapFilters — View Trends button (F3)', () => {
         <MapFilters
           filters={{}}
           onFiltersChange={vi.fn()}
-          searchQuery=""
-          onSearchChange={vi.fn()}
           selectedSchool={null}
           onSchoolSelect={vi.fn()}
           schoolBoardFilter={[]}
@@ -235,8 +221,6 @@ describe('MapFilters — View Trends button (F3)', () => {
         <MapFilters
           filters={{}}
           onFiltersChange={vi.fn()}
-          searchQuery=""
-          onSearchChange={vi.fn()}
           selectedSchool={null}
           onSchoolSelect={vi.fn()}
           schoolBoardFilter={[]}
@@ -305,14 +289,6 @@ describe('MapFilters — active filter chips and badge (#948)', () => {
     expect(onFiltersChange).toHaveBeenCalledWith({ priceMin: undefined, priceMax: undefined });
   });
 
-  it('clicking a search chip calls onSearchChange with empty string', async () => {
-    const user = userEvent.setup();
-    const onSearchChange = vi.fn();
-    renderFilters({ ...defaultProps, searchQuery: 'lakeside', onSearchChange });
-    await user.click(screen.getByRole('button', { name: 'Remove "lakeside" filter' }));
-    expect(onSearchChange).toHaveBeenCalledWith('');
-  });
-
   it('clicking a near-school chip calls onSchoolSelect(null) and clears school filter fields', async () => {
     const user = userEvent.setup();
     const onSchoolSelect = vi.fn();
@@ -328,23 +304,20 @@ describe('MapFilters — active filter chips and badge (#948)', () => {
     expect(onFiltersChange).toHaveBeenCalledWith({ schoolLat: undefined, schoolLon: undefined, schoolRadiusKm: undefined });
   });
 
-  it('existing Clear button still calls all clear handlers', async () => {
+  it('Clear button calls onFiltersChange, onSchoolSelect, and onSchoolBoardFilterChange', async () => {
     const user = userEvent.setup();
     const onFiltersChange = vi.fn();
-    const onSearchChange = vi.fn();
     const onSchoolSelect = vi.fn();
     const onSchoolBoardFilterChange = vi.fn();
     renderFilters({
       ...defaultProps,
       filters: { propertyTypes: ['apartment'] },
       onFiltersChange,
-      onSearchChange,
       onSchoolSelect,
       onSchoolBoardFilterChange,
     });
     await user.click(screen.getByRole('button', { name: /clear/i }));
     expect(onFiltersChange).toHaveBeenCalledWith({});
-    expect(onSearchChange).toHaveBeenCalledWith('');
     expect(onSchoolSelect).toHaveBeenCalledWith(null);
     expect(onSchoolBoardFilterChange).toHaveBeenCalledWith([]);
   });

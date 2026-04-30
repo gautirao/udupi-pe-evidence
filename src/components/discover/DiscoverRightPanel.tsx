@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ChevronLeft, MapPin, SlidersHorizontal, TrendingUp,
+  ChevronLeft, MapPin, Search, SlidersHorizontal, TrendingUp, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -94,6 +95,10 @@ interface DiscoverRightPanelProps {
   isFetching?: boolean;
   /** True during the initial full-screen load — disables the opacity overlay so the skeleton shows normally. */
   isInitialLoading?: boolean;
+  /** Current free-text search query. Empty string when no search is active. */
+  searchQuery?: string;
+  /** Called when the user changes the search query. */
+  onSearchChange?: (q: string) => void;
 }
 
 export function DiscoverRightPanel({
@@ -109,6 +114,8 @@ export function DiscoverRightPanel({
   footerContent,
   isFetching = false,
   isInitialLoading = false,
+  searchQuery = '',
+  onSearchChange,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -173,6 +180,32 @@ export function DiscoverRightPanel({
               </Button>
             )}
           />
+
+          {/* Search input — sticky below header, above listing cards */}
+          {onSearchChange && (
+            <div className="sticky top-0 z-10 bg-card border-b border-border p-3">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  placeholder="Search listings by keyword"
+                  value={searchQuery}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  className="pl-8 h-9 text-sm pr-8"
+                />
+                {searchQuery && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                    onClick={() => onSearchChange('')}
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Listings body */}
           <div
