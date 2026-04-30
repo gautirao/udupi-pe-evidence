@@ -141,7 +141,7 @@ export default function MapDiscovery() {
       selectedSchool={selectedSchool} onSchoolSelect={handleSchoolSelect}
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={setSchoolBoardFilter}
       city={city}
-      allListings={listingsWithCoords} trendsAreaKeys={trendsAreaKeys}
+      trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
       isFetching={isFetching}
     />
   );

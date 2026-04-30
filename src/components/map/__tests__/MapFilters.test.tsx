@@ -24,7 +24,6 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 
 vi.mock('@/hooks/usePropertyListings', () => ({
-  useLocalities: vi.fn(() => ({ data: ['Udupi', 'Karkala'], isLoading: false })),
   usePriceRange: vi.fn(() => ({ data: { min: 0, max: 10_000_000 } })),
 }));
 
@@ -50,12 +49,6 @@ vi.mock('@/integrations/supabase/client', () => ({
   },
 }));
 
-// useTrendsOptions calls useQuery internally; mock it so MapFilters renders
-// without a real QueryClient for that hook.
-vi.mock('@/hooks/useTrendsOptions', () => ({
-  useTrendsOptions: vi.fn(() => ({ data: undefined, isLoading: false })),
-}));
-
 // ─── Helpers ──────────────────────────────────────────────────
 
 function makeQueryClient() {
@@ -72,7 +65,6 @@ const defaultProps = {
   schoolBoardFilter: [] as string[],
   onSchoolBoardFilterChange: vi.fn(),
   city: 'udupi',
-  allListings: [],
 };
 
 function renderFilters(props: React.ComponentProps<typeof MapFilters> = defaultProps) {
@@ -175,6 +167,16 @@ describe('MapFilters — clear button visibility', () => {
   });
 });
 
+describe('MapFilters — locality filter removed (#950)', () => {
+  it('does not render a locality multi-select or combobox', () => {
+    renderFilters();
+    // LocalityFilter exposed a combobox/listbox or labelled input — none should appear.
+    expect(screen.queryByRole('combobox', { name: /locality/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('listbox', { name: /locality/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/locality/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('MapFilters — View Trends button (F3)', () => {
   it('does not render the button when trendsAreaKeys is empty', () => {
     renderFilters({ ...defaultProps, trendsAreaKeys: [] });
@@ -200,7 +202,6 @@ describe('MapFilters — View Trends button (F3)', () => {
           schoolBoardFilter={[]}
           onSchoolBoardFilterChange={vi.fn()}
           city="udupi"
-          allListings={[]}
           trendsAreaKeys={['IN|KA|Udupi|Manipal']}
         />
       </QueryClientProvider>,
@@ -227,7 +228,6 @@ describe('MapFilters — View Trends button (F3)', () => {
           schoolBoardFilter={[]}
           onSchoolBoardFilterChange={vi.fn()}
           city="udupi"
-          allListings={[]}
           trendsAreaKeys={['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala']}
         />
       </QueryClientProvider>,

@@ -205,7 +205,12 @@ export function useDiscoverPageState({
   const handleAreaClick = useCallback(
     (area: AreaPoint) => {
       // AreaMarkerLayer owns fitBounds on marker click — do NOT set panToArea here.
-      setFilters({});
+      // Clear localities only — area selection subsumes locality. Preserve price/beds/type/seller/status/dates
+      // so the user's refinements survive area changes.
+      setFilters((prev) => {
+        const { localities: _drop, ...rest } = prev;
+        return rest;
+      });
       setSelectedArea(area);
       urlActions.selectArea(area.areaKey);
     },
@@ -214,7 +219,12 @@ export function useDiscoverPageState({
 
   const handleAreaSelect = useCallback(
     (area: AreaPoint) => {
-      setFilters({});
+      // Clear localities only — area selection subsumes locality. Preserve price/beds/type/seller/status/dates
+      // so the user's refinements survive area changes.
+      setFilters((prev) => {
+        const { localities: _drop, ...rest } = prev;
+        return rest;
+      });
       setSelectedArea(area);
       setPanToArea(area);
       urlActions.selectArea(area.areaKey);

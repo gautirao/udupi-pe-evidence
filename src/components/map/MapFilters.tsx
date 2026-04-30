@@ -1,11 +1,8 @@
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PropertyFilters, PropertyListing, LocalityOption, useLocalities } from '@/hooks/usePropertyListings';
-import { useTrendsOptions } from '@/hooks/useTrendsOptions';
-import { computeNearbyLocalities } from '@/lib/localityUtils';
+import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
 import { Filter, Loader2, Search, TrendingUp, X } from 'lucide-react';
 import { SchoolSearchFilter } from '@/components/map/SchoolSearchFilter';
@@ -13,7 +10,6 @@ import { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PropertyTypeFilter } from './filters/PropertyTypeFilter';
 import { BedroomFilter } from './filters/BedroomFilter';
 import { SellerTypeFilter } from './filters/SellerTypeFilter';
-import { LocalityFilter } from './filters/LocalityFilter';
 import { PriceRangeFilter } from './filters/PriceRangeFilter';
 import { ListingStatusFilter } from './filters/ListingStatusFilter';
 import { DateRangeFilter } from './filters/DateRangeFilter';
@@ -28,8 +24,7 @@ interface MapFiltersProps {
   schoolBoardFilter: string[];
   onSchoolBoardFilterChange: (boards: string[]) => void;
   city: string;
-  allListings: PropertyListing[];
-  /** areaKey values for selected localities. Controls "View Trends" button visibility. */
+  /** areaKey values for the selected area. Controls "View Trends" button visibility. */
   trendsAreaKeys?: string[];
   /** True while a filter-change refetch is in-flight. Shows a loading indicator near the header. */
   isFetching?: boolean;
@@ -45,43 +40,15 @@ export function MapFilters({
   schoolBoardFilter,
   onSchoolBoardFilterChange,
   city,
-  allListings,
   trendsAreaKeys = [],
   isFetching = false,
 }: MapFiltersProps) {
   const navigate = useNavigate();
-  const { data: localityOptions = [] as LocalityOption[] } = useLocalities(city);
-  const { data: trendsOpts } = useTrendsOptions(city, true, 50);
 
-  const localityToAreaKey = useMemo(() => {
-    const m = new Map<string, string>();
-    trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
-    localityOptions.forEach((o) => { if (o.areaKey && !m.has(o.locality)) m.set(o.locality, o.areaKey); });
-    return m;
-  }, [trendsOpts, localityOptions]);
-
-  const localityNames = useMemo(() => localityOptions.map((o) => o.locality), [localityOptions]);
-
-  const selectedAreaKeys = useMemo(
-    () => (filters.localities ?? []).flatMap((loc) => { const k = localityToAreaKey.get(loc); return k ? [k] : []; }),
-    [filters.localities, localityToAreaKey],
-  );
-
-  const nearbyLocalities = useMemo(() => {
-    if (!filters.localities || filters.localities.length === 0) return [];
-    const lastSelected = filters.localities[filters.localities.length - 1];
-    const nearby = computeNearbyLocalities(allListings, lastSelected, 30).filter(
-      (loc) => !filters.localities?.includes(loc),
-    );
-    if (nearby.length > 0) return nearby;
-    return localityNames.filter((loc) => !filters.localities?.includes(loc)).slice(0, 5);
-  }, [filters.localities, allListings, localityNames]);
-
-  // 16-condition predicate — kept centralized so the polygon check is never silently lost.
+  // 15-condition predicate — kept centralized so the polygon check is never silently lost.
   const hasActiveFilters =
     !!searchQuery ||
     (filters.propertyTypes && filters.propertyTypes.length > 0) ||
-    (filters.localities && filters.localities.length > 0) ||
     (filters.bedrooms && filters.bedrooms.length > 0) ||
     (filters.sellerTypes && filters.sellerTypes.length > 0) ||
     filters.priceMin !== undefined ||
@@ -102,14 +69,6 @@ export function MapFilters({
       key: `pt-${type}`,
       label: type.charAt(0).toUpperCase() + type.slice(1),
       onRemove: () => onFiltersChange({ ...filters, propertyTypes: filters.propertyTypes!.filter((t) => t !== type) }),
-    });
-  });
-
-  (filters.localities ?? []).forEach((loc) => {
-    chips.push({
-      key: `loc-${loc}`,
-      label: loc,
-      onRemove: () => onFiltersChange({ ...filters, localities: filters.localities!.filter((l) => l !== loc) }),
     });
   });
 
@@ -193,12 +152,11 @@ export function MapFilters({
             </Button>
           )}
         </div>
-        {(selectedAreaKeys.length > 0 || trendsAreaKeys.length > 0) && (
+        {trendsAreaKeys.length > 0 && (
           <Button size="sm" className="w-full mt-2 gap-1.5 text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
-              const keysToUse = selectedAreaKeys.length > 0 ? selectedAreaKeys : trendsAreaKeys;
               const params = new URLSearchParams({ city });
-              keysToUse.slice(0, 3).forEach((k) => params.append('areaKey', k));
+              trendsAreaKeys.slice(0, 3).forEach((k) => params.append('areaKey', k));
               navigate(`/trends?${params.toString()}`);
             }}
           >
@@ -252,7 +210,6 @@ export function MapFilters({
         <PropertyTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
         <BedroomFilter filters={filters} onFiltersChange={onFiltersChange} />
         <SellerTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
-        <LocalityFilter filters={filters} onFiltersChange={onFiltersChange} localityOptions={localityOptions} nearbyLocalities={nearbyLocalities} />
         <PriceRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
         <ListingStatusFilter filters={filters} onFiltersChange={onFiltersChange} />
         <DateRangeFilter filters={filters} onFiltersChange={onFiltersChange} />
