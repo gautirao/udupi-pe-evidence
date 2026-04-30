@@ -27,7 +27,8 @@ class DiscoverListingPredicateBuilderTest {
 
         assertTrue(sql.whereFragment().startsWith(
                 "pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false"));
-        assertTrue(sql.whereFragment().contains("AND pl.city = ?"));
+        assertTrue(sql.whereFragment().contains("AND pl.area_key IN (SELECT a.area_key"));
+        assertTrue(sql.whereFragment().contains("c.slug = ?"));
         assertEquals(1, sql.params().size());
         assertEquals("udupi", sql.params().get(0));
     }
