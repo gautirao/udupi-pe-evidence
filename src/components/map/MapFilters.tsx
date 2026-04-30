@@ -7,7 +7,7 @@ import { PropertyFilters, PropertyListing, LocalityOption, useLocalities } from 
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { computeNearbyLocalities } from '@/lib/localityUtils';
 import { formatPrice } from '@/lib/formatters';
-import { Filter, Search, TrendingUp, X } from 'lucide-react';
+import { Filter, Loader2, Search, TrendingUp, X } from 'lucide-react';
 import { SchoolSearchFilter } from '@/components/map/SchoolSearchFilter';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PropertyTypeFilter } from './filters/PropertyTypeFilter';
@@ -31,6 +31,8 @@ interface MapFiltersProps {
   allListings: PropertyListing[];
   /** areaKey values for selected localities. Controls "View Trends" button visibility. */
   trendsAreaKeys?: string[];
+  /** True while a filter-change refetch is in-flight. Shows a loading indicator near the header. */
+  isFetching?: boolean;
 }
 
 export function MapFilters({
@@ -45,6 +47,7 @@ export function MapFilters({
   city,
   allListings,
   trendsAreaKeys = [],
+  isFetching = false,
 }: MapFiltersProps) {
   const navigate = useNavigate();
   const { data: localityOptions = [] as LocalityOption[] } = useLocalities(city);
@@ -174,6 +177,13 @@ export function MapFilters({
               <span data-testid="filter-count-badge" className="rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1.5 py-0.5 leading-none">
                 {chips.length}
               </span>
+            )}
+            {isFetching && (
+              <Loader2
+                data-testid="filter-fetching-indicator"
+                className="h-3.5 w-3.5 animate-spin text-muted-foreground"
+                aria-label="Loading results"
+              />
             )}
           </CardTitle>
           {hasActiveFilters && (

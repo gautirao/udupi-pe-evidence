@@ -51,6 +51,7 @@ export default function MapDiscovery() {
 
   const {
     areasLoading, listingDataLoading, markersLoading, isLoadingAreaListings,
+    isFetching,
     discoverAreas, listingsWithCoords, filteredListings,
     markerListings, areaListings, areaMarkerListings,
     topLocalities, activeFocusBounds, trendsAreaKeys,
@@ -141,6 +142,7 @@ export default function MapDiscovery() {
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={setSchoolBoardFilter}
       city={city}
       allListings={listingsWithCoords} trendsAreaKeys={trendsAreaKeys}
+      isFetching={isFetching}
     />
   );
 
@@ -248,6 +250,8 @@ export default function MapDiscovery() {
           onBack={handleAreaBack}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
+          isFetching={isFetching}
+          isInitialLoading={isLoading}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

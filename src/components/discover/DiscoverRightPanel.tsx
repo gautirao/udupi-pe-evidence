@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, MapPin, SlidersHorizontal, TrendingUp,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -89,6 +90,10 @@ interface DiscoverRightPanelProps {
   filtersContent?: React.ReactNode;
   trendsHref?: string;
   footerContent?: React.ReactNode;
+  /** True while a filter-change refetch is in-flight (isFetching && !isLoading). */
+  isFetching?: boolean;
+  /** True during the initial full-screen load — disables the opacity overlay so the skeleton shows normally. */
+  isInitialLoading?: boolean;
 }
 
 export function DiscoverRightPanel({
@@ -102,6 +107,8 @@ export function DiscoverRightPanel({
   filtersContent,
   trendsHref,
   footerContent,
+  isFetching = false,
+  isInitialLoading = false,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -119,7 +126,12 @@ export function DiscoverRightPanel({
           />
 
           {/* Empty state body */}
-          <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4">
+          <div
+            className={cn(
+              'flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4 transition-opacity duration-150',
+              isFetching && !isInitialLoading ? 'opacity-50 pointer-events-none' : 'opacity-100',
+            )}
+          >
             <EmptyState
               icon={<MapPin className="h-8 w-8 text-muted-foreground/40" />}
               heading="Select an area to explore"
@@ -163,7 +175,12 @@ export function DiscoverRightPanel({
           />
 
           {/* Listings body */}
-          <div className="flex-1 overflow-y-auto">
+          <div
+            className={cn(
+              'flex-1 overflow-y-auto transition-opacity duration-150',
+              isFetching && !isInitialLoading ? 'opacity-50 pointer-events-none' : 'opacity-100',
+            )}
+          >
             {isLoadingListings ? (
               <div className="space-y-3 p-4">
                 {[0, 1, 2].map((i) => (

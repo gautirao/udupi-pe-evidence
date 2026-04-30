@@ -38,6 +38,8 @@ export interface UseDiscoverMapDataResult {
   listingDataLoading: boolean;
   markersLoading: boolean;
   isLoadingAreaListings: boolean;
+  /** True while a filter-change refetch is in-flight for listings or markers. */
+  isFetching: boolean;
 
   // Data
   discoverAreas: AreaPoint[];
@@ -97,6 +99,7 @@ export function useDiscoverMapData({
   const {
     data: discoverListingsPage,
     isLoading: discoverListingsLoading,
+    isFetching: discoverListingsFetching,
     error: discoverListingsError,
   } = useDiscoverListings({
     city,
@@ -111,6 +114,7 @@ export function useDiscoverMapData({
   const {
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
+    isFetching: filteredMarkersFetching,
   } = useDiscoverFilteredMarkers(city, filters, markersEnabled);
 
   // ── Static data ───────────────────────────────────────────────────────────
@@ -138,6 +142,8 @@ export function useDiscoverMapData({
   // ── Derived: loading / error ──────────────────────────────────────────────
   const listingDataLoading = isAuthenticated && (debouncedSearch ? searchLoading : discoverListingsLoading);
   const markersLoading = filteredMarkersLoading;
+  /** True while a filter-change refetch is in-flight (isFetching && !isLoading). */
+  const isFetching = isAuthenticated && (discoverListingsFetching || filteredMarkersFetching);
   const error = isAuthenticated ? (debouncedSearch ? (searchError as Error | null) : (discoverListingsError as Error | null)) : null;
 
   // ── Derived: listing sets ─────────────────────────────────────────────────
@@ -247,6 +253,7 @@ export function useDiscoverMapData({
     listingDataLoading,
     markersLoading,
     isLoadingAreaListings,
+    isFetching,
     discoverAreas,
     discoverAreasData,
     listingsWithCoords,
