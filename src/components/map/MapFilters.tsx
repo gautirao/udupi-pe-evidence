@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PropertyFilters, PropertyListing, LocalityOption, useLocalities } from '@/hooks/usePropertyListings';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { computeNearbyLocalities, CITY_CONFIG } from '@/lib/localityUtils';
@@ -29,7 +28,6 @@ interface MapFiltersProps {
   schoolBoardFilter: string[];
   onSchoolBoardFilterChange: (boards: string[]) => void;
   city: string;
-  onCityChange: (city: string) => void;
   allListings: PropertyListing[];
   /** areaKey values for selected localities. Controls "View Trends" button visibility. */
   trendsAreaKeys?: string[];
@@ -45,7 +43,6 @@ export function MapFilters({
   schoolBoardFilter,
   onSchoolBoardFilterChange,
   city,
-  onCityChange,
   allListings,
   trendsAreaKeys = [],
 }: MapFiltersProps) {
@@ -126,18 +123,6 @@ export function MapFilters({
       </CardHeader>
 
       <CardContent className="flex-1 overflow-y-auto scrollbar-thin space-y-6">
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">City</Label>
-          <Select value={city} onValueChange={onCityChange}>
-            <SelectTrigger className="w-full h-9 text-sm"><SelectValue placeholder="Select city" /></SelectTrigger>
-            <SelectContent>
-              {Object.entries(CITY_CONFIG).map(([key, config]) => (
-                <SelectItem key={key} value={key}>{config.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input placeholder="Search listings..." value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} className="pl-8 h-9 text-sm" />

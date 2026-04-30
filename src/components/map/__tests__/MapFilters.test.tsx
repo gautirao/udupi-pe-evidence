@@ -72,7 +72,6 @@ const defaultProps = {
   schoolBoardFilter: [] as string[],
   onSchoolBoardFilterChange: vi.fn(),
   city: 'udupi',
-  onCityChange: vi.fn(),
   allListings: [],
 };
 
@@ -201,7 +200,6 @@ describe('MapFilters — View Trends button (F3)', () => {
           schoolBoardFilter={[]}
           onSchoolBoardFilterChange={vi.fn()}
           city="udupi"
-          onCityChange={vi.fn()}
           allListings={[]}
           trendsAreaKeys={['IN|KA|Udupi|Manipal']}
         />
@@ -229,7 +227,6 @@ describe('MapFilters — View Trends button (F3)', () => {
           schoolBoardFilter={[]}
           onSchoolBoardFilterChange={vi.fn()}
           city="udupi"
-          onCityChange={vi.fn()}
           allListings={[]}
           trendsAreaKeys={['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala']}
         />

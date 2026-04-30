@@ -139,7 +139,7 @@ export default function MapDiscovery() {
       searchQuery={searchQuery} onSearchChange={setSearchQuery}
       selectedSchool={selectedSchool} onSchoolSelect={handleSchoolSelect}
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={setSchoolBoardFilter}
-      city={city} onCityChange={handleCityChange}
+      city={city}
       allListings={listingsWithCoords} trendsAreaKeys={trendsAreaKeys}
     />
   );
