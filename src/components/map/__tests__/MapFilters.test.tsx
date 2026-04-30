@@ -240,6 +240,102 @@ describe('MapFilters — View Trends button (F3)', () => {
   });
 });
 
+// ─── Active filter chips and badge (#948) ─────────────────────
+
+describe('MapFilters — active filter chips and badge (#948)', () => {
+  it('badge absent when no filters active', () => {
+    renderFilters();
+    expect(screen.queryByTestId('filter-count-badge')).not.toBeInTheDocument();
+  });
+
+  it('badge shows count 1 for a single active property type', () => {
+    renderFilters({ ...defaultProps, filters: { propertyTypes: ['apartment'] } });
+    expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('1');
+  });
+
+  it('badge counts one chip per property type value', () => {
+    renderFilters({ ...defaultProps, filters: { propertyTypes: ['apartment', 'house'] } });
+    expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('2');
+  });
+
+  it('badge counts chips across multiple filter groups', () => {
+    renderFilters({
+      ...defaultProps,
+      filters: { propertyTypes: ['apartment'], bedrooms: [2, 3], priceMin: 1_000_000 },
+    });
+    // 1 (apartment) + 2 (2BHK, 3BHK) + 1 (price) = 4
+    expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('4');
+  });
+
+  it('clicking a property-type chip removes only that type', async () => {
+    const user = userEvent.setup();
+    const onFiltersChange = vi.fn();
+    renderFilters({
+      ...defaultProps,
+      filters: { propertyTypes: ['apartment', 'house'] },
+      onFiltersChange,
+    });
+    await user.click(screen.getByRole('button', { name: 'Remove Apartment filter' }));
+    expect(onFiltersChange).toHaveBeenCalledWith({ propertyTypes: ['house'] });
+  });
+
+  it('clicking a price chip clears both priceMin and priceMax', async () => {
+    const user = userEvent.setup();
+    const onFiltersChange = vi.fn();
+    renderFilters({
+      ...defaultProps,
+      filters: { priceMin: 1_000_000, priceMax: 5_000_000 },
+      onFiltersChange,
+    });
+    await user.click(screen.getByRole('button', { name: 'Remove ₹1000000 – ₹5000000 filter' }));
+    expect(onFiltersChange).toHaveBeenCalledWith({ priceMin: undefined, priceMax: undefined });
+  });
+
+  it('clicking a search chip calls onSearchChange with empty string', async () => {
+    const user = userEvent.setup();
+    const onSearchChange = vi.fn();
+    renderFilters({ ...defaultProps, searchQuery: 'lakeside', onSearchChange });
+    await user.click(screen.getByRole('button', { name: 'Remove "lakeside" filter' }));
+    expect(onSearchChange).toHaveBeenCalledWith('');
+  });
+
+  it('clicking a near-school chip calls onSchoolSelect(null) and clears school filter fields', async () => {
+    const user = userEvent.setup();
+    const onSchoolSelect = vi.fn();
+    const onFiltersChange = vi.fn();
+    renderFilters({
+      ...defaultProps,
+      filters: { schoolLat: 13.5, schoolLon: 74.7, schoolRadiusKm: 2 },
+      onSchoolSelect,
+      onFiltersChange,
+    });
+    await user.click(screen.getByRole('button', { name: 'Remove Near school filter' }));
+    expect(onSchoolSelect).toHaveBeenCalledWith(null);
+    expect(onFiltersChange).toHaveBeenCalledWith({ schoolLat: undefined, schoolLon: undefined, schoolRadiusKm: undefined });
+  });
+
+  it('existing Clear button still calls all clear handlers', async () => {
+    const user = userEvent.setup();
+    const onFiltersChange = vi.fn();
+    const onSearchChange = vi.fn();
+    const onSchoolSelect = vi.fn();
+    const onSchoolBoardFilterChange = vi.fn();
+    renderFilters({
+      ...defaultProps,
+      filters: { propertyTypes: ['apartment'] },
+      onFiltersChange,
+      onSearchChange,
+      onSchoolSelect,
+      onSchoolBoardFilterChange,
+    });
+    await user.click(screen.getByRole('button', { name: /clear/i }));
+    expect(onFiltersChange).toHaveBeenCalledWith({});
+    expect(onSearchChange).toHaveBeenCalledWith('');
+    expect(onSchoolSelect).toHaveBeenCalledWith(null);
+    expect(onSchoolBoardFilterChange).toHaveBeenCalledWith([]);
+  });
+});
+
 // ─── isNew unit tests (F5) ────────────────────────────────────
 
 describe('isNew', () => {
