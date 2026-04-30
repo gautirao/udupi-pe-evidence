@@ -86,7 +86,7 @@ public class DiscoverListingsService {
                     pl.listing_purpose,
                     pl.status
                 FROM property_listings pl
-                WHERE """ + whereFragment + """
+                WHERE \s""" + whereFragment + """
 
                 ORDER BY pl.created_at DESC
                 LIMIT ? OFFSET ?
@@ -164,7 +164,7 @@ public class DiscoverListingsService {
         String aggSql = """
                 SELECT pl.locality, COUNT(*) AS cnt
                 FROM property_listings pl
-                WHERE """ + whereFragment + """
+                WHERE \s""" + whereFragment + """
 
                 GROUP BY pl.locality
                 ORDER BY cnt DESC
