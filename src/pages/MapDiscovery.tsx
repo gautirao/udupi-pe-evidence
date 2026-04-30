@@ -13,9 +13,10 @@ import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { GraduationCap, Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
@@ -30,6 +31,7 @@ export default function MapDiscovery() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 250);
     return () => clearTimeout(t);
@@ -207,6 +209,20 @@ export default function MapDiscovery() {
             <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
           </div>
 
+          {/* Near a school — below city select */}
+          <div className="absolute top-16 right-4 z-[1000]">
+            <Button
+              size="sm"
+              variant={selectedSchool ? 'default' : 'outline'}
+              className={selectedSchool ? 'gap-1.5 shadow-sm' : 'gap-1.5 bg-card shadow-sm'}
+              onClick={() => setNearSchoolOpen(true)}
+              aria-pressed={selectedSchool !== null}
+            >
+              <GraduationCap className="h-4 w-4" />
+              Near a school
+            </Button>
+          </div>
+
           {/* City listing count — bottom-right */}
           {discoverAreas.length > 0 && (
             <div className="absolute bottom-16 right-4 z-[1000]">
@@ -275,6 +291,16 @@ export default function MapDiscovery() {
           ) : null}
         />
       </div>
+      <NearSchoolSheet
+        open={nearSchoolOpen}
+        onOpenChange={setNearSchoolOpen}
+        selectedSchool={selectedSchool}
+        onSchoolSelect={handleSchoolSelect}
+        radiusKm={filters.schoolRadiusKm ?? 2}
+        onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
+        boardFilter={schoolBoardFilter}
+        onBoardFilterChange={setSchoolBoardFilter}
+      />
     </AppLayout>
   );
 }

@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { formatPrice } from '@/lib/formatters';
 import { Filter, Loader2, Search, TrendingUp, X } from 'lucide-react';
-import { SchoolSearchFilter } from '@/components/map/SchoolSearchFilter';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PropertyTypeFilter } from './filters/PropertyTypeFilter';
 import { BedroomFilter } from './filters/BedroomFilter';
@@ -197,15 +196,6 @@ export function MapFilters({
             </Button>
           )}
         </div>
-
-        <SchoolSearchFilter
-          selectedSchool={selectedSchool}
-          onSchoolSelect={onSchoolSelect}
-          radiusKm={filters.schoolRadiusKm ?? 2}
-          onRadiusChange={(radius) => onFiltersChange({ ...filters, schoolRadiusKm: radius })}
-          boardFilter={schoolBoardFilter}
-          onBoardFilterChange={onSchoolBoardFilterChange}
-        />
 
         <PropertyTypeFilter filters={filters} onFiltersChange={onFiltersChange} />
         <BedroomFilter filters={filters} onFiltersChange={onFiltersChange} />

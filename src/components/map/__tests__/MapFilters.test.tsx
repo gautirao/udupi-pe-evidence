@@ -177,6 +177,20 @@ describe('MapFilters — locality filter removed (#950)', () => {
   });
 });
 
+describe('MapFilters — school search removed from panel (#951)', () => {
+  it('does not render the SchoolSearchFilter search input inside MapFilters', () => {
+    renderFilters();
+    // SchoolSearchFilter renders an input with aria-label "Search for a school" — must not appear here.
+    expect(screen.queryByRole('combobox', { name: /search for a school/i })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/type a school name/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render a "Search Near School" label inside MapFilters', () => {
+    renderFilters();
+    expect(screen.queryByText(/search near school/i)).not.toBeInTheDocument();
+  });
+});
+
 describe('MapFilters — View Trends button (F3)', () => {
   it('does not render the button when trendsAreaKeys is empty', () => {
     renderFilters({ ...defaultProps, trendsAreaKeys: [] });
