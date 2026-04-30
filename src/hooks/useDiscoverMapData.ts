@@ -1,15 +1,20 @@
 import { useMemo } from 'react';
-import { usePropertyListings, PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
-import { useDiscoverMarkers } from '@/hooks/useDiscoverMarkers';
+import { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { useDiscoverListings } from '@/hooks/useDiscoverListings';
+import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas, DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useListingSearch } from '@/hooks/useListingSearch';
 import { useSchoolSearch, SchoolResult } from '@/hooks/useSchoolSearch';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
-import { computeFocusBounds, computeTopLocalities } from '@/lib/mapUtils';
+import { computeFocusBounds } from '@/lib/mapUtils';
 import { CITY_CONFIG } from '@/lib/localityUtils';
-import { markerToPropertyListing, cityListingToPropertyListing } from '@/lib/discoverMappers';
+import {
+  filteredMarkerToPropertyListing,
+  discoverListingToPropertyListing,
+  cityListingToPropertyListing,
+} from '@/lib/discoverMappers';
 
 export interface UseDiscoverMapDataParams {
   city: string;
@@ -23,6 +28,8 @@ export interface UseDiscoverMapDataParams {
   fitTick: number;
   /** Pre-computed gate: true only when authenticated AND zoom > AREA_LAYER_MAX_ZOOM. */
   markersEnabled: boolean;
+  /** Current page for the listing cards panel (0-indexed). */
+  page: number;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -48,6 +55,9 @@ export interface UseDiscoverMapDataResult {
   cityZoom: number | undefined;
   schoolSearchResults: SchoolResult[] | undefined;
   error: Error | null;
+  /** Pagination metadata from the listings endpoint */
+  totalElements: number;
+  totalPages: number;
 }
 
 export function useDiscoverMapData({
@@ -59,27 +69,15 @@ export function useDiscoverMapData({
   isAuthenticated,
   fitTick,
   markersEnabled,
+  page,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
   // ── Memoized city config ──────────────────────────────────────────────────
-  // Stabilize so PropertyMap doesn't get a new array reference on every render.
   const cityCenter = useMemo(() => CITY_CONFIG[city]?.center, [city]);
   const cityZoom = useMemo(() => CITY_CONFIG[city]?.zoom, [city]);
 
-  // Merge city into filters so the React Query key changes on city switch and the
-  // client-side city filter in usePropertyListings scopes results correctly.
-  // `filters` is a stable useState ref from useDiscoverPageState — only changes
-  // on user-driven filter actions, so this memo does not fire on every render.
-  const filtersWithCity = useMemo(() => ({ ...filters, city }), [filters, city]);
-
-  // ── Data hooks ───────────────────────────────────────────────────────────
-  const {
-    data: listings = [],
-    isLoading: listingsLoading,
-    error: listingsError,
-  } = usePropertyListings(filtersWithCity);
-
+  // ── Listing search (text) — unchanged path ────────────────────────────────
   const singleLocality = filters.localities?.length === 1 ? filters.localities[0] : undefined;
   const singlePropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
   const singleBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
@@ -95,12 +93,31 @@ export function useDiscoverMapData({
     bedrooms: singleBedrooms,
   });
 
+  // ── Paginated discover listings (auth-only) ────────────────────────────────
+  const {
+    data: discoverListingsPage,
+    isLoading: discoverListingsLoading,
+    error: discoverListingsError,
+  } = useDiscoverListings({
+    city,
+    page,
+    size: 50,
+    filters,
+    includeAggregates: true,
+    enabled: isAuthenticated && !debouncedSearch,
+  });
+
+  // ── Filtered markers (auth-only, same predicate as listings) ──────────────
+  const {
+    data: filteredMarkersData,
+    isLoading: filteredMarkersLoading,
+  } = useDiscoverFilteredMarkers(city, filters, markersEnabled);
+
+  // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
   const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(isCityValid ? city : '');
-  const { data: markersData, isLoading: markersLoading } = useDiscoverMarkers(city, null, markersEnabled);
 
-  // Map filter state to discover listing params.
-  // priceMin/priceMax in PropertyFilters are rupees; backend expects paise.
+  // Area listing cards (right panel detail view)
   const discoverMinPrice = filters.priceMin != null ? filters.priceMin * 100 : undefined;
   const discoverMaxPrice = filters.priceMax != null ? filters.priceMax * 100 : undefined;
   const discoverBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
@@ -119,25 +136,23 @@ export function useDiscoverMapData({
   const { data: schoolSearchResults } = useSchoolSearch(urlSchoolId ?? '');
 
   // ── Derived: loading / error ──────────────────────────────────────────────
-  const listingDataLoading = isAuthenticated && (debouncedSearch ? searchLoading : listingsLoading);
-  const error = isAuthenticated ? (debouncedSearch ? searchError : listingsError) : null;
+  const listingDataLoading = isAuthenticated && (debouncedSearch ? searchLoading : discoverListingsLoading);
+  const markersLoading = filteredMarkersLoading;
+  const error = isAuthenticated ? (debouncedSearch ? (searchError as Error | null) : (discoverListingsError as Error | null)) : null;
 
   // ── Derived: listing sets ─────────────────────────────────────────────────
-  const filteredListings = useMemo(
-    () =>
-      isAuthenticated
-        ? (debouncedSearch ? (searchResults ?? []) : listings)
-        : [],
-    [isAuthenticated, debouncedSearch, searchResults, listings],
-  );
+  const filteredListings = useMemo(() => {
+    if (!isAuthenticated) return [];
+    if (debouncedSearch) return searchResults ?? [];
+    const now = new Date().toISOString();
+    return (discoverListingsPage?.content ?? []).map((l) =>
+      discoverListingToPropertyListing(l, now),
+    );
+  }, [isAuthenticated, debouncedSearch, searchResults, discoverListingsPage]);
 
-  // Anonymous users: no lat/lon in teaser response — pass empty array so no pins render.
   const listingsWithCoords = useMemo(
-    () =>
-      isAuthenticated
-        ? filteredListings.filter((l) => l.latitude && l.longitude)
-        : [],
-    [isAuthenticated, filteredListings],
+    () => filteredListings.filter((l) => l.latitude && l.longitude),
+    [filteredListings],
   );
 
   // ── Derived: discover areas ───────────────────────────────────────────────
@@ -164,10 +179,10 @@ export function useDiscoverMapData({
   );
 
   const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
-    if (!markersData?.markers) return [];
+    if (!filteredMarkersData?.markers) return [];
     const now = new Date().toISOString();
-    return markersData.markers.map((m) => markerToPropertyListing(m, now));
-  }, [markersData]);
+    return filteredMarkersData.markers.map((m) => filteredMarkerToPropertyListing(m, now));
+  }, [filteredMarkersData]);
 
   const areaMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!selectedArea || areaListings.length === 0) return [];
@@ -177,26 +192,30 @@ export function useDiscoverMapData({
       .map((l) => cityListingToPropertyListing(l, now));
   }, [selectedArea, areaListings]);
 
-  // ── Derived: top localities & focus bounds ────────────────────────────────
+  // ── Derived: topLocalities from aggregate response ────────────────────────
+  // Full-filtered-set aggregate — does NOT change on page navigation.
   const topLocalities = useMemo(
-    () => computeTopLocalities(listingsWithCoords),
-    [listingsWithCoords],
+    () => discoverListingsPage?.aggregates?.topLocalities ?? [],
+    [discoverListingsPage],
   );
 
+  // ── Derived: focus bounds from filtered markers (full set, not paginated) ─
   const focusBounds = useMemo(
-    () => computeFocusBounds(listingsWithCoords, filters.localities ?? []),
-    [filters.localities, listingsWithCoords],
+    () =>
+      computeFocusBounds(
+        filteredMarkersData?.markers ?? [],
+        filters.localities ?? [],
+      ),
+    [filteredMarkersData, filters.localities],
   );
 
-  // fitTick is in the dep array solely to force a new reference on refit clicks
+  // fitTick in dep array forces a new reference on refit clicks
   const activeFocusBounds = useMemo(() => {
-    void fitTick; // ← do NOT delete this line
+    void fitTick; // ← do NOT delete
     return focusBounds;
   }, [focusBounds, fitTick]);
 
   // ── Derived: locality → areaKey map ──────────────────────────────────────
-  // Primary source: area_overview_stats via /api/trends/options (backend-authoritative, limit=50).
-  // Secondary: /api/discover/areas (all seeded areas, including zero-listing).
   const localityToAreaKey = useMemo(() => {
     const m = new Map<string, string>();
     trendsOpts?.defaultAreas.forEach((a) => m.set(a.areaLabel, a.areaKey));
@@ -219,6 +238,10 @@ export function useDiscoverMapData({
     return [];
   }, [selectedArea, isAuthenticated, filters.localities, localityToAreaKey]);
 
+  // ── Pagination metadata ───────────────────────────────────────────────────
+  const totalElements = discoverListingsPage?.totalElements ?? 0;
+  const totalPages = discoverListingsPage?.totalPages ?? 0;
+
   return {
     areasLoading,
     listingDataLoading,
@@ -239,5 +262,7 @@ export function useDiscoverMapData({
     cityZoom,
     schoolSearchResults,
     error,
+    totalElements,
+    totalPages,
   };
 }

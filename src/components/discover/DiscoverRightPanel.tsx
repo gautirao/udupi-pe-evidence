@@ -88,6 +88,7 @@ interface DiscoverRightPanelProps {
   onBack?: () => void;
   filtersContent?: React.ReactNode;
   trendsHref?: string;
+  footerContent?: React.ReactNode;
 }
 
 export function DiscoverRightPanel({
@@ -100,6 +101,7 @@ export function DiscoverRightPanel({
   onBack,
   filtersContent,
   trendsHref,
+  footerContent,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -193,6 +195,7 @@ export function DiscoverRightPanel({
           </div>
         </>
       )}
+      {footerContent}
     </div>
   );
 }

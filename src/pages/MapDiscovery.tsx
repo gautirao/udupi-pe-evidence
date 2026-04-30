@@ -14,7 +14,8 @@ import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { Card } from '@/components/ui/card';
-import { Loader2, MapPin } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
@@ -43,6 +44,7 @@ export default function MapDiscovery() {
     handleCityChange, handleSchoolSelect, handleFiltersChange,
     handlePolygonDrawn, handlePolygonCleared,
     handleAreaClick, handleAreaSelect, handleAreaBack,
+    page, setPage,
   } = useDiscoverPageState({ urlState, urlActions });
 
   const isCityValid = city in CITY_CONFIG;
@@ -53,10 +55,12 @@ export default function MapDiscovery() {
     markerListings, areaListings, areaMarkerListings,
     topLocalities, activeFocusBounds, trendsAreaKeys,
     cityCenter, cityZoom, schoolSearchResults, error,
+    totalElements, totalPages,
   } = useDiscoverMapData({
     city, selectedArea, filters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
     markersEnabled: isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM,
+    page,
   });
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
@@ -244,6 +248,27 @@ export default function MapDiscovery() {
           onBack={handleAreaBack}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
+          footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
+            <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
+              <Button
+                variant="outline" size="sm"
+                disabled={page === 0}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />Prev
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {page + 1} / {totalPages} · {totalElements.toLocaleString()} listings
+              </span>
+              <Button
+                variant="outline" size="sm"
+                disabled={page >= totalPages - 1}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next<ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          ) : null}
         />
       </div>
     </AppLayout>

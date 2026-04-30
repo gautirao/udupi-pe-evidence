@@ -49,6 +49,10 @@ export interface UseDiscoverPageStateResult {
   handleAreaClick: (area: AreaPoint) => void;
   handleAreaSelect: (area: AreaPoint) => void;
   handleAreaBack: () => void;
+
+  // Pagination
+  page: number;
+  setPage: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export function useDiscoverPageState({
@@ -58,6 +62,7 @@ export function useDiscoverPageState({
   const [filters, setFilters] = useState<PropertyFilters>({});
   const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
+  const [page, setPage] = useState(0);
 
   // Initialize mapZoom from URL viewport when present so the correct zoom band
   // (area markers vs listing markers) is applied from the very first render.
@@ -127,6 +132,10 @@ export function useDiscoverPageState({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlAreaKey]);
+
+  // Reset page to 0 whenever filter set, city, or selected area changes so
+  // paginated results always start from the beginning after a filter change.
+  useEffect(() => { setPage(0); }, [filters, city, selectedArea]);
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
 
@@ -252,5 +261,7 @@ export function useDiscoverPageState({
     handleAreaClick,
     handleAreaSelect,
     handleAreaBack,
+    page,
+    setPage,
   };
 }
