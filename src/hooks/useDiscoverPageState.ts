@@ -59,7 +59,22 @@ export function useDiscoverPageState({
   urlState,
   urlActions,
 }: UseDiscoverPageStateParams): UseDiscoverPageStateResult {
-  const [filters, setFilters] = useState<PropertyFilters>({});
+  const [filters, setFilters] = useState<PropertyFilters>(() => {
+    const f = urlState.filters;
+    return {
+      propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
+      bedrooms: f.bedrooms,
+      priceMin: f.priceMin,
+      priceMax: f.priceMax,
+      sellerTypes: f.sellerTypes,
+      backOnMarket: f.backOnMarket,
+      newToMarket: f.newToMarket,
+      reraRegistered: f.reraRegistered,
+      readyToMove: f.readyToMove,
+      dateFrom: f.dateFrom ? new Date(f.dateFrom) : undefined,
+      dateTo: f.dateTo ? new Date(f.dateTo) : undefined,
+    };
+  });
   const [selectedArea, setSelectedArea] = useState<AreaPoint | null>(null);
   const [panToArea, setPanToArea] = useState<AreaPoint | null>(null);
   const [page, setPage] = useState(0);
@@ -185,7 +200,13 @@ export function useDiscoverPageState({
         bedrooms: next.bedrooms,
         priceMin: next.priceMin,
         priceMax: next.priceMax,
-        sellerType: next.sellerTypes?.length === 1 ? next.sellerTypes[0] : undefined,
+        sellerTypes: next.sellerTypes,
+        backOnMarket: next.backOnMarket,
+        newToMarket: next.newToMarket,
+        reraRegistered: next.reraRegistered,
+        readyToMove: next.readyToMove,
+        dateFrom: next.dateFrom ? next.dateFrom.toISOString().slice(0, 10) : undefined,
+        dateTo: next.dateTo ? next.dateTo.toISOString().slice(0, 10) : undefined,
       });
     },
     [selectedSchool, urlActions],

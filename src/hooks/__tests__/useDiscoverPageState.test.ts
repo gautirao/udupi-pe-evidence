@@ -15,6 +15,7 @@ function makeUrlState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlSta
     filters: {},
     schoolId: null,
     radiusKm: null,
+    q: '',
     ...overrides,
   };
 }
@@ -28,6 +29,7 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     setFiltersLive: vi.fn(),
     setFiltersCommitted: vi.fn(),
     setSchoolParams: vi.fn(),
+    setSearchQuery: vi.fn(),
     ...overrides,
   };
 }
@@ -199,5 +201,132 @@ describe('useDiscoverPageState — pagination', () => {
       result.current.handleAreaBack();
     });
     expect(result.current.page).toBe(0);
+  });
+});
+
+describe('useDiscoverPageState — initial filters from URL', () => {
+  it('lazy-initialises filters from urlState on mount', () => {
+    const urlFilters = {
+      propertyTypes: ['house', 'apartment'] as ['house', 'apartment'],
+      bedrooms: [2, 3],
+      priceMin: 1_000_000,
+      priceMax: 10_000_000,
+      sellerTypes: ['owner', 'broker'],
+      backOnMarket: true as true,
+      newToMarket: true as true,
+      reraRegistered: true as true,
+      readyToMove: true as true,
+      dateFrom: '2025-01-01',
+      dateTo: '2025-12-31',
+    };
+
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({ filters: urlFilters }),
+        urlActions: makeUrlActions(),
+      }),
+    );
+
+    const f = result.current.filters;
+    expect(f.propertyTypes).toEqual(['house', 'apartment']);
+    expect(f.bedrooms).toEqual([2, 3]);
+    expect(f.priceMin).toBe(1_000_000);
+    expect(f.priceMax).toBe(10_000_000);
+    expect(f.sellerTypes).toEqual(['owner', 'broker']);
+    expect(f.backOnMarket).toBe(true);
+    expect(f.newToMarket).toBe(true);
+    expect(f.reraRegistered).toBe(true);
+    expect(f.readyToMove).toBe(true);
+    // dateFrom/dateTo converted from string to Date
+    expect(f.dateFrom).toBeInstanceOf(Date);
+    expect(f.dateFrom?.toISOString().slice(0, 10)).toBe('2025-01-01');
+    expect(f.dateTo).toBeInstanceOf(Date);
+    expect(f.dateTo?.toISOString().slice(0, 10)).toBe('2025-12-31');
+  });
+
+  it('leaves optional fields undefined when URL filters are empty', () => {
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState({ filters: {} }),
+        urlActions: makeUrlActions(),
+      }),
+    );
+    const f = result.current.filters;
+    expect(f.sellerTypes).toBeUndefined();
+    expect(f.backOnMarket).toBeUndefined();
+    expect(f.dateFrom).toBeUndefined();
+    expect(f.dateTo).toBeUndefined();
+  });
+});
+
+describe('useDiscoverPageState — handleFiltersChange passes all new fields to setFiltersLive', () => {
+  it('passes multi-seller array to setFiltersLive without truncating', () => {
+    const setFiltersLive = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ setFiltersLive }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleFiltersChange({ sellerTypes: ['owner', 'broker'] });
+    });
+
+    expect(setFiltersLive).toHaveBeenCalledWith(
+      expect.objectContaining({ sellerTypes: ['owner', 'broker'] }),
+    );
+  });
+
+  it('converts dateFrom/dateTo Date objects to ISO strings for setFiltersLive', () => {
+    const setFiltersLive = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ setFiltersLive }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleFiltersChange({
+        dateFrom: new Date('2025-03-15'),
+        dateTo: new Date('2025-06-30'),
+      });
+    });
+
+    expect(setFiltersLive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dateFrom: '2025-03-15',
+        dateTo: '2025-06-30',
+      }),
+    );
+  });
+
+  it('passes boolean status flags through to setFiltersLive', () => {
+    const setFiltersLive = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ setFiltersLive }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleFiltersChange({
+        backOnMarket: true,
+        newToMarket: true,
+        reraRegistered: true,
+        readyToMove: true,
+      });
+    });
+
+    expect(setFiltersLive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backOnMarket: true,
+        newToMarket: true,
+        reraRegistered: true,
+        readyToMove: true,
+      }),
+    );
   });
 });

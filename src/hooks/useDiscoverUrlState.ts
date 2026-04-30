@@ -15,7 +15,13 @@
  *   beds       – comma-joined bedroom counts (e.g. "2,3")
  *   priceMin   – rupees
  *   priceMax   – rupees
- *   seller     – seller type
+ *   seller     – comma-joined seller types (e.g. "owner,broker"); legacy singular value also accepted
+ *   bom        – "1" when backOnMarket=true
+ *   ntm        – "1" when newToMarket=true
+ *   rera       – "1" when reraRegistered=true
+ *   rtm        – "1" when readyToMove=true
+ *   from       – ISO date YYYY-MM-DD for dateFrom
+ *   to         – ISO date YYYY-MM-DD for dateTo
  *   schoolId   – school id (already in use; threaded through for completeness)
  *   radiusKm   – school radius (already in use; threaded through for completeness)
  *
@@ -47,7 +53,16 @@ export interface DiscoverUrlFilters {
   bedrooms?: number[];
   priceMin?: number;
   priceMax?: number;
-  sellerType?: string;
+  /** Comma-separated seller types in the URL; replaces the former singular sellerType. */
+  sellerTypes?: string[];
+  backOnMarket?: boolean;
+  newToMarket?: boolean;
+  reraRegistered?: boolean;
+  readyToMove?: boolean;
+  /** ISO date string YYYY-MM-DD — URL representation of dateFrom */
+  dateFrom?: string;
+  /** ISO date string YYYY-MM-DD — URL representation of dateTo */
+  dateTo?: string;
 }
 
 export interface DiscoverUrlState {
@@ -139,10 +154,40 @@ function serializeFilters(
   } else {
     params.delete('priceMax');
   }
-  if (filters.sellerType) {
-    params.set('seller', filters.sellerType);
+  if (filters.sellerTypes && filters.sellerTypes.length > 0) {
+    params.set('seller', filters.sellerTypes.join(','));
   } else {
     params.delete('seller');
+  }
+  if (filters.backOnMarket) {
+    params.set('bom', '1');
+  } else {
+    params.delete('bom');
+  }
+  if (filters.newToMarket) {
+    params.set('ntm', '1');
+  } else {
+    params.delete('ntm');
+  }
+  if (filters.reraRegistered) {
+    params.set('rera', '1');
+  } else {
+    params.delete('rera');
+  }
+  if (filters.readyToMove) {
+    params.set('rtm', '1');
+  } else {
+    params.delete('rtm');
+  }
+  if (filters.dateFrom) {
+    params.set('from', filters.dateFrom);
+  } else {
+    params.delete('from');
+  }
+  if (filters.dateTo) {
+    params.set('to', filters.dateTo);
+  } else {
+    params.delete('to');
   }
   return params;
 }
@@ -182,12 +227,34 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
       ? { lat, lon, zoom }
       : null;
 
+  // seller: accept both legacy singular "owner" and new comma-separated "owner,broker"
+  const sellerRaw = urlParams.get('seller');
+  const sellerTypes = sellerRaw
+    ? sellerRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
+
+  // dateFrom / dateTo: stored as ISO date strings; validate before accepting
+  const parseDateParam = (raw: string | null): string | undefined => {
+    if (!raw) return undefined;
+    const d = new Date(raw);
+    return !isNaN(d.getTime()) ? raw : undefined;
+  };
+
   const filters: DiscoverUrlFilters = {
     propertyTypes: parseCommaStrings(urlParams.get('type')),
     bedrooms: parseCommaInts(urlParams.get('beds')),
     priceMin: urlParams.get('priceMin') ? Number(urlParams.get('priceMin')) : undefined,
     priceMax: urlParams.get('priceMax') ? Number(urlParams.get('priceMax')) : undefined,
-    sellerType: urlParams.get('seller') ?? undefined,
+    sellerTypes,
+    backOnMarket: urlParams.get('bom') === '1' ? true : undefined,
+    newToMarket: urlParams.get('ntm') === '1' ? true : undefined,
+    reraRegistered: urlParams.get('rera') === '1' ? true : undefined,
+    readyToMove: urlParams.get('rtm') === '1' ? true : undefined,
+    dateFrom: parseDateParam(urlParams.get('from')),
+    dateTo: parseDateParam(urlParams.get('to')),
   };
 
   const schoolId = urlParams.get('schoolId');

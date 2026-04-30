@@ -70,7 +70,8 @@ describe('useDiscoverUrlState — initial state from URL', () => {
     expect(filters.bedrooms).toEqual([2, 3]);
     expect(filters.priceMin).toBe(5000000);
     expect(filters.priceMax).toBe(20000000);
-    expect(filters.sellerType).toBe('owner');
+    // legacy singular seller parses as array with one element
+    expect(filters.sellerTypes).toEqual(['owner']);
   });
 
   it('returns undefined filter values when params are absent', () => {
@@ -82,7 +83,7 @@ describe('useDiscoverUrlState — initial state from URL', () => {
     expect(filters.bedrooms).toBeUndefined();
     expect(filters.priceMin).toBeUndefined();
     expect(filters.priceMax).toBeUndefined();
-    expect(filters.sellerType).toBeUndefined();
+    expect(filters.sellerTypes).toBeUndefined();
   });
 
   it('reads schoolId and radiusKm from URL', () => {
@@ -222,7 +223,7 @@ describe('useDiscoverUrlState — setFiltersCommitted', () => {
         bedrooms: [2, 3],
         priceMin: 1000000,
         priceMax: 5000000,
-        sellerType: 'owner',
+        sellerTypes: ['owner'],
       });
     });
 
@@ -231,7 +232,7 @@ describe('useDiscoverUrlState — setFiltersCommitted', () => {
     expect(filters.bedrooms).toEqual([2, 3]);
     expect(filters.priceMin).toBe(1000000);
     expect(filters.priceMax).toBe(5000000);
-    expect(filters.sellerType).toBe('owner');
+    expect(filters.sellerTypes).toEqual(['owner']);
   });
 
   it('clears filter params when values are empty/undefined', () => {
@@ -449,5 +450,185 @@ describe('useDiscoverUrlState — setFiltersLive (debounced)', () => {
 
     // Committed value should be present
     expect(result.current[0].filters.propertyTypes).toEqual(['land']);
+  });
+});
+
+// ─── New fields: seller (multi), booleans, dates ──────────────────────────────
+
+describe('useDiscoverUrlState — seller (multi-value)', () => {
+  it('legacy singular seller=owner parses as sellerTypes array with one element', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?seller=owner'),
+    });
+    expect(result.current[0].filters.sellerTypes).toEqual(['owner']);
+  });
+
+  it('seller=owner,broker parses as sellerTypes with both values', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?seller=owner,broker'),
+    });
+    expect(result.current[0].filters.sellerTypes).toEqual(['owner', 'broker']);
+  });
+
+  it('sellerTypes undefined when seller param absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.sellerTypes).toBeUndefined();
+  });
+
+  it('round-trips multi-seller via setFiltersCommitted', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({ sellerTypes: ['owner', 'broker'] });
+    });
+
+    expect(result.current[0].filters.sellerTypes).toEqual(['owner', 'broker']);
+  });
+
+  it('clears seller param when sellerTypes is empty array', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?seller=owner'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({ sellerTypes: [] });
+    });
+
+    expect(result.current[0].filters.sellerTypes).toBeUndefined();
+  });
+});
+
+describe('useDiscoverUrlState — boolean status flags', () => {
+  it('reads bom=1 as backOnMarket=true', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?bom=1'),
+    });
+    expect(result.current[0].filters.backOnMarket).toBe(true);
+  });
+
+  it('returns undefined backOnMarket when bom param absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.backOnMarket).toBeUndefined();
+  });
+
+  it('reads ntm=1 as newToMarket=true', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?ntm=1'),
+    });
+    expect(result.current[0].filters.newToMarket).toBe(true);
+  });
+
+  it('reads rera=1 as reraRegistered=true', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?rera=1'),
+    });
+    expect(result.current[0].filters.reraRegistered).toBe(true);
+  });
+
+  it('reads rtm=1 as readyToMove=true', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?rtm=1'),
+    });
+    expect(result.current[0].filters.readyToMove).toBe(true);
+  });
+
+  it('round-trips all boolean flags via setFiltersCommitted', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({
+        backOnMarket: true,
+        newToMarket: true,
+        reraRegistered: true,
+        readyToMove: true,
+      });
+    });
+
+    const { filters } = result.current[0];
+    expect(filters.backOnMarket).toBe(true);
+    expect(filters.newToMarket).toBe(true);
+    expect(filters.reraRegistered).toBe(true);
+    expect(filters.readyToMove).toBe(true);
+  });
+
+  it('omits boolean params from URL when flags are false/undefined', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?bom=1&ntm=1&rera=1&rtm=1'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({
+        backOnMarket: false,
+        newToMarket: undefined,
+        reraRegistered: false,
+        readyToMove: undefined,
+      });
+    });
+
+    const { filters } = result.current[0];
+    expect(filters.backOnMarket).toBeUndefined();
+    expect(filters.newToMarket).toBeUndefined();
+    expect(filters.reraRegistered).toBeUndefined();
+    expect(filters.readyToMove).toBeUndefined();
+  });
+});
+
+describe('useDiscoverUrlState — date range', () => {
+  it('reads from= and to= as ISO date strings', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?from=2025-01-01&to=2025-12-31'),
+    });
+    expect(result.current[0].filters.dateFrom).toBe('2025-01-01');
+    expect(result.current[0].filters.dateTo).toBe('2025-12-31');
+  });
+
+  it('silently ignores malformed date values', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?from=not-a-date&to=also-bad'),
+    });
+    expect(result.current[0].filters.dateFrom).toBeUndefined();
+    expect(result.current[0].filters.dateTo).toBeUndefined();
+  });
+
+  it('returns undefined dateFrom/dateTo when params absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.dateFrom).toBeUndefined();
+    expect(result.current[0].filters.dateTo).toBeUndefined();
+  });
+
+  it('round-trips date range via setFiltersCommitted', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({ dateFrom: '2025-03-15', dateTo: '2025-06-30' });
+    });
+
+    expect(result.current[0].filters.dateFrom).toBe('2025-03-15');
+    expect(result.current[0].filters.dateTo).toBe('2025-06-30');
+  });
+
+  it('clears date params when values are undefined', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?from=2025-01-01&to=2025-12-31'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({ dateFrom: undefined, dateTo: undefined });
+    });
+
+    expect(result.current[0].filters.dateFrom).toBeUndefined();
+    expect(result.current[0].filters.dateTo).toBeUndefined();
   });
 });
