@@ -160,9 +160,15 @@ public class DiscoverListingPredicateBuilder {
         }
 
         // school proximity — PostGIS ST_DWithin on geography
+        // pl.geog = property_listings.geog, the stored generated column added by V73.
+        // (schools.geog is a separate column added by V75; it is not referenced here.)
+        // Using the stored column avoids recalculating ST_MakePoint(pl.longitude, pl.latitude)::geography
+        // per row and allows the idx_property_listings_geog GiST index to be used.
+        // pl.geog is NULL only if lat/lon were NULL when the row was written; ST_DWithin
+        // returns NULL (falsy) for a NULL first argument, so those listings are excluded.
         if (f.schoolLat() != null && f.schoolLon() != null) {
             double radiusKm = f.schoolRadiusKm() != null ? f.schoolRadiusKm() : 2.0;
-            sb.append(" AND ST_DWithin(ST_MakePoint(pl.longitude, pl.latitude)::geography, ST_MakePoint(?, ?)::geography, ?)");
+            sb.append(" AND ST_DWithin(pl.geog, ST_MakePoint(?, ?)::geography, ?)");
             params.add(f.schoolLon());
             params.add(f.schoolLat());
             params.add(radiusKm * 1000.0); // metres

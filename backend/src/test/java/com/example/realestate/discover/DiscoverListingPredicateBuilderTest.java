@@ -161,14 +161,53 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
         assertTrue(sql.whereFragment().contains("ST_DWithin("));
+        // Must reference the stored pl.geog generated column (V73), not recalculate geography inline
+        assertTrue(sql.whereFragment().contains("pl.geog"),
+                "Expected predicate to use stored pl.geog generated column, not ST_MakePoint(pl.longitude, pl.latitude)");
+        assertFalse(sql.whereFragment().contains("ST_MakePoint(pl.longitude"),
+                "Predicate must not recalculate geography from raw columns — use pl.geog instead");
         assertTrue(sql.params().contains(3000.0),
                 "Expected radius in metres (3.0 km = 3000.0 m)");
-        // lon, lat order in params
+        // lon, lat order in params — ST_MakePoint(lon, lat) for the school point
         int lonIdx = sql.params().indexOf(74.0);
         int latIdx = sql.params().indexOf(13.0);
         assertTrue(lonIdx >= 0, "Longitude 74.0 should be a param");
         assertTrue(latIdx >= 0, "Latitude 13.0 should be a param");
         assertTrue(lonIdx < latIdx, "lon param should appear before lat param per ST_MakePoint(lon, lat)");
+    }
+
+    // ── 9b. schoolRadiusKm=null → default 2 km = 2000 m ────────────────────
+
+    @Test
+    void build_schoolProximityNullRadius_defaults2km() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, 13.0, 74.0, null); // schoolRadiusKm = null
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("ST_DWithin("),
+                "Expected school proximity clause when lat and lon are provided");
+        assertTrue(sql.params().contains(2000.0),
+                "Expected default radius of 2000 m (2 km) when schoolRadiusKm is null");
+    }
+
+    // ── 9c. schoolLon=null → no school proximity clause (silent skip) ────────
+
+    @Test
+    void build_schoolProximityMissingLon_noClause() {
+        // Documents the contract: both schoolLat AND schoolLon must be non-null
+        // to generate the proximity predicate. A partial pair is silently skipped.
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, 13.0, null, 2.0); // schoolLon = null
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertFalse(sql.whereFragment().contains("ST_DWithin("),
+                "No proximity clause should be generated when schoolLon is null");
     }
 
     // ── 10. reraRegistered=true → PG regex on rera_number ─────────────────
