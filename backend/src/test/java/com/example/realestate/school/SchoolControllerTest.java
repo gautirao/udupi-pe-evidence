@@ -1,5 +1,7 @@
 package com.example.realestate.school;
 
+import com.example.realestate.area.AreaNotFoundException;
+import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.security.UserRoleService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import(SchoolControllerTest.TestConfig.class)
+@Import({SchoolControllerTest.TestConfig.class, GlobalExceptionHandler.class})
 class SchoolControllerTest {
 
     private static final UUID SCHOOL_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -194,5 +197,117 @@ class SchoolControllerTest {
                         .param("lon", "0.0"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // ==================== GET /popular — city-only mode ====================
+
+    @Test
+    void popular_missingCity_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/schools/popular"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Query parameter 'city' is required"));
+    }
+
+    @Test
+    void popular_blankCity_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "  "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Query parameter 'city' is required"));
+    }
+
+    @Test
+    void popular_validCity_returns200WithNotableSchools() throws Exception {
+        SchoolResponse school1 = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable");
+        SchoolResponse school2 = new SchoolResponse(
+                UUID.fromString("00000000-0000-0000-0000-000000000002").toString(), "Aloysius PU College", "ICSE",
+                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "notable");
+
+        when(schoolService.findPopularByCity("udupi", 10))
+                .thenReturn(List.of(school1, school2));
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].name").value("Sharada Vidyalaya"))
+                .andExpect(jsonPath("$[0].prominenceTier").value("notable"))
+                .andExpect(jsonPath("$[1].name").value("Aloysius PU College"))
+                .andExpect(jsonPath("$[1].prominenceTier").value("notable"));
+    }
+
+    @Test
+    void popular_unknownCity_returns200WithEmptyArray() throws Exception {
+        when(schoolService.findPopularByCity("nonexistent", 10))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "nonexistent"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void popular_limitOver50_doesNotReturn400() throws Exception {
+        // Clamping happens inside the service layer, not the controller.
+        // Passing limit=51 must not cause a 400 — it is passed through and clamped by the service.
+        when(schoolService.findPopularByCity(eq("udupi"), anyInt()))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("limit", "51"))
+                .andExpect(status().isOk());
+    }
+
+    // ==================== GET /popular — area-narrowing mode ====================
+
+    @Test
+    void popular_validAreaKey_returns200WithNearbySchools() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable");
+
+        when(schoolService.findPopularByArea("IN|KA|Udupi|Manipal", 10))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("areaKey", "IN|KA|Udupi|Manipal"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Sharada Vidyalaya"));
+    }
+
+    @Test
+    void popular_invalidAreaKey_returns404() throws Exception {
+        com.example.realestate.area.AreaNotFoundException ex =
+                new com.example.realestate.area.AreaNotFoundException("IN|KA|Udupi|Invalid");
+
+        when(schoolService.findPopularByArea("IN|KA|Udupi|Invalid", 10))
+                .thenThrow(ex);
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("areaKey", "IN|KA|Udupi|Invalid"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void popular_areaKeyEmpty_ignoresAndUsesCity() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable");
+
+        when(schoolService.findPopularByCity("udupi", 10))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("areaKey", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
     }
 }

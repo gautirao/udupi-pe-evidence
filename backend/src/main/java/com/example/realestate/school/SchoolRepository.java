@@ -74,4 +74,77 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
             @Param("lat") double lat,
             @Param("lon") double lon,
             @Param("radiusMeters") double radiusMeters);
+
+    /**
+     * Returns notable schools scoped to the city identified by {@code citySlug}.
+     *
+     * <p>City scoping uses the district join:
+     * {@code schools.district IN (SELECT DISTINCT a.district FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ?)}.
+     * This is safe because {@code areas.district} maps 1:N to cities.
+     *
+     * <p>Results are ordered {@code name ASC, id ASC} for stable, deterministic output.
+     *
+     * @param citySlug the city slug (e.g. "udupi")
+     * @param limit    maximum number of results to return
+     * @return notable schools in the city, ordered by name then id
+     */
+    @Query(value = """
+            SELECT s.*
+            FROM schools s
+            WHERE s.prominence_tier = 'notable'
+              AND s.district IN (
+                  SELECT DISTINCT a.district
+                  FROM areas a
+                  JOIN cities c ON c.id = a.city_id
+                  WHERE c.slug = :citySlug
+              )
+            ORDER BY s.name ASC, s.id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<School> findPopularByCity(
+            @Param("citySlug") String citySlug,
+            @Param("limit") int limit);
+
+    /**
+     * Returns {@code true} if the {@code areas} table contains a row for {@code areaKey}.
+     * Used to distinguish "unknown area" (404) from "valid area with no nearby schools" (200 empty).
+     *
+     * @param areaKey pipe-separated area key
+     * @return 1 if the area exists, 0 otherwise
+     */
+    @Query(value = "SELECT COUNT(*) FROM areas WHERE area_key = :areaKey", nativeQuery = true)
+    int countByAreaKey(@Param("areaKey") String areaKey);
+
+    /**
+     * Returns notable schools within 2 km of the area centroid for the given {@code areaKey}.
+     *
+     * <p>The area centroid is resolved from {@code areas.geo_center_lat / geo_center_lon}.
+     * If no row exists for {@code areaKey}, the query returns an empty list; callers are
+     * responsible for distinguishing "unknown area" from "area with no nearby schools"
+     * by first verifying that the area exists.
+     *
+     * <p>Results are ordered {@code name ASC, id ASC} for stable, deterministic output.
+     *
+     * @param areaKey      pipe-separated area key (e.g. "IN|KA|Udupi|Manipal")
+     * @param radiusMeters proximity radius in metres (typically 2000)
+     * @param limit        maximum number of results to return
+     * @return notable schools near the area centroid, ordered by name then id
+     */
+    @Query(value = """
+            SELECT s.*
+            FROM schools s
+            JOIN areas a ON a.area_key = :areaKey
+            WHERE s.prominence_tier = 'notable'
+              AND ST_DWithin(
+                  ST_Point(s.longitude, s.latitude)::geography,
+                  ST_Point(a.geo_center_lon, a.geo_center_lat)::geography,
+                  :radiusMeters
+              )
+            ORDER BY s.name ASC, s.id ASC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<School> findPopularByArea(
+            @Param("areaKey") String areaKey,
+            @Param("radiusMeters") double radiusMeters,
+            @Param("limit") int limit);
 }

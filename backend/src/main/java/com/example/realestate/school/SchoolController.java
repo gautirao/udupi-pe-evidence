@@ -20,6 +20,7 @@ import java.util.UUID;
  * <ul>
  *   <li>GET /api/public/schools/search?q=&amp;limit= — autocomplete search</li>
  *   <li>GET /api/public/schools/nearby?lat=&amp;lon=&amp;radiusKm= — spatial nearby</li>
+ *   <li>GET /api/public/schools/popular?city=&amp;limit=&amp;areaKey= — notable schools for a city or area</li>
  *   <li>GET /api/public/schools/{id} — single school detail</li>
  * </ul>
  */
@@ -83,6 +84,47 @@ public class SchoolController {
         List<SchoolResponse> results = schoolService.findNearby(lat, lon, radiusKm);
         log.debug("GET /api/public/schools/nearby lat={} lon={} radiusKm={} results={}",
                 lat, lon, radiusKm, results.size());
+        return ResponseEntity.ok(results);
+    }
+
+    /**
+     * Returns notable schools for a city, optionally narrowed to those within 2 km of an area centroid.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>{@code city} is required — missing or blank returns 400.</li>
+     *   <li>{@code limit} defaults to 10, clamped to [1, 50] by the service.</li>
+     *   <li>{@code areaKey} is optional. When present, results are scoped to schools within 2 km of
+     *       the area centroid. An invalid areaKey returns 404.</li>
+     *   <li>An unknown city slug with no matching districts returns 200 with an empty array.</li>
+     * </ul>
+     *
+     * @param city    city slug (required, e.g. "udupi")
+     * @param limit   max results (default 10, clamped to 1..50)
+     * @param areaKey optional pipe-separated area key for proximity narrowing
+     * @return notable schools, ordered by name ASC then id ASC
+     */
+    @GetMapping("/popular")
+    public ResponseEntity<?> popular(
+            @RequestParam(required = false) String city,
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) String areaKey) {
+
+        if (city == null || city.isBlank()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Query parameter 'city' is required"));
+        }
+
+        List<SchoolResponse> results;
+        if (areaKey != null && !areaKey.isBlank()) {
+            // AreaNotFoundException (unknown areaKey) propagates to GlobalExceptionHandler → 404
+            results = schoolService.findPopularByArea(areaKey, limit);
+        } else {
+            results = schoolService.findPopularByCity(city.trim(), limit);
+        }
+
+        log.debug("GET /api/public/schools/popular city='{}' areaKey='{}' limit={} results={}",
+                city, areaKey, limit, results.size());
         return ResponseEntity.ok(results);
     }
 

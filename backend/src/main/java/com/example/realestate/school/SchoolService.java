@@ -1,5 +1,6 @@
 package com.example.realestate.school;
 
+import com.example.realestate.area.AreaNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
@@ -89,4 +90,51 @@ public class SchoolService {
     public Optional<SchoolResponse> findById(UUID id) {
         return repository.findById(id).map(SchoolResponse::from);
     }
+
+    /**
+     * Returns notable schools scoped to the city identified by {@code citySlug},
+     * ordered by name ASC then id ASC for stable output.
+     *
+     * <p>An unknown city slug returns an empty list (200) — not an error.
+     *
+     * @param citySlug city slug (e.g. "udupi")
+     * @param limit    maximum results (clamped to 1..50)
+     * @return matching schools as response DTOs with distanceKm=null
+     */
+    @Transactional(readOnly = true)
+    public List<SchoolResponse> findPopularByCity(String citySlug, int limit) {
+        int clampedLimit = Math.max(1, Math.min(50, limit));
+        log.debug("findPopularByCity citySlug='{}' limit={}", citySlug, clampedLimit);
+        return repository.findPopularByCity(citySlug, clampedLimit)
+                .stream()
+                .map(SchoolResponse::from)
+                .toList();
+    }
+
+    /**
+     * Returns notable schools within 2 km of the area centroid for the given {@code areaKey}.
+     *
+     * @param areaKey pipe-separated area key (e.g. "IN|KA|Udupi|Manipal")
+     * @param limit   maximum results (clamped to 1..50)
+     * @return matching schools as response DTOs with distanceKm=null
+     * @throws AreaNotFoundException if no area row exists for the given areaKey
+     */
+    @Transactional(readOnly = true)
+    public List<SchoolResponse> findPopularByArea(String areaKey, int limit) {
+        int clampedLimit = Math.max(1, Math.min(50, limit));
+        log.debug("findPopularByArea areaKey='{}' limit={}", areaKey, clampedLimit);
+
+        if (repository.countByAreaKey(areaKey) == 0) {
+            log.warn("findPopularByArea: unknown areaKey='{}'", areaKey);
+            throw new AreaNotFoundException(areaKey);
+        }
+
+        return repository.findPopularByArea(areaKey, AREA_RADIUS_METERS, clampedLimit)
+                .stream()
+                .map(SchoolResponse::from)
+                .toList();
+    }
+
+    /** Fixed 2 km radius used for area-scoped popular school queries. */
+    private static final double AREA_RADIUS_METERS = 2000.0;
 }
