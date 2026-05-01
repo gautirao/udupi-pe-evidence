@@ -125,6 +125,9 @@ export function useDiscoverPageState({
     if (urlCity !== city) {
       setCity(urlCity);
       setMapZoom(CITY_CONFIG[urlCity]?.zoom ?? 11);
+      // localities is kept for backward compat (backend still accepts it; old URLs may contain it).
+      // LocalityChipsBar was removed in #969; this field is no longer user-editable from the
+      // Discover UI, but is still forwarded to backend listing queries and must be cleared on city change.
       setFilters((prev) => ({ ...prev, localities: undefined }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,6 +160,7 @@ export function useDiscoverPageState({
   const handleCityChange = useCallback(
     (newCity: string) => {
       setCity(newCity);
+      // localities is kept for backward compat; no longer user-editable after #969.
       setFilters((prev) => ({ ...prev, localities: undefined }));
       setMapZoom(CITY_CONFIG[newCity]?.zoom ?? 11);
       setSelectedArea(null);

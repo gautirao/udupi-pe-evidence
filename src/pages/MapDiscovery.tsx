@@ -6,7 +6,6 @@ import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { MapStatsBar } from '@/components/discover/MapStatsBar';
-import { LocalityChipsBar } from '@/components/discover/LocalityChipsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -249,15 +248,6 @@ export default function MapDiscovery() {
                 {' '}properties
               </div>
             </div>
-          )}
-
-          {isAuthenticated && !isLoading && topLocalities.length > 0 && (
-            <LocalityChipsBar
-              filters={filters} topLocalities={topLocalities}
-              onFiltersChange={handleFiltersChange}
-              setFitTick={setFitTick}
-              urlActions={urlActions}
-            />
           )}
 
           {isAuthenticated && (filters.polygon || !!selectedSchool) && (
