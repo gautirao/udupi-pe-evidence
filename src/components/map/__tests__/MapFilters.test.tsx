@@ -29,6 +29,7 @@ vi.mock('@/hooks/usePropertyListings', () => ({
 
 vi.mock('@/hooks/useSchoolSearch', () => ({
   useSchoolSearch: vi.fn(() => ({ data: [], isLoading: false })),
+  useSchoolById: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
 vi.mock('@/lib/formatters', () => ({

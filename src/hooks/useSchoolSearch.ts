@@ -20,6 +20,7 @@ export interface NearbySchoolsResponse {
 }
 
 const SCHOOL_SEARCH_KEY = ['school-search'] as const;
+const SCHOOL_BY_ID_KEY = ['school-by-id'] as const;
 const NEARBY_SCHOOLS_KEY = ['nearby-schools'] as const;
 
 /**
@@ -35,6 +36,26 @@ export function useSchoolSearch(query: string) {
         { skipAuth: true },
       ),
     enabled: query.trim().length >= 2,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Fetch a single school by ID for cold-load URL restoration.
+ * Distinct query key from useSchoolSearch to avoid cache collision.
+ * Uses the ID-based endpoint, not the substring search endpoint, so the lookup is exact.
+ * retry: false — if the school is deleted (404), fail fast and let the caller clean up the URL param.
+ */
+export function useSchoolById(id: string | null) {
+  return useQuery({
+    queryKey: [...SCHOOL_BY_ID_KEY, id],
+    queryFn: () =>
+      api.get<SchoolResult>(
+        `/api/public/schools/${id}`,
+        { skipAuth: true },
+      ),
+    enabled: !!id && id.trim().length > 0,
+    retry: false,
     staleTime: 60_000,
   });
 }

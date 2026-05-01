@@ -12,6 +12,7 @@ import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { ApiError } from '@/lib/api';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -74,7 +75,7 @@ export default function MapDiscovery() {
     discoverAreas, listingsWithCoords, filteredListings,
     markerListings, areaListings, areaMarkerListings,
     topLocalities, activeFocusBounds, trendsAreaKeys,
-    cityCenter, cityZoom, schoolSearchResults, error,
+    cityCenter, cityZoom, schoolById, schoolByIdError, error,
     totalElements, totalPages,
   } = useDiscoverMapData({
     city, selectedArea, filters, debouncedSearch,
@@ -104,19 +105,30 @@ export default function MapDiscovery() {
     return () => clearTimeout(t);
   }, [isLoading, setShowLoader]);
 
-  // School restore on mount — runs once schoolSearchResults resolves (from mapData).
+  // School restore on cold-load — runs once schoolById resolves (exact ID lookup, not substring search).
   const urlSchoolId = urlState.schoolId;
   const urlRadiusKm = urlState.radiusKm;
+
+  // Keep urlActions in a ref so the cleanup effect below doesn't need it in its dep array,
+  // avoiding a potential stale-closure/infinite-loop when the actions object identity changes.
+  const urlActionsRef = useRef(urlActions);
+  urlActionsRef.current = urlActions;
+
   useEffect(() => {
-    if (urlSchoolId && schoolSearchResults && schoolSearchResults.length > 0 && !selectedSchool) {
-      const match = schoolSearchResults.find((s) => s.id === urlSchoolId);
-      if (match) {
-        const radius = urlRadiusKm ?? 2;
-        setSelectedSchool(match);
-        setFilters((prev) => ({ ...prev, schoolLat: match.latitude, schoolLon: match.longitude, schoolRadiusKm: radius }));
-      }
+    if (urlSchoolId && schoolById && !selectedSchool) {
+      const radius = urlRadiusKm ?? 2;
+      setSelectedSchool(schoolById);
+      setFilters((prev) => ({ ...prev, schoolLat: schoolById.latitude, schoolLon: schoolById.longitude, schoolRadiusKm: radius }));
     }
-  }, [urlSchoolId, urlRadiusKm, schoolSearchResults, selectedSchool, setSelectedSchool, setFilters]);
+  }, [urlSchoolId, urlRadiusKm, schoolById, selectedSchool, setSelectedSchool, setFilters]);
+
+  // 404 cleanup — if the school no longer exists, silently drop the URL param without error toast.
+  useEffect(() => {
+    if (!urlSchoolId || !schoolByIdError) return;
+    if (schoolByIdError instanceof ApiError && schoolByIdError.status === 404) {
+      urlActionsRef.current.setSchoolParams(null);
+    }
+  }, [urlSchoolId, schoolByIdError]);
 
   // Refs kept current every render so the resolution effect can read them without
   // adding unstable objects to its dep array.

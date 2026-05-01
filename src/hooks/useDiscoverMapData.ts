@@ -6,7 +6,7 @@ import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas, DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useListingSearch } from '@/hooks/useListingSearch';
-import { useSchoolSearch, SchoolResult } from '@/hooks/useSchoolSearch';
+import { useSchoolById, SchoolResult } from '@/hooks/useSchoolSearch';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
 import { CITY_CONFIG } from '@/lib/localityUtils';
@@ -55,7 +55,12 @@ export interface UseDiscoverMapDataResult {
   trendsAreaKeys: string[];
   cityCenter: [number, number] | undefined;
   cityZoom: number | undefined;
-  schoolSearchResults: SchoolResult[] | undefined;
+  /** The school matching the URL ?schoolId= param, or undefined while loading / not set / 404. */
+  schoolById: SchoolResult | undefined;
+  /** True while the school-by-ID request is in-flight. */
+  schoolByIdLoading: boolean;
+  /** Error from the school-by-ID request — caller uses this to detect 404 and drop the URL param. */
+  schoolByIdError: Error | null;
   error: Error | null;
   /** Pagination metadata from the listings endpoint */
   totalElements: number;
@@ -137,7 +142,11 @@ export function useDiscoverMapData({
     propertyType: discoverPropertyType,
   });
 
-  const { data: schoolSearchResults } = useSchoolSearch(urlSchoolId ?? '');
+  const {
+    data: schoolById,
+    isLoading: schoolByIdLoading,
+    error: schoolByIdError,
+  } = useSchoolById(urlSchoolId);
 
   // ── Derived: loading / error ──────────────────────────────────────────────
   const listingDataLoading = isAuthenticated && (debouncedSearch ? searchLoading : discoverListingsLoading);
@@ -267,7 +276,9 @@ export function useDiscoverMapData({
     trendsAreaKeys,
     cityCenter,
     cityZoom,
-    schoolSearchResults,
+    schoolById,
+    schoolByIdLoading,
+    schoolByIdError: schoolByIdError as Error | null,
     error,
     totalElements,
     totalPages,

@@ -66,6 +66,7 @@ vi.mock('@/hooks/useListingSearch', () => ({
 
 vi.mock('@/hooks/useSchoolSearch', () => ({
   useSchoolSearch: vi.fn(() => ({ data: undefined })),
+  useSchoolById: vi.fn(() => ({ data: undefined })),
 }));
 
 // Leaflet and its wrappers do not render in jsdom

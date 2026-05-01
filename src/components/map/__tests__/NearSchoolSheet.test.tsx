@@ -18,6 +18,7 @@ globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserv
 
 vi.mock('@/hooks/useSchoolSearch', () => ({
   useSchoolSearch: vi.fn(() => ({ data: [], isLoading: false })),
+  useSchoolById: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
 // usePopularSchools hits the network — stub it for sheet-level rendering tests.
