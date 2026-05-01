@@ -309,6 +309,7 @@ export default function MapDiscovery() {
         onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
         boardFilter={schoolBoardFilter}
         onBoardFilterChange={setSchoolBoardFilter}
+        city={isCityValid ? city : null}
       />
     </AppLayout>
   );

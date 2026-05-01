@@ -20,6 +20,28 @@ vi.mock('@/hooks/useSchoolSearch', () => ({
   useSchoolSearch: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
+// usePopularSchools hits the network — stub it for sheet-level rendering tests.
+const usePopularSchoolsMock = vi.hoisted(() =>
+  vi.fn(() => ({
+    data: [],
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  })),
+);
+vi.mock('@/hooks/usePopularSchools', () => ({
+  usePopularSchools: usePopularSchoolsMock,
+}));
+
+// useTrendsOptions also fires a network query — stub it.
+const useTrendsOptionsMock = vi.hoisted(() =>
+  vi.fn(() => ({ data: undefined, isLoading: false })),
+);
+vi.mock('@/hooks/useTrendsOptions', () => ({
+  useTrendsOptions: useTrendsOptionsMock,
+}));
+
 // Supabase client calls localStorage.getItem at module-load time in jsdom.
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -58,6 +80,7 @@ const defaultProps = {
   onRadiusChange: vi.fn(),
   boardFilter: [] as string[],
   onBoardFilterChange: vi.fn(),
+  city: 'udupi' as string | null,
 };
 
 function renderSheet(props: Partial<React.ComponentProps<typeof NearSchoolSheet>> = {}) {
@@ -125,5 +148,78 @@ describe('NearSchoolSheet — radius change', () => {
     renderSheet({ open: true, selectedSchool: mockSchool, radiusKm: 2, onRadiusChange });
     await user.click(screen.getByRole('button', { name: '5 km' }));
     expect(onRadiusChange).toHaveBeenCalledWith(5);
+  });
+});
+
+describe('NearSchoolSheet — popular schools grid', () => {
+  it('shows the "enter location first" placeholder when city is null', () => {
+    renderSheet({ open: true, city: null });
+    expect(screen.getByText(/enter a location first/i)).toBeInTheDocument();
+  });
+
+  it('renders the popular schools heading when a city is set', () => {
+    renderSheet({ open: true, city: 'udupi' });
+    expect(screen.getByRole('heading', { name: /popular schools/i })).toBeInTheDocument();
+  });
+
+  it('renders a popular school card when the hook returns results', () => {
+    usePopularSchoolsMock.mockReturnValueOnce({
+      data: [mockSchool],
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSheet({ open: true, city: 'udupi' });
+    // Both the autocomplete label area and the grid card render the school name when selected;
+    // selectedSchool is null here so only the grid card shows it.
+    expect(screen.getAllByText('Manipal Public School').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('clicking a popular school card fires onSchoolSelect, not any area mutation', async () => {
+    const user = userEvent.setup();
+    const onSchoolSelect = vi.fn();
+    usePopularSchoolsMock.mockReturnValueOnce({
+      data: [mockSchool],
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSheet({ open: true, city: 'udupi', onSchoolSelect });
+
+    await user.click(
+      screen.getByRole('button', { name: /select manipal public school/i }),
+    );
+    expect(onSchoolSelect).toHaveBeenCalledTimes(1);
+    expect(onSchoolSelect).toHaveBeenCalledWith(mockSchool);
+  });
+
+  it('renders the empty-state message when the hook returns an empty array', () => {
+    usePopularSchoolsMock.mockReturnValueOnce({
+      data: [],
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    });
+    renderSheet({ open: true, city: 'udupi' });
+    expect(screen.getByText(/no popular schools found near udupi/i)).toBeInTheDocument();
+  });
+
+  it('renders the error state with a Retry button that calls refetch()', async () => {
+    const user = userEvent.setup();
+    const refetch = vi.fn();
+    usePopularSchoolsMock.mockReturnValueOnce({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      isFetching: false,
+      refetch,
+    });
+    renderSheet({ open: true, city: 'udupi' });
+    const retry = screen.getByRole('button', { name: /retry/i });
+    await user.click(retry);
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });
