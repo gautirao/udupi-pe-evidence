@@ -29,7 +29,7 @@ public class DiscoverListingsController {
     private static final Logger log = LoggerFactory.getLogger(DiscoverListingsController.class);
 
     private static final int DEFAULT_SIZE = 20;
-    private static final int MAX_SIZE = 100;
+    private static final int MAX_SIZE = 50;
 
     private static final TypeReference<List<List<Double>>> POLYGON_TYPE =
             new TypeReference<>() {};
@@ -61,6 +61,7 @@ public class DiscoverListingsController {
             @RequestParam(name = "schoolLat", required = false) Double schoolLat,
             @RequestParam(name = "schoolLon", required = false) Double schoolLon,
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
+            @RequestParam(name = "bbox", required = false) String bboxParam,
             @RequestParam(name = "page", required = false, defaultValue = "0") int page,
             @RequestParam(name = "size", required = false, defaultValue = "20") int size,
             @RequestParam(name = "includeAggregates", required = false, defaultValue = "false") boolean includeAggregates
@@ -82,6 +83,9 @@ public class DiscoverListingsController {
 
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
+
+        // Parse and validate bbox
+        DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
 
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
@@ -105,6 +109,7 @@ public class DiscoverListingsController {
                 schoolLat,
                 schoolLon,
                 schoolRadiusKm,
+                bbox,
                 page,
                 effectiveSize,
                 includeAggregates
@@ -133,4 +138,5 @@ public class DiscoverListingsController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "polygon_invalid_json");
         }
     }
+
 }

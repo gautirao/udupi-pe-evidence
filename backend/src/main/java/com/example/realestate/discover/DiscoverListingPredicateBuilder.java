@@ -13,6 +13,14 @@ import java.util.List;
  */
 public class DiscoverListingPredicateBuilder {
 
+    /**
+     * Validated bounding box: south, west, north, east in decimal degrees.
+     *
+     * <p>All four values are in [-90,90] × [-180,180] with south ≤ north and west ≤ east.
+     * Antimeridian-crossing boxes are rejected at the controller layer.
+     */
+    public record Bbox(double south, double west, double north, double east) {}
+
     public record Filters(
             String city,
             List<String> propertyTypes,
@@ -30,7 +38,8 @@ public class DiscoverListingPredicateBuilder {
             List<List<Double>> polygon,   // [[lat,lon],...] ≥3 vertices, nullable
             Double schoolLat,
             Double schoolLon,
-            Double schoolRadiusKm         // default 2.0 when schoolLat+schoolLon provided
+            Double schoolRadiusKm,         // default 2.0 when schoolLat+schoolLon provided
+            Bbox bbox                      // viewport rectangle filter, nullable
     ) {}
 
     public record Sql(String whereFragment, List<Object> params) {}
@@ -172,6 +181,21 @@ public class DiscoverListingPredicateBuilder {
             params.add(f.schoolLon());
             params.add(f.schoolLat());
             params.add(radiusKm * 1000.0); // metres
+        }
+
+        // bbox — viewport rectangle filter using the GIST-indexed geog column.
+        // The && operator (geometry/geography overlap) is supported by the idx_property_listings_geog
+        // GiST index and is the correct operator for a rectangular viewport test.
+        // ST_MakeEnvelope(west, south, east, north, srid) produces a geometry bounding box;
+        // casting to ::geography makes the && operands type-compatible with pl.geog.
+        // Antimeridian-crossing boxes (west > east) are rejected at the controller layer.
+        if (f.bbox() != null) {
+            Bbox b = f.bbox();
+            sb.append(" AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
+            params.add(b.west());
+            params.add(b.south());
+            params.add(b.east());
+            params.add(b.north());
         }
 
         return new Sql(sb.toString(), params);

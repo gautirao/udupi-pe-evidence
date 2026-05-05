@@ -211,7 +211,8 @@ public class DiscoverListingsService {
                 q.polygon(),
                 q.schoolLat(),
                 q.schoolLon(),
-                q.schoolRadiusKm()
+                q.schoolRadiusKm(),
+                q.bbox()
         );
     }
 }

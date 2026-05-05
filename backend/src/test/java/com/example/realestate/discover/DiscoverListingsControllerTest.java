@@ -98,12 +98,12 @@ class DiscoverListingsControllerTest {
         verify(service).getListings(argThat(q -> q.city().equals("udupi")));
     }
 
-    // ── 3. size=200 → clamped to 100 in service call ─────────────────────────
+    // ── 3. size=200 → clamped to 50 in service call ──────────────────────────
 
     @Test
-    void sizeAboveMax_clampedTo100() throws Exception {
+    void sizeAboveMax_clampedTo50() throws Exception {
         when(service.getListings(any())).thenReturn(
-                new DiscoverListingsPage(List.of(), 0, 100, 0L, 0, null));
+                new DiscoverListingsPage(List.of(), 0, 50, 0L, 0, null));
 
         mockMvc.perform(get("/api/discover/listings")
                         .param("city", "udupi")
@@ -111,7 +111,7 @@ class DiscoverListingsControllerTest {
                         .with(jwt()))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(argThat(q -> q.size() == 100));
+        verify(service).getListings(argThat(q -> q.size() == 50));
     }
 
     // ── 4. page=-1 → 400 ─────────────────────────────────────────────────────
@@ -170,5 +170,66 @@ class DiscoverListingsControllerTest {
                 .andExpect(status().isOk());
 
         verify(service).getListings(argThat(DiscoverListingsQuery::includeAggregates));
+    }
+
+    // ── 8. Valid bbox → 200, bbox passed to service ───────────────────────────
+
+    @Test
+    void validBbox_returns200_andBboxPassedToService() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("bbox", "13.3,74.7,13.4,74.8")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getListings(argThat(q ->
+                q.bbox() != null
+                && q.bbox().south() == 13.3
+                && q.bbox().west() == 74.7
+                && q.bbox().north() == 13.4
+                && q.bbox().east() == 74.8
+        ));
+    }
+
+    // ── 9. bbox south > north → 400 ───────────────────────────────────────────
+
+    @Test
+    void bboxSouthGreaterThanNorth_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("bbox", "13.5,74.7,13.3,74.8")   // south=13.5 > north=13.3
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 10. bbox with 3 values (malformed) → 400 ─────────────────────────────
+
+    @Test
+    void bboxMalformed_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("bbox", "13.3,74.7,13.4")         // only 3 values
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 11. bbox with non-numeric value → 400 ────────────────────────────────
+
+    @Test
+    void bboxNonNumeric_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .param("bbox", "13.3,74.7,abc,74.8")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 }

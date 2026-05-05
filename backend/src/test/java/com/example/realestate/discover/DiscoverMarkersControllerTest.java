@@ -85,8 +85,8 @@ class DiscoverMarkersControllerTest {
                 .andExpect(jsonPath("$.city", is("udupi")))
                 .andExpect(jsonPath("$.markers", hasSize(1)))
                 .andExpect(jsonPath("$.markers[0].id", is("abc-id")))
-                .andExpect(jsonPath("$.markers[0].latitude", is(13.3)))
-                .andExpect(jsonPath("$.markers[0].longitude", is(74.7)))
+                .andExpect(jsonPath("$.markers[0].lat", is(13.3)))
+                .andExpect(jsonPath("$.markers[0].lon", is(74.7)))
                 .andExpect(jsonPath("$.markers[0].pricePaise", is(5_000_000)))
                 .andExpect(jsonPath("$.truncated", is(false)));
     }
@@ -131,5 +131,56 @@ class DiscoverMarkersControllerTest {
                         .with(jwt()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.truncated", is(true)));
+    }
+
+    // ── 6. Valid bbox → 200, bbox passed to service ───────────────────────────
+
+    @Test
+    void validBbox_returns200_andBboxPassedToService() throws Exception {
+        DiscoverMarker marker = new DiscoverMarker("m1", 13.35, 74.75, null, "Malpe");
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(marker), false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("bbox", "13.3,74.7,13.4,74.8")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markers[0].lat", is(13.35)))
+                .andExpect(jsonPath("$.markers[0].lon", is(74.75)));
+
+        verify(service).getMarkers(argThat(f ->
+                f.bbox() != null
+                && f.bbox().south() == 13.3
+                && f.bbox().west() == 74.7
+                && f.bbox().north() == 13.4
+                && f.bbox().east() == 74.8
+        ));
+    }
+
+    // ── 7. bbox with inverted lat (south > north) → 400 ──────────────────────
+
+    @Test
+    void bboxSouthGreaterThanNorth_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("bbox", "13.5,74.7,13.3,74.8")   // south=13.5 > north=13.3
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
+
+    // ── 8. bbox with non-numeric value → 400 ─────────────────────────────────
+
+    @Test
+    void bboxNonNumeric_returns400() throws Exception {
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("bbox", "13.3,bad,13.4,74.8")
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
     }
 }

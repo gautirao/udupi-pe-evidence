@@ -21,6 +21,7 @@ public record DiscoverListingsQuery(
         Double schoolLat,
         Double schoolLon,
         Double schoolRadiusKm,
+        DiscoverListingPredicateBuilder.Bbox bbox,
         int page,
         int size,
         boolean includeAggregates

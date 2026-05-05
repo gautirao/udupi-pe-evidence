@@ -43,7 +43,7 @@ class DiscoverListingsMarkersConsistencyTest {
                 null,
                 1_000_000L,
                 10_000_000L,
-                null, null, null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
         assertConsistent(f);
     }
 
@@ -55,7 +55,7 @@ class DiscoverListingsMarkersConsistencyTest {
                 "mangalore",
                 null, null, null, null, null, null, null, null, null, null, null, null,
                 null,
-                12.86, 74.84, 1.5);
+                12.86, 74.84, 1.5, null);
         assertConsistent(f);
     }
 
@@ -72,7 +72,7 @@ class DiscoverListingsMarkersConsistencyTest {
                 "udupi",
                 null, null, null, null, null, null, null, null, null, null, null, null,
                 polygon,
-                null, null, null);
+                null, null, null, null);
         assertConsistent(f);
     }
 
@@ -85,7 +85,7 @@ class DiscoverListingsMarkersConsistencyTest {
                 null,
                 List.of("Malpe", "Manipal", "Karkala"),
                 null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null);
+                null, null, null, null, null);
         assertConsistent(f);
     }
 
@@ -97,7 +97,7 @@ class DiscoverListingsMarkersConsistencyTest {
                 "udupi",
                 null, null, null, null, null, null, null, null,
                 Boolean.TRUE,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
         assertConsistent(f);
     }
 
@@ -110,7 +110,7 @@ class DiscoverListingsMarkersConsistencyTest {
                 null, null, null, null, null, null, null, null,
                 null,
                 Boolean.TRUE,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
         assertConsistent(f);
     }
 }

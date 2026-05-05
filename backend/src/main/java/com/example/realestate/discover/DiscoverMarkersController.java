@@ -58,7 +58,8 @@ public class DiscoverMarkersController {
             @RequestParam(name = "polygon", required = false) String polygonJson,
             @RequestParam(name = "schoolLat", required = false) Double schoolLat,
             @RequestParam(name = "schoolLon", required = false) Double schoolLon,
-            @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm
+            @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
+            @RequestParam(name = "bbox", required = false) String bboxParam
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -69,6 +70,9 @@ public class DiscoverMarkersController {
 
         // Parse and validate polygon
         List<List<Double>> polygon = parsePolygon(polygonJson);
+
+        // Parse and validate bbox
+        DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
 
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
@@ -91,7 +95,8 @@ public class DiscoverMarkersController {
                 polygon,
                 schoolLat,
                 schoolLon,
-                schoolRadiusKm
+                schoolRadiusKm,
+                bbox
         );
 
         return ResponseEntity.ok(service.getMarkers(filters));
@@ -116,4 +121,5 @@ public class DiscoverMarkersController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "polygon_invalid_json");
         }
     }
+
 }
