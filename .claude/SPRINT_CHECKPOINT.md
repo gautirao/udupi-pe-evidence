@@ -1,84 +1,116 @@
-=== ROLLING CHECKPOINT START ===
+=== MILESTONE #15 ROLLING CHECKPOINT (2026-05-06 20:15 GMT+1) ===
 
-## Sprint Preamble
+## Milestone Status
 
-Sprint name: discover-trends-redesign-2-parity-fixes
-Sprint identity: Model B
-  Milestone: discover-trends-redesign-2-parity-fixes (#11)
-  Sprint label: N/A (single-issue sprint — no dedicated sprint label)
-Current sprint iteration ID: WAIVED (Model B)
-Status: SPRINT COMPLETE
-Next PR: NONE — 1/1 issues done
-
-## Project Item IDs
-
-#931 → PVTI_lAHOAAVnaM4BSWI7zgrX0xY
-
-## Sprint Issues
-
-- #931  [FE][AUDIT+EPIC] Global UI theme alignment — migrate to mock design system  ✅ PR #933
-
-## Execution Order
-
-Phase 1: #931 ✅ — token baseline + cluster fix (PR #933, merged 2026-04-29)
-
-## Dependencies
-
-None (single-issue sprint)
-
-## Enriched Specs
-
-SEE .claude/sprint-enriched-specs.md
-
-## Sprint-level Conventions
-
-- Token reference: mock authoritative source is mockup/ReTrends/src/styles/theme.css
-- Primary target: #030213 (dark navy) → HSL 244 81% 4%
-- All hardcoded orange-* usages in src/ are property-type legends (intentional) — do not modify
-- --pin-house and --chart-1 stay orange (intentional semantic tokens)
-- qa-risk: ui-theme::src/index.css — Leaflet cluster uses bg-primary; token flip cascade affects all primary-themed surfaces including clusters (from #931)
-
-## Known Temporary Exceptions
-
-(none)
-
-## Risks
-
-(none — all resolved)
-
-## Progress
-
-#931 ✅ PR #933 (merged 2026-04-29 — primary token: terracotta→dark navy; --ring→neutral gray; --pin-cluster added)
+**Milestone #15:** `discover-area-journey-figma-parity`
+**Completed Issues:** A1 ✅ MERGED (76fd6d3), A2 ✅ MERGED (f70b8e1)
+**Current Issue:** A3 (#993) — Ready to start
+**Mode:** Sequential (1 issue at a time)
 
 ---
 
-=== PR RECORDS BEGIN ===
+## A1 + A2 Verification Report
 
-## PR #933 — [FE] Global UI theme alignment — migrate to mock design system (#931)
-Issue: #931
-Date: 2026-04-29
-Route: qa-fast → frontend-engineer(×2) → code-reviewer(×2) → E2E smoke
-Touched files:
-  - src/index.css (16 token values changed; --pin-cluster token added)
-Acceptance criteria:
-  - AC1 ✅ --primary: 244 81% 4% (dark navy) in :root
-  - AC2 ✅ --primary-foreground: 0 0% 100% (white)
-  - AC3 ✅ --ring: 0 0% 40% (neutral gray, WCAG 3:1 on light bg)
-  - AC4 ✅ --sidebar-primary: 244 81% 4% / dark: 264 58% 38%
-  - AC5 ✅ --pin-house: 16 65% 45% unchanged (intentional orange)
-  - AC6 ✅ --chart-1: 16 65% 45% unchanged (chart data color)
-  - AC7 ✅ rg check: 8 hits, all property-type legends — no unintended orange classes
-  - AC8 ✅ E2E smoke 6/6 pass — no homepage regression
-  - AC9 ✅ --pin-cluster: 175 45% 40% (teal) — Leaflet clusters visible after token flip
-Key decisions:
-  - --ring uses 0 0% 40% (slightly darker than mock's 71%) to meet WCAG 3:1 on light backgrounds
-  - --pin-cluster added as new token (not reusing --primary) following --pin-* pattern
-  - dark --sidebar-primary: 264 58% 38% (accurate oklch→HSL conversion of mock value)
-Gate Satisfaction Record:
-  - qa-fast: COMPLETE (4 risks: HIGH cluster visibility, HIGH ring WCAG, MEDIUM Trends hardcoded blue, LOW chart stroke)
-  - Engineer materialization: PASS (2 cycles — cycle 2 fixed cluster + sidebar + comment issues)
-  - Code-reviewer: APPROVE (cycle 2, delta-only)
-  - E2E: PASS (6/6, Q7 permanent skip)
-  - All gates satisfied: YES
-Risks: NONE
-Spec invalidation: NONE
+### A1 #991 — Area Journey Shell + JourneySwitcher + DiscoverRightPanel State Machine
+
+**Commit:** 76fd6d3
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| JourneySwitcher | ✅ | Two cards (area-first/school-first), icons (Building2/GraduationCap), aria-labels, click handlers |
+| DiscoverRightPanel | ✅ | Thin state-machine switch with 7 audit cases + A2 area-groups-landing; defensive fallbacks |
+| derivePanelContent | ✅ | All 8 states routed (guided-entry, area-groups-landing, area-selection, area-selected, school-browse, schools-in-area, school-selected, area-school-combined) |
+| startOver() | ✅ | Clears journey/groupId/areaKey/schoolId/radiusKm/filters/viewport; preserves city + property filters; uses REPLACE |
+| AreaSelectedPanel | ✅ | PropertyCard list, loading skeletons, empty state, search input, back button with ChevronLeft icon |
+| Quick-select chips | ✅ | Removed (not duplicated in new UI) |
+
+**Test Coverage:**
+- JourneySwitcher: 7 tests ✅
+- DiscoverRightPanel routing: 17 tests ✅
+- useDiscoverUrlState (includes startOver): 80 tests ✅
+- discoverPanelState (derivePanelContent): 12 tests ✅
+- **Subtotal: 116 tests passing**
+
+### A2 #992 — AreaGroupsLandingPanel from /api/discover/area-groups
+
+**Commit:** f70b8e1
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| useAreaGroups hook | ✅ | City-keyed query, queryKey includes city, enabled guard (city.length > 0), staleTime 60s, error fallback returns { groups: [] } |
+| AreaGroupsLandingPanel | ✅ | Renders groups from API, loading skeletons, Browse-all fallback for empty response, discriminated union type safety |
+| Group card click | ✅ | Sets ?groupId= in URL (no area selection yet) |
+| Browse-all fallback | ✅ | Renders when groups.length === 0, scoped to current city, pure UI (props-driven, no refetch) |
+| Discriminated union | ✅ | onSelectArea required when fallbackAreas provided; silent no-ops eliminated |
+
+**Test Coverage:**
+- AreaGroupsLandingPanel: 19 tests ✅
+- **E2E: 8/8 tests passing** ✅ (includes AC#5 group-card-click → ?groupId= URL test)
+
+**Blocking Issues Fixed:**
+1. Type safety — Discriminated union enforces onSelectArea with fallbackAreas
+2. E2E assertion — Fixed broken `.not` syntax to `.not.toBeAttached()`
+3. AC coverage — Added test for group card click → URL ?groupId= change
+
+### Overall Verification
+
+| Category | Result |
+|----------|--------|
+| Unit tests | 668 passing (1 pre-existing failure: Index.invalidCity, unrelated) |
+| TypeScript build | Clean ✓ |
+| A2 E2E tests | 8/8 passing ✓ |
+| A1 state machine | Verified (all 8 cases routed) ✓ |
+| A2 API integration | Verified (useAreaGroups + AreaGroupsLandingPanel) ✓ |
+| No school-journey UI | Verified (stubs only) ✓ |
+| No A3+ features | Verified (no map focus, no marker fade) ✓ |
+| Existing Discover flows | No regressions ✓ |
+
+**Checkpoint commit:** 8bbba1f
+
+---
+
+## A3 Ready to Start
+
+**Issue:** #993 — Focused-group map behaviour + area marker selection
+**Scope:**
+- Map focus: fitBounds to group bounds or fallback to member markers
+- Area marker fade: non-group markers fade, group members remain prominent
+- Click area marker: URL PUSH with ?areaKey=, preserve ?groupId=
+- Back from area: return to group-focused state (not all-areas)
+
+**Dependencies:** A1 ✅, A2 ✅ (state machine, group card click, URL contract)
+
+**Out of scope:**
+- A4 features (area-indicator chips)
+- A5 features (selected-area filters)
+- School journey UI
+
+---
+
+## Known Issues (Non-blocking)
+
+| Issue | Scope | Priority |
+|-------|-------|----------|
+| 1 Index.invalidCity unit test failure | Pre-existing, unrelated to A1/A2 | Low |
+| useAreaGroups error suppression | Advisory (try/catch swallows all errors) | Post-launch |
+| staleTime value not asserted in unit tests | Advisory (presence verified, behavior acceptable) | Post-launch |
+| groupId URL validation across city change | Advisory (deferred to A2.1 post-launch) | Post-launch |
+
+---
+
+## Next Steps
+
+1. Fetch A3 #993 issue details and ACs
+2. Inspect AreaMarkerLayer, map focus logic, URL actions
+3. Write implementation plan and wait for approval
+4. Proceed via ROUTE_AND_RUN.md (qa-fast → frontend-engineer → code-reviewer → E2E)
+
+---
+
+## Notes
+
+- Model: Haiku 4.5 (cost-optimized)
+- Desktop-first MVP (mobile deferred post-launch)
+- All gates passed: qa-fast → engineer → code-reviewer → E2E
+- No technical debt; all blocking issues resolved cleanly
+- Sequential execution: A1 → A2 → A3 (one issue at a time, full gates per issue)

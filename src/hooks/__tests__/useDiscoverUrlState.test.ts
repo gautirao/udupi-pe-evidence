@@ -1065,3 +1065,86 @@ describe('useDiscoverUrlState — startOver', () => {
     expect(result.current[0].areaKey).toBeNull();
   });
 });
+
+// ─── A3 #993: selectArea preserves groupId ────────────────────────────────────
+
+describe('useDiscoverUrlState — selectArea preserves groupId (A3 #993)', () => {
+  it('preserves groupId when selectArea is called while groupId is set', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes',
+      ),
+    });
+
+    act(() => {
+      result.current[1].selectArea('IN|KA|Udupi|Manipal');
+    });
+
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(result.current[0].groupId).toBe('coastal-homes');
+  });
+
+  it('does not add groupId when it was absent before selectArea', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first'),
+    });
+
+    act(() => {
+      result.current[1].selectArea('IN|KA|Udupi|Manipal');
+    });
+
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(result.current[0].groupId).toBeNull();
+  });
+
+  it('final URL contains both ?groupId= and ?areaKey= when group was already set', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes',
+      ),
+    });
+
+    act(() => {
+      result.current[1].selectArea('IN|KA|Udupi|Karkala');
+    });
+
+    const state = result.current[0];
+    expect(state.groupId).toBe('coastal-homes');
+    expect(state.areaKey).toBe('IN|KA|Udupi|Karkala');
+    expect(state.journey).toBe('area-first');
+  });
+});
+
+// ─── A3 #993: selectGroup clears areaKey ─────────────────────────────────────
+
+describe('useDiscoverUrlState — selectGroup clears areaKey (A3 #993)', () => {
+  it('clears areaKey when selectGroup is called with a group id', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      ),
+    });
+
+    act(() => {
+      result.current[1].selectGroup('inland-hills');
+    });
+
+    expect(result.current[0].groupId).toBe('inland-hills');
+    expect(result.current[0].areaKey).toBeNull();
+  });
+
+  it('clears areaKey when selectGroup is called with null (deselect)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      ),
+    });
+
+    act(() => {
+      result.current[1].selectGroup(null);
+    });
+
+    expect(result.current[0].groupId).toBeNull();
+    expect(result.current[0].areaKey).toBeNull();
+  });
+});

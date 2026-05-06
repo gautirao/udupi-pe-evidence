@@ -4,6 +4,7 @@ import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { derivePanelContent } from '@/utils/discoverPanelState';
+import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { MapStatsBar } from '@/components/discover/MapStatsBar';
@@ -200,6 +201,67 @@ export default function MapDiscovery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [areasLoading, discoverAreas, deselectArea, resolveSignal]);
 
+  // ── Group-focused map behaviour (A3 #993) ────────────────────────────────────
+  //
+  // When a group is selected (groupId set), two things must happen:
+  //   1. Fade non-member area markers (focusedGroupAreas → AreaMarkerLayer via PropertyMap)
+  //   2. fitBounds to cover all member areas — but ONLY when groupId changes and no
+  //      areaKey is set. When areaKey is set, the existing per-area fitBounds applies.
+  //
+  // fitBounds is triggered by calling setPanToArea with a synthetic AreaPoint whose
+  // bbox is the union of all member areas' bboxes. This reuses PropertyMap's existing
+  // AreaPanner effect (the F7 debounce) with zero new fitBounds machinery.
+
+  const focusedGroup = urlState.groupId
+    ? (areaGroupsData?.groups ?? []).find((g) => g.id === urlState.groupId) ?? null
+    : null;
+
+  const focusedGroupAreas = useMemo(
+    () => focusedGroup?.area_keys,
+    // Re-derive only when the selected group or the groups dataset changes.
+    // Prevents AreaMarkerLayer from tearing down all markers on every background refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [urlState.groupId, areaGroupsData],
+  );
+
+  // Effect: when groupId changes and there is no areaKey, fitBounds to the group members.
+  // When areaKey is set, the area-level fitBounds (existing logic) takes precedence.
+  // When areaKey clears while groupId remains (user navigates back), re-trigger group bounds.
+  const prevGroupIdRef = useRef<string | null>(null);
+  const prevAreaKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // Guard: wait for area data before computing bounds.
+    // This must run BEFORE updating refs — on cold load with ?groupId= the effect fires
+    // while areasLoading=true, and if refs were updated here the transition check would
+    // see groupChanged=false on the second fire (when data has loaded) and skip fitBounds.
+    if (!urlState.groupId) return;
+    if (areasLoading) return;
+
+    // Now that data is ready, compare against the previous stable values and advance refs.
+    const groupChanged = urlState.groupId !== prevGroupIdRef.current;
+    const areaKeyCleared =
+      prevAreaKeyRef.current !== null && urlState.areaKey === null;
+
+    prevGroupIdRef.current = urlState.groupId;
+    prevAreaKeyRef.current = urlState.areaKey;
+
+    // Only act when no area is selected
+    if (urlState.areaKey !== null) return;
+    // Act on group change OR when areaKey was just cleared (back navigation)
+    if (!groupChanged && !areaKeyCleared) return;
+
+    // Resolve member areas — filter discoverAreas to the group's area_keys.
+    // Areas not in discoverAreas (partial membership) are silently dropped.
+    const groupAreaKeys = focusedGroup?.area_keys ?? [];
+    const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+    const bounds = computeGroupBounds(memberAreas);
+    if (bounds) {
+      setPanToArea(bounds);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.groupId, urlState.areaKey, areasLoading, discoverAreas, areaGroupsData]);
+
   if (!isCityValid) return <CityNotSupported city={city} />;
 
   const trendsHref = selectedArea
@@ -257,6 +319,7 @@ export default function MapDiscovery() {
               cityZoom={cityZoom}
               areas={mapZoom <= AREA_LAYER_MAX_ZOOM ? discoverAreas : []}
               onAreaClick={handleAreaClick}
+              focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
               onZoomChange={setMapZoom}
               onViewportChange={urlActions.reportViewport}
               onBoundsChange={handleBoundsChange}

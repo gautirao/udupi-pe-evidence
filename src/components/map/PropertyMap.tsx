@@ -115,6 +115,12 @@ interface PropertyMapProps {
   areas?: AreaPoint[];
   /** Called when an area marker is clicked (in addition to the built-in bbox fitBounds). */
   onAreaClick?: (area: AreaPoint) => void;
+  /**
+   * When set, area markers NOT in this array are rendered at 0.3 opacity (dimmed).
+   * Markers in the array remain at full opacity. Absent = all markers full opacity.
+   * Passed through to AreaMarkerLayer unchanged.
+   */
+  focusedGroupAreas?: string[];
   /** Called on every zoomend with the new zoom level. Used by zoom-band switching logic. */
   onZoomChange?: (zoom: number) => void;
   /**
@@ -424,6 +430,7 @@ export function PropertyMap({
   cityZoom,
   areas = [],
   onAreaClick,
+  focusedGroupAreas,
   onZoomChange,
   onViewportChange,
   onBoundsChange,
@@ -461,7 +468,7 @@ export function PropertyMap({
         <AreaPanner panToArea={panToArea} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (
-          <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} />
+          <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} focusedGroupAreas={focusedGroupAreas} />
         )}
         <ScaleHud />
         {onPolygonDrawn && onPolygonCleared && (

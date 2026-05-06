@@ -370,6 +370,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         (prev) => {
           const next = new URLSearchParams(prev);
           next.set('areaKey', newAreaKey);
+          // groupId is preserved intentionally: when the user selects an area while
+          // inside a group (area-groups-landing → area-selected), both ?groupId= and
+          // ?areaKey= must be present so the back-navigation can return to the group.
+          // groupId is NOT set here if it was absent — we only preserve, never add.
           return next;
         },
         { replace: false }, // PUSH — deliberate navigation into an area
