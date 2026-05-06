@@ -13,7 +13,8 @@ public record SchoolResponse(
         double longitude,
         String address,
         Double distanceKm,
-        String prominenceTier
+        String prominenceTier,
+        String schoolCategory
 ) {
     /** Converts a School entity to a response DTO (without distance). */
     public static SchoolResponse from(School s) {
@@ -26,7 +27,8 @@ public record SchoolResponse(
                 s.getLongitude(),
                 s.getAddress(),
                 null,
-                s.getProminenceTier()
+                s.getProminenceTier(),
+                s.getSchoolCategory()
         );
     }
 
@@ -41,7 +43,8 @@ public record SchoolResponse(
                 s.getLongitude(),
                 s.getAddress(),
                 distanceKm,
-                s.getProminenceTier()
+                s.getProminenceTier(),
+                s.getSchoolCategory()
         );
     }
 }

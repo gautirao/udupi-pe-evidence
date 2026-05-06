@@ -53,6 +53,9 @@ public class School {
     @Column(name = "board")
     private String board;
 
+    @Column(name = "school_category")
+    private String schoolCategory;
+
     @Column(name = "prominence_tier")
     private String prominenceTier;
 
@@ -93,6 +96,9 @@ public class School {
 
     public String getBoard() { return board; }
     public void setBoard(String board) { this.board = board; }
+
+    public String getSchoolCategory() { return schoolCategory; }
+    public void setSchoolCategory(String schoolCategory) { this.schoolCategory = schoolCategory; }
 
     public String getProminenceTier() { return prominenceTier; }
     public void setProminenceTier(String prominenceTier) { this.prominenceTier = prominenceTier; }

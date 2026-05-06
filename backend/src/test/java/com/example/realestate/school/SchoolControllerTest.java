@@ -19,11 +19,13 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -42,7 +44,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({SchoolControllerTest.TestConfig.class, GlobalExceptionHandler.class})
 class SchoolControllerTest {
 
-    private static final UUID SCHOOL_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID SCHOOL_ID  = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID SCHOOL_ID2 = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     /** Minimal security config: permit everything (mirrors production's permitAll on this path). */
     static class TestConfig {
@@ -75,7 +78,7 @@ class SchoolControllerTest {
     void search_validQuery_returns200WithResults() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, null);
 
         when(schoolService.search(anyString(), anyInt()))
                 .thenReturn(List.of(school));
@@ -117,7 +120,7 @@ class SchoolControllerTest {
     void nearby_validCoordinates_returns200WithResults() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Vidyodaya High School", "State",
-                null, 13.3409, 74.7421, "Ajjarkad, Udupi", 0.85, null);
+                null, 13.3409, 74.7421, "Ajjarkad, Udupi", 0.85, null, null);
 
         when(schoolService.findNearby(anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(school));
@@ -161,7 +164,7 @@ class SchoolControllerTest {
     void getById_existingSchool_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Christ King PU College", "State",
-                null, 13.3433, 74.7456, "Kunjibettu, Udupi", null, null);
+                null, 13.3433, 74.7456, "Kunjibettu, Udupi", null, null, null);
 
         when(schoolService.findById(SCHOOL_ID)).thenReturn(Optional.of(school));
 
@@ -199,7 +202,7 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$.length()").value(0));
     }
 
-    // ==================== GET /popular — city-only mode ====================
+    // ==================== GET /popular — city-only mode (backward compatibility) ====================
 
     @Test
     void popular_missingCity_returns400() throws Exception {
@@ -217,13 +220,13 @@ class SchoolControllerTest {
     }
 
     @Test
-    void popular_validCity_returns200WithNotableSchools() throws Exception {
+    void popular_validCity_noFilters_routesToExistingMethod() throws Exception {
         SchoolResponse school1 = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable");
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
         SchoolResponse school2 = new SchoolResponse(
-                UUID.fromString("00000000-0000-0000-0000-000000000002").toString(), "Aloysius PU College", "ICSE",
-                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "notable");
+                SCHOOL_ID2.toString(), "Aloysius PU College", "ICSE",
+                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "notable", null);
 
         when(schoolService.findPopularByCity("udupi", 10))
                 .thenReturn(List.of(school1, school2));
@@ -236,6 +239,9 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$[0].prominenceTier").value("notable"))
                 .andExpect(jsonPath("$[1].name").value("Aloysius PU College"))
                 .andExpect(jsonPath("$[1].prominenceTier").value("notable"));
+
+        // Guardrail: must route to the original method, not the filtered one
+        verify(schoolService).findPopularByCity("udupi", 10);
     }
 
     @Test
@@ -251,8 +257,6 @@ class SchoolControllerTest {
 
     @Test
     void popular_limitOver50_doesNotReturn400() throws Exception {
-        // Clamping happens inside the service layer, not the controller.
-        // Passing limit=51 must not cause a 400 — it is passed through and clamped by the service.
         when(schoolService.findPopularByCity(eq("udupi"), anyInt()))
                 .thenReturn(List.of());
 
@@ -262,13 +266,13 @@ class SchoolControllerTest {
                 .andExpect(status().isOk());
     }
 
-    // ==================== GET /popular — area-narrowing mode ====================
+    // ==================== GET /popular — area-narrowing mode (no filters) ====================
 
     @Test
-    void popular_validAreaKey_returns200WithNearbySchools() throws Exception {
+    void popular_validAreaKey_noFilters_returns200WithNearbySchools() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable");
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
 
         when(schoolService.findPopularByArea("IN|KA|Udupi|Manipal", 10))
                 .thenReturn(List.of(school));
@@ -279,27 +283,27 @@ class SchoolControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Sharada Vidyalaya"));
+
+        verify(schoolService).findPopularByArea("IN|KA|Udupi|Manipal", 10);
     }
 
     @Test
     void popular_invalidAreaKey_returns404() throws Exception {
-        com.example.realestate.area.AreaNotFoundException ex =
-                new com.example.realestate.area.AreaNotFoundException("IN|KA|Udupi|Invalid");
-
         when(schoolService.findPopularByArea("IN|KA|Udupi|Invalid", 10))
-                .thenThrow(ex);
+                .thenThrow(new AreaNotFoundException("IN|KA|Udupi|Invalid"));
 
         mockMvc.perform(get("/api/public/schools/popular")
                         .param("city", "udupi")
                         .param("areaKey", "IN|KA|Udupi|Invalid"))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").exists());
     }
 
     @Test
     void popular_areaKeyEmpty_ignoresAndUsesCity() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable");
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
 
         when(schoolService.findPopularByCity("udupi", 10))
                 .thenReturn(List.of(school));
@@ -309,5 +313,253 @@ class SchoolControllerTest {
                         .param("areaKey", ""))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    // ==================== GET /popular — with board filter ====================
+
+    @Test
+    void popular_withBoardFilter_routesToFilteredMethod() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
+
+        when(schoolService.getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("board", "CBSE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].board").value("CBSE"))
+                .andExpect(jsonPath("$[0].prominenceTier").value("notable"));
+
+        verify(schoolService).getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10));
+    }
+
+    // ==================== GET /popular — with category filter ====================
+
+    @Test
+    void popular_withCategoryFilter_routesToFilteredMethod() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Manipal Primary School", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", "Primary");
+
+        when(schoolService.getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("category", "Primary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].schoolCategory").value("Primary"));
+
+        verify(schoolService).getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10));
+    }
+
+    // ==================== GET /popular — with board+category combined ====================
+
+    @Test
+    void popular_withBoardAndCategoryFilters_routesToFilteredMethod() throws Exception {
+        when(schoolService.getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/popular")
+                        .param("city", "udupi")
+                        .param("board", "CBSE")
+                        .param("category", "Primary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        verify(schoolService).getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10));
+    }
+
+    // ==================== GET /by-area — missing areaKey -> 400 ====================
+
+    @Test
+    void byArea_missingAreaKey_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/schools/by-area"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void byArea_blankAreaKey_returns400() throws Exception {
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "  "))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Query parameter 'areaKey' is required"));
+    }
+
+    // ==================== GET /by-area — invalid area -> 404 ====================
+
+    @Test
+    void byArea_unknownAreaKey_returns404() throws Exception {
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Unknown"), any(), any(), anyInt(), anyInt()))
+                .thenThrow(new AreaNotFoundException("IN|KA|Udupi|Unknown"));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Unknown"))
+                .andExpect(status().isNotFound());
+    }
+
+    // ==================== GET /by-area — happy path, no filters ====================
+
+    @Test
+    void byArea_validAreaKey_noFilters_returns200() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
+
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].name").value("Sharada Vidyalaya"))
+                .andExpect(jsonPath("$[0].id").value(SCHOOL_ID.toString()));
+    }
+
+    // ==================== GET /by-area — pagination size clamped at controller level ====================
+
+    @Test
+    void byArea_sizeOver50_passedToServiceForClamping() throws Exception {
+        // Controller passes size through; service clamps. No 400 from controller.
+        when(schoolService.getSchoolsByArea(anyString(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("size", "100"))
+                .andExpect(status().isOk());
+    }
+
+    // ==================== GET /by-area — board filter single ====================
+
+    @Test
+    void byArea_singleBoardFilter_returns200() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
+
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("board", "CBSE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].board").value("CBSE"));
+    }
+
+    // ==================== GET /by-area — multiple board filters ====================
+
+    @Test
+    void byArea_multipleBoardFilters_returns200() throws Exception {
+        SchoolResponse s1 = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null);
+        SchoolResponse s2 = new SchoolResponse(
+                SCHOOL_ID2.toString(), "Aloysius PU College", "ICSE",
+                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "directory", null);
+
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of(s1, s2));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("board", "CBSE")
+                        .param("board", "ICSE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2));
+    }
+
+    // ==================== GET /by-area — category filter single ====================
+
+    @Test
+    void byArea_singleCategoryFilter_returns200() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Manipal Primary", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, "Primary");
+
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("category", "Primary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].schoolCategory").value("Primary"));
+    }
+
+    // ==================== GET /by-area — multiple category filters ====================
+
+    @Test
+    void byArea_multipleCategoryFilters_returns200() throws Exception {
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("category", "Primary")
+                        .param("category", "Secondary"))
+                .andExpect(status().isOk());
+    }
+
+    // ==================== GET /by-area — combined board+category filters ====================
+
+    @Test
+    void byArea_combinedBoardAndCategory_returns200() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Sharada Primary", "CBSE",
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, "Primary");
+
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("board", "CBSE")
+                        .param("category", "Primary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].board").value("CBSE"))
+                .andExpect(jsonPath("$[0].schoolCategory").value("Primary"));
+    }
+
+    // ==================== GET /by-area — empty result ====================
+
+    @Test
+    void byArea_validAreaNoMatchingSchools_returns200EmptyArray() throws Exception {
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of());
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Manipal")
+                        .param("board", "AICTE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    // ==================== GET /by-area — schoolCategory field present in response ====================
+
+    @Test
+    void byArea_response_includesSchoolCategoryField() throws Exception {
+        SchoolResponse school = new SchoolResponse(
+                SCHOOL_ID.toString(), "Udupi District School", null,
+                "STATE", 13.3400, 74.7400, "Udupi", null, "directory", "Higher Secondary");
+
+        when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Udupi"), any(), any(), eq(0), eq(20)))
+                .thenReturn(List.of(school));
+
+        mockMvc.perform(get("/api/public/schools/by-area")
+                        .param("areaKey", "IN|KA|Udupi|Udupi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].schoolCategory").value("Higher Secondary"))
+                .andExpect(jsonPath("$[0].prominenceTier").value("directory"));
     }
 }
