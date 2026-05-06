@@ -1,86 +1,20 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import {
-  ChevronLeft, MapPin, Search, SlidersHorizontal, TrendingUp, X,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/EmptyState';
-import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
-import { PropertyCard } from './PropertyCard';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
+import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
+import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
+import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
+import {
+  SchoolBrowsePanel,
+  SchoolsInAreaPanel,
+  SchoolSelectedPanel,
+  AreaSchoolCombinedPanel,
+} from './panels/SchoolJourneyPanels';
 
-interface RightPanelHeaderProps {
-  title: string;
-  onBack?: () => void;
-  filtersContent?: React.ReactNode;
-  actions?: React.ReactNode;
-}
-
-function RightPanelHeader({ title, onBack, filtersContent, actions }: RightPanelHeaderProps) {
-  const hasBack = onBack != null;
-
-  return (
-    <div
-      className={`px-4 py-3 border-b border-border flex-shrink-0 flex items-center ${
-        hasBack ? 'gap-2' : 'justify-between'
-      }`}
-    >
-      {hasBack && (
-        <button
-          onClick={onBack}
-          data-testid="back-button"
-          aria-label="Back to areas"
-          className="p-1 rounded hover:bg-accent/50 transition-colors flex-shrink-0"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-      )}
-      <h2 className={`text-sm font-semibold ${hasBack ? 'truncate flex-1' : ''}`}>{title}</h2>
-      <div className={hasBack ? 'flex items-center gap-1.5 flex-shrink-0' : undefined}>
-        {actions}
-        {filtersContent && (
-          hasBack ? (
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="icon" className="h-7 w-7">
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  <span className="sr-only">Filters</span>
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-80 p-0">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Filters</SheetTitle>
-                </SheetHeader>
-                {filtersContent}
-              </SheetContent>
-            </Sheet>
-          ) : (
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filters
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-80 p-0">
-                <SheetHeader className="sr-only">
-                  <SheetTitle>Filters</SheetTitle>
-                </SheetHeader>
-                {filtersContent}
-              </SheetContent>
-            </Sheet>
-          )
-        )}
-      </div>
-    </div>
-  );
-}
-
-interface DiscoverRightPanelProps {
+export interface DiscoverRightPanelProps {
+  panelContent: DiscoverPanelContent;
   areas: AreaPoint[];
   selectedArea?: AreaPoint | null;
   areaListings?: DiscoverCityListingItem[];
@@ -88,6 +22,8 @@ interface DiscoverRightPanelProps {
   isAuthenticated?: boolean;
   onAreaSelect?: (area: AreaPoint) => void;
   onBack?: () => void;
+  onStartOver: () => void;
+  onSelectJourney: (journey: DiscoverJourney) => void;
   filtersContent?: React.ReactNode;
   trendsHref?: string;
   footerContent?: React.ReactNode;
@@ -99,16 +35,20 @@ interface DiscoverRightPanelProps {
   searchQuery?: string;
   /** Called when the user changes the search query. */
   onSearchChange?: (q: string) => void;
+  /** Active journey (passed through from URL state for panel headers). */
+  journey?: DiscoverJourney | null;
 }
 
 export function DiscoverRightPanel({
-  areas,
+  panelContent,
+  areas: _areas,
   selectedArea,
   areaListings,
   isLoadingListings,
   isAuthenticated = false,
-  onAreaSelect,
   onBack,
+  onStartOver,
+  onSelectJourney,
   filtersContent,
   trendsHref,
   footerContent,
@@ -116,137 +56,85 @@ export function DiscoverRightPanel({
   isInitialLoading = false,
   searchQuery = '',
   onSearchChange,
+  journey,
 }: DiscoverRightPanelProps) {
-  const navigate = useNavigate();
+  function renderPanel(): React.ReactNode {
+    switch (panelContent) {
+      case 'guided-entry':
+        return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+
+      case 'area-selection':
+        return <AreaSelectionPanel onStartOver={onStartOver} />;
+
+      case 'area-selected':
+        if (!selectedArea) {
+          // Defensive fallback: state machine says area-selected but area not yet resolved.
+          return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+        }
+        return (
+          <AreaSelectedPanel
+            selectedArea={selectedArea}
+            areaListings={areaListings}
+            isLoadingListings={isLoadingListings}
+            isAuthenticated={isAuthenticated}
+            onBack={onBack}
+            onStartOver={onStartOver}
+            journey={journey}
+            filtersContent={filtersContent}
+            trendsHref={trendsHref}
+            isFetching={isFetching}
+            isInitialLoading={isInitialLoading}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+          />
+        );
+
+      case 'school-browse':
+        return <SchoolBrowsePanel onStartOver={onStartOver} journey={journey} />;
+
+      case 'schools-in-area':
+        if (!selectedArea) {
+          // Defensive fallback: state machine says schools-in-area but area not yet resolved.
+          return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+        }
+        return (
+          <SchoolsInAreaPanel
+            selectedArea={selectedArea}
+            onStartOver={onStartOver}
+            onBack={onBack}
+            journey={journey}
+          />
+        );
+
+      case 'school-selected':
+        return (
+          <SchoolSelectedPanel
+            schoolId=""
+            onStartOver={onStartOver}
+            onBack={onBack}
+            journey={journey}
+          />
+        );
+
+      case 'area-school-combined':
+        return (
+          <AreaSchoolCombinedPanel
+            selectedArea={selectedArea}
+            onStartOver={onStartOver}
+            onBack={onBack}
+            journey={journey}
+          />
+        );
+    }
+  }
 
   return (
     <div
       className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
-      {!selectedArea ? (
-        <>
-          {/* Empty-state header */}
-          <RightPanelHeader
-            title="Properties"
-            filtersContent={filtersContent}
-          />
-
-          {/* Empty state body */}
-          <div
-            className={cn(
-              'flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4 transition-opacity duration-150',
-              isFetching && !isInitialLoading ? 'opacity-50 pointer-events-none' : 'opacity-100',
-            )}
-          >
-            <EmptyState
-              icon={<MapPin className="h-8 w-8 text-muted-foreground/40" />}
-              heading="Select an area to explore"
-              description="Click on an area marker on the map to see available properties"
-            >
-              {areas.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Quick select:</p>
-                  <div className="flex flex-wrap gap-2 justify-center">
-                    {areas.slice(0, 4).map((area) => (
-                      <button
-                        key={area.areaKey}
-                        data-testid="quick-select-chip"
-                        onClick={() => onAreaSelect?.(area)}
-                        className="text-sm px-3 py-1.5 bg-card border border-border rounded-lg hover:border-primary/60 hover:bg-accent transition-colors"
-                      >
-                        {area.areaLabel}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </EmptyState>
-          </div>
-        </>
-      ) : (
-        <>
-          {/* Listings header */}
-          <RightPanelHeader
-            title={selectedArea.areaLabel}
-            onBack={onBack}
-            filtersContent={filtersContent}
-            actions={trendsHref && (
-              <Button asChild variant="ghost" size="sm" className="gap-1.5 text-xs h-7 px-2">
-                <Link to={trendsHref}>
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Trends
-                </Link>
-              </Button>
-            )}
-          />
-
-          {/* Search input — sticky below header, above listing cards */}
-          {onSearchChange && (
-            <div className="sticky top-0 z-10 bg-card border-b border-border p-3">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  placeholder="Search listings by keyword"
-                  value={searchQuery}
-                  onChange={(e) => onSearchChange(e.target.value)}
-                  className="pl-8 h-9 text-sm pr-8"
-                />
-                {searchQuery && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
-                    onClick={() => onSearchChange('')}
-                    aria-label="Clear search"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Listings body */}
-          <div
-            className={cn(
-              'flex-1 overflow-y-auto transition-opacity duration-150',
-              isFetching && !isInitialLoading ? 'opacity-50 pointer-events-none' : 'opacity-100',
-            )}
-          >
-            {isLoadingListings ? (
-              <div className="space-y-3 p-4">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} data-testid="listing-skeleton" className="rounded-lg border border-border p-3">
-                    <Skeleton className="w-full h-40 rounded-lg mb-3" />
-                    <Skeleton className="h-4 w-2/3 mb-2" />
-                    <Skeleton className="h-3 w-1/3 mb-2" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                ))}
-              </div>
-            ) : !areaListings || areaListings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full">
-                <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">No listings in this area yet</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {areaListings.map((listing) => (
-                  <PropertyCard
-                    key={listing.id}
-                    listing={listing}
-                    isAuthenticated={isAuthenticated}
-                    onNavigate={() => navigate(`/listing/${listing.id}`)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </>
-      )}
+      {renderPanel()}
       {footerContent}
     </div>
   );
 }
-

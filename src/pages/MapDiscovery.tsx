@@ -3,6 +3,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
+import { derivePanelContent } from '@/utils/discoverPanelState';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
 import { MapStatsBar } from '@/components/discover/MapStatsBar';
@@ -28,6 +29,8 @@ export default function MapDiscovery() {
   const { user, isLoading: authLoading } = useAuth();
   const [urlState, urlActions] = useDiscoverUrlState();
   const isAuthenticated = !authLoading && user !== null;
+
+  const panelContent = derivePanelContent(urlState);
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -305,6 +308,8 @@ export default function MapDiscovery() {
         </div>
 
         <DiscoverRightPanel
+          panelContent={panelContent}
+          journey={urlState.journey}
           areas={discoverAreas}
           selectedArea={selectedArea}
           areaListings={areaListings}
@@ -312,6 +317,8 @@ export default function MapDiscovery() {
           isAuthenticated={isAuthenticated}
           onAreaSelect={handleAreaSelect}
           onBack={handleAreaBack}
+          onStartOver={() => urlActions.startOver()}
+          onSelectJourney={(j) => urlActions.setJourney(j)}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
           isFetching={isFetching}

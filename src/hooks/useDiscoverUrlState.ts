@@ -141,6 +141,12 @@ export interface DiscoverUrlActions {
    * Empty array removes the param.
    */
   setCategoryFilters: (categories: string[]) => void;
+  /**
+   * Start over — clears journey, groupId, areaKey, schoolId, radiusKm, board, category, q,
+   * and viewport. Preserves city and property filters (type, beds, price, seller, booleans,
+   * dates). Single REPLACE — does not push a history entry.
+   */
+  startOver: () => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -596,6 +602,32 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  const startOver = useCallback(() => {
+    // Cancel pending viewport debounce — it must not restore stale coords after reset.
+    if (viewportTimer.current) {
+      clearTimeout(viewportTimer.current);
+      viewportTimer.current = null;
+    }
+    setUrlParams(
+      (prev) => {
+        // Preserve city and all property filter params; clear everything else.
+        const next = new URLSearchParams();
+        const cityVal = prev.get('city');
+        if (cityVal) next.set('city', cityVal);
+        // Preserve property filters
+        const filterParams = ['type', 'beds', 'priceMin', 'priceMax', 'seller', 'bom', 'ntm', 'rera', 'rtm', 'from', 'to'] as const;
+        for (const key of filterParams) {
+          const val = prev.get(key);
+          if (val) next.set(key, val);
+        }
+        // Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport are
+        // intentionally omitted — they do not survive Start Over.
+        return next;
+      },
+      { replace: true }, // REPLACE — start over is not a navigation destination
+    );
+  }, [setUrlParams]);
+
   const actions: DiscoverUrlActions = {
     changeCity,
     setCity,
@@ -610,6 +642,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectGroup,
     setBoardFilters,
     setCategoryFilters,
+    startOver,
   };
 
   return [state, actions];

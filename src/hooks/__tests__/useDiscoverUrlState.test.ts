@@ -956,3 +956,112 @@ describe('useDiscoverUrlState — setCategoryFilters', () => {
     expect(result.current[0].filters.categoryFilters).toBeUndefined();
   });
 });
+
+// ─── startOver ────────────────────────────────────────────────────────────────
+
+describe('useDiscoverUrlState — startOver', () => {
+  it('clears journey, groupId, areaKey, schoolId, radiusKm, board, category, and q', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=bangalore&journey=area-first&groupId=coastal&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=school-abc&radiusKm=3&board=cbse&category=primary&q=beach',
+      ),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    const state = result.current[0];
+    expect(state.journey).toBeNull();
+    expect(state.groupId).toBeNull();
+    expect(state.areaKey).toBeNull();
+    expect(state.schoolId).toBeNull();
+    expect(state.radiusKm).toBeNull();
+    expect(state.filters.boardFilters).toBeUndefined();
+    expect(state.filters.categoryFilters).toBeUndefined();
+    expect(state.q).toBe('');
+  });
+
+  it('preserves city after startOver', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=bangalore&journey=area-first'),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    expect(result.current[0].city).toBe('bangalore');
+  });
+
+  it('preserves property filters (type, beds, price, seller, booleans, dates) after startOver', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=bangalore&journey=area-first&type=house&beds=2,3&priceMin=1000000&priceMax=5000000&seller=owner,broker&bom=1&ntm=1&rera=1&rtm=1&from=2025-01-01&to=2025-12-31',
+      ),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    const { filters } = result.current[0];
+    expect(filters.propertyTypes).toEqual(['house']);
+    expect(filters.bedrooms).toEqual([2, 3]);
+    expect(filters.priceMin).toBe(1000000);
+    expect(filters.priceMax).toBe(5000000);
+    expect(filters.sellerTypes).toEqual(['owner', 'broker']);
+    expect(filters.backOnMarket).toBe(true);
+    expect(filters.newToMarket).toBe(true);
+    expect(filters.reraRegistered).toBe(true);
+    expect(filters.readyToMove).toBe(true);
+    expect(filters.dateFrom).toBe('2025-01-01');
+    expect(filters.dateTo).toBe('2025-12-31');
+  });
+
+  it('clears viewport (lat, lon, zoom) after startOver', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=bangalore&journey=area-first&lat=13.34090&lon=74.74210&zoom=12',
+      ),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    expect(result.current[0].viewport).toBeNull();
+  });
+
+  it('is idempotent — calling startOver twice produces same state as once', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=bangalore&journey=area-first&areaKey=k1&q=foo'),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+      result.current[1].startOver();
+    });
+
+    const state = result.current[0];
+    expect(state.city).toBe('bangalore');
+    expect(state.journey).toBeNull();
+    expect(state.areaKey).toBeNull();
+    expect(state.q).toBe('');
+  });
+
+  it('returns to guided-entry panel state after startOver (journey=null → derivePanelContent)', () => {
+    // Verifies the integration: startOver clears journey, so derivePanelContent
+    // returns guided-entry. This is a read-only check — no panel import needed.
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=bangalore&journey=area-first&areaKey=k1'),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    expect(result.current[0].journey).toBeNull();
+    expect(result.current[0].areaKey).toBeNull();
+  });
+});
