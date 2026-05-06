@@ -151,9 +151,22 @@ public class DiscoverListingPredicateBuilder {
             sb.append(" AND pl.possession_status = 'READY'");
         }
 
-        // polygon — PostGIS ST_Contains
+        // polygon — two-stage PostGIS predicate exploiting the idx_property_listings_geog GiST index.
+        //
+        // Stage 1 (prefilter): ST_Intersects on the envelope of the polygon against pl.geog.
+        //   The GiST index on pl.geog supports geography operators natively; feeding it the
+        //   bounding-box envelope of the drawn polygon eliminates rows outside the bounding
+        //   rectangle cheaply before the exact containment test runs.
+        //
+        // Stage 2 (exact): ST_Contains on the full polygon geometry against pl.geog::geometry.
+        //   Using pl.geog::geometry (the stored generated column) instead of
+        //   ST_SetSRID(ST_Point(pl.longitude, pl.latitude), 4326) avoids recalculating the
+        //   point geography per row and is consistent with the school-proximity and bbox predicates.
+        //   ST_Contains is boundary-exclusive: points exactly on the polygon edge are excluded.
+        //
+        // The WKT string is built once and bound twice (once per ? placeholder).
         if (f.polygon() != null && f.polygon().size() >= 3) {
-            // Build WKT polygon string from [[lat,lon],...] — ST_Contains uses lon,lat
+            // Build WKT polygon string from [[lat,lon],...] — PostGIS expects lon lat order
             StringBuilder wkt = new StringBuilder("POLYGON((");
             for (int i = 0; i < f.polygon().size(); i++) {
                 List<Double> pt = f.polygon().get(i);
@@ -164,8 +177,13 @@ public class DiscoverListingPredicateBuilder {
             List<Double> first = f.polygon().get(0);
             wkt.append(",").append(first.get(1)).append(" ").append(first.get(0));
             wkt.append("))");
-            sb.append(" AND ST_Contains(ST_GeomFromText(?, 4326), ST_SetSRID(ST_Point(pl.longitude, pl.latitude), 4326))");
-            params.add(wkt.toString());
+            String wktStr = wkt.toString();
+            // Prefilter: envelope intersect via GiST index on pl.geog
+            sb.append(" AND ST_Intersects(ST_Envelope(ST_GeomFromText(?, 4326))::geography, pl.geog)");
+            params.add(wktStr);
+            // Exact: point-in-polygon on the narrowed candidate set
+            sb.append(" AND ST_Contains(ST_GeomFromText(?, 4326), pl.geog::geometry)");
+            params.add(wktStr);
         }
 
         // school proximity — PostGIS ST_DWithin on geography

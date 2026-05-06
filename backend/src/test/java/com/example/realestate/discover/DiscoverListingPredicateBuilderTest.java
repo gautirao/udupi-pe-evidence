@@ -126,10 +126,15 @@ class DiscoverListingPredicateBuilderTest {
         assertTrue(sql.whereFragment().contains("INTERVAL '7 days'"));
     }
 
-    // ── 8. polygon with 3 vertices → ST_Contains ────────────────────────────
+    // ── 8. polygon with 3 vertices → two-stage GiST + ST_Contains predicate ──
+    //
+    // Parity contract:
+    //   Stage 1 (prefilter): ST_Intersects(ST_Envelope(polygon)::geography, pl.geog)
+    //   Stage 2 (exact):     ST_Contains(polygon, pl.geog::geometry)
+    //   The WKT string is bound twice — once per stage.
 
     @Test
-    void build_polygonWith3Vertices_generatesStContains() {
+    void build_polygonWith3Vertices_generatesTwoStagePredicate() {
         List<List<Double>> polygon = List.of(
                 List.of(13.3, 74.7),
                 List.of(13.4, 74.8),
@@ -142,11 +147,111 @@ class DiscoverListingPredicateBuilderTest {
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
-        assertTrue(sql.whereFragment().contains("ST_Contains(ST_GeomFromText(?, 4326)"));
-        // WKT param should be in the list
-        boolean hasWkt = sql.params().stream()
-                .anyMatch(p -> p instanceof String s && s.startsWith("POLYGON(("));
-        assertTrue(hasWkt, "Expected WKT polygon param");
+        // Stage 1: prefilter uses envelope + pl.geog for GiST index access
+        assertTrue(sql.whereFragment().contains(
+                "ST_Intersects(ST_Envelope(ST_GeomFromText(?, 4326))::geography, pl.geog)"),
+                "Expected GiST prefilter: ST_Intersects(ST_Envelope(...)::geography, pl.geog)");
+
+        // Stage 2: exact point-in-polygon using stored pl.geog column
+        assertTrue(sql.whereFragment().contains(
+                "ST_Contains(ST_GeomFromText(?, 4326), pl.geog::geometry)"),
+                "Expected exact predicate: ST_Contains(polygon, pl.geog::geometry)");
+
+        // WKT string must be bound twice (one param per stage)
+        long wktParamCount = sql.params().stream()
+                .filter(p -> p instanceof String s && s.startsWith("POLYGON(("))
+                .count();
+        assertEquals(2, wktParamCount,
+                "WKT polygon string must be bound twice — once for prefilter, once for exact predicate");
+    }
+
+    // ── 8b. polygon null → no polygon predicates generated ──────────────────
+
+    @Test
+    void build_nullPolygon_noPolygonClauses() {
+        DiscoverListingPredicateBuilder.Sql sql =
+                DiscoverListingPredicateBuilder.build(minimal("udupi"));
+
+        assertFalse(sql.whereFragment().contains("ST_Contains"),
+                "No ST_Contains clause when polygon is null");
+        assertFalse(sql.whereFragment().contains("ST_Intersects"),
+                "No ST_Intersects clause when polygon is null");
+        assertFalse(sql.params().stream().anyMatch(p -> p instanceof String s && s.startsWith("POLYGON")),
+                "No WKT param when polygon is null");
+    }
+
+    // ── 8c. polygon < 3 vertices → no polygon predicates generated ──────────
+
+    @Test
+    void build_polygonWith2Vertices_noPolygonClauses() {
+        List<List<Double>> twoPoints = List.of(
+                List.of(13.3, 74.7),
+                List.of(13.4, 74.8)
+        );
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                twoPoints, null, null, null, null);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertFalse(sql.whereFragment().contains("ST_Contains"),
+                "No ST_Contains clause when polygon has fewer than 3 vertices");
+        assertFalse(sql.whereFragment().contains("ST_Intersects"),
+                "No ST_Intersects clause when polygon has fewer than 3 vertices");
+    }
+
+    // ── 8d. WKT coordinate order: vertices converted lon lat (not lat lon) ───
+
+    @Test
+    void build_polygonWktCoordinateOrder_isLonLat() {
+        // Input is [[lat, lon]] per API contract.
+        // PostGIS WKT expects (lon lat), so the WKT param must swap the order.
+        List<List<Double>> polygon = List.of(
+                List.of(13.3, 74.7),  // lat=13.3, lon=74.7
+                List.of(13.4, 74.8),
+                List.of(13.3, 74.8)
+        );
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                polygon, null, null, null, null);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        String wkt = sql.params().stream()
+                .filter(p -> p instanceof String s && s.startsWith("POLYGON(("))
+                .map(p -> (String) p)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No WKT param found"));
+
+        // First vertex in WKT must be "74.7 13.3" (lon lat), not "13.3 74.7" (lat lon)
+        assertTrue(wkt.startsWith("POLYGON((74.7 13.3"),
+                "WKT must start with lon lat order. Got: " + wkt);
+    }
+
+    // ── 8e. prefilter appears before exact predicate in WHERE fragment ───────
+
+    @Test
+    void build_polygonPredicateOrder_prefilterBeforeExact() {
+        List<List<Double>> polygon = List.of(
+                List.of(13.3, 74.7),
+                List.of(13.4, 74.8),
+                List.of(13.3, 74.8)
+        );
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null,
+                null, null, null, null, null, null,
+                polygon, null, null, null, null);
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        int prefilterPos = sql.whereFragment().indexOf("ST_Intersects(ST_Envelope(");
+        int exactPos     = sql.whereFragment().indexOf("ST_Contains(ST_GeomFromText(");
+        assertTrue(prefilterPos >= 0, "Prefilter ST_Intersects must be present");
+        assertTrue(exactPos >= 0, "Exact ST_Contains must be present");
+        assertTrue(prefilterPos < exactPos,
+                "Prefilter (envelope intersect) must appear before exact (ST_Contains) in WHERE fragment");
     }
 
     // ── 9. school proximity filter ───────────────────────────────────────────
