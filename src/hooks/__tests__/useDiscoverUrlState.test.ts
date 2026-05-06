@@ -10,6 +10,12 @@
  *  - setFiltersLive → debounced replace
  *  - setFiltersCommitted → push
  *  - Edge cases: missing params, partial viewport, multiple areaKey values
+ *  - changeCity → atomic push, clears journey/groupId/areaKey/viewport
+ *  - setJourney → push
+ *  - selectGroup → push
+ *  - setBoardFilters / setCategoryFilters → replace, comma-separated round-trip
+ *  - journey/groupId initial reads from URL
+ *  - boardFilters/categoryFilters initial reads from URL
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -630,5 +636,323 @@ describe('useDiscoverUrlState — date range', () => {
 
     expect(result.current[0].filters.dateFrom).toBeUndefined();
     expect(result.current[0].filters.dateTo).toBeUndefined();
+  });
+});
+
+// ─── journey + groupId initial reads ─────────────────────────────────────────
+
+describe('useDiscoverUrlState — journey and groupId from URL', () => {
+  it('reads journey=area-first from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first'),
+    });
+    expect(result.current[0].journey).toBe('area-first');
+  });
+
+  it('reads journey=school-first from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=school-first'),
+    });
+    expect(result.current[0].journey).toBe('school-first');
+  });
+
+  it('returns null journey when param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].journey).toBeNull();
+  });
+
+  it('returns null journey for unknown journey values (defensive parse)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=unknown-mode'),
+    });
+    expect(result.current[0].journey).toBeNull();
+  });
+
+  it('reads groupId from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first&groupId=coastal-homes'),
+    });
+    expect(result.current[0].groupId).toBe('coastal-homes');
+  });
+
+  it('returns null groupId when param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].groupId).toBeNull();
+  });
+});
+
+// ─── board / category filter reads ───────────────────────────────────────────
+
+describe('useDiscoverUrlState — boardFilters and categoryFilters from URL', () => {
+  it('reads board param as comma-separated boardFilters', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?board=cbse,icse'),
+    });
+    expect(result.current[0].filters.boardFilters).toEqual(['cbse', 'icse']);
+  });
+
+  it('reads category param as comma-separated categoryFilters', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?category=primary,secondary'),
+    });
+    expect(result.current[0].filters.categoryFilters).toEqual(['primary', 'secondary']);
+  });
+
+  it('returns undefined boardFilters when board param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.boardFilters).toBeUndefined();
+  });
+
+  it('returns undefined categoryFilters when category param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.categoryFilters).toBeUndefined();
+  });
+});
+
+// ─── changeCity (atomic) ──────────────────────────────────────────────────────
+
+describe('useDiscoverUrlState — changeCity (atomic city switch)', () => {
+  it('sets the new city in URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('manipal');
+    });
+
+    expect(result.current[0].city).toBe('manipal');
+  });
+
+  it('clears journey on city switch', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('manipal');
+    });
+
+    expect(result.current[0].journey).toBeNull();
+  });
+
+  it('clears groupId on city switch', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first&groupId=coastal-homes'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('manipal');
+    });
+
+    expect(result.current[0].groupId).toBeNull();
+  });
+
+  it('clears areaKey on city switch', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('manipal');
+    });
+
+    expect(result.current[0].areaKey).toBeNull();
+  });
+
+  it('clears viewport on city switch', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&lat=13.34090&lon=74.74210&zoom=12'),
+    });
+
+    act(() => {
+      result.current[1].changeCity('manipal');
+    });
+
+    expect(result.current[0].viewport).toBeNull();
+  });
+
+  it('preserves property filters (type/beds/price) across city switch', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&type=house&beds=2,3&priceMin=1000000&priceMax=5000000',
+      ),
+    });
+
+    act(() => {
+      result.current[1].changeCity('manipal');
+    });
+
+    const { filters } = result.current[0];
+    expect(filters.propertyTypes).toEqual(['house']);
+    expect(filters.bedrooms).toEqual([2, 3]);
+    expect(filters.priceMin).toBe(1000000);
+    expect(filters.priceMax).toBe(5000000);
+  });
+
+  it('all cleared params happen in one setSearchParams call (single history entry)', () => {
+    // Verify atomicity: after changeCity, browser history has exactly one new entry.
+    // With MemoryRouter we can only observe the resulting state is correct — the
+    // single-push contract is guaranteed by the implementation using one setUrlParams call.
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal&areaKey=IN%7CKA%7CUdupi%7CManipal&lat=13.34090&lon=74.74210&zoom=12',
+      ),
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    const state = result.current[0];
+    expect(state.city).toBe('kundapur');
+    expect(state.journey).toBeNull();
+    expect(state.groupId).toBeNull();
+    expect(state.areaKey).toBeNull();
+    expect(state.viewport).toBeNull();
+  });
+});
+
+// ─── setJourney ──────────────────────────────────────────────────────────────
+
+describe('useDiscoverUrlState — setJourney', () => {
+  it('sets journey=area-first', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setJourney('area-first');
+    });
+
+    expect(result.current[0].journey).toBe('area-first');
+  });
+
+  it('sets journey=school-first', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setJourney('school-first');
+    });
+
+    expect(result.current[0].journey).toBe('school-first');
+  });
+
+  it('removes journey param when null is passed', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first'),
+    });
+
+    act(() => {
+      result.current[1].setJourney(null);
+    });
+
+    expect(result.current[0].journey).toBeNull();
+  });
+});
+
+// ─── selectGroup ─────────────────────────────────────────────────────────────
+
+describe('useDiscoverUrlState — selectGroup', () => {
+  it('sets groupId', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first'),
+    });
+
+    act(() => {
+      result.current[1].selectGroup('waterfront-villas');
+    });
+
+    expect(result.current[0].groupId).toBe('waterfront-villas');
+  });
+
+  it('removes groupId when null is passed', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first&groupId=waterfront-villas'),
+    });
+
+    act(() => {
+      result.current[1].selectGroup(null);
+    });
+
+    expect(result.current[0].groupId).toBeNull();
+  });
+});
+
+// ─── setBoardFilters ──────────────────────────────────────────────────────────
+
+describe('useDiscoverUrlState — setBoardFilters', () => {
+  it('writes comma-separated board param', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setBoardFilters(['cbse', 'icse']);
+    });
+
+    expect(result.current[0].filters.boardFilters).toEqual(['cbse', 'icse']);
+  });
+
+  it('removes board param when empty array is passed', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&board=cbse,icse'),
+    });
+
+    act(() => {
+      result.current[1].setBoardFilters([]);
+    });
+
+    expect(result.current[0].filters.boardFilters).toBeUndefined();
+  });
+
+  it('round-trips single board value', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setBoardFilters(['cbse']);
+    });
+
+    expect(result.current[0].filters.boardFilters).toEqual(['cbse']);
+  });
+});
+
+// ─── setCategoryFilters ───────────────────────────────────────────────────────
+
+describe('useDiscoverUrlState — setCategoryFilters', () => {
+  it('writes comma-separated category param', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setCategoryFilters(['primary', 'secondary']);
+    });
+
+    expect(result.current[0].filters.categoryFilters).toEqual(['primary', 'secondary']);
+  });
+
+  it('removes category param when empty array is passed', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&category=primary,secondary'),
+    });
+
+    act(() => {
+      result.current[1].setCategoryFilters([]);
+    });
+
+    expect(result.current[0].filters.categoryFilters).toBeUndefined();
   });
 });

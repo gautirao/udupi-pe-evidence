@@ -10,12 +10,18 @@
  *   lon        – map center longitude (5 dp, debounced replace)
  *   zoom       – integer zoom level   (debounced replace)
  *
+ * Journey params:
+ *   journey    – active journey type: "area-first" | "school-first" (absent = no journey)
+ *   groupId    – area-group slug selected for area-first journey (absent when no group)
+ *
  * Filter params:
  *   type       – comma-joined property types (e.g. "land,house")
  *   beds       – comma-joined bedroom counts (e.g. "2,3")
  *   priceMin   – rupees
  *   priceMax   – rupees
  *   seller     – comma-joined seller types (e.g. "owner,broker"); legacy singular value also accepted
+ *   board      – comma-joined school board filters (e.g. "cbse,icse")
+ *   category   – comma-joined school category filters (e.g. "primary,secondary")
  *   bom        – "1" when backOnMarket=true
  *   ntm        – "1" when newToMarket=true
  *   rera       – "1" when reraRegistered=true
@@ -29,18 +35,24 @@
  *   q          – free-text search query (empty string when no search)
  *
  * History semantics (per issue #910 spec):
- *   City change          → push
+ *   City change          → push (atomic: clears journey, groupId, areaKey, viewport)
+ *   Journey change       → push
+ *   Group selection      → push
  *   Area selection       → push
  *   Area deselection     → replace (remove areaKey)
  *   Map pan/zoom         → replace (debounced 300 ms)
  *   Live filter change   → replace (debounced 300 ms)
  *   Committed filter     → push
+ *   School board/cat     → replace
  */
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Journey type — mutually exclusive modes for the right panel. Absent = no active journey. */
+export type DiscoverJourney = 'area-first' | 'school-first';
 
 export interface DiscoverViewport {
   lat: number;
@@ -55,6 +67,10 @@ export interface DiscoverUrlFilters {
   priceMax?: number;
   /** Comma-separated seller types in the URL; replaces the former singular sellerType. */
   sellerTypes?: string[];
+  /** Comma-separated school board filters (e.g. "cbse,icse"). School-journey only. */
+  boardFilters?: string[];
+  /** Comma-separated school category filters (e.g. "primary,secondary"). School-journey only. */
+  categoryFilters?: string[];
   backOnMarket?: boolean;
   newToMarket?: boolean;
   reraRegistered?: boolean;
@@ -75,10 +91,23 @@ export interface DiscoverUrlState {
   radiusKm: number | null;
   /** Free-text search query. Empty string when no search is active. */
   q: string;
+  /** Active journey type. Null when no journey is active. */
+  journey: DiscoverJourney | null;
+  /** Selected area-group slug for area-first journey. Null when no group is selected. */
+  groupId: string | null;
 }
 
 export interface DiscoverUrlActions {
-  /** Change city — pushes a new history entry and clears areaKey */
+  /**
+   * Atomic city switch — single PUSH, clears journey, groupId, areaKey, and viewport.
+   * Property filters (type, beds, price, seller, booleans, dates) are preserved.
+   * Replaces the old `setCity` for user-initiated city changes.
+   */
+  changeCity: (city: string) => void;
+  /**
+   * Low-level city setter — pushes a new history entry and clears areaKey.
+   * Kept for backward compatibility; prefer `changeCity` for user-initiated changes.
+   */
   setCity: (city: string) => void;
   /** Select an area — pushes a new history entry */
   selectArea: (areaKey: string) => void;
@@ -98,6 +127,20 @@ export interface DiscoverUrlActions {
   setSchoolParams: (params: { schoolId: string; radiusKm: number } | null) => void;
   /** Set the free-text search query — debounced replace. Empty string removes the param. */
   setSearchQuery: (q: string) => void;
+  /** Set the active journey — pushes a new history entry. Null removes the journey param. */
+  setJourney: (journey: DiscoverJourney | null) => void;
+  /** Select an area group — pushes a new history entry. Null removes the groupId param. */
+  selectGroup: (groupId: string | null) => void;
+  /**
+   * Set school board filters — replace (not push). Comma-separated in URL as `board`.
+   * Empty array removes the param.
+   */
+  setBoardFilters: (boards: string[]) => void;
+  /**
+   * Set school category filters — replace (not push). Comma-separated in URL as `category`.
+   * Empty array removes the param.
+   */
+  setCategoryFilters: (categories: string[]) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -158,6 +201,16 @@ function serializeFilters(
     params.set('seller', filters.sellerTypes.join(','));
   } else {
     params.delete('seller');
+  }
+  if (filters.boardFilters && filters.boardFilters.length > 0) {
+    params.set('board', filters.boardFilters.join(','));
+  } else {
+    params.delete('board');
+  }
+  if (filters.categoryFilters && filters.categoryFilters.length > 0) {
+    params.set('category', filters.categoryFilters.join(','));
+  } else {
+    params.delete('category');
   }
   if (filters.backOnMarket) {
     params.set('bom', '1');
@@ -249,6 +302,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     priceMin: urlParams.get('priceMin') ? Number(urlParams.get('priceMin')) : undefined,
     priceMax: urlParams.get('priceMax') ? Number(urlParams.get('priceMax')) : undefined,
     sellerTypes,
+    boardFilters: parseCommaStrings(urlParams.get('board')),
+    categoryFilters: parseCommaStrings(urlParams.get('category')),
     backOnMarket: urlParams.get('bom') === '1' ? true : undefined,
     newToMarket: urlParams.get('ntm') === '1' ? true : undefined,
     reraRegistered: urlParams.get('rera') === '1' ? true : undefined,
@@ -263,6 +318,13 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
 
   const q = urlParams.get('q') ?? '';
 
+  // journey: validate against allowed values; unknown values are treated as null
+  const rawJourney = urlParams.get('journey');
+  const journey: DiscoverJourney | null =
+    rawJourney === 'area-first' || rawJourney === 'school-first' ? rawJourney : null;
+
+  const groupId = urlParams.get('groupId');
+
   const state: DiscoverUrlState = {
     city,
     areaKey,
@@ -271,6 +333,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     schoolId,
     radiusKm,
     q,
+    journey,
+    groupId,
   };
 
   // ─── Actions ─────────────────────────────────────────────────────────────
@@ -429,7 +493,111 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  /**
+   * Atomic city switch — single PUSH, clears journey, groupId, areaKey, and viewport.
+   * Property filters (type, beds, price, seller, booleans, dates) are preserved.
+   */
+  const changeCity = useCallback(
+    (newCity: string) => {
+      // Cancel any pending viewport debounce so it cannot restore stale coords after the switch.
+      if (viewportTimer.current) {
+        clearTimeout(viewportTimer.current);
+        viewportTimer.current = null;
+      }
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('city', newCity);
+          // Clear journey context — new city starts fresh
+          next.delete('journey');
+          next.delete('groupId');
+          next.delete('areaKey');
+          // Clear viewport — new city has its own default zoom/center
+          next.delete('lat');
+          next.delete('lon');
+          next.delete('zoom');
+          return next;
+        },
+        { replace: false }, // PUSH — city switch is a major navigation destination
+      );
+    },
+    [setUrlParams],
+  );
+
+  const setJourney = useCallback(
+    (newJourney: DiscoverJourney | null) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newJourney) {
+            next.set('journey', newJourney);
+          } else {
+            next.delete('journey');
+          }
+          return next;
+        },
+        { replace: false }, // PUSH — journey type is a navigational choice
+      );
+    },
+    [setUrlParams],
+  );
+
+  const selectGroup = useCallback(
+    (newGroupId: string | null) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newGroupId) {
+            next.set('groupId', newGroupId);
+          } else {
+            next.delete('groupId');
+          }
+          return next;
+        },
+        { replace: false }, // PUSH — group selection is a navigational choice
+      );
+    },
+    [setUrlParams],
+  );
+
+  const setBoardFilters = useCallback(
+    (boards: string[]) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (boards.length > 0) {
+            next.set('board', boards.join(','));
+          } else {
+            next.delete('board');
+          }
+          return next;
+        },
+        { replace: true }, // REPLACE — filter refinement, not a history destination
+      );
+    },
+    [setUrlParams],
+  );
+
+  const setCategoryFilters = useCallback(
+    (categories: string[]) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (categories.length > 0) {
+            next.set('category', categories.join(','));
+          } else {
+            next.delete('category');
+          }
+          return next;
+        },
+        { replace: true }, // REPLACE — filter refinement, not a history destination
+      );
+    },
+    [setUrlParams],
+  );
+
   const actions: DiscoverUrlActions = {
+    changeCity,
     setCity,
     selectArea,
     deselectArea,
@@ -438,6 +606,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setFiltersCommitted,
     setSchoolParams,
     setSearchQuery,
+    setJourney,
+    selectGroup,
+    setBoardFilters,
+    setCategoryFilters,
   };
 
   return [state, actions];

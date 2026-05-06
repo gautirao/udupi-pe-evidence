@@ -16,12 +16,15 @@ function makeUrlState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlSta
     schoolId: null,
     radiusKm: null,
     q: '',
+    journey: null,
+    groupId: null,
     ...overrides,
   };
 }
 
 function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUrlActions {
   return {
+    changeCity: vi.fn(),
     setCity: vi.fn(),
     selectArea: vi.fn(),
     deselectArea: vi.fn(),
@@ -30,6 +33,10 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     setFiltersCommitted: vi.fn(),
     setSchoolParams: vi.fn(),
     setSearchQuery: vi.fn(),
+    setJourney: vi.fn(),
+    selectGroup: vi.fn(),
+    setBoardFilters: vi.fn(),
+    setCategoryFilters: vi.fn(),
     ...overrides,
   };
 }
@@ -259,6 +266,26 @@ describe('useDiscoverPageState — initial filters from URL', () => {
   });
 });
 
+describe('useDiscoverPageState — handleCityChange delegates to changeCity', () => {
+  it('calls changeCity (not setCity) when city changes', () => {
+    const changeCity = vi.fn();
+    const setCity = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ changeCity, setCity }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleCityChange('manipal');
+    });
+
+    expect(changeCity).toHaveBeenCalledWith('manipal');
+    expect(setCity).not.toHaveBeenCalled();
+  });
+});
+
 describe('useDiscoverPageState — handleFiltersChange passes all new fields to setFiltersLive', () => {
   it('passes multi-seller array to setFiltersLive without truncating', () => {
     const setFiltersLive = vi.fn();
@@ -326,6 +353,30 @@ describe('useDiscoverPageState — handleFiltersChange passes all new fields to 
         newToMarket: true,
         reraRegistered: true,
         readyToMove: true,
+      }),
+    );
+  });
+
+  it('forwards boardFilters and categoryFilters to setFiltersLive', () => {
+    const setFiltersLive = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ setFiltersLive }),
+      }),
+    );
+
+    act(() => {
+      result.current.handleFiltersChange({
+        boardFilters: ['cbse', 'icse'],
+        categoryFilters: ['primary', 'secondary'],
+      });
+    });
+
+    expect(setFiltersLive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        boardFilters: ['cbse', 'icse'],
+        categoryFilters: ['primary', 'secondary'],
       }),
     );
   });

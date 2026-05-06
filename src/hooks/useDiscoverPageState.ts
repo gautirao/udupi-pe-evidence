@@ -92,6 +92,12 @@ export function useDiscoverPageState({
   const [showLoader, setShowLoader] = useState(false);
 
   const [selectedSchool, setSelectedSchool] = useState<SchoolResult | null>(null);
+  // schoolBoardFilter: ephemeral UI state for the school-board chip strip in MapFilters.
+  // This is NOT the same as filters.boardFilters (DiscoverUrlFilters), which is URL-backed
+  // and persists across navigation for the school journey. schoolBoardFilter is reset to []
+  // on page load and is managed entirely by MapFilters/SchoolBoardFilter UI components.
+  // Do not consolidate these: the chip strip has its own transient active-state that must
+  // survive filter-panel re-renders without polluting URL history.
   const [schoolBoardFilter, setSchoolBoardFilter] = useState<string[]>([]);
 
   // City state — lazy initializer reads from useDiscoverUrlState (which reads URL on first render)
@@ -165,7 +171,8 @@ export function useDiscoverPageState({
       setMapZoom(CITY_CONFIG[newCity]?.zoom ?? 11);
       setSelectedArea(null);
       setPanToArea(null);
-      urlActions.setCity(newCity);
+      // changeCity is atomic: single PUSH, clears journey/groupId/areaKey/viewport.
+      urlActions.changeCity(newCity);
     },
     [urlActions],
   );
@@ -205,6 +212,8 @@ export function useDiscoverPageState({
         priceMin: next.priceMin,
         priceMax: next.priceMax,
         sellerTypes: next.sellerTypes,
+        boardFilters: next.boardFilters,
+        categoryFilters: next.categoryFilters,
         backOnMarket: next.backOnMarket,
         newToMarket: next.newToMarket,
         reraRegistered: next.reraRegistered,

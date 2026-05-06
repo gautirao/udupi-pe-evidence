@@ -133,6 +133,18 @@ export interface PropertyFilters {
   schoolLon?: number;
   /** School proximity filter: radius in km (default 2) */
   schoolRadiusKm?: number;
+  /**
+   * School board filters for the school journey — comma-serialized in URL as `board`.
+   * Passed through to useDiscoverUrlState.setFiltersLive; not evaluated by usePropertyListings.
+   * Examples: ['cbse', 'icse']
+   */
+  boardFilters?: string[];
+  /**
+   * School category filters for the school journey — comma-serialized in URL as `category`.
+   * Passed through to useDiscoverUrlState.setFiltersLive; not evaluated by usePropertyListings.
+   * Examples: ['primary', 'secondary']
+   */
+  categoryFilters?: string[];
 }
 
 export interface PropertyListingWithImages extends PropertyListing {
