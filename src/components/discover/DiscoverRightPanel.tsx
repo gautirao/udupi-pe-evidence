@@ -3,8 +3,11 @@ import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
+import type { AreaGroup } from '@/hooks/useAreaGroups';
+import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
+import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import {
   SchoolBrowsePanel,
@@ -37,6 +40,16 @@ export interface DiscoverRightPanelProps {
   onSearchChange?: (q: string) => void;
   /** Active journey (passed through from URL state for panel headers). */
   journey?: DiscoverJourney | null;
+  /** Area groups for the area-groups-landing panel. */
+  areaGroups?: AreaGroup[];
+  /** True while area groups are loading. */
+  isLoadingAreaGroups?: boolean;
+  /** Called when the user selects a group from the landing panel. */
+  onSelectGroup?: (groupId: string) => void;
+  /** All areas in the city — used as Browse-all fallback when groups is empty. */
+  discoverAreas?: DiscoverArea[];
+  /** Called when the user selects an area from Browse-all fallback. */
+  onSelectAreaKey?: (areaKey: string) => void;
 }
 
 export function DiscoverRightPanel({
@@ -57,11 +70,31 @@ export function DiscoverRightPanel({
   searchQuery = '',
   onSearchChange,
   journey,
+  areaGroups = [],
+  isLoadingAreaGroups = false,
+  onSelectGroup,
+  discoverAreas = [],
+  onSelectAreaKey,
 }: DiscoverRightPanelProps) {
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
       case 'guided-entry':
         return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+
+      case 'area-groups-landing':
+        return (
+          <AreaGroupsLandingPanel
+            groups={areaGroups}
+            isLoading={isLoadingAreaGroups}
+            onSelectGroup={onSelectGroup ?? (() => undefined)}
+            onStartOver={onStartOver}
+            // Satisfy the discriminated union: only spread fallbackAreas + onSelectArea
+            // when onSelectAreaKey is defined, so Browse-all buttons are never silent no-ops.
+            {...(onSelectAreaKey
+              ? { fallbackAreas: discoverAreas, onSelectArea: onSelectAreaKey }
+              : {})}
+          />
+        );
 
       case 'area-selection':
         return <AreaSelectionPanel onStartOver={onStartOver} />;

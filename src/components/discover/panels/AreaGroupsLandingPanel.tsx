@@ -1,0 +1,175 @@
+import React from 'react';
+import { LayoutGrid, MapPin } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PanelHeader } from '../PanelHeader';
+import type { AreaGroup } from '@/hooks/useAreaGroups';
+import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * Discriminated union: when fallbackAreas is supplied (possibly non-empty),
+ * onSelectArea must also be supplied so Browse-all buttons are never silent no-ops.
+ * When fallbackAreas is omitted the component renders the no-areas empty state.
+ */
+export type AreaGroupsLandingPanelProps = {
+  groups: AreaGroup[];
+  isLoading: boolean;
+  onSelectGroup: (groupId: string) => void;
+  onStartOver: () => void;
+} & (
+  | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
+  | { fallbackAreas?: never; onSelectArea?: never }
+);
+
+// ─── Loading skeletons ────────────────────────────────────────────────────────
+
+function GroupCardSkeleton() {
+  return (
+    <div className="rounded-lg border border-border p-4 space-y-2">
+      <Skeleton className="h-4 w-2/3" />
+      <Skeleton className="h-3 w-1/2" />
+      <Skeleton className="h-3 w-1/3" />
+    </div>
+  );
+}
+
+// ─── Browse-all fallback ──────────────────────────────────────────────────────
+
+interface BrowseAllFallbackProps {
+  areas: DiscoverArea[];
+  onSelectArea: (areaKey: string) => void;
+}
+
+function BrowseAllFallback({ areas, onSelectArea }: BrowseAllFallbackProps) {
+  if (areas.length === 0) {
+    return (
+      <div
+        className="flex flex-col items-center justify-center py-12 px-4 text-center"
+        role="status"
+        aria-label="No areas available"
+      >
+        <MapPin className="h-8 w-8 text-muted-foreground/40 mb-3" aria-hidden="true" />
+        <p className="text-sm font-medium text-foreground mb-1">No areas found</p>
+        <p className="text-xs text-muted-foreground">
+          No neighbourhoods are available for this city yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-4">
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+        Browse all areas
+      </p>
+      <ul className="space-y-1" role="list" aria-label="All areas in city">
+        {areas.map((area) => (
+          <li key={area.areaKey}>
+            <button
+              type="button"
+              className="w-full flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => onSelectArea(area.areaKey)}
+              aria-label={`Browse ${area.name}, ${area.listingCount} listing${area.listingCount === 1 ? '' : 's'}`}
+              data-testid={`browse-all-area-${area.areaKey}`}
+            >
+              <span className="font-medium truncate">{area.name}</span>
+              <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                {area.listingCount} listing{area.listingCount === 1 ? '' : 's'}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ─── Group card ───────────────────────────────────────────────────────────────
+
+interface GroupCardProps {
+  group: AreaGroup;
+  onSelect: (groupId: string) => void;
+}
+
+function GroupCard({ group, onSelect }: GroupCardProps) {
+  const areaCount = group.area_keys.length;
+
+  return (
+    <button
+      type="button"
+      className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      onClick={() => onSelect(group.id)}
+      aria-label={`Select group ${group.name}${group.region_label ? `, ${group.region_label}` : ''}, ${areaCount} area${areaCount === 1 ? '' : 's'}`}
+      data-testid={`area-group-card-${group.id}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-sm truncate">{group.name}</p>
+          {group.subtitle && (
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{group.subtitle}</p>
+          )}
+          {group.region_label && (
+            <p className="text-xs text-muted-foreground/70 mt-1">{group.region_label}</p>
+          )}
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 font-medium">
+          {areaCount} area{areaCount === 1 ? '' : 's'}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+// ─── Panel ────────────────────────────────────────────────────────────────────
+
+export function AreaGroupsLandingPanel({
+  groups,
+  isLoading,
+  onSelectGroup,
+  onStartOver,
+  fallbackAreas = [],
+  onSelectArea,
+}: AreaGroupsLandingPanelProps) {
+  return (
+    <>
+      <PanelHeader
+        title="Select area"
+        journey="area-first"
+        onStartOver={onStartOver}
+      />
+
+      <div
+        className="flex-1 overflow-y-auto"
+        aria-busy={isLoading}
+        aria-label="Area groups"
+      >
+        {isLoading ? (
+          <div className="space-y-3 p-4" data-testid="area-groups-loading">
+            {[0, 1, 2, 3].map((i) => (
+              <GroupCardSkeleton key={i} />
+            ))}
+          </div>
+        ) : groups.length > 0 ? (
+          <div className="space-y-3 p-4" data-testid="area-groups-list">
+            <div className="flex items-center gap-2 mb-1">
+              <LayoutGrid className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Neighbourhood groups
+              </p>
+            </div>
+            {groups.map((group) => (
+              <GroupCard key={group.id} group={group} onSelect={onSelectGroup} />
+            ))}
+          </div>
+        ) : (
+          <BrowseAllFallback
+            areas={fallbackAreas}
+            // onSelectArea is guaranteed by the discriminated union when fallbackAreas is present
+            onSelectArea={onSelectArea!}
+          />
+        )}
+      </div>
+    </>
+  );
+}

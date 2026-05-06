@@ -36,10 +36,19 @@ describe('derivePanelContent — area-first journey', () => {
     expect(derivePanelContent(makeState({ journey: 'area-first' }))).toBe('area-selection');
   });
 
-  it('returns area-selection when journey=area-first with groupId but no areaKey', () => {
+  it('returns area-groups-landing when journey=area-first, groupId is set, no areaKey', () => {
     expect(
       derivePanelContent(makeState({ journey: 'area-first', groupId: 'coastal-homes' })),
-    ).toBe('area-selection');
+    ).toBe('area-groups-landing');
+  });
+
+  it('returns area-selected (not area-groups-landing) when areaKey is also set', () => {
+    // areaKey takes priority over groupId within area-first journey
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', groupId: 'coastal-homes', areaKey: 'IN|KA|Udupi|Manipal' }),
+      ),
+    ).toBe('area-selected');
   });
 
   it('returns area-selected when journey=area-first and areaKey is set', () => {

@@ -558,6 +558,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           } else {
             next.delete('groupId');
           }
+          // Clear areaKey: a group selection resets area choice (can't have both simultaneously
+          // in area-first journey — area-groups-landing and area-selected are mutually exclusive).
+          next.delete('areaKey');
           return next;
         },
         { replace: false }, // PUSH — group selection is a navigational choice

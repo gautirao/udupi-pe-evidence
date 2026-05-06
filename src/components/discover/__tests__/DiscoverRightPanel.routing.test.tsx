@@ -62,6 +62,48 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
   });
 
+  it('panelContent="area-groups-landing" renders AreaGroupsLandingPanel with group cards', () => {
+    const groups = [
+      {
+        id: 'south-zone',
+        name: 'South Zone',
+        subtitle: 'Koramangala, HSR',
+        region_label: 'South',
+        school_count: 5,
+        area_keys: ['IN|KA|Bengaluru|Koramangala'],
+      },
+    ];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={groups}
+        isLoadingAreaGroups={false}
+        onSelectGroup={vi.fn()}
+        discoverAreas={[]}
+        onSelectAreaKey={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Select area')).toBeInTheDocument();
+    expect(screen.getByTestId('area-group-card-south-zone')).toBeInTheDocument();
+    expect(screen.getByText('South Zone')).toBeInTheDocument();
+  });
+
+  it('panelContent="area-groups-landing" shows loading skeletons when isLoadingAreaGroups=true', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={[]}
+        isLoadingAreaGroups={true}
+        onSelectGroup={vi.fn()}
+        discoverAreas={[]}
+        onSelectAreaKey={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('area-groups-loading')).toBeInTheDocument();
+  });
+
   it('panelContent="area-selected" with listings renders AreaSelectedPanel', () => {
     const area = makeArea('k1', 'Manipal');
     const listings = [makeListing('l1')];

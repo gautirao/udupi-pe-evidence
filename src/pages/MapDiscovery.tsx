@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
+import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { ApiError } from '@/lib/api';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
@@ -31,6 +32,15 @@ export default function MapDiscovery() {
   const isAuthenticated = !authLoading && user !== null;
 
   const panelContent = derivePanelContent(urlState);
+
+  // Fetch area groups for the current city.
+  // The hook's enabled guard (city.length > 0) prevents fetching on empty city.
+  // Passing urlState.city directly avoids a stale-data window that the conditional ''
+  // approach would create when the panel briefly re-renders before city resolves.
+  const {
+    data: areaGroupsData,
+    isLoading: isLoadingAreaGroups,
+  } = useAreaGroups(urlState.city);
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -319,6 +329,11 @@ export default function MapDiscovery() {
           onBack={handleAreaBack}
           onStartOver={() => urlActions.startOver()}
           onSelectJourney={(j) => urlActions.setJourney(j)}
+          areaGroups={areaGroupsData?.groups ?? []}
+          isLoadingAreaGroups={isLoadingAreaGroups}
+          onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
+          discoverAreas={discoverAreas}
+          onSelectAreaKey={(areaKey) => urlActions.selectArea(areaKey)}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
           isFetching={isFetching}

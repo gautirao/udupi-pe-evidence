@@ -7,19 +7,21 @@
  *
  * Panel states (audit-aligned with issue #990):
  *
- *   guided-entry        — no journey selected (landing state)
- *   area-selection      — area-first journey, no group selected
- *   area-selected       — area-first journey, area selected (areaKey present)
- *   school-browse       — school-first journey, no school selected
- *   schools-in-area     — school-first journey, area selected (schoolId absent)
- *   school-selected     — school-first journey, schoolId present
- *   area-school-combined — area selected AND school selected (both present)
+ *   guided-entry          — no journey selected (landing state)
+ *   area-groups-landing   — area-first journey, groupId set, no areaKey yet
+ *   area-selection        — area-first journey, no group selected
+ *   area-selected         — area-first journey, area selected (areaKey present)
+ *   school-browse         — school-first journey, no school selected
+ *   schools-in-area       — school-first journey, area selected (schoolId absent)
+ *   school-selected       — school-first journey, schoolId present
+ *   area-school-combined  — area selected AND school selected (both present)
  */
 
 import type { DiscoverUrlState } from '../hooks/useDiscoverUrlState';
 
 export type DiscoverPanelContent =
   | 'guided-entry'
+  | 'area-groups-landing'
   | 'area-selection'
   | 'area-selected'
   | 'school-browse'
@@ -38,7 +40,8 @@ export type DiscoverPanelContent =
  *    c. Neither → school-browse
  * 3. Area-first journey:
  *    a. areaKey present → area-selected
- *    b. No areaKey → area-selection (group may or may not be set; group is within area-selection)
+ *    b. groupId present, no areaKey → area-groups-landing (group selected, area not yet chosen)
+ *    c. Neither → area-selection (no group selected yet)
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
@@ -62,6 +65,10 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   if (journey === 'area-first') {
     if (areaKey) {
       return 'area-selected';
+    }
+    const { groupId } = urlState;
+    if (groupId) {
+      return 'area-groups-landing';
     }
     return 'area-selection';
   }
