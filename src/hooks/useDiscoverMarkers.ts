@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { snapBbox } from '@/lib/bboxUtils';
 
 export interface DiscoverMarker {
   id: string;
@@ -13,36 +14,23 @@ export interface DiscoverMarkersResponse {
   markers: DiscoverMarker[];
 }
 
-/** Snap bbox to a 0.02° grid (≈2.2 km) to maximise cache hits across adjacent viewports. */
-function snapBbox(
-  bbox: [number, number, number, number],
-): [number, number, number, number] {
-  const STEP = 0.02;
-  const r2 = (v: number) => Math.round(v * 100) / 100;
-  return [
-    r2(Math.floor(bbox[0] / STEP) * STEP), // south — expand outward
-    r2(Math.floor(bbox[1] / STEP) * STEP), // west  — expand outward
-    r2(Math.ceil(bbox[2] / STEP) * STEP),  // north — expand outward
-    r2(Math.ceil(bbox[3] / STEP) * STEP),  // east  — expand outward
-  ];
-}
-
 export function useDiscoverMarkers(
   city: string,
   bbox?: [number, number, number, number] | null,
   enabled = true,
 ) {
-  const snapped = bbox ? snapBbox(bbox) : null;
+  const snapped = bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
 
   return useQuery<DiscoverMarkersResponse>({
     queryKey: ['discover-markers', city, snapped],
     queryFn: ({ signal }) => {
-      let url = `/api/listings/markers?city=${encodeURIComponent(city)}`;
+      const params = new URLSearchParams();
+      params.set('city', city);
       if (snapped) {
         const [s, w, n, e] = snapped;
-        url += `&bbox=${s},${w},${n},${e}`;
+        params.set('bbox', `${s},${w},${n},${e}`);
       }
-      return api.get<DiscoverMarkersResponse>(url, { skipAuth: true, signal });
+      return api.get<DiscoverMarkersResponse>(`/api/listings/markers?${params.toString()}`, { skipAuth: true, signal });
     },
     enabled: enabled && city.length > 0,
     staleTime: 300_000,

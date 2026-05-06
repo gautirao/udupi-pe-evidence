@@ -152,4 +152,95 @@ describe('useDiscoverFilteredMarkers', () => {
     expect(params.get('newToMarket')).toBe('true');
     expect(params.get('reraRegistered')).toBe('true');
   });
+
+  it('bbox_snapped_to_grid_and_sent_as_south_west_north_east', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    // Raw bbox: south=13.341, west=74.741, north=13.359, east=74.759
+    // Snapped: south=13.34, west=74.74, north=13.36, east=74.76
+    const bbox: [number, number, number, number] = [13.341, 74.741, 13.359, 74.759];
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, bbox),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('bbox')).toBe('13.34,74.74,13.36,74.76');
+  });
+
+  it('bbox_omitted_when_not_provided', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('bbox')).toBe(false);
+  });
+
+  it('bbox_omitted_when_null', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('bbox')).toBe(false);
+  });
+
+  it('bbox_omitted_when_contains_Infinity', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          [Infinity, 74.741, 13.359, 74.759] as unknown as [number, number, number, number],
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('bbox')).toBe(false);
+  });
+
+  it('bbox_omitted_when_contains_NaN', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          [NaN, 74.741, 13.359, 74.759] as unknown as [number, number, number, number],
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('bbox')).toBe(false);
+  });
 });

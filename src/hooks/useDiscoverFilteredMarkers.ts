@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
+import { snapBbox } from '@/lib/bboxUtils';
 
 export interface DiscoverFilteredMarker {
   id: string;
@@ -20,12 +21,26 @@ export function useDiscoverFilteredMarkers(
   city: string,
   filters: PropertyFilters,
   enabled = true,
+  /**
+   * Optional viewport bounding box [south, west, north, east].
+   * Snapped to 0.02° grid for cache efficiency before being sent to the API.
+   * When omitted, the backend falls back to the full city query.
+   */
+  bbox?: [number, number, number, number] | null,
 ) {
+  // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
+  const snapped: [number, number, number, number] | null =
+    bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
+
   return useQuery<DiscoverFilteredMarkersResponse>({
-    queryKey: ['discover-filtered-markers', city, filters],
+    queryKey: ['discover-filtered-markers', city, filters, snapped],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
+      if (snapped) {
+        const [s, w, n, e] = snapped;
+        params.set('bbox', `${s},${w},${n},${e}`);
+      }
 
       filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
       filters.localities?.forEach((l) => params.append('localities', l));
@@ -36,7 +51,7 @@ export function useDiscoverFilteredMarkers(
       if (filters.bedrooms != null) {
         filters.bedrooms.forEach((b) => params.append('bedrooms', String(b)));
       }
-      filters.sellerTypes?.forEach((s) => params.append('sellerTypes', s));
+      filters.sellerTypes?.forEach((st) => params.append('sellerTypes', st));
       if (filters.backOnMarket) params.set('backOnMarket', 'true');
       if (filters.newToMarket) params.set('newToMarket', 'true');
       if (filters.reraRegistered) params.set('reraRegistered', 'true');

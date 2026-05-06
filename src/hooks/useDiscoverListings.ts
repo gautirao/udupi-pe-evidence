@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
+import { snapBbox } from '@/lib/bboxUtils';
 
 export interface DiscoverListingItem {
   id: string;
@@ -51,6 +52,12 @@ export interface UseDiscoverListingsParams {
   filters: PropertyFilters;
   includeAggregates?: boolean;
   enabled?: boolean;
+  /**
+   * Optional viewport bounding box [south, west, north, east].
+   * Snapped to 0.02° grid for cache efficiency before being sent to the API.
+   * When omitted, the backend falls back to the full city query.
+   */
+  bbox?: [number, number, number, number] | null;
 }
 
 export function useDiscoverListings({
@@ -60,15 +67,24 @@ export function useDiscoverListings({
   filters,
   includeAggregates = false,
   enabled = true,
+  bbox,
 }: UseDiscoverListingsParams) {
+  // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
+  const snapped: [number, number, number, number] | null =
+    bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
+
   return useQuery<DiscoverListingsPage>({
-    queryKey: ['discover-listings', city, page, size, filters, includeAggregates],
+    queryKey: ['discover-listings', city, page, size, filters, includeAggregates, snapped],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
       params.set('page', String(page));
       params.set('size', String(size));
       if (includeAggregates) params.set('includeAggregates', 'true');
+      if (snapped) {
+        const [s, w, n, e] = snapped;
+        params.set('bbox', `${s},${w},${n},${e}`);
+      }
 
       filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
       filters.localities?.forEach((l) => params.append('localities', l));
@@ -80,7 +96,7 @@ export function useDiscoverListings({
       if (filters.bedrooms != null) {
         filters.bedrooms.forEach((b) => params.append('bedrooms', String(b)));
       }
-      filters.sellerTypes?.forEach((s) => params.append('sellerTypes', s));
+      filters.sellerTypes?.forEach((st) => params.append('sellerTypes', st));
       if (filters.backOnMarket) params.set('backOnMarket', 'true');
       if (filters.newToMarket) params.set('newToMarket', 'true');
       if (filters.reraRegistered) params.set('reraRegistered', 'true');

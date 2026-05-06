@@ -30,6 +30,13 @@ export interface UseDiscoverMapDataParams {
   markersEnabled: boolean;
   /** Current page for the listing cards panel (0-indexed). */
   page: number;
+  /**
+   * Optional viewport bounding box [south, west, north, east] extracted from the map.
+   * Passed through to useDiscoverListings and useDiscoverFilteredMarkers, which snap
+   * it to a 0.02° grid before including it in the API call and query key.
+   * When null/undefined the backend falls back to the full city query.
+   */
+  bbox?: [number, number, number, number] | null;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -77,6 +84,7 @@ export function useDiscoverMapData({
   fitTick,
   markersEnabled,
   page,
+  bbox,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -113,6 +121,7 @@ export function useDiscoverMapData({
     filters,
     includeAggregates: true,
     enabled: isAuthenticated && !debouncedSearch,
+    bbox,
   });
 
   // ── Filtered markers (auth-only, same predicate as listings) ──────────────
@@ -120,7 +129,7 @@ export function useDiscoverMapData({
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
     isFetching: filteredMarkersFetching,
-  } = useDiscoverFilteredMarkers(city, filters, markersEnabled);
+  } = useDiscoverFilteredMarkers(city, filters, markersEnabled, bbox);
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);

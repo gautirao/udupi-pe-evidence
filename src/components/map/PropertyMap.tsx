@@ -129,6 +129,13 @@ interface PropertyMapProps {
   resetMapTick?: number;
   /** Called once when the Leaflet map instance has finished initialising. Use to gate data-readiness checks. */
   onReady?: () => void;
+  /**
+   * Called after every map moveend/zoomend (after the first mount event is skipped)
+   * with the current bounding box as [south, west, north, east].
+   * The caller is responsible for debouncing before triggering API refetches.
+   * NaN/Infinity bboxes from hidden containers are suppressed before this fires.
+   */
+  onBoundsChange?: (bbox: [number, number, number, number]) => void;
 }
 
 /**
@@ -184,6 +191,52 @@ function ViewportWatcher({
       map.off('zoomend', handler);
     };
   }, [map, onViewportChange]);
+  return null;
+}
+
+/**
+ * Fires onBoundsChange with the current map bbox [south, west, north, east] after
+ * every moveend or zoomend. The initial mount fire is suppressed (hasMountedRef guard)
+ * so that URL-restored viewports don't trigger an immediate API refetch before the
+ * user has interacted. The caller is responsible for debouncing if needed.
+ *
+ * Coalescing: Leaflet fires zoomend then moveend in rapid succession on pinch/scroll
+ * zoom. The caller's debounce window (≥300 ms) collapses these into a single refetch.
+ */
+function BoundsWatcher({
+  onBoundsChange,
+}: {
+  onBoundsChange?: (bbox: [number, number, number, number]) => void;
+}) {
+  const map = useMap();
+  // Skip the first fire on mount — the initial viewport is already captured from
+  // URL params; we only want to trigger refetches on genuine user pan/zoom.
+  const hasMountedRef = useRef(false);
+
+  useEffect(() => {
+    if (!onBoundsChange) return;
+    const handler = () => {
+      if (!hasMountedRef.current) {
+        hasMountedRef.current = true;
+        return;
+      }
+      const b = map.getBounds();
+      const s = b.getSouth();
+      const w = b.getWest();
+      const n = b.getNorth();
+      const e = b.getEast();
+      // Guard against degenerate bounds (NaN or Infinity) from hidden/unmounted containers.
+      if ([s, w, n, e].every(Number.isFinite)) {
+        onBoundsChange([s, w, n, e]);
+      }
+    };
+    map.on('moveend', handler);
+    map.on('zoomend', handler);
+    return () => {
+      map.off('moveend', handler);
+      map.off('zoomend', handler);
+    };
+  }, [map, onBoundsChange]);
   return null;
 }
 
@@ -373,6 +426,7 @@ export function PropertyMap({
   onAreaClick,
   onZoomChange,
   onViewportChange,
+  onBoundsChange,
   panToArea,
   resetMapTick,
   onReady,
@@ -403,6 +457,7 @@ export function PropertyMap({
         />
         <ZoomWatcher onZoomChange={onZoomChange} />
         <ViewportWatcher onViewportChange={onViewportChange} />
+        <BoundsWatcher onBoundsChange={onBoundsChange} />
         <AreaPanner panToArea={panToArea} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (

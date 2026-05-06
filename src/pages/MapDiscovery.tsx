@@ -33,6 +33,28 @@ export default function MapDiscovery() {
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 
+  // Transient map bbox — not stored in URL. Updated on pan/zoom via onBoundsChange.
+  // Stored as a ref for the debounce timer and as state to trigger re-renders/refetches.
+  const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
+  const bboxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBoundsChange = useCallback(
+    (bbox: [number, number, number, number]) => {
+      if (bboxTimerRef.current) clearTimeout(bboxTimerRef.current);
+      bboxTimerRef.current = setTimeout(() => {
+        setMapBbox(bbox);
+      }, 300);
+    },
+    [],
+  );
+
+  // Cleanup bbox timer on unmount
+  useEffect(() => {
+    return () => {
+      if (bboxTimerRef.current) clearTimeout(bboxTimerRef.current);
+    };
+  }, []);
+
   // Sync local searchQuery when the URL `q` param changes (e.g. browser back/forward).
   useEffect(() => {
     if (urlState.q !== searchQuery) {
@@ -67,6 +89,11 @@ export default function MapDiscovery() {
     page, setPage,
   } = useDiscoverPageState({ urlState, urlActions });
 
+  // Reset bbox when city changes — the previous city's viewport is out-of-bounds for the new city.
+  useEffect(() => {
+    setMapBbox(null);
+  }, [city]);
+
   const isCityValid = city in CITY_CONFIG;
 
   const {
@@ -82,6 +109,7 @@ export default function MapDiscovery() {
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
     markersEnabled: isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
+    bbox: mapBbox,
   });
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
@@ -218,6 +246,7 @@ export default function MapDiscovery() {
               onAreaClick={handleAreaClick}
               onZoomChange={setMapZoom}
               onViewportChange={urlActions.reportViewport}
+              onBoundsChange={handleBoundsChange}
               panToArea={panToArea}
               resetMapTick={resetMapTick}
               onReady={() => setMapReady(true)}
