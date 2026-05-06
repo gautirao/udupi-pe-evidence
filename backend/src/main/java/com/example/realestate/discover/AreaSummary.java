@@ -15,5 +15,6 @@ public record AreaSummary(
         long listingCount,
         Long medianPricePaise,
         String trendDirection,
-        String confidenceTier
+        String confidenceTier,
+        long schoolCount
 ) {}

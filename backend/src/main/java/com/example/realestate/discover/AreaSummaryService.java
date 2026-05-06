@@ -34,7 +34,8 @@ public class AreaSummaryService {
                         rs.getLong("listing_count"),
                         nullableLong(rs.getObject("median_price_paise")),
                         rs.getString("trend_direction"),
-                        rs.getString("confidence_tier")
+                        rs.getString("confidence_tier"),
+                        rs.getLong("school_count")
                 ),
                 city);
 
@@ -63,7 +64,17 @@ public class AreaSummaryService {
                 COALESCE(pl.listing_count, 0)        AS listing_count,
                 aos.median_price_paise,
                 aos.trend_direction,
-                aos.confidence_tier
+                aos.confidence_tier,
+                (
+                    SELECT COUNT(*)
+                    FROM schools s
+                    WHERE s.geog IS NOT NULL
+                      AND ST_DWithin(
+                              s.geog,
+                              ST_MakePoint(a.geo_center_lon, a.geo_center_lat)::geography,
+                              2000
+                          )
+                )                                    AS school_count
             FROM areas a
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN area_overview_stats aos
