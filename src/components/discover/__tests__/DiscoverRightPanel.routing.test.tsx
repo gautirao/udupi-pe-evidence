@@ -141,12 +141,14 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByText(/coming in milestone 2/i)).toBeInTheDocument();
   });
 
-  it('panelContent="schools-in-area" with selectedArea renders Milestone 2 placeholder', () => {
+  it('panelContent="schools-in-area" with selectedArea renders SchoolsInAreaPanel', () => {
     const area = makeArea('k1', 'Manipal');
     renderPanel(
-      <DiscoverRightPanel {...baseProps} panelContent="schools-in-area" selectedArea={area} />,
+      <DiscoverRightPanel {...baseProps} panelContent="schools-in-area" selectedArea={area} journey="school-first" />,
     );
-    expect(screen.getByText(/coming in milestone 2/i)).toBeInTheDocument();
+    // Verify the real SchoolsInAreaPanel renders (headers from PanelHeader + subtitle)
+    expect(screen.getByText(/schools in manipal/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose a school to view nearby homes/i)).toBeInTheDocument();
   });
 
   it('panelContent="schools-in-area" with no selectedArea falls back to guided-entry', () => {
