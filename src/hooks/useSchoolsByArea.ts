@@ -30,12 +30,10 @@ export function useSchoolsByArea(
         size: String(size),
       });
 
-      if (board.length > 0) {
-        params.set('board', board.join(','));
-      }
-      if (category.length > 0) {
-        params.set('category', category.join(','));
-      }
+      // Append board filters as repeated query params for Spring to parse as List<String>
+      board.forEach((b) => params.append('board', b));
+      // Append category filters as repeated query params for Spring to parse as List<String>
+      category.forEach((c) => params.append('category', c));
 
       const res = await fetch(`/api/public/schools/by-area?${params}`);
       if (!res.ok) {
