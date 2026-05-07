@@ -447,6 +447,8 @@ export default function MapDiscovery() {
           isInitialLoading={isLoading}
           searchQuery={searchQuery}
           onSearchChange={handleSearchChange}
+          filters={filters}
+          onFiltersChange={handleFiltersChange}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

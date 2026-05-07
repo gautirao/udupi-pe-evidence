@@ -1,6 +1,7 @@
 import React from 'react';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -55,6 +56,10 @@ export interface DiscoverRightPanelProps {
    * for the area-selected state. Omitted for read-only panels.
    */
   activeContextChips?: React.ReactNode;
+  /** Current property filters for quick-filter chips. */
+  filters?: PropertyFilters;
+  /** Called when property filters change via quick chips or clear action. */
+  onFiltersChange?: (filters: PropertyFilters) => void;
 }
 
 export function DiscoverRightPanel({
@@ -81,6 +86,8 @@ export function DiscoverRightPanel({
   discoverAreas = [],
   onSelectAreaKey,
   activeContextChips,
+  filters = {},
+  onFiltersChange,
 }: DiscoverRightPanelProps) {
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
@@ -126,6 +133,9 @@ export function DiscoverRightPanel({
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
             activeContextChips={activeContextChips}
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            onSelectJourney={onSelectJourney}
           />
         );
 

@@ -1,17 +1,28 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, MapPin, Search, TrendingUp, X } from 'lucide-react';
+import { ChevronLeft, MapPin, Search, TrendingUp, X, Plus, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { PropertyCard } from '../PropertyCard';
 import { PanelHeader } from '../PanelHeader';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { SlidersHorizontal } from 'lucide-react';
+
+// Quick filter options (hardcoded MVP)
+const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'land'] as const;
+const QUICK_BEDROOMS = [2, 3] as const;
+
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  apartment: 'Apartments',
+  villa: 'Villas',
+  land: 'Plots',
+};
 
 interface AreaSelectedPanelProps {
   selectedArea: AreaPoint;
@@ -29,6 +40,12 @@ interface AreaSelectedPanelProps {
   onSearchChange?: (q: string) => void;
   /** Active context chips forwarded to PanelHeader centre slot. */
   activeContextChips?: React.ReactNode;
+  /** Current property filters. */
+  filters?: PropertyFilters;
+  /** Called when property filters change (from quick chips or clear action). */
+  onFiltersChange?: (filters: PropertyFilters) => void;
+  /** Called when user clicks "Add a school in this area" CTA. */
+  onSelectJourney?: (journey: DiscoverJourney) => void;
 }
 
 export function AreaSelectedPanel({
@@ -46,8 +63,75 @@ export function AreaSelectedPanel({
   searchQuery = '',
   onSearchChange,
   activeContextChips,
+  filters = {},
+  onFiltersChange,
+  onSelectJourney,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
+
+  // Compute active property types and bedrooms from current filters
+  const activePropertyTypes = useMemo(
+    () => new Set(filters.propertyTypes || []),
+    [filters.propertyTypes],
+  );
+  const activeBedrooms = useMemo(
+    () => new Set(filters.bedrooms || []),
+    [filters.bedrooms],
+  );
+
+  const hasPropertyFilters = Boolean(
+    filters.propertyTypes?.length || filters.bedrooms?.length || filters.priceMin || filters.priceMax
+  );
+
+  // Toggle property type: add if not present, remove if already active
+  const handleTogglePropertyType = useCallback(
+    (type: string) => {
+      if (!onFiltersChange) return;
+      const current = filters.propertyTypes || [];
+      const updated = activePropertyTypes.has(type)
+        ? current.filter((t) => t !== type)
+        : [...current, type];
+      onFiltersChange({ ...filters, propertyTypes: updated.length > 0 ? updated : undefined });
+    },
+    [filters, activePropertyTypes, onFiltersChange],
+  );
+
+  // Toggle bedroom count: add if not present, remove if already active
+  const handleToggleBedroom = useCallback(
+    (bed: number) => {
+      if (!onFiltersChange) return;
+      const current = filters.bedrooms || [];
+      const updated = activeBedrooms.has(bed)
+        ? current.filter((b) => b !== bed)
+        : [...current, bed];
+      onFiltersChange({ ...filters, bedrooms: updated.length > 0 ? updated : undefined });
+    },
+    [filters, activeBedrooms, onFiltersChange],
+  );
+
+  // Clear property-type filters only; preserve school, polygon, city, date, and other active filters
+  const handleClearPropertyFilters = useCallback(() => {
+    if (!onFiltersChange) return;
+    onFiltersChange({
+      ...filters,
+      propertyTypes: undefined,
+      bedrooms: undefined,
+      priceMin: undefined,
+      priceMax: undefined,
+      localities: undefined,
+      sellerTypes: undefined,
+      backOnMarket: undefined,
+      newToMarket: undefined,
+      reraRegistered: undefined,
+      readyToMove: undefined,
+    });
+  }, [filters, onFiltersChange]);
+
+  // Add school in this area: transition to school-first journey, preserving area
+  const handleAddSchool = useCallback(() => {
+    if (!onSelectJourney) return;
+    onSelectJourney('school-first');
+  }, [onSelectJourney]);
 
   return (
     <>
@@ -98,6 +182,59 @@ export function AreaSelectedPanel({
         }
       />
 
+      {/* Quick filter chips section */}
+      <div className="border-b border-border px-3 py-3 space-y-2">
+        {/* Property type chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_PROPERTY_TYPES.map((type) => (
+            <Button
+              key={type}
+              variant={activePropertyTypes.has(type) ? 'default' : 'outline'}
+              size="sm"
+              className={cn(
+                'h-8 text-xs px-3',
+                activePropertyTypes.has(type) && 'bg-primary text-primary-foreground',
+              )}
+              onClick={() => handleTogglePropertyType(type)}
+              data-testid={`quick-chip-${type}`}
+            >
+              {PROPERTY_TYPE_LABELS[type]}
+            </Button>
+          ))}
+        </div>
+
+        {/* BHK chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_BEDROOMS.map((bed) => (
+            <Button
+              key={bed}
+              variant={activeBedrooms.has(bed) ? 'default' : 'outline'}
+              size="sm"
+              className={cn(
+                'h-8 text-xs px-3',
+                activeBedrooms.has(bed) && 'bg-primary text-primary-foreground',
+              )}
+              onClick={() => handleToggleBedroom(bed)}
+              data-testid={`quick-chip-${bed}-bhk`}
+            >
+              {bed} BHK
+            </Button>
+          ))}
+        </div>
+
+        {/* Add school CTA */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full h-8 text-xs gap-1.5"
+          onClick={handleAddSchool}
+          data-testid="add-school-cta"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add a school in this area
+        </Button>
+      </div>
+
       {/* Search input — sticky below header, above listing cards */}
       {onSearchChange && (
         <div className="sticky top-[49px] z-10 bg-card border-b border-border p-3">
@@ -143,9 +280,23 @@ export function AreaSelectedPanel({
             ))}
           </div>
         ) : !areaListings || areaListings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full">
+          <div className="flex flex-col items-center justify-center h-full p-4">
             <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
-            <p className="text-sm text-muted-foreground">No listings in this area yet</p>
+            {hasPropertyFilters ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">No listings match these filters</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearPropertyFilters}
+                  data-testid="clear-filters-button"
+                >
+                  Clear filters
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No listings in this area yet</p>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-border">
