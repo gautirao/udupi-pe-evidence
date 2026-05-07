@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 
 /**
  * One area marker point.
@@ -18,6 +19,8 @@ export interface AreaPoint {
   /** From areas.bbox — used for fitBounds on click. */
   bbox: [[number, number], [number, number]] | null;
   listingCount?: number | null;
+  /** Number of schools in this area — from /api/discover/areas. Null/undefined means not yet loaded. */
+  schoolCount?: number | null;
   trendDirection?: 'rising' | 'falling' | 'stable' | null;
 }
 
@@ -31,6 +34,16 @@ interface AreaMarkerLayerProps {
    * Dimmed markers remain fully clickable.
    */
   focusedGroupAreas?: string[];
+  /**
+   * Active journey type. When 'school-first' and no school is selected,
+   * the badge shows school count (with GraduationCap icon) instead of property count.
+   */
+  journey?: DiscoverJourney | null;
+  /**
+   * Whether a school is currently selected. When truthy in school-first journey,
+   * falls back to property count badge (school has already been chosen).
+   */
+  selectedSchool?: unknown;
 }
 
 /**
@@ -42,12 +55,31 @@ interface AreaMarkerLayerProps {
  *
  * opacity: 1.0 for focused/unfocused markers; 0.3 for dimmed (non-group) markers.
  * pointer-events:auto is explicit so dimmed markers remain clickable.
+ *
+ * Badge logic:
+ *   - school-first journey + no school selected + schoolCount != null → school count badge
+ *   - all other cases → property count badge (existing behaviour)
+ *   - Zero counts are intentionally shown ("0 schools", "0 properties").
  */
-function makeAreaCard(area: AreaPoint, opacity: number): L.DivIcon {
-  const countHtml =
-    area.listingCount != null
-      ? `<div style="font-size:13px;color:#6b7280;margin-top:3px;">${area.listingCount.toLocaleString()} properties</div>`
-      : '';
+function makeAreaCard(
+  area: AreaPoint,
+  opacity: number,
+  journey?: DiscoverJourney | null,
+  selectedSchool?: unknown,
+): L.DivIcon {
+  let countHtml: string;
+  if (journey === 'school-first' && !selectedSchool && area.schoolCount != null) {
+    const n = area.schoolCount;
+    const label = n === 1 ? '1 school' : `${n.toLocaleString()} schools`;
+    // GraduationCap SVG inline (24×24 stroke icon, matches lucide-react visual)
+    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;margin-right:3px;flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
+    countHtml = `<div style="font-size:13px;color:#6b7280;margin-top:3px;display:flex;align-items:center;">${iconSvg}${escapeHtml(label)}</div>`;
+  } else {
+    countHtml =
+      area.listingCount != null
+        ? `<div style="font-size:13px;color:#6b7280;margin-top:3px;">${area.listingCount.toLocaleString()} ${area.listingCount === 1 ? 'property' : 'properties'}</div>`
+        : '';
+  }
 
   return L.divIcon({
     className: 'area-marker',
@@ -73,7 +105,13 @@ function makeAreaCard(area: AreaPoint, opacity: number): L.DivIcon {
   });
 }
 
-export function AreaMarkerLayer({ areas, onAreaClick, focusedGroupAreas }: AreaMarkerLayerProps) {
+export function AreaMarkerLayer({
+  areas,
+  onAreaClick,
+  focusedGroupAreas,
+  journey,
+  selectedSchool,
+}: AreaMarkerLayerProps) {
   const map = useMap();
 
   useEffect(() => {
@@ -87,7 +125,7 @@ export function AreaMarkerLayer({ areas, onAreaClick, focusedGroupAreas }: AreaM
         : 1.0;
       const marker = L.marker(
         [area.geo_center_lat, area.geo_center_lon],
-        { icon: makeAreaCard(area, opacity) }
+        { icon: makeAreaCard(area, opacity, journey, selectedSchool) }
       );
 
       marker.on('click', () => {
@@ -113,8 +151,9 @@ export function AreaMarkerLayer({ areas, onAreaClick, focusedGroupAreas }: AreaM
     };
   // focusedGroupAreas is an array reference — it changes identity when the group
   // changes, which is correct: re-render recreates markers with new opacity values.
+  // journey and selectedSchool change the badge content so must also be deps.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [areas, map, onAreaClick, focusedGroupAreas]);
+  }, [areas, map, onAreaClick, focusedGroupAreas, journey, selectedSchool]);
 
   return null;
 }

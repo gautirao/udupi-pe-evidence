@@ -6,9 +6,11 @@
  * state machine can reference all panel states without compile errors.
  */
 import React from 'react';
-import { GraduationCap } from 'lucide-react';
+import { GraduationCap, SlidersHorizontal } from 'lucide-react';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PanelHeader } from '../PanelHeader';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 
@@ -63,9 +65,45 @@ export interface SchoolSelectedPanelProps {
   onStartOver?: () => void;
   onBack?: () => void;
   journey?: DiscoverJourney | null;
+  filtersContent?: React.ReactNode;
+  activeContextChips?: React.ReactNode;
 }
-export function SchoolSelectedPanel({ onStartOver, journey }: SchoolSelectedPanelProps) {
-  return <Milestone2Placeholder title="School details" journey={journey} onStartOver={onStartOver} />;
+export function SchoolSelectedPanel({ onStartOver, journey, filtersContent, activeContextChips }: SchoolSelectedPanelProps) {
+  return (
+    <>
+      <PanelHeader
+        title="School details"
+        journey={journey}
+        onStartOver={onStartOver}
+        activeContextChips={activeContextChips}
+        actions={
+          filtersContent && (
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="h-7 w-7">
+                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                  <span className="sr-only">Filters</span>
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-80 p-0">
+                <SheetHeader className="sr-only">
+                  <SheetTitle>Filters</SheetTitle>
+                </SheetHeader>
+                {filtersContent}
+              </SheetContent>
+            </Sheet>
+          )
+        }
+      />
+      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center py-10 px-4">
+        <EmptyState
+          icon={<GraduationCap className="h-8 w-8 text-muted-foreground/40" />}
+          heading="Coming in Milestone 2"
+          description="School-journey features are not yet available"
+        />
+      </div>
+    </>
+  );
 }
 
 /** Both area and school are selected (cross-journey). */

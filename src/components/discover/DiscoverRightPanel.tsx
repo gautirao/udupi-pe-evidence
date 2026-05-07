@@ -163,6 +163,8 @@ export function DiscoverRightPanel({
             onStartOver={onStartOver}
             onBack={onBack}
             journey={journey}
+            filtersContent={filtersContent}
+            activeContextChips={activeContextChips}
           />
         );
 

@@ -11,6 +11,7 @@ import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { ScaleHud } from '@/dev/ScaleHud';
 import { Card } from '@/components/ui/card';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 
 // Extended listing with images for map display
 export interface PropertyListingWithImages extends PropertyListing {
@@ -142,6 +143,16 @@ interface PropertyMapProps {
    * NaN/Infinity bboxes from hidden containers are suppressed before this fires.
    */
   onBoundsChange?: (bbox: [number, number, number, number]) => void;
+  /**
+   * Active journey type. Passed through to AreaMarkerLayer to drive the school-count
+   * badge variant when journey='school-first' and no school is selected.
+   */
+  journey?: DiscoverJourney | null;
+  /**
+   * Currently selected school. Passed through to AreaMarkerLayer. When set,
+   * the school-first badge reverts to property count (school already chosen).
+   */
+  selectedSchool?: unknown;
 }
 
 /**
@@ -437,6 +448,8 @@ export function PropertyMap({
   panToArea,
   resetMapTick,
   onReady,
+  journey,
+  selectedSchool,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -468,7 +481,13 @@ export function PropertyMap({
         <AreaPanner panToArea={panToArea} />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (
-          <AreaMarkerLayer areas={areas} onAreaClick={onAreaClick} focusedGroupAreas={focusedGroupAreas} />
+          <AreaMarkerLayer
+            areas={areas}
+            onAreaClick={onAreaClick}
+            focusedGroupAreas={focusedGroupAreas}
+            journey={journey}
+            selectedSchool={selectedSchool}
+          />
         )}
         <ScaleHud />
         {onPolygonDrawn && onPolygonCleared && (

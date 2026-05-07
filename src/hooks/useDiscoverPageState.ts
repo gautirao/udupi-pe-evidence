@@ -161,6 +161,20 @@ export function useDiscoverPageState({
   // paginated results always start from the beginning after a filter change.
   useEffect(() => { setPage(0); }, [filters, city, selectedArea]);
 
+  // On cold-load, when selectedSchool is restored from URL but filters haven't been updated yet,
+  // sync schoolLat, schoolLon, and schoolRadiusKm into the filters so the "Near school" chip renders.
+  useEffect(() => {
+    if (selectedSchool && filters.schoolLat === undefined) {
+      const radiusKm = filters.schoolRadiusKm ?? 2;
+      setFilters((prev) => ({
+        ...prev,
+        schoolLat: selectedSchool.latitude,
+        schoolLon: selectedSchool.longitude,
+        schoolRadiusKm: radiusKm,
+      }));
+    }
+  }, [selectedSchool, filters.schoolLat]);
+
   // ── Callbacks ─────────────────────────────────────────────────────────────
 
   const handleCityChange = useCallback(
@@ -188,7 +202,7 @@ export function useDiscoverPageState({
           schoolLon: school.longitude,
           schoolRadiusKm: radiusKm,
         }));
-        urlActions.setSchoolParams({ schoolId: school.id, radiusKm });
+        urlActions.setSchoolJourney({ schoolId: school.id, radiusKm });
       } else {
         setFilters((prev) => {
           const { schoolLat: _a, schoolLon: _b, schoolRadiusKm: _c, ...rest } = prev;

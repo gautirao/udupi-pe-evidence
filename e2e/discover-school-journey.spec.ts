@@ -186,8 +186,8 @@ async function stubDiscoverListings(page: Page): Promise<ListingsCapture> {
  * This q-agnostic stub hides the contract mismatch — a known gap tracked separately.
  */
 async function stubSchoolByIdLookup(page: Page, school: typeof MANIPAL_SCHOOL): Promise<void> {
-  await page.route('**/api/public/schools/search**', (route) =>
-    fulfillJson(route, 200, [school]),
+  await page.route(`**/api/public/schools/${school.id}**`, (route) =>
+    fulfillJson(route, 200, school),
   );
 }
 

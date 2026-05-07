@@ -192,6 +192,7 @@ export function useDiscoverMapData({
           ? ([[a.minLat, a.minLon], [a.maxLat, a.maxLon]] as [[number, number], [number, number]])
           : null,
       listingCount: a.listingCount,
+      schoolCount: a.schoolCount,
       trendDirection: a.trendDirection as 'rising' | 'falling' | 'stable' | null | undefined,
     }));
   }, [discoverAreasData]);

@@ -368,6 +368,8 @@ export default function MapDiscovery() {
               panToArea={panToArea}
               resetMapTick={resetMapTick}
               onReady={() => setMapReady(true)}
+              journey={urlState.journey}
+              selectedSchool={selectedSchool}
             />
           )}
 
@@ -392,7 +394,7 @@ export default function MapDiscovery() {
               variant={selectedSchool ? 'default' : 'outline'}
               className={selectedSchool ? 'gap-1.5 shadow-sm' : 'gap-1.5 bg-card shadow-sm'}
               onClick={() => setNearSchoolOpen(true)}
-              aria-pressed={selectedSchool !== null}
+              aria-pressed={Boolean(urlState.schoolId || selectedSchool)}
             >
               <GraduationCap className="h-4 w-4" />
               Near a school

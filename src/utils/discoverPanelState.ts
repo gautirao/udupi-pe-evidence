@@ -73,5 +73,11 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
     return 'area-selection';
   }
 
+  // Cold-load restoration: schoolId present without explicit journey.
+  // This handles direct URLs like /discover?city=udupi&schoolId=sch-1&radiusKm=2
+  if (schoolId) {
+    return 'school-selected';
+  }
+
   return 'guided-entry';
 }

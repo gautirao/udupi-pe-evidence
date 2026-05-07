@@ -153,6 +153,12 @@ export interface DiscoverUrlActions {
    * dates). Single REPLACE — does not push a history entry.
    */
   startOver: () => void;
+  /**
+   * Atomic school-first journey start — sets journey='school-first' and school params (schoolId,
+   * radiusKm) in a single PUSH. Ensures both params reach the URL together for correct
+   * panel routing. Only used when transitioning to school-first journey with a selected school.
+   */
+  setSchoolJourney: (params: { schoolId: string; radiusKm: number }) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -558,6 +564,22 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  const setSchoolJourney = useCallback(
+    (params: { schoolId: string; radiusKm: number }) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('journey', 'school-first');
+          next.set('schoolId', params.schoolId);
+          next.set('radiusKm', String(Math.round(params.radiusKm)));
+          return next;
+        },
+        { replace: false }, // PUSH — school-first journey is a major navigation destination
+      );
+    },
+    [setUrlParams],
+  );
+
   const selectGroup = useCallback(
     (newGroupId: string | null) => {
       setUrlParams(
@@ -667,6 +689,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setSchoolParams,
     setSearchQuery,
     setJourney,
+    setSchoolJourney,
     selectGroup,
     setBoardFilters,
     setCategoryFilters,
