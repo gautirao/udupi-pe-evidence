@@ -56,3 +56,7 @@ e2e/.test-listing-id
 e2e/fixtures/*-auth.json
 coverage/*
 
+# Claude Code local development artifacts
+.claude/worktrees/
+.claude/state/
+
