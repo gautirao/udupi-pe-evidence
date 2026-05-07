@@ -18,6 +18,48 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
+vi.mock('@/hooks/useDiscoverAreas', () => ({
+  useDiscoverAreas: vi.fn((city) => {
+    // Return mock area matching the test setup
+    if (city === 'udupi') {
+      return {
+        data: [
+          {
+            areaKey: 'IN|KA|Udupi|Manipal',
+            name: 'Manipal',
+            geo_center_lat: 13.3,
+            geo_center_lon: 74.7,
+            bbox: null,
+            listingCount: 5,
+          },
+        ],
+        isLoading: false,
+        error: null,
+      };
+    }
+    return { data: [], isLoading: false, error: null };
+  }),
+}));
+
+vi.mock('@/hooks/useDiscoverUrlState', () => ({
+  useDiscoverUrlState: vi.fn(() => ({
+    city: 'udupi',
+    areaKey: 'IN|KA|Udupi|Manipal',
+    boardFilters: [],
+    categoryFilters: [],
+  })),
+}));
+
+vi.mock('@/hooks/useSchoolsByArea', () => ({
+  useSchoolsByArea: vi.fn(() => ({
+    data: { pages: [] },
+    isLoading: false,
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+  })),
+}));
+
 const makeArea = (areaKey: string, areaLabel: string): AreaPoint => ({
   areaKey,
   areaLabel,
@@ -146,9 +188,10 @@ describe('DiscoverRightPanel — state machine routing', () => {
     renderPanel(
       <DiscoverRightPanel {...baseProps} panelContent="schools-in-area" selectedArea={area} journey="school-first" />,
     );
-    // Verify the real SchoolsInAreaPanel renders (headers from PanelHeader + subtitle)
+    // Verify the real SchoolsInAreaPanel renders (PanelHeader + board filter chips)
     expect(screen.getByText(/schools in manipal/i)).toBeInTheDocument();
-    expect(screen.getByText(/choose a school to view nearby homes/i)).toBeInTheDocument();
+    // Verify board filter chips are present
+    expect(screen.getByTestId('board-chip-cbse')).toBeInTheDocument();
   });
 
   it('panelContent="schools-in-area" with no selectedArea falls back to guided-entry', () => {
