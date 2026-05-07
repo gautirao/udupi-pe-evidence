@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
 
 // ─── Shared placeholder ───────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ export interface SchoolsInAreaPanelProps {
   journey?: DiscoverJourney | null;
 }
 export function SchoolsInAreaPanel({ onStartOver, journey }: SchoolsInAreaPanelProps) {
-  return <Milestone2Placeholder title="Schools in area" journey={journey} onStartOver={onStartOver} />;
+  return <RealSchoolsInAreaPanel journey={journey as 'school-first' | 'area-first'} onStartOver={onStartOver || (() => undefined)} />;
 }
 
 /** school-first journey — schoolId present. */
