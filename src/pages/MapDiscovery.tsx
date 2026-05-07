@@ -3,6 +3,8 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
+import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
+import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CitySelect } from '@/components/discover/CitySelect';
@@ -279,6 +281,46 @@ export default function MapDiscovery() {
     />
   );
 
+  // activeContextChips is memoised so its identity only changes when a relevant
+  // dimension actually changes — prevents unnecessary re-renders of DiscoverRightPanel.
+  const activeContextChips = useMemo(
+    () => (
+      <ActiveContextChips
+        selectedArea={selectedArea}
+        selectedSchool={selectedSchool}
+        radiusKm={urlState.radiusKm}
+        filters={filters}
+        onClearArea={handleAreaBack}
+        onClearSchool={() => {
+          // Atomic four-part clear: URL school params + journey board/category filters
+          // + local selectedSchool state + local PropertyFilters proximity fields.
+          urlActions.setSchoolParams(null);
+          urlActions.setBoardFilters([]);
+          urlActions.setCategoryFilters([]);
+          setSelectedSchool(null);
+          setFilters((prev) => {
+            const next = { ...prev };
+            delete next.schoolLat;
+            delete next.schoolLon;
+            delete next.schoolRadiusKm;
+            return next;
+          });
+        }}
+        onClearPropertyType={() =>
+          handleFiltersChange({ ...filters, propertyTypes: undefined })
+        }
+        onClearBhk={() =>
+          handleFiltersChange({ ...filters, bedrooms: undefined })
+        }
+        onClearPrice={() =>
+          handleFiltersChange({ ...filters, priceMin: undefined, priceMax: undefined })
+        }
+      />
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedArea, selectedSchool, urlState.radiusKm, filters, urlActions, handleAreaBack],
+  );
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
@@ -329,12 +371,13 @@ export default function MapDiscovery() {
             />
           )}
 
-          {/* City chip — top-left */}
+          {/* Area indicator overlay — top-left. Shows area > group > city context. */}
           <div className="absolute top-4 left-4 z-[1000]">
-            <div className="flex items-center gap-1.5 bg-card rounded-full px-3 py-2 shadow-sm border border-border text-sm font-medium select-none">
-              <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-              <span>{CITY_CONFIG[city]?.label ?? city}</span>
-            </div>
+            <AreaIndicatorOverlay
+              cityLabel={CITY_CONFIG[city]?.label ?? city}
+              focusedGroup={focusedGroup}
+              selectedArea={selectedArea}
+            />
           </div>
 
           {/* City select — top-right */}
@@ -383,6 +426,7 @@ export default function MapDiscovery() {
         <DiscoverRightPanel
           panelContent={panelContent}
           journey={urlState.journey}
+          activeContextChips={activeContextChips}
           areas={discoverAreas}
           selectedArea={selectedArea}
           areaListings={areaListings}

@@ -27,6 +27,8 @@ interface AreaSelectedPanelProps {
   isInitialLoading?: boolean;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  /** Active context chips forwarded to PanelHeader centre slot. */
+  activeContextChips?: React.ReactNode;
 }
 
 export function AreaSelectedPanel({
@@ -43,6 +45,7 @@ export function AreaSelectedPanel({
   isInitialLoading = false,
   searchQuery = '',
   onSearchChange,
+  activeContextChips,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
 
@@ -52,6 +55,7 @@ export function AreaSelectedPanel({
         title={selectedArea.areaLabel}
         journey={journey}
         onStartOver={onStartOver}
+        activeContextChips={activeContextChips}
         actions={
           <>
             {trendsHref && (

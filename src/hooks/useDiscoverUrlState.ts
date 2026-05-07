@@ -142,6 +142,12 @@ export interface DiscoverUrlActions {
    */
   setCategoryFilters: (categories: string[]) => void;
   /**
+   * Clear area context — removes areaKey only. Preserves groupId, journey, schoolId,
+   * radiusKm, filters, and viewport. Single REPLACE — does not push a history entry.
+   * Does NOT cancel the viewport debounce timer (contrast with deselectArea which does).
+   */
+  clearAreaContext: () => void;
+  /**
    * Start over — clears journey, groupId, areaKey, schoolId, radiusKm, board, category, q,
    * and viewport. Preserves city and property filters (type, beds, price, seller, booleans,
    * dates). Single REPLACE — does not push a history entry.
@@ -609,6 +615,20 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  const clearAreaContext = useCallback(() => {
+    // Do NOT cancel viewportTimer — the viewport stays valid when clearing area context.
+    // This distinguishes clearAreaContext from deselectArea (which clears viewport too).
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('areaKey');
+        // groupId, journey, schoolId, radiusKm, filters, and viewport are all preserved.
+        return next;
+      },
+      { replace: true }, // REPLACE — not a new navigation destination
+    );
+  }, [setUrlParams]);
+
   const startOver = useCallback(() => {
     // Cancel pending viewport debounce — it must not restore stale coords after reset.
     if (viewportTimer.current) {
@@ -640,6 +660,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setCity,
     selectArea,
     deselectArea,
+    clearAreaContext,
     reportViewport,
     setFiltersLive,
     setFiltersCommitted,

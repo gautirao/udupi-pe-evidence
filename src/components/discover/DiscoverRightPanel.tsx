@@ -50,6 +50,11 @@ export interface DiscoverRightPanelProps {
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
   onSelectAreaKey?: (areaKey: string) => void;
+  /**
+   * Active context chips (area, school, type, BHK, price) passed to PanelHeader
+   * for the area-selected state. Omitted for read-only panels.
+   */
+  activeContextChips?: React.ReactNode;
 }
 
 export function DiscoverRightPanel({
@@ -75,6 +80,7 @@ export function DiscoverRightPanel({
   onSelectGroup,
   discoverAreas = [],
   onSelectAreaKey,
+  activeContextChips,
 }: DiscoverRightPanelProps) {
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
@@ -119,6 +125,7 @@ export function DiscoverRightPanel({
             isInitialLoading={isInitialLoading}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
+            activeContextChips={activeContextChips}
           />
         );
 
