@@ -61,6 +61,11 @@ export interface DiscoverRightPanelProps {
   filters?: PropertyFilters;
   /** Called when property filters change via quick chips or clear action. */
   onFiltersChange?: (filters: PropertyFilters) => void;
+  // ── Schools-in-area panel ─────────────────────────────────────────────────
+  /** Pre-fetched school list from MapDiscovery — forwarded to SchoolsInAreaPanel to avoid duplicate API calls. */
+  schools?: SchoolResult[];
+  /** Whether the parent-owned schools query is loading. */
+  schoolsLoading?: boolean;
   // ── School-selected panel ────────────────────────────────────────────────
   /** The school currently selected — drives SchoolSelectedPanel header. */
   selectedSchool?: SchoolResult | null;
@@ -100,6 +105,8 @@ export function DiscoverRightPanel({
   activeContextChips,
   filters = {},
   onFiltersChange,
+  schools,
+  schoolsLoading,
   selectedSchool,
   schoolListings,
   schoolListingsLoading,
@@ -170,6 +177,8 @@ export function DiscoverRightPanel({
             onStartOver={onStartOver}
             onBack={onBack}
             journey={journey}
+            schools={schools}
+            schoolsLoading={schoolsLoading}
           />
         );
 

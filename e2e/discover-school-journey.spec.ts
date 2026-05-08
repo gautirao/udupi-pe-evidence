@@ -257,7 +257,7 @@ test.describe('Discover school-first journey (#970)', () => {
     await expect(page.getByRole('heading', { name: /popular schools/i })).toHaveCount(0);
 
     await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 5_000 }).toBe(MANIPAL_SCHOOL.id);
-    expect(getUrlParam(page, 'radiusKm')).toBe('2');
+    expect(getUrlParam(page, 'radiusKm')).toBe('3');
 
     await expect(
       page.getByRole('button', { name: /near a school/i }),
@@ -272,7 +272,7 @@ test.describe('Discover school-first journey (#970)', () => {
       const url = new URL(listings.lastRequest.url());
       expect(url.searchParams.get('schoolLat')).toBe(String(MANIPAL_SCHOOL.latitude));
       expect(url.searchParams.get('schoolLon')).toBe(String(MANIPAL_SCHOOL.longitude));
-      expect(url.searchParams.get('schoolRadiusKm')).toBe('2');
+      expect(url.searchParams.get('schoolRadiusKm')).toBe('3');
       expect(url.searchParams.get('localities')).toBeNull();
     }
   });
@@ -284,7 +284,7 @@ test.describe('Discover school-first journey (#970)', () => {
     await stubSchoolByIdLookup(page, MANIPAL_SCHOOL);
     const listings = await stubDiscoverListings(page);
 
-    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=2`);
+    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`);
     await page.waitForLoadState('domcontentloaded');
 
     const trigger = page.getByRole('button', { name: /near a school/i });
@@ -297,13 +297,13 @@ test.describe('Discover school-first journey (#970)', () => {
     ).toBeVisible({ timeout: 10_000 });
 
     expect(getUrlParam(page, 'schoolId')).toBe(MANIPAL_SCHOOL.id);
-    expect(getUrlParam(page, 'radiusKm')).toBe('2');
+    expect(getUrlParam(page, 'radiusKm')).toBe('3');
 
     if (listings.lastRequest) {
       const url = new URL(listings.lastRequest.url());
       expect(url.searchParams.get('schoolLat')).toBe(String(MANIPAL_SCHOOL.latitude));
       expect(url.searchParams.get('schoolLon')).toBe(String(MANIPAL_SCHOOL.longitude));
-      expect(url.searchParams.get('schoolRadiusKm')).toBe('2');
+      expect(url.searchParams.get('schoolRadiusKm')).toBe('3');
     }
   });
 
@@ -314,7 +314,7 @@ test.describe('Discover school-first journey (#970)', () => {
     await stubSchoolByIdLookup(page, MANIPAL_SCHOOL);
     const listings = await stubDiscoverListings(page);
 
-    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=2`);
+    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`);
     await page.waitForLoadState('domcontentloaded');
 
     const trigger = page.getByRole('button', { name: /near a school/i });
@@ -345,7 +345,7 @@ test.describe('Discover school-first journey (#970)', () => {
     await stubSchoolByIdLookup(page, MANIPAL_SCHOOL);
     await stubDiscoverListings(page);
 
-    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=2&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
+    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
     await page.waitForLoadState('domcontentloaded');
 
     await expect(
@@ -427,6 +427,200 @@ test.describe('Discover school-first journey (#970)', () => {
     const grid = page.locator('section[aria-labelledby="popular-schools-heading"]');
     await expect(grid).toContainText(/no popular schools found near udupi/i, { timeout: 10_000 });
     await expect(grid.getByRole('button', { name: /^Select / })).toHaveCount(0);
+  });
+
+  // ─── Issue #999: SchoolMarkerLayer + prop-threading tests ────────────────
+
+  /**
+   * E2E-7: schools-in-area panel renders school cards from the stubbed API.
+   *
+   * Navigating to school-first with an areaKey triggers the schools-in-area
+   * panel. The panel should show school cards loaded from /api/public/schools/by-area.
+   * Property marker listings should NOT be loaded (the page omits markerListings
+   * for school-first when no schoolId is set — see MapDiscovery listings guard).
+   */
+  test('E2E-7: schools-in-area panel renders school cards when browsing school-first', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubDiscoverListings(page);
+
+    const SCHOOLS_BY_AREA_FIXTURE = [
+      {
+        id: 'sch-1',
+        name: 'Manipal Public School',
+        board: 'CBSE',
+        boardType: null,
+        address: 'Manipal, Udupi',
+        latitude: 13.3525,
+        longitude: 74.7864,
+        schoolCategory: 'secondary',
+      },
+      {
+        id: 'sch-2',
+        name: 'MIT Vidyaniketan',
+        board: 'STATE',
+        boardType: null,
+        address: 'Manipal, Udupi',
+        latitude: 13.3510,
+        longitude: 74.7850,
+        schoolCategory: 'primary',
+      },
+    ];
+
+    // Count calls to by-area before navigation — asserted as exactly 1 after load.
+    let schoolsByAreaCallCount = 0;
+    page.on('request', (req) => {
+      if (req.url().includes('/api/public/schools/by-area')) {
+        schoolsByAreaCallCount++;
+      }
+    });
+
+    await page.route('**/api/public/schools/by-area**', (route) =>
+      fulfillJson(route, 200, SCHOOLS_BY_AREA_FIXTURE),
+    );
+
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+
+    // Panel heading confirms schools-in-area state
+    await expect(
+      page.getByText(/schools in manipal/i),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // School cards are rendered
+    const schoolCards = page.locator('[data-testid="school-card"]');
+    await expect(schoolCards).toHaveCount(SCHOOLS_BY_AREA_FIXTURE.length, { timeout: 10_000 });
+
+    // First card shows the school name
+    await expect(schoolCards.first()).toContainText('Manipal Public School');
+
+    // Assert exactly one by-area call — no duplicate requests from prop-threading split.
+    await page.waitForLoadState('networkidle');
+    expect(schoolsByAreaCallCount).toBe(1);
+
+    // No schoolId in URL — property markers are suppressed. Capture any listings
+    // request with schoolLat to detect false positives reliably.
+    let listingsWithSchoolReqFired = false;
+    page.on('request', (req) => {
+      if (req.url().includes('/api/discover/listings') && req.url().includes('schoolLat')) {
+        listingsWithSchoolReqFired = true;
+      }
+    });
+    await page.waitForLoadState('networkidle');
+    expect(listingsWithSchoolReqFired).toBe(false);
+  });
+
+  /**
+   * E2E-8: clicking a school card in schools-in-area panel writes schoolId to URL
+   * and transitions to school-selected panel.
+   *
+   * This verifies the handleSelectSchool path inside SchoolsInAreaPanel and
+   * confirms the URL state machine routes to school-selected.
+   */
+  test('E2E-8: clicking school card in schools-in-area panel sets schoolId in URL', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+
+    // Capture any listings request that carries schoolLat before navigation so
+    // we can reliably assert it was not fired during the panel transition.
+    // (The card-click path goes straight to URL state — no school-by-ID lookup
+    // is needed here since the school data comes from the by-area list, not a
+    // separate /api/public/schools/:id fetch.)
+    let listingsWithSchoolReqFired = false;
+    page.on('request', (req) => {
+      if (req.url().includes('/api/discover/listings') && req.url().includes('schoolLat')) {
+        listingsWithSchoolReqFired = true;
+      }
+    });
+
+    await stubDiscoverListings(page);
+
+    const SCHOOLS_BY_AREA_FIXTURE = [
+      {
+        id: 'sch-1',
+        name: 'Manipal Public School',
+        board: 'CBSE',
+        boardType: null,
+        address: 'Manipal, Udupi',
+        latitude: 13.3525,
+        longitude: 74.7864,
+        schoolCategory: 'secondary',
+      },
+    ];
+
+    await page.route('**/api/public/schools/by-area**', (route) =>
+      fulfillJson(route, 200, SCHOOLS_BY_AREA_FIXTURE),
+    );
+    // Note: stubSchoolByIdLookup is intentionally omitted. The card-click path
+    // reads school data from the by-area list already in memory — it does not
+    // trigger a /api/public/schools/:id lookup.
+
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for the school card to appear
+    const schoolCard = page.locator('[data-testid="school-card"]').first();
+    await expect(schoolCard).toBeVisible({ timeout: 15_000 });
+
+    // Click the card — SchoolsInAreaPanel calls urlActions.setSchoolParams
+    await schoolCard.click();
+
+    // URL should now contain schoolId=sch-1 and radiusKm=3 (DEFAULT_SCHOOL_RADIUS_KM)
+    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 5_000 }).toBe('sch-1');
+    expect(getUrlParam(page, 'radiusKm')).toBe('3');
+
+    // The right panel is still visible (state machine transitions to area-school-combined
+    // since both areaKey and schoolId are now set — the panel content changes).
+    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 5_000 });
+
+    // No listings request with schoolLat should have fired during the panel
+    // transition (school-selected panel renders only after URL settles).
+    await page.waitForLoadState('networkidle');
+    expect(listingsWithSchoolReqFired).toBe(false);
+  });
+
+  /**
+   * E2E-9: area-first journey does not render schools-in-area panel or school cards.
+   *
+   * Regression guard: SchoolMarkerLayer and schools-in-area panel are only
+   * active in school-first journey. Area-first with an areaKey should show the
+   * area-selected panel, not school cards.
+   */
+  test('E2E-9: area-first journey with areaKey shows area-selected panel, not school cards', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubDiscoverListings(page);
+
+    // Stub by-area just in case — it must NOT be called in area-first
+    let byAreaCallCount = 0;
+    await page.route('**/api/public/schools/by-area**', (route) => {
+      byAreaCallCount += 1;
+      return fulfillJson(route, 200, []);
+    });
+
+    await page.goto(
+      `/discover?city=udupi&journey=area-first&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+
+    // Area-selected panel heading should be visible
+    await expect(
+      page.getByText(/manipal/i).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // No school cards should be rendered
+    await expect(page.locator('[data-testid="school-card"]')).toHaveCount(0);
+
+    // /api/public/schools/by-area must NOT have been called — MapDiscovery only
+    // enables schoolsQuery when journey === 'school-first'
+    expect(byAreaCallCount).toBe(0);
   });
 
 });

@@ -5,6 +5,7 @@
  * stubs until their milestones ship.
  */
 import React, { useCallback } from 'react';
+import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, GraduationCap, MapPin, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -64,9 +65,20 @@ export interface SchoolsInAreaPanelProps {
   onStartOver?: () => void;
   onBack?: () => void;
   journey?: DiscoverJourney | null;
+  /** Pre-fetched schools from MapDiscovery — forwarded to avoid duplicate API calls. */
+  schools?: SchoolResult[];
+  /** Whether the parent-owned schools query is loading. */
+  schoolsLoading?: boolean;
 }
-export function SchoolsInAreaPanel({ onStartOver, journey }: SchoolsInAreaPanelProps) {
-  return <RealSchoolsInAreaPanel journey={journey as 'school-first' | 'area-first'} onStartOver={onStartOver || (() => undefined)} />;
+export function SchoolsInAreaPanel({ onStartOver, journey, schools, schoolsLoading }: SchoolsInAreaPanelProps) {
+  return (
+    <RealSchoolsInAreaPanel
+      journey={journey ?? 'area-first'}
+      onStartOver={onStartOver || (() => undefined)}
+      schools={schools}
+      schoolsLoading={schoolsLoading}
+    />
+  );
 }
 
 /** school-first journey — schoolId present. */
@@ -109,7 +121,7 @@ export function SchoolSelectedPanel({
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
 
-  const effectiveRadius = radiusKm ?? 3;
+  const effectiveRadius = radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM;
 
   // Intentionally scoped to the four filters surfaced in the "Clear filters" chip
   // (price range, bedrooms, property types). Toggle filters (sellerTypes, backOnMarket,

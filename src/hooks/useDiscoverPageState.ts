@@ -3,6 +3,7 @@ import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { DiscoverUrlState, DiscoverUrlActions } from '@/hooks/useDiscoverUrlState';
 
 export interface UseDiscoverPageStateParams {
@@ -195,7 +196,7 @@ export function useDiscoverPageState({
     (school: SchoolResult | null) => {
       setSelectedSchool(school);
       if (school) {
-        const radiusKm = filters.schoolRadiusKm ?? 3;
+        const radiusKm = filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM;
         setFilters((prev) => ({
           ...prev,
           schoolLat: school.latitude,

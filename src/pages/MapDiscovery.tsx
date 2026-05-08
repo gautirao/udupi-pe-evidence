@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -16,6 +17,7 @@ import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
+import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { ApiError } from '@/lib/api';
@@ -128,6 +130,29 @@ export default function MapDiscovery() {
     page,
     bbox: mapBbox,
   });
+
+  // Schools for SchoolMarkerLayer — fetched only in school-first journey when an area is selected.
+  // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
+  // SchoolsInAreaPanel (via DiscoverRightPanel) to avoid duplicate API calls.
+  const schoolsQuery = useSchoolsByArea(
+    urlState.journey === 'school-first' ? (urlState.areaKey ?? undefined) : undefined,
+    urlState.boardFilters ?? [],
+    urlState.categoryFilters ?? [],
+    20,
+  );
+  const schools = useMemo(
+    () => schoolsQuery.data?.pages.flatMap((p) => p.schools) ?? [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [schoolsQuery.data?.pages],
+  );
+
+  // Handler: clicking a school marker selects the school and sets the default radius.
+  const handleSelectSchoolMarker = useCallback(
+    (schoolId: string) => {
+      urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM });
+    },
+    [urlActions],
+  );
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
   const isLoading =
@@ -383,11 +408,18 @@ export default function MapDiscovery() {
             </div>
           ) : (
             <PropertyMap
-              listings={mapZoom > AREA_LAYER_MAX_ZOOM
-                ? (selectedArea
-                    ? (isLoadingAreaListings ? [] : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings))
-                    : (isAuthenticated ? markerListings : []))
-                : []}
+              listings={(() => {
+                if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
+                // school-first: hide property markers while the user is browsing schools
+                // (areaKey selected but no school chosen yet). Show them once a school is picked.
+                if (urlState.journey === 'school-first') {
+                  return urlState.schoolId ? markerListings : [];
+                }
+                // area-first (existing logic)
+                return selectedArea
+                  ? (isLoadingAreaListings ? [] : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings))
+                  : (isAuthenticated ? markerListings : []);
+              })()}
               focusBounds={activeFocusBounds}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
@@ -411,6 +443,8 @@ export default function MapDiscovery() {
               onReady={() => setMapReady(true)}
               journey={urlState.journey}
               selectedSchool={selectedSchool}
+              schools={schools}
+              onSelectSchool={handleSelectSchoolMarker}
             />
           )}
 
@@ -493,6 +527,8 @@ export default function MapDiscovery() {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           selectedSchool={selectedSchool}
+          schools={schools}
+          schoolsLoading={schoolsQuery.isLoading}
           schoolListings={schoolListings}
           schoolListingsLoading={listingDataLoading}
           radiusKm={urlState.radiusKm}
@@ -525,7 +561,7 @@ export default function MapDiscovery() {
         onOpenChange={setNearSchoolOpen}
         selectedSchool={selectedSchool}
         onSchoolSelect={handleSchoolSelect}
-        radiusKm={filters.schoolRadiusKm ?? 3}
+        radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
         onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
         boardFilter={schoolBoardFilter}
         onBoardFilterChange={setSchoolBoardFilter}

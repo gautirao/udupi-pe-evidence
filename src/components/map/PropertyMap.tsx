@@ -9,9 +9,11 @@ import 'leaflet.markercluster';
 import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropertyListings';
 import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
+import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { ScaleHud } from '@/dev/ScaleHud';
 import { Card } from '@/components/ui/card';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
 
 // Extended listing with images for map display
 export interface PropertyListingWithImages extends PropertyListing {
@@ -153,6 +155,15 @@ interface PropertyMapProps {
    * the school-first badge reverts to property count (school already chosen).
    */
   selectedSchool?: unknown;
+  /**
+   * Schools to display as markers on the map. Only rendered when
+   * journey === 'school-first'. Supplied by MapDiscovery from useSchoolsByArea.
+   */
+  schools?: SchoolResult[];
+  /**
+   * Called when a school marker is clicked. Should update URL with schoolId + radiusKm.
+   */
+  onSelectSchool?: (schoolId: string) => void;
 }
 
 /**
@@ -450,6 +461,8 @@ export function PropertyMap({
   onReady,
   journey,
   selectedSchool,
+  schools = [],
+  onSelectSchool,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -487,6 +500,13 @@ export function PropertyMap({
             focusedGroupAreas={focusedGroupAreas}
             journey={journey}
             selectedSchool={selectedSchool}
+          />
+        )}
+        {journey === 'school-first' && schools.length > 0 && (
+          <SchoolMarkerLayer
+            schools={schools}
+            onSelectSchool={onSelectSchool}
+            journey={journey}
           />
         )}
         <ScaleHud />

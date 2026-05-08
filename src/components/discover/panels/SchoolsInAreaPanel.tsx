@@ -1,14 +1,24 @@
 import { useMemo } from 'react';
 import { GraduationCap, ChevronDown } from 'lucide-react';
+import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
 
 interface SchoolsInAreaPanelProps {
   journey: 'area-first' | 'school-first';
   onStartOver: () => void;
+  /**
+   * When provided by MapDiscovery (the single useSchoolsByArea owner), the panel
+   * uses this array directly and skips its own hook call to avoid a duplicate request.
+   * Omit when using the panel standalone (e.g. in tests or outside MapDiscovery).
+   */
+  schools?: SchoolResult[];
+  /** Whether the parent-owned schools query is loading. Only used when `schools` prop is provided. */
+  schoolsLoading?: boolean;
 }
 
 const BOARD_OPTIONS = ['CBSE', 'ICSE', 'State', 'International'];
@@ -18,9 +28,10 @@ const CATEGORY_OPTIONS = [
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver }: SchoolsInAreaPanelProps) {
-  const urlState = useDiscoverUrlState();
-  const { data: areas = [] } = useDiscoverAreas(urlState.city);
+export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp, schoolsLoading: schoolsLoadingProp }: SchoolsInAreaPanelProps) {
+  const [urlState, urlActions] = useDiscoverUrlState();
+  const { data: areasData } = useDiscoverAreas(urlState.city);
+  const areas = areasData?.areas ?? [];
 
   // Get areaLabel from cached areas
   const selectedArea = useMemo(
@@ -29,23 +40,29 @@ export function SchoolsInAreaPanel({ journey, onStartOver }: SchoolsInAreaPanelP
   );
   const areaLabel = selectedArea?.name || urlState.areaKey?.split('|').pop() || 'Area';
 
-  // Fetch schools with infinite query
+  // When MapDiscovery passes schools as a prop, skip the internal hook call to avoid
+  // a duplicate request. The hook is still called (Rules of Hooks require unconditional calls)
+  // but is disabled via `enabled: false` when the prop is provided.
   const {
     data,
-    isLoading,
+    isLoading: hookLoading,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useSchoolsByArea(
-    urlState.areaKey,
+    // Disable internal fetch when parent owns the data
+    schoolsProp !== undefined ? null : urlState.areaKey,
     urlState.boardFilters || [],
     urlState.categoryFilters || [],
   );
 
-  // Flatten pages into single school list
+  const isLoading = schoolsProp !== undefined ? (schoolsLoadingProp ?? false) : hookLoading;
+
+  // Flatten pages into single school list — use prop when available
   const schools = useMemo(() => {
+    if (schoolsProp !== undefined) return schoolsProp;
     return data?.pages.flatMap((page) => page.schools) || [];
-  }, [data]);
+  }, [schoolsProp, data]);
 
   // Handler to toggle board filter
   const handleBoardToggle = (board: string) => {
@@ -53,7 +70,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver }: SchoolsInAreaPanelP
       ? (urlState.boardFilters || []).filter((b) => b !== board)
       : [...(urlState.boardFilters || []), board];
 
-    urlState.urlActions.setFiltersLive({
+    urlActions.setFiltersLive({
       propertyTypes: urlState.propertyTypes,
       bedrooms: urlState.bedrooms,
       priceMin: urlState.priceMin,
@@ -74,7 +91,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver }: SchoolsInAreaPanelP
       ? (urlState.categoryFilters || []).filter((c) => c !== category)
       : [...(urlState.categoryFilters || []), category];
 
-    urlState.urlActions.setFiltersLive({
+    urlActions.setFiltersLive({
       propertyTypes: urlState.propertyTypes,
       bedrooms: urlState.bedrooms,
       priceMin: urlState.priceMin,
@@ -91,12 +108,12 @@ export function SchoolsInAreaPanel({ journey, onStartOver }: SchoolsInAreaPanelP
 
   // Handler for selecting a school
   const handleSelectSchool = (schoolId: string) => {
-    urlState.urlActions.setSchoolParams({ schoolId, radiusKm: 2 });
+    urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM });
   };
 
   // Handler to clear filters
   const handleClearFilters = () => {
-    urlState.urlActions.setFiltersLive({
+    urlActions.setFiltersLive({
       propertyTypes: urlState.propertyTypes,
       bedrooms: urlState.bedrooms,
       priceMin: urlState.priceMin,
@@ -113,7 +130,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver }: SchoolsInAreaPanelP
 
   // Handler to pick different area
   const handlePickDifferentArea = () => {
-    urlState.urlActions.clearAreaContext();
+    urlActions.clearAreaContext();
   };
 
   return (
