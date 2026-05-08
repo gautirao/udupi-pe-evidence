@@ -219,11 +219,24 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByTestId('radius-btn-5')).toBeInTheDocument();
   });
 
-  it('panelContent="area-school-combined" renders Milestone 2 placeholder', () => {
+  it('panelContent="area-school-combined" renders AreaSchoolCombinedPanel', () => {
+    const mockArea: AreaPoint = makeArea('IN|KA|Udupi|Manipal', 'Manipal');
     renderPanel(
-      <DiscoverRightPanel {...baseProps} panelContent="area-school-combined" />,
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-school-combined"
+        selectedArea={mockArea}
+        selectedSchool={null}
+        schoolListings={[]}
+        schoolListingsLoading={false}
+        radiusKm={3}
+        onRadiusChange={vi.fn()}
+        onClearSchool={vi.fn()}
+        onClearArea={vi.fn()}
+      />,
     );
-    expect(screen.getByText(/coming in milestone 2/i)).toBeInTheDocument();
+    // selectedSchool is null → loading skeleton shown, not radius buttons
+    expect(screen.getByTestId('combined-loading-skeleton')).toBeInTheDocument();
   });
 
   it('always renders data-testid="discover-right-panel" wrapper', () => {

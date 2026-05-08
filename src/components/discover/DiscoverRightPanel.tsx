@@ -77,6 +77,17 @@ export interface DiscoverRightPanelProps {
   radiusKm?: number | null;
   /** Called when the user picks a new radius in SchoolSelectedPanel. */
   onRadiusChange?: (radiusKm: number) => void;
+  // ── Area-school-combined panel ───────────────────────────────────────────────────
+  /**
+   * Called when the user dismisses the school chip in AreaSchoolCombinedPanel.
+   * Atomically removes schoolId + radiusKm; preserves areaKey + board/category filters.
+   */
+  onClearSchool?: () => void;
+  /**
+   * Called when the user dismisses the area chip in AreaSchoolCombinedPanel.
+   * Atomically removes areaKey; preserves schoolId + radiusKm + board/category + property filters.
+   */
+  onClearArea?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -112,6 +123,8 @@ export function DiscoverRightPanel({
   schoolListingsLoading,
   radiusKm,
   onRadiusChange,
+  onClearSchool,
+  onClearArea,
 }: DiscoverRightPanelProps) {
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
@@ -204,10 +217,22 @@ export function DiscoverRightPanel({
       case 'area-school-combined':
         return (
           <AreaSchoolCombinedPanel
-            selectedArea={selectedArea}
+            selectedArea={selectedArea ?? null}
+            selectedSchool={selectedSchool ?? null}
+            listings={schoolListings ?? []}
+            isLoadingListings={schoolListingsLoading ?? false}
+            radiusKm={radiusKm ?? null}
+            onRadiusChange={onRadiusChange ?? (() => undefined)}
+            onClearSchool={onClearSchool ?? (() => undefined)}
+            onClearArea={onClearArea ?? (() => undefined)}
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            isAuthenticated={isAuthenticated}
             onStartOver={onStartOver}
             onBack={onBack}
             journey={journey}
+            filtersContent={filtersContent}
+            activeContextChips={activeContextChips}
           />
         );
     }

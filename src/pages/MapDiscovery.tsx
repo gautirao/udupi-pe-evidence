@@ -115,6 +115,26 @@ export default function MapDiscovery() {
 
   const isCityValid = city in CITY_CONFIG;
 
+  // Area-scoping for the combined panel (AC4): when BOTH area and school are selected
+  // and no user-drawn polygon is present, derive a bounding-box polygon from the area's
+  // bbox so the listings request is spatially constrained to the intersection of area
+  // bounds AND school proximity.
+  //
+  // Guard: !urlState.schoolId restricts injection to combined state only.
+  // Without this guard, area-first journey (area selected, no school) would also have
+  // the polygon injected, routing the request through the polygon endpoint (capped at 200)
+  // and breaking authenticated-user pagination.
+  //
+  // Polygon format: [[s,w],[s,e],[n,e],[n,w],[s,w]] — five [lat,lon] pairs matching
+  // the PropertyFilters.polygon convention used by useDiscoverListings/the backend.
+  const effectiveFilters = useMemo((): typeof filters => {
+    // Only inject area-bbox polygon in combined state (area + school both present).
+    if (!urlState.schoolId || !selectedArea?.bbox || filters.polygon) return filters;
+    const [[s, w], [n, e]] = selectedArea.bbox;
+    const bboxPolygon: [number, number][] = [[s, w], [s, e], [n, e], [n, w], [s, w]];
+    return { ...filters, polygon: bboxPolygon };
+  }, [filters, selectedArea, urlState.schoolId]);
+
   const {
     areasLoading, listingDataLoading, markersLoading, isLoadingAreaListings,
     isFetching,
@@ -124,7 +144,7 @@ export default function MapDiscovery() {
     cityCenter, cityZoom, schoolById, schoolByIdError, error,
     totalElements, totalPages,
   } = useDiscoverMapData({
-    city, selectedArea, filters, debouncedSearch,
+    city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
     markersEnabled: isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
@@ -207,6 +227,32 @@ export default function MapDiscovery() {
     },
     [urlState.schoolId, urlActions, setFilters],
   );
+
+  // Clear handlers for AreaSchoolCombinedPanel — stable references so the panel does
+  // not re-render on every map pan/zoom that re-runs the MapDiscovery render.
+  const onClearSchool = useCallback(() => {
+    // Atomic clear: URL school params + board/category filters
+    // + local selectedSchool state + local PropertyFilters proximity fields.
+    // Preserves areaKey (remains in area-selected state after school is cleared).
+    urlActions.setSchoolParams(null);
+    urlActions.setBoardFilters([]);
+    urlActions.setCategoryFilters([]);
+    setSelectedSchool(null);
+    setFilters((prev) => {
+      const next = { ...prev };
+      delete next.schoolLat;
+      delete next.schoolLon;
+      delete next.schoolRadiusKm;
+      return next;
+    });
+  }, [urlActions, setSelectedSchool, setFilters]);
+
+  const onClearArea = useCallback(() => {
+    // Removes areaKey from URL (REPLACE). Preserves schoolId, radiusKm,
+    // board/category filters, property filters, and viewport.
+    urlActions.clearAreaContext();
+    setSelectedArea(null);
+  }, [urlActions, setSelectedArea]);
 
   // Delayed-show spinner: only show after 200 ms to prevent flicker on fast loads.
   useEffect(() => {
@@ -533,6 +579,8 @@ export default function MapDiscovery() {
           schoolListingsLoading={listingDataLoading}
           radiusKm={urlState.radiusKm}
           onRadiusChange={handleRadiusChange}
+          onClearSchool={onClearSchool}
+          onClearArea={onClearArea}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button
