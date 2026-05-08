@@ -13,7 +13,9 @@ Process: triage → route → sequential agent execution → STOP.
 **Return protocol (when invoked from SPRINT_EXECUTOR):** After the final routed agent completes and the E2E gate is satisfied, return control to SPRINT_EXECUTOR — do NOT emit STOP or play Hero chime. SPRINT_EXECUTOR owns the git lifecycle, merge, post-merge steps, chime, and checkpoint. In standalone use (not invoked from SPRINT_EXECUTOR), ROUTE_AND_RUN owns the full lifecycle: play Hero chime and STOP.
 
 ## Agents
-qa-fast, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
+qa-fast, explorer-planner, backend-engineer, frontend-engineer, supabase-engineer, code-reviewer, performance-analyst, architect, security-reviewer, qa, team-lead, ui-designer
+
+> **ChatGPT-gated mode:** Pre-approval allowed agents are `explorer-planner`, `qa-fast`, `architect`, `ui-designer`, `performance-analyst`, `security-reviewer`. Implementation agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`, `qa` test-writing) are **blocked** until ChatGPT PLAN_REVIEW returns `verdict = "APPROVED"`. See `.claude/skills/route-and-run/SKILL.md` § ChatGPT-Gated Mode and § Main Agent Role for the full contract. The Main Agent's micro-fix exception (one/two-line mechanical, in-scope, no specialist judgement) is the only orchestrator coding allowance.
 
 ---
 

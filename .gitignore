@@ -59,4 +59,5 @@ coverage/*
 # Claude Code local development artifacts
 .claude/worktrees/
 .claude/state/
+.claude/handoffs/
 
