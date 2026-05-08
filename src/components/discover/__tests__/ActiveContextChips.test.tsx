@@ -318,6 +318,62 @@ describe('ActiveContextChips', () => {
     expect(onClearArea).not.toHaveBeenCalled();
   });
 
+  // ── School + property filter coexistence ───────────────────────────────────
+  // Verifies that school context chips and property-filter chips can both be
+  // active at the same time and each maps to a distinct clear handler.
+
+  it('renders school chip and property-type chip together when both are active', () => {
+    render(
+      <ActiveContextChips
+        selectedSchool={mockSchool}
+        radiusKm={3}
+        filters={{ ...emptyFilters, propertyTypes: ['house'], priceMin: 1_000_000 }}
+        {...noOps}
+      />,
+    );
+    // School proximity chip
+    expect(screen.getByTestId('chip-school')).toBeInTheDocument();
+    expect(screen.getByText('Manipal Academy (3 km)')).toBeInTheDocument();
+    // Property-type chip
+    expect(screen.getByTestId('chip-type')).toBeInTheDocument();
+    expect(screen.getByText('House')).toBeInTheDocument();
+    // Price chip
+    expect(screen.getByTestId('chip-price')).toBeInTheDocument();
+    // No area chip — school journey has no area selected
+    expect(screen.queryByTestId('chip-area')).not.toBeInTheDocument();
+  });
+
+  it('school chip clear and property-type chip clear are independent callbacks', async () => {
+    const onClearSchool = vi.fn();
+    const onClearPropertyType = vi.fn();
+    render(
+      <ActiveContextChips
+        selectedSchool={mockSchool}
+        radiusKm={3}
+        filters={{ ...emptyFilters, propertyTypes: ['house'] }}
+        {...noOps}
+        onClearSchool={onClearSchool}
+        onClearPropertyType={onClearPropertyType}
+      />,
+    );
+
+    // Clear the property-type chip — school chip must not fire
+    await userEvent.click(
+      screen.getByRole('button', { name: /clear house/i }),
+    );
+    expect(onClearPropertyType).toHaveBeenCalledOnce();
+    expect(onClearSchool).not.toHaveBeenCalled();
+
+    onClearPropertyType.mockClear();
+
+    // Clear the school chip — property-type chip must not fire
+    await userEvent.click(
+      screen.getByRole('button', { name: /clear manipal academy/i }),
+    );
+    expect(onClearSchool).toHaveBeenCalledOnce();
+    expect(onClearPropertyType).not.toHaveBeenCalled();
+  });
+
   it('area chip × fires onClearArea exactly once and not onClearSchool', async () => {
     const onClearArea = vi.fn();
     const onClearSchool = vi.fn();

@@ -283,6 +283,42 @@ test.describe('SchoolSelectedPanel', () => {
     await expect(dashedCircles.first()).toBeVisible();
   });
 
+  test('E2E-6: listings request includes both school context and property filter params', async ({ page }) => {
+    await stubCommonEndpoints(page);
+    await stubSchoolById(page);
+    const capture = await stubDiscoverListings(page, ONE_LISTING_PAGE);
+
+    // Navigate with schoolId, radiusKm, AND a property filter already in URL.
+    // useDiscoverUrlState maps the 'type' URL param → propertyTypes in filters, which
+    // useDiscoverListings then appends as propertyTypes= to the API request.
+    await page.goto(
+      '/discover?city=udupi&journey=school-first&schoolId=sch-1&radiusKm=3&type=house',
+    );
+
+    await waitForSchoolPanel(page);
+
+    // All four params must appear in the SAME /api/discover/listings request —
+    // a single combined check prevents the split-pass false positive where school
+    // params arrive in one request and propertyTypes in a separate one.
+    await expect
+      .poll(
+        () =>
+          capture.requests.some(
+            (r) =>
+              r.url().includes('schoolLat=') &&
+              r.url().includes('schoolLon=') &&
+              r.url().includes('schoolRadiusKm=3') &&
+              r.url().includes('propertyTypes=house'),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+
+    // URL must still carry schoolId and radiusKm (school context not wiped by filter).
+    await expect(page).toHaveURL(/schoolId=sch-1/);
+    await expect(page).toHaveURL(/radiusKm=3/);
+  });
+
   test('E2E-5: default radius is 3 km when radiusKm absent from URL', async ({ page }) => {
     await stubCommonEndpoints(page);
     await stubSchoolById(page);

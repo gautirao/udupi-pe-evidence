@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { DiscoverUrlState, DiscoverUrlActions } from '../useDiscoverUrlState';
+import type { SchoolResult } from '../useSchoolSearch';
 
 // ─── Import hook AFTER type imports ───────────────────────────
 import { useDiscoverPageState } from '../useDiscoverPageState';
@@ -32,11 +33,14 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     setFiltersLive: vi.fn(),
     setFiltersCommitted: vi.fn(),
     setSchoolParams: vi.fn(),
+    setSchoolJourney: vi.fn(),
     setSearchQuery: vi.fn(),
     setJourney: vi.fn(),
     selectGroup: vi.fn(),
     setBoardFilters: vi.fn(),
     setCategoryFilters: vi.fn(),
+    clearAreaContext: vi.fn(),
+    startOver: vi.fn(),
     ...overrides,
   };
 }
@@ -263,6 +267,130 @@ describe('useDiscoverPageState — initial filters from URL', () => {
     expect(f.backOnMarket).toBeUndefined();
     expect(f.dateFrom).toBeUndefined();
     expect(f.dateTo).toBeUndefined();
+  });
+});
+
+describe('useDiscoverPageState — handleFiltersChange preserves school context', () => {
+  it('school lat/lon/radius survive a property-filter change', () => {
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions(),
+      }),
+    );
+
+    // Establish school context in filters first (simulates post-school-select state).
+    act(() => {
+      result.current.setFilters({
+        schoolLat: 13.0,
+        schoolLon: 77.5,
+        schoolRadiusKm: 3,
+        propertyTypes: [],
+      });
+    });
+
+    // Apply a property filter while retaining existing school-context fields.
+    act(() => {
+      result.current.handleFiltersChange({
+        ...result.current.filters,
+        propertyTypes: ['house'],
+      });
+    });
+
+    expect(result.current.filters.propertyTypes).toEqual(['house']);
+    expect(result.current.filters.schoolLat).toBe(13.0);
+    expect(result.current.filters.schoolLon).toBe(77.5);
+    expect(result.current.filters.schoolRadiusKm).toBe(3);
+  });
+
+  it('bedrooms filter change does not clear schoolLat/Lon/RadiusKm', () => {
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions(),
+      }),
+    );
+
+    act(() => {
+      result.current.setFilters({
+        schoolLat: 13.35,
+        schoolLon: 74.79,
+        schoolRadiusKm: 5,
+      });
+    });
+
+    act(() => {
+      result.current.handleFiltersChange({
+        ...result.current.filters,
+        bedrooms: [2, 3],
+      });
+    });
+
+    expect(result.current.filters.bedrooms).toEqual([2, 3]);
+    expect(result.current.filters.schoolLat).toBe(13.35);
+    expect(result.current.filters.schoolLon).toBe(74.79);
+    expect(result.current.filters.schoolRadiusKm).toBe(5);
+  });
+});
+
+describe('useDiscoverPageState — handleFiltersChange with selectedSchool', () => {
+  const mockSchool: SchoolResult = {
+    id: 'sch-1',
+    name: 'Manipal Public School',
+    board: 'CBSE',
+    boardType: null,
+    latitude: 13.3525,
+    longitude: 74.7864,
+    address: 'Manipal, Udupi District',
+    distanceKm: 1.2,
+  };
+
+  it('calls setSchoolParams with schoolId and new radiusKm when selectedSchool is set', () => {
+    const setSchoolParams = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ setSchoolParams }),
+      }),
+    );
+
+    // Establish selectedSchool in state (mirrors handleSchoolSelect side-effect).
+    act(() => {
+      result.current.setSelectedSchool(mockSchool);
+    });
+
+    // Call handleFiltersChange with a new schoolRadiusKm value.
+    act(() => {
+      result.current.handleFiltersChange({
+        ...result.current.filters,
+        schoolLat: mockSchool.latitude,
+        schoolLon: mockSchool.longitude,
+        schoolRadiusKm: 5,
+      });
+    });
+
+    expect(setSchoolParams).toHaveBeenCalledWith({ schoolId: 'sch-1', radiusKm: 5 });
+  });
+
+  it('does NOT call setSchoolParams when selectedSchool is null', () => {
+    const setSchoolParams = vi.fn();
+    const { result } = renderHook(() =>
+      useDiscoverPageState({
+        urlState: makeUrlState(),
+        urlActions: makeUrlActions({ setSchoolParams }),
+      }),
+    );
+
+    // No setSelectedSchool call — selectedSchool stays null.
+    act(() => {
+      result.current.handleFiltersChange({
+        schoolLat: 13.35,
+        schoolLon: 74.79,
+        schoolRadiusKm: 5,
+      });
+    });
+
+    expect(setSchoolParams).not.toHaveBeenCalled();
   });
 });
 
