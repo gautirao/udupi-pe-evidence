@@ -165,7 +165,7 @@ export function useDiscoverPageState({
   // sync schoolLat, schoolLon, and schoolRadiusKm into the filters so the "Near school" chip renders.
   useEffect(() => {
     if (selectedSchool && filters.schoolLat === undefined) {
-      const radiusKm = filters.schoolRadiusKm ?? 2;
+      const radiusKm = filters.schoolRadiusKm ?? 3;
       setFilters((prev) => ({
         ...prev,
         schoolLat: selectedSchool.latitude,
@@ -195,7 +195,7 @@ export function useDiscoverPageState({
     (school: SchoolResult | null) => {
       setSelectedSchool(school);
       if (school) {
-        const radiusKm = filters.schoolRadiusKm ?? 2;
+        const radiusKm = filters.schoolRadiusKm ?? 3;
         setFilters((prev) => ({
           ...prev,
           schoolLat: school.latitude,

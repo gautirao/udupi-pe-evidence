@@ -201,11 +201,22 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByText('Find properties your way')).toBeInTheDocument();
   });
 
-  it('panelContent="school-selected" renders Milestone 2 placeholder', () => {
+  it('panelContent="school-selected" renders SchoolSelectedPanel with radius selector', () => {
     renderPanel(
-      <DiscoverRightPanel {...baseProps} panelContent="school-selected" />,
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-selected"
+        selectedSchool={null}
+        schoolListings={[]}
+        schoolListingsLoading={false}
+        radiusKm={3}
+        onRadiusChange={vi.fn()}
+      />,
     );
-    expect(screen.getByText(/coming in milestone 2/i)).toBeInTheDocument();
+    // SchoolSelectedPanel renders — verify radius selector is present
+    expect(screen.getByTestId('radius-btn-3')).toBeInTheDocument();
+    expect(screen.getByTestId('radius-btn-1')).toBeInTheDocument();
+    expect(screen.getByTestId('radius-btn-5')).toBeInTheDocument();
   });
 
   it('panelContent="area-school-combined" renders Milestone 2 placeholder', () => {

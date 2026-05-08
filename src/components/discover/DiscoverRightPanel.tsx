@@ -6,6 +6,7 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
@@ -60,6 +61,17 @@ export interface DiscoverRightPanelProps {
   filters?: PropertyFilters;
   /** Called when property filters change via quick chips or clear action. */
   onFiltersChange?: (filters: PropertyFilters) => void;
+  // ── School-selected panel ────────────────────────────────────────────────
+  /** The school currently selected — drives SchoolSelectedPanel header. */
+  selectedSchool?: SchoolResult | null;
+  /** Listings filtered by school proximity — rendered in SchoolSelectedPanel card list. */
+  schoolListings?: DiscoverCityListingItem[];
+  /** True while school proximity listings are loading. */
+  schoolListingsLoading?: boolean;
+  /** Active radius in km — drives the radius selector active state. */
+  radiusKm?: number | null;
+  /** Called when the user picks a new radius in SchoolSelectedPanel. */
+  onRadiusChange?: (radiusKm: number) => void;
 }
 
 export function DiscoverRightPanel({
@@ -88,6 +100,11 @@ export function DiscoverRightPanel({
   activeContextChips,
   filters = {},
   onFiltersChange,
+  selectedSchool,
+  schoolListings,
+  schoolListingsLoading,
+  radiusKm,
+  onRadiusChange,
 }: DiscoverRightPanelProps) {
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
@@ -159,7 +176,14 @@ export function DiscoverRightPanel({
       case 'school-selected':
         return (
           <SchoolSelectedPanel
-            schoolId=""
+            school={selectedSchool ?? null}
+            listings={schoolListings ?? []}
+            isLoadingListings={schoolListingsLoading ?? false}
+            radiusKm={radiusKm ?? null}
+            onRadiusChange={onRadiusChange ?? (() => undefined)}
+            filters={filters}
+            onFiltersChange={onFiltersChange}
+            isAuthenticated={isAuthenticated}
             onStartOver={onStartOver}
             onBack={onBack}
             journey={journey}

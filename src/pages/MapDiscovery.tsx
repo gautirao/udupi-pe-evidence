@@ -16,6 +16,7 @@ import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
+import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { ApiError } from '@/lib/api';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
@@ -142,6 +143,46 @@ export default function MapDiscovery() {
     [discoverAreas],
   );
 
+  // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
+  // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
+  // set when schoolLat/Lon/RadiusKm filters are active.
+  const schoolListings = useMemo(
+    (): DiscoverCityListingItem[] =>
+      filteredListings.map((l) => ({
+        id: l.id,
+        propertyType: l.property_type,
+        title: l.title,
+        locality: l.locality,
+        pricePaise: l.price != null ? l.price * 100 : undefined,
+        primaryImageUrl: l.images?.[0]?.url ?? null,
+        listingPurpose: l.listing_purpose,
+        bedrooms: l.bedrooms,
+        bathrooms: l.bathrooms,
+        builtArea: l.built_area,
+        builtAreaUnit: l.built_area_unit,
+        landArea: l.land_area,
+        landAreaUnit: l.land_area_unit,
+        totalFloors: l.total_floors,
+        parkingCount: l.parking_count,
+        furnishingStatus: l.furnishing_status,
+        createdAt: l.created_at,
+        trustTier: l.trustTier,
+        lat: l.latitude,
+        lon: l.longitude,
+      })),
+    [filteredListings],
+  );
+
+  // Radius change handler for SchoolSelectedPanel — uses REPLACE (not PUSH) per AC1.
+  const handleRadiusChange = useCallback(
+    (newRadiusKm: number) => {
+      if (!urlState.schoolId) return;
+      urlActions.setSchoolParams({ schoolId: urlState.schoolId, radiusKm: newRadiusKm });
+      setFilters((prev) => ({ ...prev, schoolRadiusKm: newRadiusKm }));
+    },
+    [urlState.schoolId, urlActions, setFilters],
+  );
+
   // Delayed-show spinner: only show after 200 ms to prevent flicker on fast loads.
   useEffect(() => {
     if (!isLoading) { setShowLoader(false); return; }
@@ -160,7 +201,7 @@ export default function MapDiscovery() {
 
   useEffect(() => {
     if (urlSchoolId && schoolById && !selectedSchool) {
-      const radius = urlRadiusKm ?? 2;
+      const radius = urlRadiusKm ?? 3;
       setSelectedSchool(schoolById);
       setFilters((prev) => ({ ...prev, schoolLat: schoolById.latitude, schoolLon: schoolById.longitude, schoolRadiusKm: radius }));
     }
@@ -353,7 +394,7 @@ export default function MapDiscovery() {
               onPolygonCleared={handlePolygonCleared}
               schoolCircle={selectedSchool ? {
                 lat: selectedSchool.latitude, lon: selectedSchool.longitude,
-                radiusKm: filters.schoolRadiusKm ?? 2, name: selectedSchool.name,
+                radiusKm: filters.schoolRadiusKm ?? 3, name: selectedSchool.name,
               } : undefined}
               initialCenter={urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] : undefined}
               initialZoom={urlState.viewport?.zoom}
@@ -451,6 +492,11 @@ export default function MapDiscovery() {
           onSearchChange={handleSearchChange}
           filters={filters}
           onFiltersChange={handleFiltersChange}
+          selectedSchool={selectedSchool}
+          schoolListings={schoolListings}
+          schoolListingsLoading={listingDataLoading}
+          radiusKm={urlState.radiusKm}
+          onRadiusChange={handleRadiusChange}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button
@@ -479,7 +525,7 @@ export default function MapDiscovery() {
         onOpenChange={setNearSchoolOpen}
         selectedSchool={selectedSchool}
         onSchoolSelect={handleSchoolSelect}
-        radiusKm={filters.schoolRadiusKm ?? 2}
+        radiusKm={filters.schoolRadiusKm ?? 3}
         onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
         boardFilter={schoolBoardFilter}
         onBoardFilterChange={setSchoolBoardFilter}

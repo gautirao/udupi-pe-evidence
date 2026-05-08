@@ -37,7 +37,7 @@ export function MapStatsBar({
               <div className="flex items-center gap-1.5 text-primary">
                 <GraduationCap className="h-4 w-4" />
                 <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
-                <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 2} km)</span>
+                <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 3} km)</span>
               </div>
             </>
           )}
