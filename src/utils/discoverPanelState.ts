@@ -8,8 +8,7 @@
  * Panel states (audit-aligned with issue #990):
  *
  *   guided-entry          — no journey selected (landing state)
- *   area-groups-landing   — area-first journey, groupId set, no areaKey yet
- *   area-selection        — area-first journey, no group selected
+ *   area-groups-landing   — area-first journey, no areaKey yet (always; groupId optional)
  *   area-selected         — area-first journey, area selected (areaKey present)
  *   school-browse         — school-first journey, no school selected
  *   schools-in-area       — school-first journey, area selected (schoolId absent)
@@ -40,8 +39,7 @@ export type DiscoverPanelContent =
  *    c. Neither → school-browse
  * 3. Area-first journey:
  *    a. areaKey present → area-selected
- *    b. groupId present, no areaKey → area-groups-landing (group selected, area not yet chosen)
- *    c. Neither → area-selection (no group selected yet)
+ *    b. no areaKey → area-groups-landing (groupId is optional; panel renders group cards or browse-all)
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
@@ -66,11 +64,7 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
     if (areaKey) {
       return 'area-selected';
     }
-    const { groupId } = urlState;
-    if (groupId) {
-      return 'area-groups-landing';
-    }
-    return 'area-selection';
+    return 'area-groups-landing';
   }
 
   // Cold-load restoration: schoolId present without explicit journey.

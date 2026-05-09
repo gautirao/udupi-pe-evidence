@@ -32,8 +32,8 @@ describe('derivePanelContent — guided-entry (no journey)', () => {
 });
 
 describe('derivePanelContent — area-first journey', () => {
-  it('returns area-selection when journey=area-first and no areaKey', () => {
-    expect(derivePanelContent(makeState({ journey: 'area-first' }))).toBe('area-selection');
+  it('returns area-groups-landing when journey=area-first and no areaKey (regardless of groupId)', () => {
+    expect(derivePanelContent(makeState({ journey: 'area-first' }))).toBe('area-groups-landing');
   });
 
   it('returns area-groups-landing when journey=area-first, groupId is set, no areaKey', () => {

@@ -204,17 +204,17 @@ test.describe('Discover — area-groups-landing panel', () => {
     await page.screenshot({ path: SS('06-area-selected-from-browse-all'), fullPage: false });
   });
 
-  test('panel shows area-selection (not area-groups-landing) when no groupId is in URL', async ({ page }) => {
+  test('panel shows area-groups-landing (real UI) when no groupId is in URL', async ({ page }) => {
     await stubApis(page);
 
     await page.goto(`/discover?city=${MOCK_CITY}&journey=area-first`);
     await page.waitForLoadState('domcontentloaded');
     await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
 
-    // area-selection (no groupId → AreaSelectionPanel placeholder)
-    await expect(page.getByText('Explore by neighbourhood')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByTestId('area-group-card-coastal-belt')).not.toBeAttached();
-    await page.screenshot({ path: SS('07-area-selection-no-group-id'), fullPage: false });
+    // area-groups-landing renders even without groupId — group cards should appear
+    await expect(page.getByTestId('area-group-card-coastal-belt')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('area-group-card-inland-corridor')).toBeVisible({ timeout: 5_000 });
+    await page.screenshot({ path: SS('07-area-groups-landing-no-group-id'), fullPage: false });
   });
 
   // AC #5: Clicking a group card sets ?groupId= in URL
