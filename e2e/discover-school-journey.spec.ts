@@ -179,11 +179,10 @@ async function stubDiscoverListings(page: Page): Promise<ListingsCapture> {
 }
 
 /**
- * Stub the school-search endpoint used by useSchoolSearch for cold-load resolution.
- * Note: the stub is q-agnostic (returns [school] regardless of ?q param).
- * useSchoolSearch calls /search?q=<urlSchoolId> where urlSchoolId is 'sch-1' (an ID, not a name).
- * Production /search is a name-keyword search, not an ID lookup, so 'q=sch-1' would not match.
- * This q-agnostic stub hides the contract mismatch — a known gap tracked separately.
+ * Stub the school-by-id endpoint for cold-load schoolId restoration.
+ * Production code (MapDiscovery.tsx) correctly uses useSchoolById(urlSchoolId) which calls
+ * the dedicated GET /api/public/schools/{id} endpoint (not name-search).
+ * This stub provides the school detail response for exact ID lookup.
  */
 async function stubSchoolByIdLookup(page: Page, school: typeof MANIPAL_SCHOOL): Promise<void> {
   await page.route(`**/api/public/schools/${school.id}**`, (route) =>

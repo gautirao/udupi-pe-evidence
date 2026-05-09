@@ -48,20 +48,18 @@ const MOCK_AREAS_RESPONSE = {
 const MOCK_AREA_GROUPS_RESPONSE = {
   groups: [
     {
-      id: MOCK_GROUP_ID,
+      slug: MOCK_GROUP_ID,
       name: 'Coastal Belt',
       subtitle: 'Udupi, Manipal, Karkala',
-      region_label: 'West Coast',
-      school_count: 8,
-      area_keys: [MOCK_AREA_KEY, MOCK_AREA_KEY_2],
+      regionLabel: 'West Coast',
+      areaKeys: [MOCK_AREA_KEY, MOCK_AREA_KEY_2],
     },
     {
-      id: MOCK_GROUP_ID2,
+      slug: MOCK_GROUP_ID2,
       name: 'Inland Corridor',
       subtitle: 'Kundapur, Hebri',
-      region_label: 'East',
-      school_count: 4,
-      area_keys: ['IN|KA|Udupi|Kundapur'],
+      regionLabel: 'East',
+      areaKeys: ['IN|KA|Udupi|Kundapur'],
     },
   ],
 };
