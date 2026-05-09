@@ -253,12 +253,14 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <button
                 onClick={handleClearFilters}
+                data-testid="empty-state-no-schools-clear-filters"
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
               >
                 Clear filters
               </button>
               <button
                 onClick={handlePickDifferentArea}
+                data-testid="empty-state-no-schools-pick-area"
                 className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 text-sm font-medium"
               >
                 Pick a different area
