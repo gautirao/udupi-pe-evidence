@@ -20,33 +20,92 @@ vi.mock('react-router-dom', async () => {
 
 vi.mock('@/hooks/useDiscoverAreas', () => ({
   useDiscoverAreas: vi.fn((city) => {
-    // Return mock area matching the test setup
+    // Return mock matching DiscoverAreasResponse shape: { city, areas[] }
     if (city === 'udupi') {
       return {
-        data: [
-          {
-            areaKey: 'IN|KA|Udupi|Manipal',
-            name: 'Manipal',
-            geo_center_lat: 13.3,
-            geo_center_lon: 74.7,
-            bbox: null,
-            listingCount: 5,
-          },
-        ],
+        data: {
+          city: 'udupi',
+          areas: [
+            {
+              areaKey: 'IN|KA|Udupi|Manipal',
+              name: 'Manipal',
+              geo_center_lat: 13.3,
+              geo_center_lon: 74.7,
+              bbox: null,
+              listingCount: 5,
+              schoolCount: 3,
+            },
+          ],
+        },
         isLoading: false,
         error: null,
       };
     }
-    return { data: [], isLoading: false, error: null };
+    return { data: { city, areas: [] }, isLoading: false, error: null };
   }),
 }));
 
 vi.mock('@/hooks/useDiscoverUrlState', () => ({
-  useDiscoverUrlState: vi.fn(() => ({
-    city: 'udupi',
-    areaKey: 'IN|KA|Udupi|Manipal',
-    boardFilters: [],
-    categoryFilters: [],
+  useDiscoverUrlState: vi.fn(() => [
+    {
+      city: 'udupi',
+      areaKey: 'IN|KA|Udupi|Manipal',
+      boardFilters: [],
+      categoryFilters: [],
+      schoolId: null,
+      radiusKm: null,
+      q: '',
+      journey: 'school-first' as const,
+      groupId: null,
+      viewport: null,
+      filters: {},
+    },
+    {
+      selectArea: vi.fn(),
+      deselectArea: vi.fn(),
+      setSchoolParams: vi.fn(),
+      setFiltersLive: vi.fn(),
+      setFiltersCommitted: vi.fn(),
+      setBoardFilters: vi.fn(),
+      setCategoryFilters: vi.fn(),
+      clearAreaContext: vi.fn(),
+      clearSchoolContext: vi.fn(),
+      startOver: vi.fn(),
+      setJourney: vi.fn(),
+      selectGroup: vi.fn(),
+      setSchoolJourney: vi.fn(),
+      setSearchQuery: vi.fn(),
+      reportViewport: vi.fn(),
+      setCity: vi.fn(),
+      changeCity: vi.fn(),
+    },
+  ]),
+}));
+
+vi.mock('@/hooks/useSchoolSearch', () => ({
+  useSchoolSearch: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+    error: null,
+  })),
+}));
+
+vi.mock('@/hooks/usePopularSchools', () => ({
+  usePopularSchools: vi.fn(() => ({
+    data: [
+      {
+        id: 'sch-1',
+        name: 'Manipal Public School',
+        board: 'CBSE',
+        boardType: null,
+        address: 'Manipal, Udupi',
+        latitude: 13.3525,
+        longitude: 74.7864,
+        distanceKm: 1.2,
+      },
+    ],
+    isLoading: false,
+    error: null,
   })),
 }));
 
@@ -176,11 +235,56 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByText('Find properties your way')).toBeInTheDocument();
   });
 
-  it('panelContent="school-browse" renders Milestone 2 placeholder', () => {
+  it('panelContent="school-browse" renders header, search input, popular schools, and area cards', () => {
+    const onSelectSchool = vi.fn();
+    const onSelectAreaKey = vi.fn();
     renderPanel(
-      <DiscoverRightPanel {...baseProps} panelContent="school-browse" />,
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-browse"
+        journey="school-first"
+        onSelectSchool={onSelectSchool}
+        onSelectAreaKey={onSelectAreaKey}
+      />,
     );
-    expect(screen.getByText(/coming in milestone 2/i)).toBeInTheDocument();
+    expect(screen.getByText('Find homes near a school')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search school name...')).toBeInTheDocument();
+    // Popular schools section (from usePopularSchools mock)
+    expect(screen.getByText('Manipal Public School')).toBeInTheDocument();
+  });
+
+  it('panelContent="school-browse" school card click calls onSelectSchool with schoolId', async () => {
+    const onSelectSchool = vi.fn();
+    const { getByText } = renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-browse"
+        journey="school-first"
+        onSelectSchool={onSelectSchool}
+        onSelectAreaKey={vi.fn()}
+      />,
+    );
+    getByText('Manipal Public School').click();
+    expect(onSelectSchool).toHaveBeenCalledWith('sch-1');
+  });
+
+  it('panelContent="school-browse" area card click calls onSelectAreaKey with areaKey', () => {
+    const onSelectAreaKey = vi.fn();
+    const { getByText } = renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-browse"
+        journey="school-first"
+        city="udupi"
+        onSelectSchool={vi.fn()}
+        onSelectAreaKey={onSelectAreaKey}
+      />,
+    );
+    // Area card for 'Manipal' comes from the useDiscoverAreas mock (data.areas)
+    // Use data-testid selector — more stable than text which can appear in multiple nodes
+    screen.getByTestId('area-card').click();
+    expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
+    expect(screen.getByText(/3 schools/i)).toBeInTheDocument();
   });
 
   it('panelContent="schools-in-area" with selectedArea renders SchoolsInAreaPanel', () => {

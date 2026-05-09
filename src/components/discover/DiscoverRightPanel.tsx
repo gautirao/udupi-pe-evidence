@@ -20,6 +20,8 @@ import {
 
 export interface DiscoverRightPanelProps {
   panelContent: DiscoverPanelContent;
+  /** City identifier — passed to SchoolBrowsePanel to avoid a redundant useDiscoverUrlState call inside the panel. */
+  city?: string;
   areas: AreaPoint[];
   selectedArea?: AreaPoint | null;
   areaListings?: DiscoverCityListingItem[];
@@ -52,6 +54,8 @@ export interface DiscoverRightPanelProps {
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
   onSelectAreaKey?: (areaKey: string) => void;
+  /** Called when the user selects a school from the school-browse panel. */
+  onSelectSchool?: (schoolId: string) => void;
   /**
    * Active context chips (area, school, type, BHK, price) passed to PanelHeader
    * for the area-selected state. Omitted for read-only panels.
@@ -92,6 +96,7 @@ export interface DiscoverRightPanelProps {
 
 export function DiscoverRightPanel({
   panelContent,
+  city = '',
   areas: _areas,
   selectedArea,
   areaListings,
@@ -113,6 +118,7 @@ export function DiscoverRightPanel({
   onSelectGroup,
   discoverAreas = [],
   onSelectAreaKey,
+  onSelectSchool,
   activeContextChips,
   filters = {},
   onFiltersChange,
@@ -177,7 +183,15 @@ export function DiscoverRightPanel({
         );
 
       case 'school-browse':
-        return <SchoolBrowsePanel onStartOver={onStartOver} journey={journey} />;
+        return (
+          <SchoolBrowsePanel
+            onStartOver={onStartOver}
+            journey={journey}
+            city={city}
+            onSelectSchool={onSelectSchool ?? (() => undefined)}
+            onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
+          />
+        );
 
       case 'schools-in-area':
         if (!selectedArea) {

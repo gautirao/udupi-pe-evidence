@@ -146,6 +146,12 @@ async function stubSchoolsByArea(page: Page, schools: unknown[] = SCHOOLS_BY_ARE
   );
 }
 
+async function stubSchoolSearch(page: Page, results: unknown[] = POPULAR_SCHOOLS_FIXTURE): Promise<void> {
+  await page.route('**/api/public/schools/search**', (route) =>
+    fulfillJson(route, 200, results),
+  );
+}
+
 async function stubDiscoverListings(page: Page): Promise<void> {
   await page.route('**/api/discover/listings**', (route) =>
     fulfillJson(route, 200, EMPTY_LISTINGS_PAGE),
@@ -353,6 +359,105 @@ test.describe('school-first journey (#1003)', () => {
     expect(url.searchParams.get('areaKey')).toBe(MANIPAL_AREA_KEY);
     expect(url.searchParams.get('schoolId')).toBe(MANIPAL_SCHOOL.id);
     expect(url.searchParams.get('radiusKm')).toBe('3');
+  });
+
+  /**
+   * E2E-9: school-browse panel is visible at /discover?city=udupi&journey=school-first
+   * (no areaKey set). Popular schools are rendered; no Milestone2Placeholder text.
+   */
+  test('E2E-9: school-browse panel visible — shows header and popular schools', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubDiscoverListings(page);
+
+    await page.goto('/discover?city=udupi&journey=school-first');
+    await page.waitForLoadState('domcontentloaded');
+
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 15_000 });
+
+    // Header text
+    await expect(rightPanel.getByText('Find homes near a school')).toBeVisible({ timeout: 10_000 });
+
+    // Search input
+    await expect(rightPanel.getByPlaceholder('Search school name...')).toBeVisible();
+
+    // Popular school cards rendered (no Milestone2Placeholder)
+    await expect(rightPanel.getByText('Manipal Public School')).toBeVisible({ timeout: 10_000 });
+    await expect(rightPanel.getByText(/coming in milestone 2/i)).not.toBeVisible();
+  });
+
+  /**
+   * E2E-10: Popular school card click routes to school-selected with schoolId in URL.
+   */
+  test('E2E-10: popular school card click → schoolId in URL', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+
+    await page.goto('/discover?city=udupi&journey=school-first');
+    await page.waitForLoadState('domcontentloaded');
+
+    const rightPanel = page.getByTestId('discover-right-panel');
+    const schoolCard = rightPanel.getByText('Manipal Public School');
+    await expect(schoolCard).toBeVisible({ timeout: 15_000 });
+    await schoolCard.click();
+
+    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 8_000 }).toBe(MANIPAL_SCHOOL.id);
+  });
+
+  /**
+   * E2E-11: Search result school card click routes to school-selected.
+   */
+  test('E2E-11: school search result click → schoolId in URL', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolSearch(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+
+    await page.goto('/discover?city=udupi&journey=school-first');
+    await page.waitForLoadState('domcontentloaded');
+
+    const rightPanel = page.getByTestId('discover-right-panel');
+    const searchInput = rightPanel.getByPlaceholder('Search school name...');
+    await expect(searchInput).toBeVisible({ timeout: 10_000 });
+    await searchInput.fill('Manipal');
+
+    // Wait for search result to appear
+    await expect(rightPanel.getByText('Manipal Public School').first()).toBeVisible({ timeout: 10_000 });
+    await rightPanel.getByText('Manipal Public School').first().click();
+
+    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 8_000 }).toBe(MANIPAL_SCHOOL.id);
+  });
+
+  /**
+   * E2E-12: Area card click in school-browse panel routes to schools-in-area with areaKey in URL.
+   */
+  test('E2E-12: area card click in school-browse → areaKey in URL', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolsByArea(page);
+    await stubDiscoverListings(page);
+
+    await page.goto('/discover?city=udupi&journey=school-first');
+    await page.waitForLoadState('domcontentloaded');
+
+    const rightPanel = page.getByTestId('discover-right-panel');
+
+    // Area card (from discoverAreas fixture — "Manipal" with 4 schools).
+    // Use data-testid="area-card" to avoid partial-text collision with school cards
+    // that also contain "Manipal" (e.g. "Manipal Public School").
+    const areaCard = rightPanel.getByTestId('area-card').first();
+    await expect(areaCard).toBeVisible({ timeout: 15_000 });
+    await areaCard.click();
+
+    await expect.poll(() => getUrlParam(page, 'areaKey'), { timeout: 8_000 }).toBe(MANIPAL_AREA_KEY);
   });
 
   /**

@@ -4,20 +4,25 @@
  * SchoolSelectedPanel is the full implementation (S3); other panels remain as
  * stubs until their milestones ship.
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, GraduationCap, MapPin, SlidersHorizontal } from 'lucide-react';
+import { ChevronLeft, GraduationCap, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
 import { PropertyCard } from '../PropertyCard';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import { useSchoolSearch } from '@/hooks/useSchoolSearch';
+import { usePopularSchools } from '@/hooks/usePopularSchools';
+import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
@@ -54,9 +59,168 @@ function Milestone2Placeholder({ title, journey, onStartOver }: Milestone2Placeh
 export interface SchoolBrowsePanelProps {
   onStartOver?: () => void;
   journey?: DiscoverJourney | null;
+  onSelectSchool: (schoolId: string) => void;
+  onSelectAreaKey: (areaKey: string) => void;
+  /** City to fetch schools/areas for — threaded from the parent to avoid a redundant useDiscoverUrlState call. */
+  city: string;
 }
-export function SchoolBrowsePanel({ onStartOver, journey }: SchoolBrowsePanelProps) {
-  return <Milestone2Placeholder title="Find a school" journey={journey} onStartOver={onStartOver} />;
+
+// ─── Internal sub-components ─────────────────────────────────────────────────
+
+function SchoolCard({ school, onClick }: { school: SchoolResult; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left p-4 bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg hover:border-purple-400 hover:shadow-md transition-all"
+    >
+      <div className="font-semibold text-gray-900">{school.name}</div>
+      <div className="text-sm text-gray-600">{school.address}</div>
+      {school.board && (
+        <Badge variant="outline" className="mt-2 text-xs">
+          {school.board}
+        </Badge>
+      )}
+    </button>
+  );
+}
+
+function AreaCard({
+  area,
+  onClick,
+}: {
+  area: { areaKey: string; name: string; schoolCount: number };
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      data-testid="area-card"
+      className="w-full text-left p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-lg hover:border-blue-400 hover:shadow-md transition-all"
+    >
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="font-semibold text-gray-900">{area.name}</div>
+          <div className="text-sm text-blue-700 flex items-center gap-1.5 mt-1">
+            <GraduationCap size={14} />
+            {area.schoolCount} schools
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+export function SchoolBrowsePanel({
+  onStartOver,
+  journey,
+  onSelectSchool,
+  onSelectAreaKey,
+  city,
+}: SchoolBrowsePanelProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const schoolSearchResult = useSchoolSearch(searchQuery);
+  const popularSchoolsResult = usePopularSchools(city, undefined, 6);
+  const discoverAreasResult = useDiscoverAreas(city);
+
+  const isSearching = searchQuery.trim().length >= 2;
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <PanelHeader
+        title="Find homes near a school"
+        subtitle="Search for a school, or explore school areas on the map."
+        onStartOver={onStartOver}
+        journey={journey}
+      />
+
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {/* Search input */}
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search school name..."
+            className="pl-9"
+          />
+        </div>
+
+        {isSearching ? (
+          /* Search results */
+          schoolSearchResult.isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : schoolSearchResult.data && schoolSearchResult.data.length > 0 ? (
+            <div className="space-y-2">
+              {schoolSearchResult.data.map((school) => (
+                <SchoolCard
+                  key={school.id}
+                  school={school}
+                  onClick={() => onSelectSchool(school.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Search size={32} />}
+              title="No schools found"
+              description="Try a different search term."
+            />
+          )
+        ) : (
+          <>
+            {/* Popular schools */}
+            {popularSchoolsResult.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : popularSchoolsResult.data && popularSchoolsResult.data.length > 0 ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Popular schools
+                </h3>
+                {popularSchoolsResult.data.map((school) => (
+                  <SchoolCard
+                    key={school.id}
+                    school={school}
+                    onClick={() => onSelectSchool(school.id)}
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            {/* Browse by area */}
+            {discoverAreasResult.isLoading ? (
+              <div className="space-y-2">
+                {[1, 2].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : discoverAreasResult.data?.areas && discoverAreasResult.data.areas.length > 0 ? (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Browse schools by area
+                </h3>
+                {discoverAreasResult.data.areas.map((area) => (
+                  <AreaCard
+                    key={area.areaKey}
+                    area={area}
+                    onClick={() => onSelectAreaKey(area.areaKey)}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** school-first journey — area selected but no school selected yet. */

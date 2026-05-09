@@ -532,6 +532,7 @@ export default function MapDiscovery() {
 
         <DiscoverRightPanel
           panelContent={panelContent}
+          city={city}
           journey={urlState.journey}
           activeContextChips={activeContextChips}
           areas={discoverAreas}
@@ -548,6 +549,7 @@ export default function MapDiscovery() {
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
           discoverAreas={discoverAreas}
           onSelectAreaKey={(areaKey) => urlActions.selectArea(areaKey)}
+          onSelectSchool={(schoolId) => urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM })}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
           isFetching={isFetching}
