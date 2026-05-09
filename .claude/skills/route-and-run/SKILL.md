@@ -534,6 +534,22 @@ change_requires_review = [
 
 > **Rule:** ChatGPT conversation is **review history**. `current-approved-plan.toml` is **execution truth**. `SPRINT_CHECKPOINT.md` is **resume truth**.
 
+#### 6.6 Decision Lock & Delta-Only Prompts (Token-Efficient Execution)
+
+**After PLAN_REVIEW approval,** settled architectural and product decisions are locked:
+- Decision Lock: Approved decisions MUST NOT be reopened by later agents (code-reviewer, QA, tests) unless **new evidence invalidates the plan**.
+- Exception: If code-reviewer finds implementation non-compliance (code doesn't match approved decision), re-invoke engineer to fix alignment — do NOT reopen the decision itself.
+- If new evidence contradicts an approved decision: surface to user with evidence cited; await explicit override.
+
+**Delta-Only Agent Prompts (after PLAN_REVIEW approval):**
+- Agents MUST use compact delta-only summaries: approved plan reference, changed files only, blockers+fixes since last agent, test results, AC evidence gained.
+- Forbidden: full plan re-paste, complete issue body, prior conversation context, complete diffs.
+- Rationale: Once planning is complete and approved, re-submitting full context at every agent invocation consumes tokens without adding information. Delta-only cuts token usage 60–80% without sacrificing fidelity.
+
+**Token-Efficient Controls Do NOT Weaken Gates:**
+- Delta-only does NOT skip PLAN_REVIEW, WORKDONE_REVIEW, code-reviewer verdict, E2E gate, scope-lock, or approval requirements.
+- All gates remain mandatory. Delta-only only reduces repetition, not enforcement.
+
 Implementation agents are now unblocked. Proceed to Step 7.
 
 ### Step 7: Execute Agents (Sequential, No Merging)

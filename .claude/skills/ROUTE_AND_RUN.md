@@ -324,6 +324,25 @@ When constructing a Task prompt for any agent, the orchestrator MUST:
 
 Rationale: each agent runs in a fresh context window. The capsule file is a stable, overwrite-protected source for AC and out-of-scope guardrails — it eliminates re-pasting and ensures consistent AC across all agents in a PR cycle. Re-entry agents additionally need the fixlog to reconstruct what has already been found and fixed.
 
+#### Delta-Only Agent Prompts (After PLAN_REVIEW Approval)
+
+Once an architect or ui-designer has approved a design direction and recorded it in `current-approved-plan.toml`, all subsequent agent prompts MUST use delta-only summaries to reduce token waste:
+
+**Delta-only content (required after PLAN_REVIEW):**
+- `approved_plan_ref: "<decision-id> from current-approved-plan.toml"`
+- `changed_files: [list of actual file changes since last agent]`
+- `blockers_and_fixes: [open issues from prior agent, fixes applied]`
+- `test_results: [command and result from prior run]`
+- `ac_evidence: [which ACs are newly covered by changes]`
+
+**What must NOT be included (forbidden after PLAN_REVIEW):**
+- Full PLAN_REVIEW output or architect design doc — link to `current-approved-plan.toml` instead
+- Complete issue body or enriched spec — link to `.claude/sprint-enriched-specs.md` instead
+- Prior conversation context or agent output summaries — summarize findings only
+- Full diff of all files — name changed files only
+
+Rationale: Once planning is complete and approved, re-pasting the full plan and issue context at every agent invocation consumes tokens without adding information. Delta-only prompts keep agents focused on unresolved problems and changes since the last run, cutting token usage by 60–80% without sacrificing fidelity.
+
 ---
 
 - **Agent permission mode**: ALL agents MUST be launched with `mode: "dontAsk"`. Do NOT use `mode: "bypassPermissions"` — it skips PreToolUse hooks (e.g. the combined-commands blocker). `dontAsk` auto-approves tool calls while still enforcing hooks.
@@ -617,6 +636,26 @@ to:
 
 - `security-reviewer` always runs last when the Security Gate (F) applies.
 - `team-lead` only routes to agents — it does not implement code itself.
+
+---
+
+## Decision Lock (After Code-Reviewer APPROVE)
+
+After code-reviewer signals APPROVE and before proceeding to QA E2E gate, settled product and architecture decisions must be locked:
+
+**When a decision was approved during planning (via architect, ui-designer, or team-lead output):**
+1. Capture the decision in `current-approved-plan.toml` under a `[decision_lock]` section with the exact decision ID and rationale.
+2. Record the approval evidence: agent name, output file reference, decision date.
+3. Write to Gate Satisfaction Record: `decision_lock: <decision-id> approved by <agent>, recorded in current-approved-plan.toml`.
+
+**Later agent behavior (cycle 2+, code-reviewer re-review, QA findings):**
+- Later agents MUST NOT reopen locked decisions.
+- If a code-reviewer challenges a locked decision, classify it as either:
+  - **Implementation non-compliance** (code doesn't match the approved decision) → re-invoke engineer to fix alignment
+  - **BLOCKER_REVIEW** (new evidence invalidates the approved plan) → surface to user with new evidence cited; do not proceed without explicit decision override
+- QA findings that conflict with a locked decision are treated as implementation bugs (engineer fix), not design issues.
+
+**Invariant:** A locked decision remains final unless explicitly overridden by user or architect. It is not revisited during normal code review or testing cycles.
 
 ---
 
