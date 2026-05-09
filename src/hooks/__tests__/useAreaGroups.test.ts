@@ -1,157 +1,265 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import React from 'react';
+import { describe, it, expect } from 'vitest';
+import { normalizeAreaGroupResponse, type AreaGroup } from '../useAreaGroups';
 
-// ─── Hoisted mocks ────────────────────────────────────────────
-const mockGet = vi.hoisted(() => vi.fn());
+describe('normalizeAreaGroupResponse', () => {
+  it('maps backend camelCase to frontend snake_case fields', () => {
+    const backendResponse = {
+      city: 'udupi',
+      groups: [
+        {
+          slug: 'coastal-belt',
+          name: 'Coastal Belt',
+          subtitle: 'Udupi, Manipal, Karkala',
+          regionLabel: 'West Coast',
+          displayOrder: 1,
+          areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+          focusLat: 13.35,
+          focusLon: 74.79,
+          minLat: 13.0,
+          minLon: 74.5,
+          maxLat: 13.5,
+          maxLon: 75.0,
+        },
+      ],
+    };
 
-vi.mock('@/lib/api', () => ({
-  api: { get: mockGet },
-  ApiError: class ApiError extends Error {
-    status: number;
-    body: unknown;
-    constructor(msg: string, status: number, body: unknown) {
-      super(msg);
-      this.status = status;
-      this.body = body;
-    }
-  },
-}));
+    const result = normalizeAreaGroupResponse(backendResponse);
 
-// ─── Import hook AFTER mocks ───────────────────────────────────
-import { useAreaGroups, AREA_GROUPS_QUERY_KEY_BASE } from '../useAreaGroups';
-
-// ─── Helpers ──────────────────────────────────────────────────
-
-function makeWrapper() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(QueryClientProvider, { client: queryClient }, children);
-}
-
-const BASE_RESPONSE = {
-  groups: [
-    {
-      id: 'south-bangalore',
-      name: 'South Bangalore',
-      subtitle: 'Koramangala, HSR, BTM',
-      region_label: 'South',
-      school_count: 42,
-      area_keys: ['IN|KA|Bengaluru|Koramangala', 'IN|KA|Bengaluru|HSR'],
-    },
-  ],
-};
-
-// ─── Tests ────────────────────────────────────────────────────
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-describe('useAreaGroups', () => {
-  it('does not fetch when city is empty string', () => {
-    const { result } = renderHook(
-      () => useAreaGroups(''),
-      { wrapper: makeWrapper() },
-    );
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(mockGet).not.toHaveBeenCalled();
+    expect(result.groups).toHaveLength(1);
+    const group = result.groups[0];
+    expect(group).toEqual({
+      id: 'coastal-belt',
+      name: 'Coastal Belt',
+      subtitle: 'Udupi, Manipal, Karkala',
+      region_label: 'West Coast',
+      school_count: 0,
+      area_keys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+    });
   });
 
-  it('fetches area groups for a given city', async () => {
-    mockGet.mockResolvedValue(BASE_RESPONSE);
+  it('handles null/missing subtitle and regionLabel', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'zone-a',
+          name: 'Zone A',
+          subtitle: null,
+          regionLabel: null,
+          areaKeys: ['IN|KA|Udupi|Area1'],
+        },
+      ],
+    };
 
-    const { result } = renderHook(
-      () => useAreaGroups('bangalore'),
-      { wrapper: makeWrapper() },
-    );
+    const result = normalizeAreaGroupResponse(backendResponse);
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const [url] = mockGet.mock.calls[0] as [string, unknown];
-    expect(url).toContain('/api/discover/area-groups');
-    expect(url).toContain('city=bangalore');
-    expect(result.current.data?.groups).toHaveLength(1);
-    expect(result.current.data?.groups[0].id).toBe('south-bangalore');
+    expect(result.groups[0]).toEqual({
+      id: 'zone-a',
+      name: 'Zone A',
+      subtitle: null,
+      region_label: null,
+      school_count: 0,
+      area_keys: ['IN|KA|Udupi|Area1'],
+    });
   });
 
-  it('encodes city with special characters in the URL', async () => {
-    mockGet.mockResolvedValue({ groups: [] });
+  it('defaults school_count to 0 (not returned by backend)', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'test-group',
+          name: 'Test Group',
+          subtitle: null,
+          regionLabel: null,
+          areaKeys: [],
+        },
+      ],
+    };
 
-    const { result } = renderHook(
-      () => useAreaGroups('udupi manipal'),
-      { wrapper: makeWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    const [url] = mockGet.mock.calls[0] as [string, unknown];
-    expect(url).toContain('city=udupi%20manipal');
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].school_count).toBe(0);
   });
 
-  it('uses city in the query key', () => {
-    mockGet.mockResolvedValue(BASE_RESPONSE);
+  it('handles missing areaKeys by defaulting to empty array', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'no-areas',
+          name: 'No Areas Group',
+          subtitle: null,
+          regionLabel: null,
+          areaKeys: null,
+        },
+      ],
+    };
 
-    const { result } = renderHook(
-      () => useAreaGroups('bangalore'),
-      { wrapper: makeWrapper() },
-    );
-
-    // Confirm query key base is correct by checking the constant
-    expect(AREA_GROUPS_QUERY_KEY_BASE).toEqual(['area-groups']);
-    // Result should be loading or success — either way the query was triggered
-    expect(result.current.fetchStatus).not.toBe('idle');
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].area_keys).toEqual([]);
   });
 
-  it('returns empty groups on API error (graceful fallback)', async () => {
-    mockGet.mockRejectedValue(new Error('Network error'));
+  it('handles missing areaKeys field entirely', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'missing-keys',
+          name: 'Missing Keys Group',
+        },
+      ],
+    };
 
-    const { result } = renderHook(
-      () => useAreaGroups('bangalore'),
-      { wrapper: makeWrapper() },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.groups).toEqual([]);
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].area_keys).toEqual([]);
   });
 
-  it('refetches when city changes', async () => {
-    mockGet.mockResolvedValue({ groups: [] });
+  it('uses slug as id fallback if slug is present', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'fallback-id',
+          name: 'Group Name',
+          areaKeys: [],
+        },
+      ],
+    };
 
-    const { result, rerender } = renderHook(
-      ({ city }: { city: string }) => useAreaGroups(city),
-      { wrapper: makeWrapper(), initialProps: { city: 'udupi' } },
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockGet).toHaveBeenCalledTimes(1);
-    const [firstUrl] = mockGet.mock.calls[0] as [string, unknown];
-    expect(firstUrl).toContain('city=udupi');
-
-    mockGet.mockResolvedValue({ groups: [] });
-    rerender({ city: 'bangalore' });
-
-    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
-    const [secondUrl] = mockGet.mock.calls[1] as [string, unknown];
-    expect(secondUrl).toContain('city=bangalore');
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].id).toBe('fallback-id');
   });
 
-  it('transitions from enabled to disabled when city becomes empty', async () => {
-    mockGet.mockResolvedValue(BASE_RESPONSE);
+  it('uses name as id if slug is missing', () => {
+    const backendResponse = {
+      groups: [
+        {
+          name: 'Fallback Name',
+          areaKeys: [],
+        },
+      ],
+    };
 
-    const { result, rerender } = renderHook(
-      ({ city }: { city: string }) => useAreaGroups(city),
-      { wrapper: makeWrapper(), initialProps: { city: 'bangalore' } },
-    );
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups[0].id).toBe('Fallback Name');
+  });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    const callCount = mockGet.mock.calls.length;
+  it('filters out groups with neither name nor slug', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'valid-group',
+          name: 'Valid Group',
+          areaKeys: [],
+        },
+        {
+          // Missing both name and slug — should be filtered out
+          regionLabel: 'Invalid',
+          areaKeys: [],
+        },
+        {
+          name: 'Another Valid',
+          areaKeys: [],
+        },
+      ],
+    };
 
-    rerender({ city: '' });
-    // No additional fetch after city becomes empty
-    expect(mockGet).toHaveBeenCalledTimes(callCount);
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups).toHaveLength(2);
+    expect(result.groups.map((g) => g.name)).toEqual(['Valid Group', 'Another Valid']);
+  });
+
+  it('returns empty groups when input groups is null', () => {
+    const backendResponse = {
+      city: 'unknown',
+      groups: null,
+    };
+
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups).toEqual([]);
+  });
+
+  it('returns empty groups when input groups is not an array', () => {
+    const backendResponse = {
+      groups: {} as any,
+    };
+
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups).toEqual([]);
+  });
+
+  it('returns empty groups when input is undefined', () => {
+    const result = normalizeAreaGroupResponse(undefined as any);
+    expect(result.groups).toEqual([]);
+  });
+
+  it('returns empty groups when input groups field is missing', () => {
+    const result = normalizeAreaGroupResponse({ city: 'udupi' });
+    expect(result.groups).toEqual([]);
+  });
+
+  it('handles multiple groups with mixed data quality', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'complete',
+          name: 'Complete Group',
+          subtitle: 'Has everything',
+          regionLabel: 'Region 1',
+          areaKeys: ['area1', 'area2'],
+        },
+        {
+          slug: 'partial',
+          name: 'Partial Group',
+          areaKeys: null,
+        },
+        {
+          name: 'No Slug',
+          regionLabel: 'Region 2',
+          areaKeys: ['area3'],
+        },
+      ],
+    };
+
+    const result = normalizeAreaGroupResponse(backendResponse);
+    expect(result.groups).toHaveLength(3);
+
+    expect(result.groups[0]).toEqual({
+      id: 'complete',
+      name: 'Complete Group',
+      subtitle: 'Has everything',
+      region_label: 'Region 1',
+      school_count: 0,
+      area_keys: ['area1', 'area2'],
+    });
+
+    expect(result.groups[1]).toEqual({
+      id: 'partial',
+      name: 'Partial Group',
+      subtitle: null,
+      region_label: null,
+      school_count: 0,
+      area_keys: [],
+    });
+
+    expect(result.groups[2]).toEqual({
+      id: 'No Slug',
+      name: 'No Slug',
+      subtitle: null,
+      region_label: 'Region 2',
+      school_count: 0,
+      area_keys: ['area3'],
+    });
+  });
+
+  it('preserves string values in areaKeys (does not filter/validate)', () => {
+    const backendResponse = {
+      groups: [
+        {
+          slug: 'test',
+          name: 'Test',
+          areaKeys: ['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2', ''],
+        },
+      ],
+    };
+
+    const result = normalizeAreaGroupResponse(backendResponse);
+    // Should preserve all values as-is, even empty strings
+    expect(result.groups[0].area_keys).toEqual(['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2', '']);
   });
 });

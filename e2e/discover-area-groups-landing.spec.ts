@@ -42,23 +42,38 @@ const MOCK_AREAS_RESPONSE = {
   ],
 };
 
+// Backend API response shape (camelCase, slug instead of id)
+// The frontend hook normalizes this to AreaGroup type
 const MOCK_AREA_GROUPS_RESPONSE = {
+  city: MOCK_CITY,
   groups: [
     {
-      id: MOCK_GROUP_ID,
+      slug: MOCK_GROUP_ID,
       name: 'Coastal Belt',
       subtitle: 'Udupi, Manipal, Karkala',
-      region_label: 'West Coast',
-      school_count: 8,
-      area_keys: [MOCK_AREA_KEY, 'IN|KA|Udupi|Karkala'],
+      regionLabel: 'West Coast',
+      displayOrder: 1,
+      areaKeys: [MOCK_AREA_KEY, 'IN|KA|Udupi|Karkala'],
+      focusLat: 13.35,
+      focusLon: 74.79,
+      minLat: 13.0,
+      minLon: 74.5,
+      maxLat: 13.5,
+      maxLon: 75.0,
     },
     {
-      id: 'inland-corridor',
+      slug: 'inland-corridor',
       name: 'Inland Corridor',
       subtitle: 'Kundapur, Hebri',
-      region_label: 'East',
-      school_count: 4,
-      area_keys: ['IN|KA|Udupi|Kundapur'],
+      regionLabel: 'East',
+      displayOrder: 2,
+      areaKeys: ['IN|KA|Udupi|Kundapur'],
+      focusLat: 13.25,
+      focusLon: 74.85,
+      minLat: 13.0,
+      minLon: 74.7,
+      maxLat: 13.5,
+      maxLon: 75.0,
     },
   ],
 };
