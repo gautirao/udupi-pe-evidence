@@ -231,12 +231,10 @@ export default function MapDiscovery() {
   // Clear handlers for AreaSchoolCombinedPanel — stable references so the panel does
   // not re-render on every map pan/zoom that re-runs the MapDiscovery render.
   const onClearSchool = useCallback(() => {
-    // Atomic clear: URL school params + board/category filters
-    // + local selectedSchool state + local PropertyFilters proximity fields.
-    // Preserves areaKey (remains in area-selected state after school is cleared).
-    urlActions.setSchoolParams(null);
-    urlActions.setBoardFilters([]);
-    urlActions.setCategoryFilters([]);
+    // Single atomic URL mutation: removes schoolId + radiusKm. Preserves areaKey,
+    // journey, board/category filters. Local selectedSchool state and proximity
+    // fields in PropertyFilters are cleared separately (no URL mutation).
+    urlActions.clearSchoolContext();
     setSelectedSchool(null);
     setFilters((prev) => {
       const next = { ...prev };
@@ -403,21 +401,7 @@ export default function MapDiscovery() {
         radiusKm={urlState.radiusKm}
         filters={filters}
         onClearArea={handleAreaBack}
-        onClearSchool={() => {
-          // Atomic four-part clear: URL school params + journey board/category filters
-          // + local selectedSchool state + local PropertyFilters proximity fields.
-          urlActions.setSchoolParams(null);
-          urlActions.setBoardFilters([]);
-          urlActions.setCategoryFilters([]);
-          setSelectedSchool(null);
-          setFilters((prev) => {
-            const next = { ...prev };
-            delete next.schoolLat;
-            delete next.schoolLon;
-            delete next.schoolRadiusKm;
-            return next;
-          });
-        }}
+        onClearSchool={onClearSchool}
         onClearPropertyType={() =>
           handleFiltersChange({ ...filters, propertyTypes: undefined })
         }

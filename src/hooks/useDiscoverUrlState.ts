@@ -148,6 +148,12 @@ export interface DiscoverUrlActions {
    */
   clearAreaContext: () => void;
   /**
+   * Clear school context — removes schoolId and radiusKm in a single REPLACE.
+   * Preserves areaKey, journey, groupId, board, category, property filters, and viewport.
+   * Returns user to filtered schools-in-area context after dismissing a school selection.
+   */
+  clearSchoolContext: () => void;
+  /**
    * Start over — clears journey, groupId, areaKey, schoolId, radiusKm, board, category, q,
    * and viewport. Preserves city and property filters (type, beds, price, seller, booleans,
    * dates). Single REPLACE — does not push a history entry.
@@ -651,6 +657,21 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     );
   }, [setUrlParams]);
 
+  const clearSchoolContext = useCallback(() => {
+    // Do NOT cancel viewportTimer — the viewport stays valid when clearing school context.
+    // Removes schoolId and radiusKm only. Preserves areaKey, journey, groupId,
+    // board/category filters, property filters, and viewport. Single REPLACE.
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('schoolId');
+        next.delete('radiusKm');
+        return next;
+      },
+      { replace: true }, // REPLACE — not a new navigation destination
+    );
+  }, [setUrlParams]);
+
   const startOver = useCallback(() => {
     // Cancel pending viewport debounce — it must not restore stale coords after reset.
     if (viewportTimer.current) {
@@ -683,6 +704,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectArea,
     deselectArea,
     clearAreaContext,
+    clearSchoolContext,
     reportViewport,
     setFiltersLive,
     setFiltersCommitted,
