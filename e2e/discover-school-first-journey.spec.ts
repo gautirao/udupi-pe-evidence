@@ -478,4 +478,34 @@ test.describe('school-first journey (#1003)', () => {
     ).toBeVisible({ timeout: 15_000 });
   });
 
+  /**
+   * E2E-13: cold-load schoolId without journey param → school-selected panel renders.
+   * Issue #1038: bare schoolId URL (/discover?city=udupi&schoolId=<id>) should restore
+   * the school-selected state via derivePanelContent, even without explicit journey param.
+   */
+  test('E2E-13: cold-load with bare schoolId (no journey param) → school-selected panel', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+
+    // Navigate to bare schoolId URL (no journey param)
+    await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // Right panel must be visible
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 15_000 });
+
+    // School name must be displayed in the header (heading)
+    await expect(rightPanel.getByRole('heading', { name: 'Manipal Public School' })).toBeVisible({ timeout: 10_000 });
+
+    // Radius selector must be visible (confirms school-selected, not placeholder)
+    await expect(rightPanel.getByRole('group', { name: /select search radius/i })).toBeVisible({ timeout: 5_000 });
+
+    // Verify the panel is not showing a placeholder message
+    await expect(rightPanel.getByText(/coming in milestone 2/i)).not.toBeVisible();
+  });
+
 });
