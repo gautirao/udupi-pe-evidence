@@ -164,6 +164,18 @@ interface PropertyMapProps {
    * Called when a school marker is clicked. Should update URL with schoolId + radiusKm.
    */
   onSelectSchool?: (schoolId: string) => void;
+  /**
+   * Loading state from useSchoolsByArea. Passed to SchoolMarkerLayer for diagnostic UI.
+   */
+  schoolsIsLoading?: boolean;
+  /**
+   * Error state from useSchoolsByArea. Passed to SchoolMarkerLayer for diagnostic UI.
+   */
+  schoolsIsError?: boolean;
+  /**
+   * Error object from useSchoolsByArea. Passed to SchoolMarkerLayer for error message display.
+   */
+  schoolsError?: Error | null;
 }
 
 /**
@@ -523,6 +535,9 @@ export function PropertyMap({
   selectedSchool,
   schools = [],
   onSelectSchool,
+  schoolsIsLoading = false,
+  schoolsIsError = false,
+  schoolsError = null,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -563,11 +578,14 @@ export function PropertyMap({
             selectedSchool={selectedSchool}
           />
         )}
-        {journey === 'school-first' && schools.length > 0 && (
+        {journey === 'school-first' && (
           <SchoolMarkerLayer
             schools={schools}
             onSelectSchool={onSelectSchool}
             journey={journey}
+            isLoading={schoolsIsLoading}
+            isError={schoolsIsError}
+            error={schoolsError}
           />
         )}
         <ScaleHud />

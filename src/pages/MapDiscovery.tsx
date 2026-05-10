@@ -481,6 +481,9 @@ export default function MapDiscovery() {
               selectedSchool={selectedSchool}
               schools={schools}
               onSelectSchool={handleSelectSchoolMarker}
+              schoolsIsLoading={schoolsQuery.isLoading}
+              schoolsIsError={schoolsQuery.isError}
+              schoolsError={schoolsQuery.error}
             />
           )}
 

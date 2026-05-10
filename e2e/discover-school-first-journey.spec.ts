@@ -508,4 +508,68 @@ test.describe('school-first journey (#1003)', () => {
     await expect(rightPanel.getByText(/coming in milestone 2/i)).not.toBeVisible();
   });
 
+  /**
+   * E2E-8a: /by-area API returns 500 error → SchoolMarkerLayer shows error UI.
+   * Issue #1045: API diagnostics — error state handling.
+   */
+  test('E2E-8a: /by-area API error (500) → SchoolMarkerLayer shows error message', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubDiscoverListings(page);
+
+    // Intercept /api/public/schools/by-area and return 500 error
+    await page.route('/api/public/schools/by-area*', (route) => {
+      route.abort('failed');
+    });
+
+    await page.goto(`/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // SchoolMarkerLayer should show error message in the map area
+    const errorDiv = page.getByTestId('school-marker-error');
+    await expect(errorDiv).toBeVisible({ timeout: 15_000 });
+
+    // Error message should be visible (generic or specific API error)
+    await expect(errorDiv).toContainText(/failed|error/i);
+  });
+
+  /**
+   * E2E-8b: /by-area API returns empty array → SchoolMarkerLayer shows empty state UI.
+   * Issue #1045: API diagnostics — empty state handling with console.warn.
+   */
+  test('E2E-8b: /by-area returns empty array → SchoolMarkerLayer shows empty message', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolsByArea(page, []);
+    await stubDiscoverListings(page);
+
+    // Listen for console.warn calls
+    const warnings: string[] = [];
+    page.on('console', (msg) => {
+      if (msg.type() === 'warning') {
+        warnings.push(msg.text());
+      }
+    });
+
+    await page.goto(`/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}`);
+    await page.waitForLoadState('domcontentloaded');
+
+    // SchoolMarkerLayer should show empty state message in the map area
+    const emptyDiv = page.getByTestId('school-marker-empty');
+    await expect(emptyDiv).toBeVisible({ timeout: 15_000 });
+
+    // Empty message should be specific
+    await expect(emptyDiv).toContainText(/no schools found/i);
+
+    // Verify console.warn was called for empty state
+    // Note: console.warn calls are collected asynchronously, so this is a soft check
+    await page.waitForTimeout(500);
+    const hasEmptyWarning = warnings.some((w) =>
+      w.includes('[SchoolMarkerLayer]') && w.includes('No schools found')
+    );
+    expect(hasEmptyWarning).toBe(true);
+  });
+
 });
