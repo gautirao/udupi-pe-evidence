@@ -417,6 +417,12 @@ export default function MapDiscovery() {
     [selectedArea, selectedSchool, urlState.radiusKm, filters, urlActions, handleAreaBack],
   );
 
+  // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render
+  const memoizedInitialCenter = useMemo(
+    () => urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] as [number, number] : undefined,
+    [urlState.viewport?.lat, urlState.viewport?.lon],
+  );
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
@@ -458,7 +464,7 @@ export default function MapDiscovery() {
                 lat: selectedSchool.latitude, lon: selectedSchool.longitude,
                 radiusKm: filters.schoolRadiusKm ?? 3, name: selectedSchool.name,
               } : undefined}
-              initialCenter={urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] : undefined}
+              initialCenter={memoizedInitialCenter}
               initialZoom={urlState.viewport?.zoom}
               cityCenter={cityCenter}
               cityZoom={cityZoom}

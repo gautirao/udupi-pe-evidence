@@ -281,6 +281,66 @@ function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
   return null;
 }
 
+function URLViewportController({
+  initialCenter,
+  initialZoom,
+}: {
+  initialCenter?: [number, number];
+  initialZoom?: number;
+}) {
+  const map = useMap();
+  const lastAppliedViewportRef = useRef<{
+    lat: number;
+    lon: number;
+    zoom: number;
+  } | null>(null);
+
+  useEffect(() => {
+    // Skip if no viewport is specified
+    if (!initialCenter || initialZoom === undefined) return;
+
+    const [requestedLat, requestedLon] = initialCenter;
+    const currentCenter = map.getCenter();
+    const currentZoom = map.getZoom();
+
+    // Tight tolerance: 0.0001 degrees (~11 meters) for lat/lon, exact for zoom
+    const LAT_LON_TOLERANCE = 0.0001;
+    const latDiff = Math.abs(currentCenter.lat - requestedLat);
+    const lonDiff = Math.abs(currentCenter.lng - requestedLon);
+    const zoomMatches = Math.round(currentZoom) === initialZoom;
+
+    // Skip if viewport is already correct (within tolerance)
+    if (
+      latDiff <= LAT_LON_TOLERANCE &&
+      lonDiff <= LAT_LON_TOLERANCE &&
+      zoomMatches
+    ) {
+      return;
+    }
+
+    // Skip if already applied (prevent feedback loop with reportViewport debounce)
+    const lastViewport = lastAppliedViewportRef.current;
+    if (
+      lastViewport &&
+      lastViewport.lat === requestedLat &&
+      lastViewport.lon === requestedLon &&
+      lastViewport.zoom === initialZoom
+    ) {
+      return;
+    }
+
+    // Apply viewport without animation to avoid intermediate moveend events
+    map.setView([requestedLat, requestedLon], initialZoom);
+    lastAppliedViewportRef.current = {
+      lat: requestedLat,
+      lon: requestedLon,
+      zoom: initialZoom,
+    };
+  }, [initialCenter, initialZoom, map]);
+
+  return null;
+}
+
 function MapController({
   selectedListing,
   focusBounds,
@@ -481,6 +541,7 @@ export function PropertyMap({
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapReadySignal onReady={onReady} />
+        <URLViewportController initialCenter={initialCenter} initialZoom={initialZoom} />
         <MapController
           selectedListing={selectedListing}
           focusBounds={focusBounds}
