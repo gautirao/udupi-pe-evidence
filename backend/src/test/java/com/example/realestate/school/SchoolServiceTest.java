@@ -42,7 +42,8 @@ class SchoolServiceTest {
         SchoolRepository.AreaSchoolProjection proj = stubProjection(id, "Sharada Vidyalaya",
                 "CBSE", "CBSE", 13.3511, 74.7871, "Manipal, Udupi", "notable", null);
 
-        when(repository.findPopularByArea(eq("IN|KA|Udupi|Manipal"), anyDouble(), anyInt()))
+        when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
+        when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), anyInt()))
                 .thenReturn(List.of(proj));
 
         List<SchoolResponse> results = service.findPopularByArea("IN|KA|Udupi|Manipal", 10);
@@ -58,8 +59,7 @@ class SchoolServiceTest {
 
     @Test
     void findPopularByArea_unknownArea_throws_AreaNotFoundException() {
-        when(repository.findPopularByArea(eq("IN|KA|Udupi|Unknown"), anyDouble(), anyInt()))
-                .thenReturn(List.of());
+        when(repository.countByAreaKey(eq("IN|KA|Udupi|Unknown"))).thenReturn(0);
 
         assertThatThrownBy(() -> service.findPopularByArea("IN|KA|Udupi|Unknown", 10))
                 .isInstanceOf(AreaNotFoundException.class)
@@ -74,15 +74,17 @@ class SchoolServiceTest {
         SchoolRepository.AreaSchoolProjection proj = stubProjection(id, "Test School",
                 null, null, 13.3, 74.7, "Udupi", null, null);
 
+        when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
+
         // limit=0 → clamped to 1
-        when(repository.findPopularByArea(eq("IN|KA|Udupi|Manipal"), anyDouble(), eq(1)))
+        when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), eq(1)))
                 .thenReturn(List.of(proj));
 
         List<SchoolResponse> resultsMin = service.findPopularByArea("IN|KA|Udupi|Manipal", 0);
         assertThat(resultsMin).hasSize(1);
 
         // limit=51 → clamped to 50
-        when(repository.findPopularByArea(eq("IN|KA|Udupi|Manipal"), anyDouble(), eq(50)))
+        when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), eq(50)))
                 .thenReturn(List.of(proj));
 
         List<SchoolResponse> resultsMax = service.findPopularByArea("IN|KA|Udupi|Manipal", 51);

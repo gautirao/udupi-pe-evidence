@@ -27,9 +27,6 @@ public class SchoolService {
     /** Maximum allowed radius in km for nearby queries (prevents abuse). */
     private static final double MAX_RADIUS_KM = 50.0;
 
-    /** Fixed 2 km radius used for area-scoped queries. */
-    private static final double AREA_RADIUS_METERS = 2000.0;
-
     private final SchoolRepository repository;
 
     public SchoolService(SchoolRepository repository) {
@@ -117,11 +114,10 @@ public class SchoolService {
     }
 
     /**
-     * Returns notable schools within 2 km of the area centroid for the given {@code areaKey}.
+     * Returns notable schools assigned to the given {@code areaKey} via FK matching.
      *
-     * <p>Uses a single LEFT JOIN query (areas → schools) to eliminate the TOCTOU race that
-     * would exist if area existence were checked in a separate {@code countByAreaKey} query.
-     * An empty result set means the area itself does not exist.
+     * <p>Uses the deterministic area_key FK assignment from the V79 migration
+     * (nearest_configured_area_within_district algorithm).
      *
      * @param areaKey pipe-separated area key (e.g. "IN|KA|Udupi|Manipal")
      * @param limit   maximum results (clamped to 1..50)
@@ -133,18 +129,16 @@ public class SchoolService {
         int clampedLimit = Math.max(1, Math.min(50, limit));
         log.debug("findPopularByArea areaKey='{}' limit={}", areaKey, clampedLimit);
 
-        List<SchoolRepository.AreaSchoolProjection> rows =
-                repository.findPopularByArea(areaKey, AREA_RADIUS_METERS, clampedLimit);
-
-        // Empty result → area_key not found in areas table
-        if (rows.isEmpty()) {
+        // Check area existence
+        if (repository.countByAreaKey(areaKey) == 0) {
             log.warn("findPopularByArea: unknown areaKey='{}'", areaKey);
             throw new AreaNotFoundException(areaKey);
         }
 
-        // LEFT JOIN: single row with null id → area found but no nearby notable schools
+        List<SchoolRepository.AreaSchoolProjection> rows =
+                repository.findPopularByAreaKey(areaKey, clampedLimit);
+
         return rows.stream()
-                .filter(p -> p.getId() != null)
                 .map(p -> new SchoolResponse(
                         p.getId().toString(),
                         p.getName(),
@@ -161,7 +155,7 @@ public class SchoolService {
     }
 
     /**
-     * Returns schools within 2 km of the area centroid for the given {@code areaKey},
+     * Returns schools assigned to {@code areaKey} via FK matching,
      * with optional board and category filters. Does NOT filter by prominence_tier.
      *
      * @param areaKey    pipe-separated area key (e.g. "IN|KA|Udupi|Manipal")
@@ -199,18 +193,16 @@ public class SchoolService {
         log.debug("getSchoolsByArea areaKey='{}' boards={} categories={} page={} size={}",
                 areaKey, normalizedBoards, normalizedCategories, clampedPage, clampedSize);
 
-        // findByAreaProximity uses INNER JOIN on areas — empty result means area not found.
-        // Validate area existence via a separate count only when the result is empty to avoid
-        // returning 404 on a valid area that has no matching schools after filtering.
-        List<SchoolRepository.AreaSchoolProjection> rows = repository.findByAreaProximity(
-                areaKey, AREA_RADIUS_METERS,
-                normalizedBoards, normalizedCategories,
-                offset, clampedSize);
-
-        if (rows.isEmpty() && repository.countByAreaKey(areaKey) == 0) {
+        // Validate area existence first (separate query to distinguish "area not found" from "no schools")
+        if (repository.countByAreaKey(areaKey) == 0) {
             log.warn("getSchoolsByArea: unknown areaKey='{}'", areaKey);
             throw new AreaNotFoundException(areaKey);
         }
+
+        List<SchoolRepository.AreaSchoolProjection> rows = repository.findByAreaKey(
+                areaKey,
+                normalizedBoards, normalizedCategories,
+                offset, clampedSize);
 
         return rows.stream()
                 .map(p -> new SchoolResponse(

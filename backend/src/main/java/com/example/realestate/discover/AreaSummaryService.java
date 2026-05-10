@@ -65,16 +65,8 @@ public class AreaSummaryService {
                 aos.median_price_paise,
                 aos.trend_direction,
                 aos.confidence_tier,
-                (
-                    SELECT COUNT(*)
-                    FROM schools s
-                    WHERE s.geog IS NOT NULL
-                      AND ST_DWithin(
-                              s.geog,
-                              ST_MakePoint(a.geo_center_lon, a.geo_center_lat)::geography,
-                              2000
-                          )
-                )                                    AS school_count
+                (SELECT COUNT(*) FROM schools s WHERE s.area_key = a.area_key)
+                                                     AS school_count
             FROM areas a
             JOIN cities c ON c.id = a.city_id
             LEFT JOIN area_overview_stats aos
