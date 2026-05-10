@@ -129,7 +129,8 @@ test.describe('Journey 1 — area marker click → back → forward', () => {
     // ── Step 1: City overview — area ring markers visible ──────────────────
     // Wait for area markers from mocked /api/discover/areas (className: 'area-marker')
     await expect(page.locator(AREA_MARKER).first()).toBeVisible({ timeout: 12_000 });
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible();
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // ── Step 2: Click the area ring marker ────────────────────────────────
     // force: true — Leaflet inner card content may intercept the hit-test
@@ -160,7 +161,8 @@ test.describe('Journey 1 — area marker click → back → forward', () => {
     );
 
     // Right panel returns to instructional state
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // ── Step 4: Browser Forward ───────────────────────────────────────────
     await page.goForward();
@@ -186,7 +188,8 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
 
     // Instructional state — no area selected
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
     await expect(page.getByTestId('listing-card')).toHaveCount(0);
 
     // Area ring markers visible (zoom ≤ AREA_LAYER_MAX_ZOOM=12 at city default)
@@ -234,7 +237,8 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
 
     // Instructional state — no areaKey in URL
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // zoom=11 ≤ AREA_LAYER_MAX_ZOOM=12 → area ring markers visible
     await expect(page.locator(AREA_MARKER).first()).toBeVisible({ timeout: 12_000 });
@@ -312,7 +316,8 @@ test.describe('Journey 3 — panel Back from bookmarked area URL', () => {
     ).toBe(false);
 
     // (b) Right panel shows instructional state
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // (c) Still on /discover (deselectArea uses replace, not navigate(-1))
     await expect(page).toHaveURL(/\/discover/);
@@ -367,7 +372,8 @@ test.describe('Journey 4 — city switch resets area; Back restores prior state'
     // zoom/lat/lon may repopulate for kundapur city level — just verify areaKey is gone
 
     // Right panel returns to instructional state for new city
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // ── Browser Back: restores Udupi + Manipal selection ────────────────
     await page.goBack();

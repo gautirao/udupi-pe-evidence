@@ -190,11 +190,9 @@ test.describe('Discover — right-panel listing cards (#887)', () => {
     const rightPanel = page.getByTestId('discover-right-panel');
     await expect(rightPanel).toBeVisible({ timeout: 10_000 });
 
-    // Instructional heading and body text must be visible
-    await expect(rightPanel.getByText('Select an area to explore')).toBeVisible({ timeout: 8_000 });
-    await expect(
-      rightPanel.getByText('Click on an area marker on the map to see available properties'),
-    ).toBeVisible();
+    // Instructional state: GuidedEntryPanel with journey cards
+    await expect(rightPanel.getByText('Find properties your way')).toBeVisible({ timeout: 8_000 });
+    await expect(rightPanel.getByTestId('journey-card-area-first')).toBeVisible();
 
     // No listing cards rendered yet
     await expect(page.getByTestId('listing-card')).toHaveCount(0);
@@ -226,19 +224,22 @@ test.describe('Discover — right-panel listing cards (#887)', () => {
     await page.goto('/discover?city=udupi');
     await page.waitForLoadState('domcontentloaded');
 
-    // Wait for the right panel and the quick-select chips (driven by useDiscoverAreas data).
-    // Using chips as the readiness signal is more reliable than waiting for Leaflet
-    // canvas markers, which are injected asynchronously outside the React tree.
-    const chip = page.getByTestId('quick-select-chip').first();
-    await expect(chip).toBeVisible({ timeout: 12_000 });
+    // Wait for the right panel and area markers (driven by useDiscoverAreas data).
+    // After #887, clicking an area marker loads listing cards directly.
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 10_000 });
+
+    // Wait for area markers to be visible as the readiness signal
+    const areaMarker = page.locator(AREA_MARKER).first();
+    await expect(areaMarker).toBeVisible({ timeout: 12_000 });
 
     // Capture the city listings request
     const listingsRequestPromise = page.waitForRequest(
       (req) => req.url().includes('/api/discover/cities/') && req.url().includes('/listings'),
     );
 
-    // Click the first quick-select chip (calls onAreaSelect — same code path as map marker click)
-    await chip.click();
+    // Click the first area marker (calls onAreaSelect — loads city listings)
+    await areaMarker.click({ force: true });
 
     // City listings endpoint must have been called
     const listingsRequest = await listingsRequestPromise;
@@ -252,39 +253,39 @@ test.describe('Discover — right-panel listing cards (#887)', () => {
     await page.screenshot({ path: SS('08-area-selected-cards-visible'), fullPage: false });
   });
 
-  // A3: listing cards contain image area, property type badge, price — no "Sign in" button
-  test('A3 — listing cards show image area, property type, and price; no Sign-in CTA', async ({
+  // A3: listing cards contain image area, property type badge, price — anonymous flow shows "Sign in to view price"
+  test('A3 — listing cards show image area, property type, and price gate; anonymous mode expected', async ({
     page,
   }) => {
     await page.goto('/discover?city=udupi');
     await page.waitForLoadState('domcontentloaded');
 
-    // Wait for quick-select chips as the readiness signal (see A2 comment)
-    const chip = page.getByTestId('quick-select-chip').first();
-    await expect(chip).toBeVisible({ timeout: 12_000 });
-    await chip.click();
+    // Wait for area markers and click to load listing cards
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 10_000 });
 
-    // Wait for cards to render
+    const areaMarker = page.locator(AREA_MARKER).first();
+    await expect(areaMarker).toBeVisible({ timeout: 12_000 });
+    await areaMarker.click({ force: true });
+
+    // Wait for cards to render after area selection
     const firstCard = page.getByTestId('listing-card').first();
-    await expect(firstCard).toBeVisible({ timeout: 10_000 });
+    await expect(firstCard).toBeVisible({ timeout: 12_000 });
 
-    // Image area: the mock listing has no primaryImageUrl so the MapPin placeholder renders
-    // inside the aspect-video div — assert the div exists with the correct aspect ratio class
-    await expect(firstCard.locator('.aspect-video')).toBeVisible();
+    // Image area: the mock listing has no primaryImageUrl so the Building2 placeholder renders
+    // inside the image container (h-44 fixed height) — assert the container exists
+    await expect(firstCard.locator('div.h-44.relative')).toBeVisible();
 
-    // Property type badge: mock has 'apartment'
-    await expect(firstCard.getByText('apartment', { exact: false })).toBeVisible();
+    // Property type badge: mock has 'apartment' (appears in both title and chip, use exact match for chip)
+    await expect(firstCard.getByText('Apartment', { exact: true })).toBeVisible();
 
-    // Price: mock pricePaise=250000000 → ₹25,00,000 (formatPrice rounds paise/100).
-    // Assert the price element is present and non-empty rather than duplicating
-    // formatPrice logic in the test.
-    const priceEl = firstCard.locator('p.font-semibold');
-    await expect(priceEl).toBeVisible();
-    const priceText = await priceEl.textContent();
-    expect(priceText?.trim().length).toBeGreaterThan(0);
+    // Price: in anonymous flow, the card shows "Sign in to view price" with lock icon instead of actual price.
+    // PropertyCard.tsx renders this in the price row (flex items-center justify-between) when isAuthenticated=false.
+    // Assert the "Sign in to view price" text is present — this is the expected anonymous mode behavior.
+    await expect(firstCard.getByText(/sign in to view price/i)).toBeVisible();
 
-    // No "Sign in" button/link on the card
-    await expect(firstCard.getByText(/sign in/i)).toHaveCount(0);
+    // Phase 2B work: authenticated flow assertions (price visibility, no sign-in text) will be added
+    // when auth fixture setup is available. Current E2E runs in anonymous mode only.
 
     await page.screenshot({ path: SS('09-card-content-verified'), fullPage: false });
   });
@@ -294,10 +295,13 @@ test.describe('Discover — right-panel listing cards (#887)', () => {
     await page.goto('/discover?city=udupi');
     await page.waitForLoadState('domcontentloaded');
 
-    // Wait for quick-select chips as the readiness signal (see A2 comment)
-    const chip = page.getByTestId('quick-select-chip').first();
-    await expect(chip).toBeVisible({ timeout: 12_000 });
-    await chip.click();
+    // Wait for area markers and click to load listing cards
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 10_000 });
+
+    const areaMarker = page.locator(AREA_MARKER).first();
+    await expect(areaMarker).toBeVisible({ timeout: 12_000 });
+    await areaMarker.click({ force: true });
 
     // Wait for cards
     const firstCard = page.getByTestId('listing-card').first();
