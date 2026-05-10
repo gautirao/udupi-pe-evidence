@@ -1,0 +1,76 @@
+=== EP-6 — /api/discover/areas (udupi) — area_overview_stats LEFT JOIN + aggregate subquery + schools COUNT subquery per row ===
+Captured: 2026-05-10T21:50:55Z
+Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
+
+--- SQL ---
+SELECT a.area_key, a.name, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon, COALESCE(pl.listing_count, 0) AS listing_count, aos.median_price_paise, aos.trend_direction, aos.confidence_tier, (SELECT COUNT(*) FROM schools s WHERE s.area_key = a.area_key) AS school_count FROM areas a JOIN cities c ON c.id = a.city_id LEFT JOIN area_overview_stats aos ON aos.area_key = a.area_key AND aos.area_level = 'locality' LEFT JOIN ( SELECT area_key, COUNT(*) AS listing_count FROM property_listings WHERE status = 'LIVE' AND archived_at IS NULL AND is_duplicate = false GROUP BY area_key ) pl ON pl.area_key = a.area_key WHERE c.slug = 'udupi' AND array_length(string_to_array(a.area_key, '|'), 1) = 4 ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
+
+--- EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ---
+BEGIN
+SET
+QUERY PLAN
+Sort  (cost=29.22..29.23 rows=1 width=150) (actual time=0.279..0.282 rows=12 loops=1)
+  Output: a.area_key, a.name, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon, (COALESCE((count(*)), '0'::bigint)), aos.median_price_paise, aos.trend_direction, aos.confidence_tier, ((SubPlan 1))
+  Sort Key: (COALESCE((count(*)), '0'::bigint)) DESC, a.name
+  Sort Method: quicksort  Memory: 26kB
+  Buffers: shared hit=39
+  ->  Nested Loop Left Join  (cost=6.31..29.21 rows=1 width=150) (actual time=0.122..0.264 rows=12 loops=1)
+        Output: a.area_key, a.name, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon, COALESCE((count(*)), '0'::bigint), aos.median_price_paise, aos.trend_direction, aos.confidence_tier, (SubPlan 1)
+        Inner Unique: true
+        Join Filter: (property_listings.area_key = a.area_key)
+        Rows Removed by Join Filter: 39
+        Buffers: shared hit=39
+        ->  Nested Loop Left Join  (cost=0.15..21.55 rows=1 width=134) (actual time=0.051..0.102 rows=12 loops=1)
+              Output: a.area_key, a.name, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon, aos.median_price_paise, aos.trend_direction, aos.confidence_tier
+              Inner Unique: true
+              Join Filter: (aos.area_key = a.area_key)
+              Rows Removed by Join Filter: 38
+              Buffers: shared hit=15
+              ->  Nested Loop  (cost=0.15..20.44 rows=1 width=112) (actual time=0.041..0.059 rows=12 loops=1)
+                    Output: a.area_key, a.name, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon
+                    Join Filter: (c.id = a.city_id)
+                    Rows Removed by Join Filter: 21
+                    Buffers: shared hit=3
+                    ->  Index Scan using cities_slug_key on public.cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.010..0.010 rows=1 loops=1)
+                          Output: c.id, c.slug, c.name, c.geo_center_lat, c.geo_center_lon, c.min_lat, c.min_lon, c.max_lat, c.max_lon, c.default_zoom, c.is_active
+                          Index Cond: (c.slug = 'udupi'::text)
+                          Buffers: shared hit=2
+                    ->  Seq Scan on public.areas a  (cost=0.00..18.05 rows=2 width=116) (actual time=0.016..0.041 rows=33 loops=1)
+                          Output: a.area_key, a.city_id, a.name, a.district, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon
+                          Filter: (array_length(string_to_array(a.area_key, '|'::text), 1) = 4)
+                          Buffers: shared hit=1
+              ->  Seq Scan on public.area_overview_stats aos  (cost=0.00..1.06 rows=4 width=39) (actual time=0.002..0.002 rows=4 loops=12)
+                    Output: aos.area_key, aos.area_level, aos.listing_count_90d, aos.median_price_paise, aos.price_p10_paise, aos.price_p90_paise, aos.property_type_dist, aos.trend_direction, aos.trend_pct_change, aos.confidence_tier, aos.nearby_area_keys, aos.centroid_lat, aos.centroid_lon, aos.district_area_key, aos.updated_at, aos.min_lat, aos.min_lon, aos.max_lat, aos.max_lon, aos.geo_center_lat, aos.geo_center_lon, aos.city_slug
+                    Filter: ((aos.area_level)::text = 'locality'::text)
+                    Rows Removed by Filter: 1
+                    Buffers: shared hit=12
+        ->  GroupAggregate  (cost=6.16..6.18 rows=1 width=26) (actual time=0.006..0.008 rows=4 loops=12)
+              Output: property_listings.area_key, count(*)
+              Group Key: property_listings.area_key
+              Buffers: shared hit=11
+              ->  Sort  (cost=6.16..6.16 rows=1 width=18) (actual time=0.004..0.005 rows=12 loops=12)
+                    Output: property_listings.area_key
+                    Sort Key: property_listings.area_key
+                    Sort Method: quicksort  Memory: 25kB
+                    Buffers: shared hit=11
+                    ->  Index Scan using idx_property_listings_status_created_at on public.property_listings  (cost=0.14..6.15 rows=1 width=18) (actual time=0.009..0.026 rows=13 loops=1)
+                          Output: property_listings.area_key
+                          Index Cond: ((property_listings.status)::text = 'LIVE'::text)
+                          Filter: (property_listings.archived_at IS NULL)
+                          Buffers: shared hit=11
+        SubPlan 1
+          ->  Aggregate  (cost=1.45..1.46 rows=1 width=8) (actual time=0.004..0.004 rows=1 loops=12)
+                Output: count(*)
+                Buffers: shared hit=13
+                ->  Index Only Scan using idx_schools_area_key on public.schools s  (cost=0.15..1.42 rows=10 width=0) (actual time=0.002..0.003 rows=4 loops=12)
+                      Output: s.area_key
+                      Index Cond: (s.area_key = a.area_key)
+                      Heap Fetches: 0
+                      Buffers: shared hit=13
+Query Identifier: -7375391655581849959
+Planning:
+  Buffers: shared hit=11
+Planning Time: 1.639 ms
+Execution Time: 0.357 ms
+(63 rows)
+ROLLBACK

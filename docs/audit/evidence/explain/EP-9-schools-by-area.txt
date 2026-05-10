@@ -1,0 +1,30 @@
+=== EP-9 — /api/public/schools/by-area (IN|KA|Udupi|Manipal limit=20 offset=0; no board/category filter) ===
+Captured: 2026-05-10T21:50:56Z
+Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
+
+--- SQL ---
+SELECT s.id, s.name, s.board_type, s.board, s.latitude, s.longitude, s.address, s.prominence_tier, s.school_category FROM schools s WHERE s.area_key = 'IN|KA|Udupi|Manipal' ORDER BY s.name ASC, s.id ASC LIMIT 20 OFFSET 0
+
+--- EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ---
+BEGIN
+SET
+QUERY PLAN
+Limit  (cost=10.65..10.68 rows=12 width=194) (actual time=0.058..0.060 rows=12 loops=1)
+  Output: id, name, board_type, board, latitude, longitude, address, prominence_tier, school_category
+  Buffers: shared hit=6
+  ->  Sort  (cost=10.65..10.68 rows=12 width=194) (actual time=0.057..0.058 rows=12 loops=1)
+        Output: id, name, board_type, board, latitude, longitude, address, prominence_tier, school_category
+        Sort Key: s.name, s.id
+        Sort Method: quicksort  Memory: 27kB
+        Buffers: shared hit=6
+        ->  Index Scan using idx_schools_area_key on public.schools s  (cost=0.15..10.43 rows=12 width=194) (actual time=0.017..0.029 rows=12 loops=1)
+              Output: id, name, board_type, board, latitude, longitude, address, prominence_tier, school_category
+              Index Cond: (s.area_key = 'IN|KA|Udupi|Manipal'::text)
+              Buffers: shared hit=6
+Query Identifier: 6125602966025188759
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.121 ms
+Execution Time: 0.087 ms
+(17 rows)
+ROLLBACK

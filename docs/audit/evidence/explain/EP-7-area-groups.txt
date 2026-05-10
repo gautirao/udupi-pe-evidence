@@ -1,0 +1,41 @@
+=== EP-7 — /api/discover/area-groups (udupi) ===
+Captured: 2026-05-10T21:50:55Z
+Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
+
+--- SQL ---
+SELECT ag.slug, ag.name, ag.subtitle, ag.region_label, ag.display_order, agm.area_key, ag.focus_lat, ag.focus_lon, ag.min_lat, ag.min_lon, ag.max_lat, ag.max_lon FROM area_groups ag JOIN cities c ON c.id = ag.city_id LEFT JOIN area_group_members agm ON agm.area_group_id = ag.id WHERE c.slug = 'udupi' AND ag.is_active = true ORDER BY ag.display_order, agm.display_order
+
+--- EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ---
+BEGIN
+SET
+QUERY PLAN
+Sort  (cost=5.16..5.17 rows=3 width=216) (actual time=0.066..0.067 rows=10 loops=1)
+  Output: ag.slug, ag.name, ag.subtitle, ag.region_label, ag.display_order, agm.area_key, ag.focus_lat, ag.focus_lon, ag.min_lat, ag.min_lon, ag.max_lat, ag.max_lon, agm.display_order
+  Sort Key: ag.display_order, agm.display_order
+  Sort Method: quicksort  Memory: 26kB
+  Buffers: shared hit=14
+  ->  Nested Loop Left Join  (cost=0.45..5.14 rows=3 width=216) (actual time=0.041..0.054 rows=10 loops=1)
+        Output: ag.slug, ag.name, ag.subtitle, ag.region_label, ag.display_order, agm.area_key, ag.focus_lat, ag.focus_lon, ag.min_lat, ag.min_lon, ag.max_lat, ag.max_lon, agm.display_order
+        Buffers: shared hit=14
+        ->  Nested Loop  (cost=0.30..4.75 rows=1 width=184) (actual time=0.032..0.035 rows=5 loops=1)
+              Output: ag.slug, ag.name, ag.subtitle, ag.region_label, ag.display_order, ag.focus_lat, ag.focus_lon, ag.min_lat, ag.min_lon, ag.max_lat, ag.max_lon, ag.id
+              Buffers: shared hit=4
+              ->  Index Scan using cities_slug_key on public.cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.009..0.009 rows=1 loops=1)
+                    Output: c.id, c.slug, c.name, c.geo_center_lat, c.geo_center_lon, c.min_lat, c.min_lon, c.max_lat, c.max_lon, c.default_zoom, c.is_active
+                    Index Cond: (c.slug = 'udupi'::text)
+                    Buffers: shared hit=2
+              ->  Index Scan using idx_area_groups_city_active_order on public.area_groups ag  (cost=0.15..2.37 rows=1 width=188) (actual time=0.018..0.020 rows=5 loops=1)
+                    Output: ag.id, ag.city_id, ag.slug, ag.name, ag.subtitle, ag.region_label, ag.display_order, ag.is_active, ag.focus_lat, ag.focus_lon, ag.min_lat, ag.min_lon, ag.max_lat, ag.max_lon, ag.created_at
+                    Index Cond: ((ag.city_id = c.id) AND (ag.is_active = true))
+                    Buffers: shared hit=2
+        ->  Index Scan using idx_area_group_members_group_order on public.area_group_members agm  (cost=0.15..0.33 rows=6 width=40) (actual time=0.002..0.003 rows=2 loops=5)
+              Output: agm.id, agm.area_group_id, agm.area_key, agm.display_order
+              Index Cond: (agm.area_group_id = ag.id)
+              Buffers: shared hit=10
+Query Identifier: -8524265984657844121
+Planning:
+  Buffers: shared hit=13
+Planning Time: 0.286 ms
+Execution Time: 0.116 ms
+(28 rows)
+ROLLBACK

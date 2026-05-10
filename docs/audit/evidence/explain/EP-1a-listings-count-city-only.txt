@@ -1,0 +1,47 @@
+=== EP-1.a — COUNT(*) city-only (udupi) ===
+Captured: 2026-05-10T21:50:52Z
+Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
+
+--- SQL ---
+SELECT COUNT(*) FROM property_listings pl WHERE pl.status = 'LIVE' AND pl.archived_at IS NULL AND pl.is_duplicate = false AND pl.area_key IN (SELECT a.area_key FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'udupi')
+
+--- EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ---
+BEGIN
+SET
+QUERY PLAN
+Aggregate  (cost=8.74..8.75 rows=1 width=8) (actual time=0.091..0.092 rows=1 loops=1)
+  Output: count(*)
+  Buffers: shared hit=37
+  ->  Nested Loop Semi Join  (cost=0.45..8.74 rows=1 width=0) (actual time=0.044..0.087 rows=12 loops=1)
+        Buffers: shared hit=37
+        ->  Index Scan using idx_property_listings_status_created_at on public.property_listings pl  (cost=0.14..6.15 rows=1 width=18) (actual time=0.017..0.033 rows=13 loops=1)
+              Output: pl.id, pl.raw_post_id, pl.property_type, pl.title, pl.locality, pl.price, pl.price_unit, pl.land_area, pl.land_area_unit, pl.built_area, pl.built_area_unit, pl.bedrooms, pl.bathrooms, pl.contact_info, pl.contact_phone, pl.description, pl.latitude, pl.longitude, pl.confidence_score, pl.language_detected, pl.is_valid, pl.is_duplicate, pl.parsed_data, pl.updated_by, pl.created_at, pl.updated_at, pl.area_sqm, pl.area_sqft, pl.area_cent, pl.price_per_cent_paise, pl.repost_count, pl.area_key, pl.area_label, pl.status, pl.address_confirmed, pl.rejection_reason, pl.submitted_at, pl.reviewed_at, pl.reviewed_by, pl.created_by, pl.price_paise, pl.dedupe_hash, pl.search_vector, pl.video_url, pl.listing_number, pl.rera_number, pl.listing_purpose, pl.carpet_area, pl.carpet_area_unit, pl.floor_number, pl.total_floors, pl.furnishing_status, pl.washrooms, pl.parking_count, pl.road_frontage_ft, pl.commercial_usage, pl.number_of_units, pl.monthly_rent, pl.security_deposit_months, pl.lock_in_months, pl.seller_type, pl.archived_at, pl.is_suspected_duplicate, pl.first_published_at, pl.last_live_at, pl.back_to_market_at, pl.last_updated_at, pl.possession_status, pl.expected_possession_date, pl.approvals_declared, pl.status_changed_at, pl.status_changed_by_actor_type, pl.status_changed_by_actor_id, pl.status_reason_code, pl.status_reason_note, pl.approved_at, pl.rejected_at, pl.submission_count, pl.review_submitted_at, pl.last_approved_snapshot, pl.trust_tier, pl.ranking_score, pl.geog
+              Index Cond: ((pl.status)::text = 'LIVE'::text)
+              Filter: (pl.archived_at IS NULL)
+              Buffers: shared hit=11
+        ->  Nested Loop  (cost=0.31..2.58 rows=1 width=32) (actual time=0.004..0.004 rows=1 loops=13)
+              Output: a.area_key
+              Inner Unique: true
+              Buffers: shared hit=26
+              ->  Index Scan using areas_pkey on public.areas a  (cost=0.15..2.37 rows=1 width=36) (actual time=0.002..0.002 rows=1 loops=13)
+                    Output: a.area_key, a.city_id, a.name, a.district, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon
+                    Index Cond: (a.area_key = pl.area_key)
+                    Buffers: shared hit=24
+              ->  Memoize  (cost=0.16..0.21 rows=1 width=4) (actual time=0.001..0.001 rows=1 loops=12)
+                    Output: c.id
+                    Cache Key: a.city_id
+                    Cache Mode: logical
+                    Hits: 11  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                    Buffers: shared hit=2
+                    ->  Index Scan using cities_pkey on public.cities c  (cost=0.15..0.20 rows=1 width=4) (actual time=0.005..0.005 rows=1 loops=1)
+                          Output: c.id
+                          Index Cond: (c.id = a.city_id)
+                          Filter: (c.slug = 'udupi'::text)
+                          Buffers: shared hit=2
+Query Identifier: 8813159012958159936
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.362 ms
+Execution Time: 0.153 ms
+(34 rows)
+ROLLBACK

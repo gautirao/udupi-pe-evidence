@@ -1,0 +1,87 @@
+=== Dataset Baseline + Index Inventory ===
+Captured: 2026-05-10T21:49:34Z
+
+--- Row counts ---
+property_listings (total): 1466
+property_listings (status=LIVE): 76
+property_listings (LIVE + !archived + !duplicate): 13
+schools: 294
+schools (notable): 274
+schools (with area_key): 287
+schools (with district): 294
+listing_images: 2706
+areas: 33
+cities: 4
+area_overview_stats: 5
+area_groups: 10
+area_group_members: 23
+
+--- Per-city LIVE-visible listing counts ---
+bangalore (0 visible / 10 total)
+kundapur (0 visible / 3 total)
+mangalore (0 visible / 8 total)
+udupi (12 visible / 21 total)
+
+--- property_listings indexes ---
+idx_listing_area_key_status_created :: CREATE INDEX idx_listing_area_key_status_created ON public.property_listings USING btree (area_key, status, created_at DESC)
+idx_listings_trust_ranking :: CREATE INDEX idx_listings_trust_ranking ON public.property_listings USING btree (trust_tier, ranking_score DESC, created_at DESC)
+idx_property_listings_area_key :: CREATE INDEX idx_property_listings_area_key ON public.property_listings USING btree (area_key) WHERE (area_key IS NOT NULL)
+idx_property_listings_bbox_not_dup :: CREATE INDEX idx_property_listings_bbox_not_dup ON public.property_listings USING btree (latitude, longitude) WHERE (is_duplicate = false)
+idx_property_listings_coordinates :: CREATE INDEX idx_property_listings_coordinates ON public.property_listings USING btree (latitude, longitude)
+idx_property_listings_created_at :: CREATE INDEX idx_property_listings_created_at ON public.property_listings USING btree (created_at)
+idx_property_listings_created_by_created_at :: CREATE INDEX idx_property_listings_created_by_created_at ON public.property_listings USING btree (created_by, created_at DESC) WHERE (created_by IS NOT NULL)
+idx_property_listings_dedupe_hash :: CREATE INDEX idx_property_listings_dedupe_hash ON public.property_listings USING btree (dedupe_hash) WHERE (dedupe_hash IS NOT NULL)
+idx_property_listings_geog :: CREATE INDEX idx_property_listings_geog ON public.property_listings USING gist (geog) WHERE (geog IS NOT NULL)
+idx_property_listings_lat_lon :: CREATE INDEX idx_property_listings_lat_lon ON public.property_listings USING btree (latitude, longitude) WHERE ((latitude IS NOT NULL) AND (longitude IS NOT NULL))
+idx_property_listings_locality :: CREATE INDEX idx_property_listings_locality ON public.property_listings USING btree (locality)
+idx_property_listings_not_archived :: CREATE INDEX idx_property_listings_not_archived ON public.property_listings USING btree (created_by, status) WHERE (archived_at IS NULL)
+idx_property_listings_price :: CREATE INDEX idx_property_listings_price ON public.property_listings USING btree (price)
+idx_property_listings_price_per_cent_paise :: CREATE INDEX idx_property_listings_price_per_cent_paise ON public.property_listings USING btree (price_per_cent_paise) WHERE (price_per_cent_paise IS NOT NULL)
+idx_property_listings_property_type :: CREATE INDEX idx_property_listings_property_type ON public.property_listings USING btree (property_type)
+idx_property_listings_raw_post_id_unique :: CREATE UNIQUE INDEX idx_property_listings_raw_post_id_unique ON public.property_listings USING btree (raw_post_id) WHERE (raw_post_id IS NOT NULL)
+idx_property_listings_search_vector :: CREATE INDEX idx_property_listings_search_vector ON public.property_listings USING gin (search_vector)
+idx_property_listings_seller_type :: CREATE INDEX idx_property_listings_seller_type ON public.property_listings USING btree (seller_type)
+idx_property_listings_status :: CREATE INDEX idx_property_listings_status ON public.property_listings USING btree (status)
+idx_property_listings_status_created_at :: CREATE INDEX idx_property_listings_status_created_at ON public.property_listings USING btree (status, created_at DESC) WHERE (is_duplicate = false)
+property_listings_pkey :: CREATE UNIQUE INDEX property_listings_pkey ON public.property_listings USING btree (id)
+uq_listing_number :: CREATE UNIQUE INDEX uq_listing_number ON public.property_listings USING btree (listing_number)
+
+--- schools indexes ---
+idx_schools_area_key :: CREATE INDEX idx_schools_area_key ON public.schools USING btree (area_key)
+idx_schools_geog :: CREATE INDEX idx_schools_geog ON public.schools USING gist (geog) WHERE (geog IS NOT NULL)
+idx_schools_lat_lon :: CREATE INDEX idx_schools_lat_lon ON public.schools USING btree (latitude, longitude)
+idx_schools_name :: CREATE INDEX idx_schools_name ON public.schools USING btree (name)
+idx_schools_udise_code :: CREATE UNIQUE INDEX idx_schools_udise_code ON public.schools USING btree (udise_code) WHERE (udise_code IS NOT NULL)
+schools_pkey :: CREATE UNIQUE INDEX schools_pkey ON public.schools USING btree (id)
+
+--- listing_images indexes ---
+idx_listing_images_listing_id :: CREATE INDEX idx_listing_images_listing_id ON public.listing_images USING btree (listing_id)
+idx_listing_images_listing_position :: CREATE INDEX idx_listing_images_listing_position ON public.listing_images USING btree (listing_id, "position")
+listing_images_pkey :: CREATE UNIQUE INDEX listing_images_pkey ON public.listing_images USING btree (id)
+uq_listing_images_listing_path :: CREATE UNIQUE INDEX uq_listing_images_listing_path ON public.listing_images USING btree (listing_id, storage_path)
+
+--- areas / cities / area_overview_stats / area_groups indexes ---
+area_group_members.area_group_members_area_group_id_area_key_key
+area_group_members.area_group_members_pkey
+area_group_members.idx_area_group_members_group_order
+area_groups.area_groups_city_id_slug_key
+area_groups.area_groups_pkey
+area_groups.idx_area_groups_city_active_order
+area_overview_stats.area_overview_stats_pkey
+areas.areas_pkey
+cities.cities_pkey
+cities.cities_slug_key
+
+--- Extensions installed ---
+pg_stat_statements 1.11
+pgcrypto 1.3
+plpgsql 1.0
+postgis 3.3.7
+postgres_fdw 1.1
+supabase_vault 0.3.1
+uuid-ossp 1.1
+
+--- pg_stat_statements + auto_explain check ---
+pg_stat_statements: 1
+(auto_explain is a loadable module — check shared_preload_libraries below)
+pg_stat_statements, pgaudit, plpgsql, plpgsql_check, pg_cron, pg_net, pgsodium, auto_explain, pg_tle, plan_filter, supabase_vault

@@ -1,0 +1,65 @@
+=== EP-8 — /api/public/schools/popular (udupi limit=5; prominence_tier='notable' + district IN subquery) ===
+Captured: 2026-05-10T21:50:56Z
+Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
+
+--- SQL ---
+SELECT s.* FROM schools s WHERE s.prominence_tier = 'notable' AND s.district IN ( SELECT DISTINCT a.district FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = 'udupi' ) ORDER BY s.name ASC, s.id ASC LIMIT 5
+
+--- EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ---
+BEGIN
+SET
+QUERY PLAN
+Limit  (cost=18.97..21.54 rows=5 width=3346) (actual time=1.462..1.465 rows=5 loops=1)
+  Output: s.id, s.name, s.board_type, s.latitude, s.longitude, s.address, s.district, s.source, s.created_at, s.udise_code, s.state, s.board, s.serial_no, s.block, s.village, s.cluster, s.location, s.state_mgmt, s.national_mgmt, s.school_category, s.school_type, s.school_status, s.osm_id, s.osm_name, s.match_confidence, s.match_method, s.coordinate_source, s.coordinate_precision, s.prominence_tier, s.geog, s.area_key
+  Buffers: shared hit=38
+  ->  Incremental Sort  (cost=18.97..65.78 rows=91 width=3346) (actual time=1.461..1.463 rows=5 loops=1)
+        Output: s.id, s.name, s.board_type, s.latitude, s.longitude, s.address, s.district, s.source, s.created_at, s.udise_code, s.state, s.board, s.serial_no, s.block, s.village, s.cluster, s.location, s.state_mgmt, s.national_mgmt, s.school_category, s.school_type, s.school_status, s.osm_id, s.osm_name, s.match_confidence, s.match_method, s.coordinate_source, s.coordinate_precision, s.prominence_tier, s.geog, s.area_key
+        Sort Key: s.name, s.id
+        Presorted Key: s.name
+        Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 27kB  Peak Memory: 27kB
+        Buffers: shared hit=38
+        ->  Nested Loop  (cost=18.48..61.68 rows=91 width=3346) (actual time=1.397..1.441 rows=6 loops=1)
+              Output: s.id, s.name, s.board_type, s.latitude, s.longitude, s.address, s.district, s.source, s.created_at, s.udise_code, s.state, s.board, s.serial_no, s.block, s.village, s.cluster, s.location, s.state_mgmt, s.national_mgmt, s.school_category, s.school_type, s.school_status, s.osm_id, s.osm_name, s.match_confidence, s.match_method, s.coordinate_source, s.coordinate_precision, s.prominence_tier, s.geog, s.area_key
+              Inner Unique: true
+              Join Filter: ((s.district)::text = a.district)
+              Rows Removed by Join Filter: 39
+              Buffers: shared hit=38
+              ->  Index Scan using idx_schools_name on public.schools s  (cost=0.27..39.35 rows=274 width=3346) (actual time=1.315..1.353 rows=45 loops=1)
+                    Output: s.id, s.name, s.board_type, s.latitude, s.longitude, s.address, s.district, s.source, s.created_at, s.udise_code, s.state, s.board, s.serial_no, s.block, s.village, s.cluster, s.location, s.state_mgmt, s.national_mgmt, s.school_category, s.school_type, s.school_status, s.osm_id, s.osm_name, s.match_confidence, s.match_method, s.coordinate_source, s.coordinate_precision, s.prominence_tier, s.geog, s.area_key
+                    Filter: ((s.prominence_tier)::text = 'notable'::text)
+                    Rows Removed by Filter: 6
+                    Buffers: shared hit=35
+              ->  Materialize  (cost=18.21..18.22 rows=1 width=32) (actual time=0.001..0.002 rows=1 loops=45)
+                    Output: a.district
+                    Buffers: shared hit=3
+                    ->  Unique  (cost=18.21..18.22 rows=1 width=32) (actual time=0.061..0.065 rows=1 loops=1)
+                          Output: a.district
+                          Buffers: shared hit=3
+                          ->  Sort  (cost=18.21..18.21 rows=1 width=32) (actual time=0.060..0.062 rows=12 loops=1)
+                                Output: a.district
+                                Sort Key: a.district
+                                Sort Method: quicksort  Memory: 25kB
+                                Buffers: shared hit=3
+                                ->  Hash Join  (cost=2.38..18.20 rows=1 width=32) (actual time=0.036..0.042 rows=12 loops=1)
+                                      Output: a.district
+                                      Inner Unique: true
+                                      Hash Cond: (a.city_id = c.id)
+                                      Buffers: shared hit=3
+                                      ->  Seq Scan on public.areas a  (cost=0.00..14.60 rows=460 width=36) (actual time=0.011..0.014 rows=33 loops=1)
+                                            Output: a.area_key, a.city_id, a.name, a.district, a.geo_center_lat, a.geo_center_lon, a.min_lat, a.min_lon, a.max_lat, a.max_lon
+                                            Buffers: shared hit=1
+                                      ->  Hash  (cost=2.37..2.37 rows=1 width=4) (actual time=0.012..0.013 rows=1 loops=1)
+                                            Output: c.id
+                                            Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                            Buffers: shared hit=2
+                                            ->  Index Scan using cities_slug_key on public.cities c  (cost=0.15..2.37 rows=1 width=4) (actual time=0.009..0.010 rows=1 loops=1)
+                                                  Output: c.id
+                                                  Index Cond: (c.slug = 'udupi'::text)
+                                                  Buffers: shared hit=2
+Query Identifier: -3594987551951659685
+Planning:
+  Buffers: shared hit=82
+Planning Time: 1.054 ms
+Execution Time: 1.522 ms
+(52 rows)
+ROLLBACK

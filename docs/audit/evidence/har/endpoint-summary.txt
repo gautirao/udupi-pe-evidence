@@ -1,0 +1,103 @@
+=== Discover Endpoint Summary (warm Render, public anonymous GETs) ===
+Captured: 2026-05-10T21:55:13Z
+Base: https://udupi-property-explorer.onrender.com  (deployed Render instance — same code & schema as local backend)
+Trials: 3 per endpoint, sequential; warm baseline (cold start was ~43s on first probe).
+Auth: NONE (anonymous public GETs per JwtConfig.permitAll for /api/discover/** and /api/public/schools/**).
+Dataset: property_listings = 13 LIVE+visible (12 in Udupi); schools = 294.
+Method: curl -w timing format → summarised network table (per ChatGPT PLAN_REVIEW APPROVED for use in lieu of raw HAR).
+
+Note on waterfall: Each row below is a SEQUENTIAL probe of one endpoint.
+The frontend journey states fire 2-5 of these in PARALLEL (see Phase 1 frontend-findings.md Q1).
+Per-endpoint total here = backend round-trip time when run alone; parallel timings under load could differ due to pool contention.
+
+== EP-1.a /api/discover/listings  (city only — used in S1 city landing, S2 area-groups)
+URL: https://udupi-property-explorer.onrender.com/api/discover/listings?city=udupi&page=0&size=50
+  trial-1: 401 | dns=0.005555s | conn=0.015192s | ssl=0.030820s | ttfb=0.277075s | total=0.277203s | bytes=0B
+  trial-2: 401 | dns=0.004898s | conn=0.014172s | ssl=0.031499s | ttfb=0.219019s | total=0.219059s | bytes=0B
+  trial-3: 401 | dns=0.002860s | conn=0.012083s | ssl=0.026649s | ttfb=0.267287s | total=0.267348s | bytes=0B
+
+== EP-1.b /api/discover/listings?includeAggregates=true  (used when aggregate cards visible)
+URL: https://udupi-property-explorer.onrender.com/api/discover/listings?city=udupi&page=0&size=50&includeAggregates=true
+  trial-1: 401 | dns=0.003188s | conn=0.023147s | ssl=0.038223s | ttfb=0.581429s | total=0.581819s | bytes=0B
+  trial-2: 401 | dns=0.005217s | conn=0.015491s | ssl=0.032153s | ttfb=0.198440s | total=0.198606s | bytes=0B
+  trial-3: 401 | dns=0.003618s | conn=0.012053s | ssl=0.029149s | ttfb=0.511696s | total=0.511763s | bytes=0B
+
+== EP-1.c /api/discover/listings + bbox  (used in S1/S2/S3 with viewport)
+URL: https://udupi-property-explorer.onrender.com/api/discover/listings?city=udupi&page=0&size=50&bboxSouth=13.209&bboxWest=74.698&bboxNorth=13.362&bboxEast=74.790
+  trial-1: 401 | dns=0.006046s | conn=0.011445s | ssl=0.023764s | ttfb=0.210761s | total=0.210949s | bytes=0B
+  trial-2: 401 | dns=0.005845s | conn=0.013666s | ssl=0.031168s | ttfb=0.529417s | total=0.529513s | bytes=0B
+  trial-3: 401 | dns=0.004912s | conn=0.011239s | ssl=0.021408s | ttfb=0.202678s | total=0.202786s | bytes=0B
+
+== EP-1.d /api/discover/listings + schoolLat/schoolLon/schoolRadiusKm  (used in S7 school-selected)
+URL: https://udupi-property-explorer.onrender.com/api/discover/listings?city=udupi&page=0&size=50&schoolLat=13.290&schoolLon=74.740&schoolRadiusKm=5
+  trial-1: 401 | dns=0.003735s | conn=0.009952s | ssl=0.021963s | ttfb=0.182075s | total=0.182112s | bytes=0B
+  trial-2: 401 | dns=0.003152s | conn=0.099096s | ssl=0.109118s | ttfb=0.284721s | total=0.284795s | bytes=0B
+  trial-3: 401 | dns=0.003880s | conn=0.013320s | ssl=0.029298s | ttfb=0.208159s | total=0.208246s | bytes=0B
+
+== EP-1.e /api/discover/listings + filters  (used in S4 area+filters)
+URL: https://udupi-property-explorer.onrender.com/api/discover/listings?city=udupi&page=0&size=50&bedrooms=2&bedrooms=3
+  trial-1: 401 | dns=0.008672s | conn=0.018256s | ssl=0.036459s | ttfb=0.205632s | total=0.205739s | bytes=0B
+  trial-2: 401 | dns=0.004552s | conn=0.010014s | ssl=0.021484s | ttfb=0.252453s | total=0.252560s | bytes=0B
+  trial-3: 401 | dns=0.003842s | conn=0.008595s | ssl=0.020406s | ttfb=0.197169s | total=0.197235s | bytes=0B
+
+== EP-3.a /api/discover/markers  (city only — STATIC_CODE_RISK: unbounded payload path)
+URL: https://udupi-property-explorer.onrender.com/api/discover/markers?city=udupi
+  trial-1: 401 | dns=0.003981s | conn=0.013609s | ssl=0.030924s | ttfb=0.279711s | total=0.279780s | bytes=0B
+  trial-2: 401 | dns=0.002889s | conn=0.008722s | ssl=0.021260s | ttfb=0.186770s | total=0.186882s | bytes=0B
+  trial-3: 401 | dns=0.004930s | conn=0.013954s | ssl=0.030231s | ttfb=0.287148s | total=0.287519s | bytes=0B
+
+== EP-3.b /api/discover/markers + bbox  (typical zoom>12 path)
+URL: https://udupi-property-explorer.onrender.com/api/discover/markers?city=udupi&bboxSouth=13.209&bboxWest=74.698&bboxNorth=13.362&bboxEast=74.790
+  trial-1: 401 | dns=0.002932s | conn=0.010613s | ssl=0.027335s | ttfb=0.224366s | total=0.224514s | bytes=0B
+  trial-2: 401 | dns=0.005263s | conn=0.014378s | ssl=0.029794s | ttfb=0.232379s | total=0.232452s | bytes=0B
+  trial-3: 401 | dns=0.006445s | conn=0.011868s | ssl=0.022542s | ttfb=0.197529s | total=0.197667s | bytes=0B
+
+== EP-3.c /api/discover/markers + schoolLat/schoolLon  (S7 path)
+URL: https://udupi-property-explorer.onrender.com/api/discover/markers?city=udupi&schoolLat=13.290&schoolLon=74.740&schoolRadiusKm=5
+  trial-1: 401 | dns=0.005326s | conn=0.013308s | ssl=0.026647s | ttfb=0.274326s | total=0.274501s | bytes=0B
+  trial-2: 401 | dns=0.007826s | conn=0.016847s | ssl=0.032415s | ttfb=0.208830s | total=0.209008s | bytes=0B
+  trial-3: 401 | dns=0.007011s | conn=0.014812s | ssl=0.029650s | ttfb=0.575282s | total=0.575464s | bytes=0B
+
+== EP-4 /api/listings/markers  (legacy controller — confirm not on Discover hot path)
+URL: https://udupi-property-explorer.onrender.com/api/listings/markers?city=udupi
+  trial-1: 200 | dns=0.007723s | conn=0.014131s | ssl=0.025984s | ttfb=0.327434s | total=0.327989s | bytes=1190B
+  trial-2: 200 | dns=0.005525s | conn=0.015609s | ssl=0.034035s | ttfb=0.397322s | total=0.397876s | bytes=1190B
+  trial-3: 200 | dns=0.010265s | conn=0.020253s | ssl=0.038996s | ttfb=0.835122s | total=0.835364s | bytes=1190B
+
+== EP-5 /api/discover/cities/udupi/listings  (S3/S4 area-selected card list)
+URL: https://udupi-property-explorer.onrender.com/api/discover/cities/udupi/listings?areaKeys=IN%7CKA%7CUdupi%7CManipal&limitPerArea=5
+  trial-1: 200 | dns=0.006148s | conn=0.099097s | ssl=0.126664s | ttfb=0.974609s | total=0.974979s | bytes=2167B
+  trial-2: 200 | dns=0.003748s | conn=0.011194s | ssl=0.024600s | ttfb=0.701902s | total=0.702803s | bytes=2167B
+  trial-3: 200 | dns=0.003260s | conn=0.012332s | ssl=0.033779s | ttfb=0.695834s | total=0.696485s | bytes=2167B
+
+== EP-6 /api/discover/areas  (S1/S2/S3 always firing)
+URL: https://udupi-property-explorer.onrender.com/api/discover/areas?city=udupi
+  trial-1: 200 | dns=0.003589s | conn=0.010698s | ssl=0.024310s | ttfb=0.469461s | total=0.469844s | bytes=2618B
+  trial-2: 200 | dns=0.005143s | conn=0.015442s | ssl=0.034638s | ttfb=0.459555s | total=0.460291s | bytes=2618B
+  trial-3: 200 | dns=0.008148s | conn=0.017309s | ssl=0.034951s | ttfb=0.358673s | total=0.360682s | bytes=2618B
+
+== EP-7 /api/discover/area-groups  (S1/S2 always firing; cacheable)
+URL: https://udupi-property-explorer.onrender.com/api/discover/area-groups?city=udupi
+  trial-1: 200 | dns=0.004687s | conn=0.013854s | ssl=0.032139s | ttfb=0.476209s | total=0.477710s | bytes=1484B
+  trial-2: 200 | dns=0.004572s | conn=0.010204s | ssl=0.021620s | ttfb=0.470032s | total=0.470234s | bytes=1484B
+  trial-3: 200 | dns=0.003137s | conn=0.010104s | ssl=0.022228s | ttfb=0.574086s | total=0.574233s | bytes=1484B
+
+== EP-8 /api/public/schools/popular  (S5 school-first landing)
+URL: https://udupi-property-explorer.onrender.com/api/public/schools/popular?city=udupi&limit=5
+  trial-1: 200 | dns=0.002531s | conn=0.012358s | ssl=0.027221s | ttfb=0.634526s | total=0.634645s | bytes=1658B
+  trial-2: 200 | dns=0.003747s | conn=0.009941s | ssl=0.027994s | ttfb=0.643712s | total=0.645317s | bytes=1658B
+  trial-3: 200 | dns=0.003780s | conn=0.012782s | ssl=0.031634s | ttfb=0.570965s | total=0.572128s | bytes=1658B
+
+== EP-9 /api/public/schools/by-area  (S6 schools-in-area)
+URL: https://udupi-property-explorer.onrender.com/api/public/schools/by-area?areaKey=IN%7CKA%7CUdupi%7CManipal&size=20
+  trial-1: 200 | dns=0.004084s | conn=0.102100s | ssl=0.119921s | ttfb=1.947677s | total=1.948016s | bytes=3969B
+  trial-2: 200 | dns=0.004292s | conn=0.010608s | ssl=0.020775s | ttfb=0.770161s | total=0.771434s | bytes=3969B
+  trial-3: 200 | dns=0.003481s | conn=0.011029s | ssl=0.028577s | ttfb=0.527428s | total=0.528309s | bytes=3969B
+
+== EP-10 /api/public/schools/nearby  (lat/lon radius=5km — measured Seq Scan; idx_schools_geog NOT used)
+URL: https://udupi-property-explorer.onrender.com/api/public/schools/nearby?lat=13.290&lon=74.740&radiusMeters=5000
+  trial-1: 200 | dns=0.004755s | conn=0.014616s | ssl=0.031987s | ttfb=0.451353s | total=0.452141s | bytes=2B
+  trial-2: 200 | dns=0.005268s | conn=0.014720s | ssl=0.032631s | ttfb=0.706101s | total=0.708514s | bytes=2B
+  trial-3: 200 | dns=0.005011s | conn=0.013611s | ssl=0.030299s | ttfb=0.761003s | total=0.761542s | bytes=2B
+
+=== DONE ===

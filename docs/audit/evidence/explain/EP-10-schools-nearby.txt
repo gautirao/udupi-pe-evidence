@@ -1,0 +1,28 @@
+=== EP-10 — /api/public/schools/nearby (lat=13.29 lon=74.74 radius=5km — uses ST_DWithin on ST_Point(lon,lat) — RECOMPUTED point, NOT s.geog stored column) ===
+Captured: 2026-05-10T21:50:56Z
+Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
+
+--- SQL ---
+SELECT s.id, s.name, s.board_type AS boardType, s.board, s.latitude, s.longitude, s.address, s.prominence_tier AS prominenceTier, s.school_category AS schoolCategory, ST_Distance(ST_Point(s.longitude, s.latitude)::geography, ST_Point(74.740, 13.290)::geography) / 1000.0 AS distanceKm FROM schools s WHERE ST_DWithin(ST_Point(s.longitude, s.latitude)::geography, ST_Point(74.740, 13.290)::geography, 5000) ORDER BY distanceKm ASC
+
+--- EXPLAIN (ANALYZE, BUFFERS, VERBOSE) ---
+BEGIN
+SET
+QUERY PLAN
+Sort  (cost=7440.57..7440.57 rows=1 width=202) (actual time=83.648..83.648 rows=1 loops=1)
+  Output: id, name, board_type, board, latitude, longitude, address, prominence_tier, school_category, ((st_distance((st_point(longitude, latitude))::geography, '0101000020E61000008FC2F5285CAF524014AE47E17A942A40'::geography, true) / '1000'::double precision))
+  Sort Key: ((st_distance((st_point(s.longitude, s.latitude))::geography, '0101000020E61000008FC2F5285CAF524014AE47E17A942A40'::geography, true) / '1000'::double precision))
+  Sort Method: quicksort  Memory: 25kB
+  Buffers: shared hit=86
+  ->  Seq Scan on public.schools s  (cost=0.00..7440.56 rows=1 width=202) (actual time=83.022..83.629 rows=1 loops=1)
+        Output: id, name, board_type, board, latitude, longitude, address, prominence_tier, school_category, (st_distance((st_point(longitude, latitude))::geography, '0101000020E61000008FC2F5285CAF524014AE47E17A942A40'::geography, true) / '1000'::double precision)
+        Filter: st_dwithin((st_point(s.longitude, s.latitude))::geography, '0101000020E61000008FC2F5285CAF524014AE47E17A942A40'::geography, '5000'::double precision, true)
+        Rows Removed by Filter: 293
+        Buffers: shared hit=83
+Query Identifier: -7768662525306039281
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.166 ms
+Execution Time: 83.695 ms
+(15 rows)
+ROLLBACK
