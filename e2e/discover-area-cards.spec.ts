@@ -25,10 +25,13 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SS = (name: string) => path.join(__dirname, `../screenshots/area-cards-${name}.png`);
 
-// Area card markers: makeAreaCard uses className:'' so only the base Leaflet
-// classes are present. Use '.leaflet-marker-icon' to select them.
-// (The old '.area-marker' class was from the pre-#887 makeAreaIcon DivIcon.)
-const AREA_MARKER = '.leaflet-marker-icon';
+// Area card markers have className 'area-marker' (set by makeAreaCard divIcon
+// per AreaMarkerLayer.tsx:85) in addition to the base 'leaflet-marker-icon'
+// Leaflet class. Use the intersection selector to disambiguate area markers
+// from listing/school/cluster markers — matches the pattern already used in
+// discover-area-nav-journey.spec.ts, discover-viewport.spec.ts, and
+// discover-to-trends.spec.ts.
+const AREA_MARKER = '.leaflet-marker-icon.area-marker';
 
 // Helper to extract URL param for cleaner assertions
 function getUrlParam(page: import('@playwright/test').Page, key: string): string | null {
@@ -60,7 +63,7 @@ test.describe('Discover — area cards (B-switch)', () => {
     await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
 
     // ── Step 2: Wait for area marker cards ───────────────────────────────────
-    // makeAreaCard produces .leaflet-marker-icon divicons (className:'')
+    // makeAreaCard produces .leaflet-marker-icon.area-marker divicons
     const firstMarker = page.locator(AREA_MARKER).first();
     await expect(firstMarker).toBeVisible({ timeout: 12_000 });
     await page.screenshot({ path: SS('03-before-click'), fullPage: false });
