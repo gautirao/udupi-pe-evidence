@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
   test.beforeEach(async ({ page }) => {
     // Load discover page with area selected (use a test area key from seed data)
-    // Format: city|areaKey|city_code — using a known test area
-    await page.goto('/discover?areaKey=test-area|udupi|udupi');
+    // Format: Country|State|City|Area — using Manipal, a known area in Udupi city
+    await page.goto('/discover?areaKey=IN|KA|Udupi|Manipal');
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
   });
 
