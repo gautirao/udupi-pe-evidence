@@ -112,3 +112,53 @@ describe('derivePanelContent — area-school-combined', () => {
     ).toBe('area-school-combined');
   });
 });
+
+describe('derivePanelContent — precedence rules (regression + new inference)', () => {
+  // Case 1: journey='area-first' + areaKey → 'area-selected' (existing)
+  it('Case 1: journey=area-first + areaKey → area-selected', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'area-first', areaKey: 'udupi-west' })),
+    ).toBe('area-selected');
+  });
+
+  // Case 2: journey='area-first' + no areaKey → 'area-groups-landing' (existing)
+  it('Case 2: journey=area-first + no areaKey → area-groups-landing', () => {
+    expect(derivePanelContent(makeState({ journey: 'area-first' }))).toBe('area-groups-landing');
+  });
+
+  // Case 3: journey='school-first' + schoolId → 'school-selected' (existing)
+  it('Case 3: journey=school-first + schoolId → school-selected', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'school-first', schoolId: 'sch-1' })),
+    ).toBe('school-selected');
+  });
+
+  // Case 4: journey='school-first' + areaKey + no schoolId → 'schools-in-area' (existing)
+  it('Case 4: journey=school-first + areaKey (no schoolId) → schools-in-area', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'school-first', areaKey: 'udupi-west' })),
+    ).toBe('schools-in-area');
+  });
+
+  // Case 5: no journey + areaKey + no schoolId → 'area-selected' (NEW: #1049 fix)
+  it('Case 5: no journey + areaKey (no schoolId) → area-selected (infer area-first)', () => {
+    expect(derivePanelContent(makeState({ areaKey: 'udupi-west' }))).toBe('area-selected');
+  });
+
+  // Case 6: no journey + schoolId → 'school-selected' (NEW: protect #1038 cold-load)
+  it('Case 6: no journey + schoolId → school-selected (cold-load protection)', () => {
+    expect(derivePanelContent(makeState({ schoolId: 'sch-1' }))).toBe('school-selected');
+  });
+
+  // Case 7: no journey + no areaKey + no schoolId → 'guided-entry' (city-only)
+  it('Case 7: no journey + no areaKey + no schoolId → guided-entry', () => {
+    expect(derivePanelContent(makeState())).toBe('guided-entry');
+  });
+
+  // Case 8: areaKey + schoolId → 'area-school-combined' (both present, highest priority)
+  it('Case 8: areaKey + schoolId (both present) → area-school-combined', () => {
+    expect(
+      derivePanelContent(makeState({ areaKey: 'udupi-west', schoolId: 'sch-1' })),
+    ).toBe('area-school-combined');
+  });
+});
