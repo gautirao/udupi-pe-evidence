@@ -30,6 +30,11 @@ const SS = (name: string) => path.join(__dirname, `../screenshots/area-cards-${n
 // (The old '.area-marker' class was from the pre-#887 makeAreaIcon DivIcon.)
 const AREA_MARKER = '.leaflet-marker-icon';
 
+// Helper to extract URL param for cleaner assertions
+function getUrlParam(page: import('@playwright/test').Page, key: string): string | null {
+  return new URL(page.url()).searchParams.get(key);
+}
+
 test.describe('Discover — area cards (B-switch)', () => {
   test('area markers appear on the map for default Udupi city', async ({ page }) => {
     // ── Step 1: Load Discover with Udupi at default zoom ─────────────────────
@@ -69,7 +74,26 @@ test.describe('Discover — area cards (B-switch)', () => {
     // navigate to /trends. The right panel shows the area name in the header
     // and begins loading listing cards.
     await expect(page.getByTestId('back-button')).toBeVisible({ timeout: 8_000 });
-    await expect(page).toHaveURL('/discover?city=udupi'); // URL unchanged
+
+    // After marker click: areaKey is pushed (selectArea), viewport is REPLACED
+    // (reportViewport debounce ~300ms). This URL is bookmarkable per #1043/#1047
+    // architecture; viewport restoration handles Back/Forward.
+
+    // Verify areaKey was pushed by selectArea
+    expect(getUrlParam(page, 'areaKey')).toBeTruthy();
+
+    // Verify each viewport param is present after reportViewport debounce
+    // Use expect.poll to avoid brittle fixed timeouts around the 300ms debounce
+    await expect.poll(() => getUrlParam(page, 'lat'), {
+      timeout: 2000,
+    }).toBeTruthy();
+    await expect.poll(() => getUrlParam(page, 'lon'), {
+      timeout: 2000,
+    }).toBeTruthy();
+    await expect.poll(() => getUrlParam(page, 'zoom'), {
+      timeout: 2000,
+    }).toBeTruthy();
+
     await page.screenshot({ path: SS('04-area-selected-right-panel'), fullPage: false });
   });
 
