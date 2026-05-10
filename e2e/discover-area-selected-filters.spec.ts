@@ -33,10 +33,10 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
     // Chip should be highlighted (bg-primary)
     await expect(apartmentChip).toHaveClass(/bg-primary/);
 
-    // URL should contain propertyTypes filter
+    // URL should contain type filter (canonical param name)
     await page.waitForTimeout(300); // Allow debounce
     const url = page.url();
-    expect(url).toContain('propertyTypes=apartment');
+    expect(url).toContain('type=apartment');
   });
 
   test('toggles BHK chip and filters listings', async ({ page }) => {
@@ -47,10 +47,10 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
     // Chip should be highlighted
     await expect(bhk2Chip).toHaveClass(/bg-primary/);
 
-    // URL should contain bedrooms filter
+    // URL should contain beds filter (canonical param name)
     await page.waitForTimeout(300);
     const url = page.url();
-    expect(url).toContain('bedrooms=2');
+    expect(url).toContain('beds=2');
   });
 
   test('combines multiple quick filters', async ({ page }) => {
@@ -60,8 +60,8 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
 
     await page.waitForTimeout(300);
     const url = page.url();
-    expect(url).toContain('propertyTypes=apartment');
-    expect(url).toContain('bedrooms=2');
+    expect(url).toContain('type=apartment');
+    expect(url).toContain('beds=2');
   });
 
   test('deselects chip when clicked again', async ({ page }) => {
@@ -107,8 +107,8 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
 
     await page.waitForTimeout(300);
     let url = page.url();
-    expect(url).toContain('propertyTypes=apartment');
-    expect(url).toContain('bedrooms=2');
+    expect(url).toContain('type=apartment');
+    expect(url).toContain('beds=2');
 
     // Click clear if visible
     const clearButton = page.locator('[data-testid="clear-filters-button"]');
@@ -117,8 +117,8 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
       await page.waitForTimeout(300);
 
       url = page.url();
-      expect(url).not.toContain('propertyTypes');
-      expect(url).not.toContain('bedrooms');
+      expect(url).not.toMatch(/[&?]type=/);
+      expect(url).not.toMatch(/[&?]beds=/);
 
       // Chips should no longer be highlighted
       await expect(page.locator('[data-testid="quick-chip-apartment"]')).not.toHaveClass(/bg-primary/);
@@ -146,7 +146,7 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
     await page.waitForTimeout(300);
 
     let url = page.url();
-    expect(url).toContain('propertyTypes=apartment');
+    expect(url).toContain('type=apartment');
 
     // Click add school CTA
     await page.locator('[data-testid="add-school-cta"]').click();
@@ -154,7 +154,7 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
 
     // Property filters should still be in URL
     url = page.url();
-    expect(url).toContain('propertyTypes=apartment');
+    expect(url).toContain('type=apartment');
     expect(url).toContain('journey=school-first');
   });
 
@@ -164,7 +164,7 @@ test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
     await page.waitForTimeout(300);
 
     let url = page.url();
-    expect(url).toContain('propertyTypes=apartment');
+    expect(url).toContain('type=apartment');
 
     // Switch city (click city selector dropdown if available)
     const cityButton = page.locator('[data-testid="city-selector"]').first();
