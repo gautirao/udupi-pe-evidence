@@ -14,6 +14,22 @@ import { ScaleHud } from '@/dev/ScaleHud';
 import { Card } from '@/components/ui/card';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
+
+/**
+ * Maximum zoom at which the area-overview marker layer remains visible.
+ *
+ * Mirrors the canonical `AREA_LAYER_MAX_ZOOM` in `src/pages/MapDiscovery.tsx`
+ * (importing from MapDiscovery would create a circular module dependency,
+ * since MapDiscovery imports PropertyMap). A drift-guard test in
+ * `PropertyMap.areaPanner.test.tsx` asserts both constants stay in sync.
+ *
+ * Used by AreaPanner: when fitBounds receives a synthetic group-bounds
+ * AreaPoint (areaKey === GROUP_BOUNDS_SYNTHETIC_KEY), clamping maxZoom to
+ * this value keeps narrow groups (e.g. University Belt) within the zoom
+ * band where the area-overview markers are still rendered (issue #1069).
+ */
+export const AREA_PANNER_GROUP_MAX_ZOOM = 12;
 
 // Extended listing with images for map display
 export interface PropertyListingWithImages extends PropertyListing {
@@ -285,7 +301,15 @@ function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
   useEffect(() => {
     if (!panToArea) return;
     if (panToArea.bbox) {
-      map.fitBounds(panToArea.bbox, { padding: [40, 40], maxZoom: 16 });
+      // Issue #1069: a synthetic group-bounds AreaPoint (from computeGroupBounds)
+      // can fit at a zoom level above AREA_PANNER_GROUP_MAX_ZOOM for narrow groups,
+      // which then trips MapDiscovery's zoom-band gate and hides the area markers
+      // the user was meant to see. Clamp group fits to the area-layer threshold.
+      const isGroupBounds = panToArea.areaKey === GROUP_BOUNDS_SYNTHETIC_KEY;
+      map.fitBounds(panToArea.bbox, {
+        padding: [40, 40],
+        maxZoom: isGroupBounds ? AREA_PANNER_GROUP_MAX_ZOOM : 16,
+      });
     } else {
       map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], 13);
     }
