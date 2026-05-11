@@ -1,4 +1,6 @@
 import React from 'react';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
@@ -92,6 +94,17 @@ export interface DiscoverRightPanelProps {
    * Atomically removes areaKey; preserves schoolId + radiusKm + board/category + property filters.
    */
   onClearArea?: () => void;
+  /**
+   * Issue #1064 AC3 — true while `useDiscoverAreas` is still hydrating.
+   * When `urlAreaKey` is present but `selectedArea` is null we use this to
+   * distinguish "still loading → show skeleton" from "loaded → areaKey not found".
+   */
+  isLoadingAreas?: boolean;
+  /**
+   * Issue #1064 AC3 — the raw areaKey from the URL. Needed so the panel can tell
+   * "URL has an areaKey but selectedArea is null" apart from the no-selection state.
+   */
+  urlAreaKey?: string | null;
 }
 
 export function DiscoverRightPanel({
@@ -131,7 +144,42 @@ export function DiscoverRightPanel({
   onRadiusChange,
   onClearSchool,
   onClearArea,
+  isLoadingAreas = false,
+  urlAreaKey = null,
 }: DiscoverRightPanelProps) {
+  // Issue #1064 AC3 — explicit hydration/not-found UIs replace the silent
+  // GuidedEntryPanel fall-back when the URL claims an areaKey but `selectedArea`
+  // has not (yet) resolved. We render two small inline JSX blocks shared by the
+  // area-selected and schools-in-area branches.
+  const renderAreaHydrating = (): React.ReactNode => (
+    <div
+      data-testid="discover-area-hydrating"
+      className="flex flex-1 items-center justify-center p-8"
+      aria-live="polite"
+    >
+      <div className="flex flex-col items-center gap-3 text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
+        <p className="text-sm text-muted-foreground">Loading area details…</p>
+      </div>
+    </div>
+  );
+  const renderAreaNotFound = (areaKey: string): React.ReactNode => (
+    <div
+      data-testid="discover-area-not-found"
+      className="flex flex-1 items-center justify-center p-8"
+    >
+      <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+        <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+        <h2 className="text-base font-semibold">Area not found</h2>
+        <p className="text-sm text-muted-foreground break-all">
+          We could not find an area for <span className="font-mono">{areaKey}</span>.
+        </p>
+        <Button variant="outline" size="sm" onClick={onStartOver}>
+          Back to Discover
+        </Button>
+      </div>
+    </div>
+  );
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
       case 'guided-entry':
@@ -157,7 +205,13 @@ export function DiscoverRightPanel({
 
       case 'area-selected':
         if (!selectedArea) {
-          // Defensive fallback: state machine says area-selected but area not yet resolved.
+          // Issue #1064 AC3/AC4 — explicit hydration vs not-found states.
+          // (a) URL has areaKey, areas still loading → skeleton/spinner
+          // (b) URL has areaKey, areas loaded → "Area not found" error
+          // (c) URL has no areaKey → defensive fallback to guided entry
+          if (urlAreaKey) {
+            return isLoadingAreas ? renderAreaHydrating() : renderAreaNotFound(urlAreaKey);
+          }
           return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
         }
         return (
@@ -195,7 +249,10 @@ export function DiscoverRightPanel({
 
       case 'schools-in-area':
         if (!selectedArea) {
-          // Defensive fallback: state machine says schools-in-area but area not yet resolved.
+          // Issue #1064 AC3 — same three-branch logic as area-selected.
+          if (urlAreaKey) {
+            return isLoadingAreas ? renderAreaHydrating() : renderAreaNotFound(urlAreaKey);
+          }
           return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
         }
         return (

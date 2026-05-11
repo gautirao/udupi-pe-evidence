@@ -52,6 +52,14 @@ export default function MapDiscovery() {
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 
+  // Issue #1064 AC2 — Start Over must reset the map viewport to city center/zoom.
+  // useDiscoverPageState owns `resetMapTick` (incremented by handleAreaBack); we need a
+  // second source of truth that increments on Start Over without modifying that hook
+  // (out of scope per scope-lock). We compose both into a single number passed to
+  // PropertyMap.resetMapTick; MapController's handledTickRef-based guard correctly
+  // detects any net increase and triggers the flyTo(cityCenter, cityZoom).
+  const [startOverTick, setStartOverTick] = useState(0);
+
   // Transient map bbox — not stored in URL. Updated on pan/zoom via onBoundsChange.
   // Stored as a ref for the debounce timer and as state to trigger re-renders/refetches.
   const [mapBbox, setMapBbox] = useState<[number, number, number, number] | null>(null);
@@ -107,6 +115,13 @@ export default function MapDiscovery() {
     handleAreaClick, handleAreaSelect, handleAreaBack,
     page, setPage,
   } = useDiscoverPageState({ urlState, urlActions });
+
+  // Issue #1064 AC2 — composed tick + Start Over handler (see startOverTick declaration above).
+  const composedResetMapTick = resetMapTick + startOverTick;
+  const handleStartOver = useCallback(() => {
+    urlActions.startOver();
+    setStartOverTick((t) => t + 1);
+  }, [urlActions]);
 
   // Reset bbox when city changes — the previous city's viewport is out-of-bounds for the new city.
   useEffect(() => {
@@ -475,7 +490,7 @@ export default function MapDiscovery() {
               onViewportChange={urlActions.reportViewport}
               onBoundsChange={handleBoundsChange}
               panToArea={panToArea}
-              resetMapTick={resetMapTick}
+              resetMapTick={composedResetMapTick}
               onReady={() => setMapReady(true)}
               journey={urlState.journey}
               selectedSchool={selectedSchool}
@@ -551,7 +566,9 @@ export default function MapDiscovery() {
           isAuthenticated={isAuthenticated}
           onAreaSelect={handleAreaSelect}
           onBack={handleAreaBack}
-          onStartOver={() => urlActions.startOver()}
+          onStartOver={handleStartOver}
+          isLoadingAreas={areasLoading}
+          urlAreaKey={urlState.areaKey}
           onSelectJourney={(j) => urlActions.setJourney(j)}
           areaGroups={areaGroupsData?.groups ?? []}
           isLoadingAreaGroups={isLoadingAreaGroups}
