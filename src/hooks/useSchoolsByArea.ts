@@ -1,4 +1,5 @@
 import { useInfiniteQuery, UseInfiniteQueryResult } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { SchoolResult } from './useSchoolSearch';
 
 interface SchoolsByAreaResponse {
@@ -35,12 +36,14 @@ export function useSchoolsByArea(
       // Append category filters as repeated query params for Spring to parse as List<String>
       category.forEach((c) => params.append('category', c));
 
-      const res = await fetch(`/api/public/schools/by-area?${params}`);
-      if (!res.ok) {
-        throw new Error(`Failed to fetch schools: ${res.status} ${res.statusText}`);
-      }
-
-      const schools: SchoolResult[] = await res.json();
+      // Use api.get (which prefixes VITE_API_BASE_URL) instead of raw relative fetch —
+      // on Cloudflare Pages the page origin does NOT serve /api/**, so relative fetch 404s
+      // and the panel silently shows empty. { skipAuth: true } matches the public endpoint
+      // contract — same convention as useDiscoverAreas.
+      const schools = await api.get<SchoolResult[]>(
+        `/api/public/schools/by-area?${params.toString()}`,
+        { skipAuth: true },
+      );
       const totalElements = schools.length + (page * size); // Estimate; API doesn't provide total
       const isLast = schools.length < size;
 

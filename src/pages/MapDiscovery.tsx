@@ -574,7 +574,20 @@ export default function MapDiscovery() {
           isLoadingAreaGroups={isLoadingAreaGroups}
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
           discoverAreas={discoverAreas}
-          onSelectAreaKey={(areaKey) => urlActions.selectArea(areaKey)}
+          onSelectAreaKey={(areaKey) => {
+            // Issue #1067 R2 — right-panel area-card click must trigger map flyTo
+            // in addition to updating the URL. The deferred-hydration effect at
+            // lines 312-329 only fires on cold-load (initialViewportRef gate), so
+            // in-session selections never panned without this branch. Routing
+            // through handleAreaSelect reuses the canonical AreaPoint handler
+            // (URL update + setPanToArea + filter reset) — single source of truth.
+            const match = discoverAreas.find((a) => a.areaKey === areaKey);
+            if (match) {
+              handleAreaSelect(match);
+            } else {
+              urlActions.selectArea(areaKey);
+            }
+          }}
           onSelectSchool={(schoolId) => urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM })}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
