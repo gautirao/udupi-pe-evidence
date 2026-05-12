@@ -212,9 +212,17 @@ export function useDiscoverMapData({
   const areaMarkerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!selectedArea || areaListings.length === 0) return [];
     const now = new Date().toISOString();
-    return areaListings
-      .filter((l): l is typeof l & { lat: number; lon: number } => l.lat != null && l.lon != null)
-      .map((l) => cityListingToPropertyListing(l, now));
+    // Filter listings with coordinates (handle both lat/lon and latitude/longitude)
+    const withCoords = areaListings
+      .filter((l) => (l.lat != null && l.lon != null) || (l.latitude != null && l.longitude != null))
+      .map((l) => ({
+        ...l,
+        lat: l.lat ?? l.latitude,
+        lon: l.lon ?? l.longitude,
+      }))
+      .filter((l) => l.lat != null && l.lon != null)
+      .map((l) => ({ ...l, lat: l.lat as number, lon: l.lon as number }));
+    return withCoords.map((l) => cityListingToPropertyListing(l as any, now));
   }, [selectedArea, areaListings]);
 
   // ── Derived: topLocalities from aggregate response ────────────────────────

@@ -22,6 +22,8 @@ export interface DiscoverCityListingItem {
   trustTier?: string | null;
   lat?: number | null;
   lon?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 interface DiscoverCityAreaResult {

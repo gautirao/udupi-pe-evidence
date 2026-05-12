@@ -161,10 +161,30 @@ export default function MapDiscovery() {
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
-    markersEnabled: isAuthenticated && mapZoom > AREA_LAYER_MAX_ZOOM,
+    markersEnabled: (isAuthenticated || urlState.journey === 'area-first') && mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
     bbox: mapBbox,
   });
+
+  // Debug: expose areaListings and related data to window.__debug for Playwright tests
+  useEffect(() => {
+    (window as any).__debug = {
+      ...(window as any).__debug,
+      propertyMapListings: {
+        areaListings,
+        areaMarkerListings,
+        areaLen: areaListings.length,
+        areaMarkerLen: areaMarkerListings.length,
+        markerListings,
+        markerLen: markerListings.length,
+        selectedArea,
+      },
+      mapState: {
+        zoom: mapZoom,
+        city,
+      },
+    };
+  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city]);
 
   // Schools for SchoolMarkerLayer — fetched only in school-first journey when an area is selected.
   // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
@@ -461,15 +481,17 @@ export default function MapDiscovery() {
             <PropertyMap
               listings={(() => {
                 if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
-                // school-first: hide property markers while the user is browsing schools
-                // (areaKey selected but no school chosen yet). Show them once a school is picked.
+                // school-first journey: show markers only if a school is selected
                 if (urlState.journey === 'school-first') {
                   return urlState.schoolId ? markerListings : [];
                 }
-                // area-first (existing logic)
-                return selectedArea
-                  ? (isLoadingAreaListings ? [] : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings))
-                  : (isAuthenticated ? markerListings : []);
+                // area-first or area-selected: show property markers for the selected area
+                // Works for both explicit area-first journey AND implicit area selection
+                if (selectedArea) {
+                  return isLoadingAreaListings ? [] : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings);
+                }
+                // No area selected: show markers only if authenticated
+                return isAuthenticated ? markerListings : [];
               })()}
               focusBounds={activeFocusBounds}
               polygon={filters.polygon}

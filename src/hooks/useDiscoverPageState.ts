@@ -140,6 +140,16 @@ export function useDiscoverPageState({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.city]);
 
+  // Sync mapZoom with URL viewport.zoom when it changes (e.g., after initial hydration).
+  // This handles the case where viewport hasn't hydrated by mount time, so mapZoom defaults
+  // to city zoom (11), then later viewport.zoom becomes available and must update mapZoom.
+  useEffect(() => {
+    if (urlState.viewport?.zoom != null) {
+      setMapZoom(urlState.viewport.zoom);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlState.viewport?.zoom]);
+
   // Sync selectedArea with URL areaKey for browser Back/Forward navigation.
   // Back (areaKey removed): clear selectedArea. Forward (areaKey restored): re-arm
   // pendingAreaKeyRef so the Index.tsx resolution effect can re-match it against areas data.
