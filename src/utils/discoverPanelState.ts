@@ -45,11 +45,6 @@ export type DiscoverPanelContent =
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
   const { journey, areaKey, schoolId } = urlState;
 
-  // Combined: area + school are co-active regardless of journey
-  if (areaKey && schoolId) {
-    return 'area-school-combined';
-  }
-
   if (journey === 'school-first') {
     if (schoolId) {
       return 'school-selected';
@@ -65,6 +60,11 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
       return 'area-selected';
     }
     return 'area-groups-landing';
+  }
+
+  // Combined: area + school are co-active (no explicit journey, or cross-journey state)
+  if (areaKey && schoolId) {
+    return 'area-school-combined';
   }
 
   // Cold-load restoration: schoolId present without explicit journey.

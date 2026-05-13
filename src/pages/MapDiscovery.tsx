@@ -481,9 +481,19 @@ export default function MapDiscovery() {
             <PropertyMap
               listings={(() => {
                 if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
-                // school-first journey: show markers only if a school is selected
+                // school-first journey
                 if (urlState.journey === 'school-first') {
-                  return urlState.schoolId ? markerListings : [];
+                  // schoolId set: proximity markerListings drive the school-radius surface
+                  if (urlState.schoolId) return markerListings;
+                  // Issue #1074 Slice A: school-first + areaKey (no schoolId) → surface
+                  // the area's property markers alongside the schools list. Mirrors the
+                  // area-first fallback below.
+                  if (selectedArea) {
+                    return isLoadingAreaListings
+                      ? []
+                      : (areaMarkerListings.length > 0 ? areaMarkerListings : markerListings);
+                  }
+                  return [];
                 }
                 // area-first or area-selected: show property markers for the selected area
                 // Works for both explicit area-first journey AND implicit area selection

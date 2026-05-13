@@ -263,6 +263,9 @@ export function DiscoverRightPanel({
             journey={journey}
             schools={schools}
             schoolsLoading={schoolsLoading}
+            areaListings={areaListings}
+            isLoadingAreaListings={isLoadingListings}
+            isAuthenticated={isAuthenticated}
           />
         );
 

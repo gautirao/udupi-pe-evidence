@@ -67,10 +67,12 @@ const createMarkerIcon = (propertyType: PropertyType): L.DivIcon => {
   const cached = iconCache.get(propertyType);
   if (cached) return cached;
   const { color } = propertyConfig[propertyType];
+  // Issue #1074 — include 'property-marker' class + data-testid so E2E can
+  // distinguish property markers from `.school-marker` school pins.
   const icon = L.divIcon({
-    className: 'custom-marker',
+    className: 'custom-marker property-marker',
     html: `
-      <div style="
+      <div data-testid="property-marker" style="
         width: 32px;
         height: 32px;
         background-color: ${color};
