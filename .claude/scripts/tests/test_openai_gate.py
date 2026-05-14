@@ -47,6 +47,7 @@ _minimal_verdict_record = openai_gate._minimal_verdict_record
 _truncate = openai_gate._truncate
 _compact_list = openai_gate._compact_list
 _toml_str_value = openai_gate._toml_str_value
+_materialize_approved_plan = openai_gate._materialize_approved_plan
 MINIMAL_VERDICT_FIELDS = openai_gate.MINIMAL_VERDICT_FIELDS
 REASONS_SUMMARY_MAX = openai_gate.REASONS_SUMMARY_MAX
 ITEM_SUMMARY_MAX = openai_gate.ITEM_SUMMARY_MAX
@@ -1017,3 +1018,130 @@ def test_toml_str_value_handles_list_of_strings():
     assert parsed["x"] == items, (
         f"List round-trip failed: original={items!r}, toml={result!r}, parsed={parsed['x']!r}"
     )
+
+
+# ── _materialize_approved_plan TOML-escape regression tests ───────────────────
+#
+# These tests call _materialize_approved_plan directly with a minimal but valid
+# verdict_dict.  We redirect the `.claude/state` write path by chdir-ing into
+# tmp_path — the function uses `Path(".claude/state")` (relative to cwd).
+#
+# After the call we read back `.claude/state/last-chatgpt-verdict.toml` and
+# parse it with tomllib to verify round-trip fidelity.
+
+
+def _make_verdict(next_action: str) -> dict:
+    """Minimal PLAN_REVIEW APPROVED verdict suitable for _materialize_approved_plan."""
+    return {
+        "gate": "PLAN_REVIEW",
+        "issue": 1081,
+        "verdict": "APPROVED",
+        "summary": "Test.",
+        "blocking_issues": [],
+        "required_changes": [],
+        "approved_scope": None,
+        "approved_files": None,
+        "next_action": next_action,
+    }
+
+
+def _run_materialize(tmp_path: Path, monkeypatch, next_action: str) -> dict:
+    """
+    Run _materialize_approved_plan in *tmp_path*, return tomllib-parsed verdict.
+
+    Writes a minimal input packet, calls the function from cwd=tmp_path so that
+    Path(".claude/state") resolves inside the temp directory, then parses the
+    written TOML and returns the dict.
+
+    Uses monkeypatch.chdir so cwd restore is automatic and parallel-safe
+    (no process-global os.chdir mutation).
+    """
+    # Write a minimal packet file the function will byte-copy.
+    packet = tmp_path / "packet.toml"
+    packet.write_text('gate = "PLAN_REVIEW"\nissue = 1081\n', encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    _materialize_approved_plan(packet, _make_verdict(next_action))
+
+    verdict_path = tmp_path / ".claude" / "state" / "last-chatgpt-verdict.toml"
+    return tomllib.loads(verdict_path.read_text(encoding="utf-8"))
+
+
+def test_materialize_next_action_with_double_quotes(tmp_path, monkeypatch):
+    """next_action containing double-quotes must round-trip cleanly via tomllib."""
+    next_action = 'Say "hello" then proceed'
+    data = _run_materialize(tmp_path, monkeypatch, next_action)
+    assert data["next_action"] == next_action
+
+
+def test_materialize_next_action_with_backslashes(tmp_path, monkeypatch):
+    """next_action containing backslashes must round-trip without corruption."""
+    next_action = "C:\\path\\file"
+    data = _run_materialize(tmp_path, monkeypatch, next_action)
+    assert data["next_action"] == next_action
+
+
+def test_materialize_next_action_with_newlines(tmp_path, monkeypatch):
+    """next_action containing a newline character must round-trip via tomllib."""
+    next_action = "line1\nline2"
+    data = _run_materialize(tmp_path, monkeypatch, next_action)
+    assert "\n" in data["next_action"], "newline must be preserved in round-trip"
+    assert data["next_action"] == next_action
+
+
+def test_materialize_next_action_toml_injection_payload(tmp_path, monkeypatch):
+    """
+    A malicious next_action that embeds a TOML injection payload must NOT
+    create additional top-level keys or tables.  The parsed dict must contain
+    exactly the 5 expected keys and no 'evil' table.
+    """
+    next_action = 'bad"\n[evil]\nkey="value"\n'
+    data = _run_materialize(tmp_path, monkeypatch, next_action)
+
+    expected_keys = {"gate", "verdict", "issue", "approved_at", "next_action"}
+    assert set(data.keys()) == expected_keys, (
+        f"Unexpected keys in parsed TOML: {set(data.keys()) - expected_keys}"
+    )
+    assert "evil" not in data, "'evil' table must not be injected"
+    assert "key" not in data, "'key' must not be a top-level key"
+
+
+def test_materialize_next_action_triple_quote_payload(tmp_path, monkeypatch):
+    """Triple-quote payload must not break TOML parsing or inject extra keys."""
+    next_action = '""" triple quote style'
+    data = _run_materialize(tmp_path, monkeypatch, next_action)
+
+    expected_keys = {"gate", "verdict", "issue", "approved_at", "next_action"}
+    assert set(data.keys()) == expected_keys, (
+        f"Unexpected extra keys: {set(data.keys()) - expected_keys}"
+    )
+    assert data["next_action"] == next_action
+
+
+def test_materialize_next_action_empty_string(tmp_path, monkeypatch):
+    """Empty next_action must be stored as an empty string and round-trip cleanly."""
+    data = _run_materialize(tmp_path, monkeypatch, "")
+    assert data["next_action"] == ""
+
+
+def test_materialize_full_tomllib_roundtrip(tmp_path, monkeypatch):
+    """
+    Full output parses cleanly; all 5 expected fields present with correct types.
+    gate / verdict / next_action / approved_at must be str; issue must be int.
+    """
+    next_action = "Proceed with implementation per current-approved-plan.toml."
+    data = _run_materialize(tmp_path, monkeypatch, next_action)
+
+    expected_keys = {"gate", "verdict", "issue", "approved_at", "next_action"}
+    assert set(data.keys()) == expected_keys
+
+    assert isinstance(data["gate"], str)
+    assert isinstance(data["verdict"], str)
+    assert isinstance(data["next_action"], str)
+    assert isinstance(data["approved_at"], str)
+    assert isinstance(data["issue"], int)
+
+    assert data["gate"] == "PLAN_REVIEW"
+    assert data["verdict"] == "APPROVED"
+    assert data["issue"] == 1081
+    assert data["next_action"] == next_action

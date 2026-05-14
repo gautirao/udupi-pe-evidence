@@ -162,6 +162,8 @@ The `INDEX.md` in `.claude/openai-gates/` is append-only — each run adds one r
 
 ## Approved-Plan Materialization
 
+> **TOML injection hardening:** All AI-controlled string fields in `last-chatgpt-verdict.toml` (notably `next_action` and `approved_at`) are serialized via `_toml_str_value`, which escapes double-quotes, backslashes, newlines, carriage returns, and tabs — preventing TOML injection from adversarial `next_action` payloads.
+
 PLAN_REVIEW APPROVED verdict writes:
 - `.claude/state/current-approved-plan.toml` — byte-copy of input packet
 - `.claude/state/last-chatgpt-verdict.toml` — verdict summary

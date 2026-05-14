@@ -335,8 +335,16 @@ def _toml_str_value(v: object) -> str:
     if isinstance(v, list):
         items = ", ".join(_toml_str_value(i) for i in v)
         return f"[{items}]"
-    # str — escape backslashes and double-quotes
-    escaped = str(v).replace("\\", "\\\\").replace('"', '\\"')
+    # str — escape backslashes, double-quotes, and ASCII control characters
+    # Backslash must be replaced first (before any escape sequence is introduced).
+    escaped = (
+        str(v)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
     return f'"{escaped}"'
 
 
@@ -567,8 +575,8 @@ def _materialize_approved_plan(packet_path: Path, verdict_dict: dict) -> None:
         f'gate = "PLAN_REVIEW"\n'
         f'verdict = "APPROVED"\n'
         f'issue = {verdict_dict["issue"]}\n'
-        f'approved_at = "{datetime.now(timezone.utc).isoformat()}"\n'
-        f'next_action = "{verdict_dict["next_action"].replace(chr(34), chr(39))}"\n'
+        f'approved_at = {_toml_str_value(datetime.now(timezone.utc).isoformat())}\n'
+        f'next_action = {_toml_str_value(verdict_dict["next_action"])}\n'
     )
     (state_dir / "last-chatgpt-verdict.toml").write_text(verdict_toml, encoding="utf-8")
 
