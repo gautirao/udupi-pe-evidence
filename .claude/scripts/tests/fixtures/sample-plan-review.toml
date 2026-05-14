@@ -1,0 +1,20 @@
+gate = "PLAN_REVIEW"
+issue = 1078
+revision = 1
+title = "Sample plan review packet for testing"
+classification = "low-risk"
+
+[goal]
+summary = "Test plan review packet with no secrets."
+
+[scope]
+allowed_files = [
+  ".claude/scripts/openai_gate.py",
+  ".claude/scripts/requirements.txt",
+]
+
+[acceptance_criteria]
+items = [
+  "AC1 — Basic functionality works",
+  "AC2 — Tests pass",
+]

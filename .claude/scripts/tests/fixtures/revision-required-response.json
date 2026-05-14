@@ -1,0 +1,16 @@
+{
+  "gate": "PLAN_REVIEW",
+  "issue": 1078,
+  "verdict": "REVISION_REQUIRED",
+  "summary": "Plan needs clarification on error handling paths.",
+  "blocking_issues": [
+    "Error handling for network timeout not specified"
+  ],
+  "required_changes": [
+    "Add explicit network timeout handling with sanitized error output",
+    "Document fail-closed behavior for each exit code"
+  ],
+  "approved_scope": null,
+  "approved_files": null,
+  "next_action": "Revise plan and resubmit for PLAN_REVIEW."
+}

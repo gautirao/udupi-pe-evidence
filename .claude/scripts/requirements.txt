@@ -1,0 +1,15 @@
+# OpenAI Gate Automation — Python runtime dependencies (script-only)
+# Spike-verified: openai 1.109.1 on Python 3.11.15 (2026-05-14)
+# Responses API shape: client.responses.create(text={"format":{"type":"json_schema",...}})
+# response.output_text → str
+#
+# Scope-lock: only openai + jsonschema were approved as new dependencies for #1078.
+# Test runner (pytest) is NOT a runtime dependency — install separately in your
+# dev/test venv per .claude/docs/openai-gate.md if you need to run tests.
+
+# OpenAI Python SDK — Responses API + structured output
+# Version range: >=1.50 (Responses API stabilised); <2.0 (guard against breaking v2 changes)
+openai>=1.50,<2.0
+
+# JSON Schema local re-validation (defense-in-depth after structured output)
+jsonschema>=4.0,<5.0

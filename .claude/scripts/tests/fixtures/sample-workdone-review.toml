@@ -1,0 +1,13 @@
+gate = "WORKDONE_REVIEW"
+issue = 1078
+title = "Sample workdone review packet for testing"
+classification = "low-risk"
+
+[goal]
+summary = "Test workdone review packet with no secrets."
+
+[evidence]
+items = [
+  "All ACs implemented",
+  "Tests pass",
+]

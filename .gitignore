@@ -61,3 +61,13 @@ coverage/*
 .claude/state/
 .claude/handoffs/
 
+# OpenAI gate run artifacts — only .gitkeep and README.md committed
+.claude/openai-gates/*
+!.claude/openai-gates/.gitkeep
+!.claude/openai-gates/README.md
+
+# Python venv and bytecode for gate scripts
+.claude/scripts/.venv/
+.claude/scripts/**/__pycache__/
+.claude/scripts/**/*.pyc
+

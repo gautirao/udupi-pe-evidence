@@ -1,0 +1,29 @@
+# Executor Prompt — Issue {{ISSUE}}
+
+## Context
+
+Gate `{{GATE}}` has returned `APPROVED`. The approved plan is materialized at:
+`.claude/state/current-approved-plan.toml`
+
+## Instructions
+
+1. Read `.claude/state/current-approved-plan.toml` — this is the authoritative approved plan.
+2. Follow the `[implementation_steps]` in order.
+3. Touch only files listed in `[scope].allowed_files`.
+4. After completing each file, call `index_file` to keep the jcodemunch index fresh.
+5. On completion, emit a WORKDONE_REVIEW packet for ChatGPT review before opening a PR.
+
+## Required Tools
+
+- Use `rtk` prefix for all shell commands.
+- Use jcodemunch MCP tools for code exploration (not Read/Grep/Glob).
+- Use `mode: "dontAsk"` (not `bypassPermissions`) so hooks fire.
+
+## Scope Lock
+
+Any file not in `[scope].allowed_files` requires a SCOPE_CHANGE_REVIEW before touching.
+Stop and flag immediately if scope drift is detected.
+
+## Resume
+
+If interrupted, resume from `.claude/state/active/RESUME_CHECKPOINT.md`.

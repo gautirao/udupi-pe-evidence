@@ -11,6 +11,34 @@ description: Execute GitHub issues using the preserved ROUTE_AND_RUN per-PR orch
 - Sprint execution with checkpoint (sprint mode)
 - Resume after context loss or interruption
 
+---
+
+## OpenAI Gate Automation (v1 — PLAN_REVIEW)
+
+A local Python CLI at `.claude/scripts/openai_gate.py` automates gate packet
+submission to the OpenAI API. This is a developer tool only — gate semantics
+and routing rules are unchanged.
+
+**Quick reference:**
+```bash
+# Dry-run (no key needed):
+python .claude/scripts/openai_gate.py \
+  --dry-run --issue <N> --gate PLAN_REVIEW \
+  --input .claude/handoffs/issue-<N>/<packet>.toml
+
+# Live PLAN_REVIEW:
+OPENAI_API_KEY=sk-... python .claude/scripts/openai_gate.py \
+  --issue <N> --gate PLAN_REVIEW \
+  --input .claude/handoffs/issue-<N>/<packet>.toml
+```
+
+On `APPROVED` verdict, writes `current-approved-plan.toml` + state files.
+On any other verdict, saves artifacts only — state files are not touched.
+
+See `.claude/docs/openai-gate.md` for full usage, exit codes, and security notes.
+
+---
+
 ## Operating principles
 
 **Authority & Non-Override:**
