@@ -29,12 +29,23 @@ Agent returns exactly ONE of these verdicts (no override):
 
 ## Validation Checklist
 
-### Scope Lock (if approved plan exists)
-- [ ] All changed files in packet match allowed_files list (exact paths or globs)
-- [ ] No files match non_goals list
-- [ ] No deferred or bundled work from other issues
+### Scope Lock (if approved plan exists) — AC5: Mandatory Scope Fields
 
-**Failure condition:** File mismatch → verdict: SCOPE_DRIFT
+**Required fields in packet (WORKDONE_REVIEW or code-reviewer output):**
+- [ ] `approved_files` array present (from current-approved-plan.toml `[scope].allowed_files`)
+- [ ] `actual_changed_files` array present (from `git diff --name-only`)
+- [ ] `unapproved_files` array computed (actual_changed_files minus approved_files)
+- [ ] `scope_verdict` explicitly set: `PASS | FAIL | UNKNOWN | N/A` (N/A allowed only when no approved plan exists)
+- [ ] `requires_scope_change_review` boolean explicitly set
+
+**Field validation:**
+- [ ] If `approved_files` is empty or missing → verdict: `NEEDS_MORE_EVIDENCE` (not PASS)
+- [ ] If `actual_changed_files` is empty or missing → verdict: `NEEDS_MORE_EVIDENCE`
+- [ ] If `unapproved_files` is non-empty AND no SCOPE_CHANGE_REVIEW approval exists → verdict: `SCOPE_DRIFT`
+- [ ] If `scope_verdict` is `UNKNOWN` or missing → verdict: `NEEDS_MORE_EVIDENCE`
+- [ ] Missing scope evidence must block, never silent PASS
+
+**Failure condition:** File mismatch, missing mandatory fields, or missing evidence → verdict: `SCOPE_DRIFT` or `NEEDS_MORE_EVIDENCE`
 
 ### Forbidden Files (global rules)
 - [ ] No `.env.local`, `.env.*.local`, `secrets/`, `creds.json`, `.aws/`, `.gcloud/`, `.claude/state/handoffs` (previous verdicts)
@@ -144,6 +155,9 @@ summary = "<1-2 sentences: verdict reason>"
 
 [checks]
 scope_lock = "PASS | FAIL | UNKNOWN | N/A"
+scope_compliance_fields = "PASS | FAIL | N/A"
+scope_verdict_set = "PASS | FAIL | N/A"
+unapproved_files = "NONE | PRESENT_WITH_REVIEW | PRESENT_WITHOUT_REVIEW | UNKNOWN"
 forbidden_files = "PASS | FAIL | UNKNOWN"
 acceptance_criteria = "PASS | FAIL | N/A"
 test_evidence = "PASS | FAIL | N/A"
@@ -152,6 +166,13 @@ pr_body = "PASS | FAIL | N/A"
 review_gates = "PASS | FAIL | N/A"
 cross_issue_scope = "PASS | FAIL | N/A"
 evidence_completeness = "PASS | FAIL | N/A"
+
+[scope_compliance]
+approved_files = []
+actual_changed_files = []
+unapproved_files = []
+scope_verdict = "PASS | FAIL | UNKNOWN"
+requires_scope_change_review = false
 
 [blocking_findings]
 # Only populate if verdict != READY_FOR_HUMAN_APPROVAL

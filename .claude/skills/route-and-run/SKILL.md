@@ -748,6 +748,28 @@ If ANY fails: re-invoke engineer with (a) specific failed check(s), (b) original
 
 If fails on second run: escalate to user (BLOCKED).
 
+**AC2 — Final Diff vs Approved Scope Hard Gate (before WORKDONE_REVIEW)**
+
+After materialization passes, compare the final diff against the approved scope:
+
+```bash
+FINAL_FILES=$(git diff --name-only origin/main...HEAD)
+APPROVED_FILES=$(grep -A 100 "^\[scope\]" current-approved-plan.toml | grep "^allowed_files" -A 100 | grep "^\s*\"" | sed 's/.*"\(.*\)".*/\1/')
+UNAPPROVED=$(comm -23 <(echo "$FINAL_FILES" | sort) <(echo "$APPROVED_FILES" | sort))
+```
+
+**If UNAPPROVED is non-empty:**
+- Verdict: `SCOPE_CHANGE_REQUIRED` (not `APPROVED`)
+- Do NOT proceed to WORKDONE_REVIEW
+- Route to SCOPE_CHANGE_REVIEW gate
+- List unapproved files explicitly
+
+**If UNAPPROVED is empty:**
+- Verdict: scope validation PASS
+- Proceed to WORKDONE_REVIEW
+
+Missing scope evidence (e.g., `current-approved-plan.toml` not found, `allowed_files` not populated) triggers `NEEDS_MORE_EVIDENCE` verdict, not PASS.
+
 ---
 
 ## Spec Invalidation Check (Sprint context only — HARD GATE)
@@ -780,6 +802,36 @@ If ANY gate fails: STOP. Do NOT proceed to commit/push/PR. Surface failure to us
 
 ## Scope Lock & Drift Control
 
+**AC1 — Universal Scope-Lock Policy (No Automatic Bypass)**
+
+No file family automatically bypasses scope-lock. This includes (but is not limited to):
+- Production source code (`.ts`, `.tsx`, `.java`, `.kt`, backend/)
+- Test files (`*.spec.ts`, `*.test.ts`, test/, tests/)
+- Documentation files (`*.md`, docs/, .claude/*)
+- GitHub workflows (`.github/workflows/`)
+- Scripts and configuration (`.claude/scripts/`, `scripts/`)
+- Generated artifacts (build/, dist/, node_modules/)
+- Tooling and process files
+
+All changed files require either:
+1. Explicit entry in the approved plan's `[scope].allowed_files`, OR
+2. Approval via SCOPE_CHANGE_REVIEW handoff gate before PR creation/merge
+
+If a file appears in the final `git diff --name-only origin/main...HEAD` but is not in the approved scope, the implementation is **OUT OF SCOPE**. This triggers **SCOPE_CHANGE_REQUIRED** verdict at the Pre-Merge gate and blocks PR creation/merge unless explicitly approved.
+
+**AC7 — Regression Example: Issue #1074**
+
+Issue #1074 merged with two process failures that would be caught by this gate:
+1. **Unapproved file drift:** `src/utils/discoverPanelState.ts` was modified but NOT in the approved `allowed_files` list
+2. **Missing WORKDONE_REVIEW:** PR merged without ChatGPT WORKDONE_REVIEW approval
+
+With the scope-lock enforcement gates (AC2 + AC4 + AC5), both failures would have been blocked:
+- Main Agent would detect `src/utils/discoverPanelState.ts` mismatch in the Post-Engineer Materialization Check (AC2)
+- Gatekeeper would flag scope drift as SCOPE_DRIFT or SCOPE_UNKNOWN (AC5)
+- Main Agent would block PR creation/merge without WORKDONE_REVIEW approval (AC4)
+
+---
+
 After PLAN_REVIEW approval, `current-approved-plan.toml` is the **implementation contract**. Engineer prompts MUST include:
 
 - `approved_plan_ref` (path to `current-approved-plan.toml`)
@@ -806,6 +858,52 @@ After PLAN_REVIEW approval, `current-approved-plan.toml` is the **implementation
 3. Ask user
 4. Route to `architect`
 5. Continue inside approved scope (only if the deviation can be eliminated)
+
+**AC8 — Diff-vs-Scope Validation**
+
+Before the Pre-Merge Gate (AC2), the Main Agent validates the final diff against approved scope using this command:
+
+```bash
+git diff --name-only origin/main...HEAD | while read file; do
+  if ! grep -q "^$file$" <(echo "$ALLOWED_FILES"); then
+    echo "OUT OF SCOPE: $file"
+  fi
+done
+```
+
+Where `$ALLOWED_FILES` is populated from `current-approved-plan.toml` `[scope].allowed_files`.
+
+Fallback for local-only branches (no origin/main):
+```bash
+git diff --name-only main...HEAD | ...
+```
+
+If any file is flagged as OUT OF SCOPE, the Main Agent:
+1. Emits `SCOPE_CHANGE_REQUIRED` verdict
+2. Blocks PR creation and merge
+3. Routes to SCOPE_CHANGE_REVIEW gate
+
+**AC9 — Verification Dry-Runs**
+
+**Example 1: Clean diff (all files in approved scope)**
+```
+Approved files: src/components/MapDiscovery.tsx, src/utils/api.ts
+Final diff files: src/components/MapDiscovery.tsx, src/utils/api.ts
+Result: PASS — all files approved
+```
+
+**Example 2: Unapproved file (like #1074)**
+```
+Approved files: src/components/MapDiscovery.tsx
+Final diff files: src/components/MapDiscovery.tsx, src/utils/discoverPanelState.ts
+Result: SCOPE_CHANGE_REQUIRED — src/utils/discoverPanelState.ts is unapproved
+```
+
+**Example 3: Mid-fix-verify discovery**
+Engineer implementing AC2 discovers mid-cycle that unapproved file is necessary:
+1. Engineer outputs: "File X is required but not in approved scope"
+2. Main Agent: blocks further commits, routes to SCOPE_CHANGE_REVIEW
+3. SCOPE_CHANGE_REVIEW approved or rejected before continuing
 
 Drift handled silently — i.e. engineer ships outside `allowed_files` without the Main Agent re-routing — is a process violation. The Main Agent must verify `Files changed` against `allowed_files` during the materialisation check.
 
@@ -877,7 +975,27 @@ User pastes ChatGPT response back; Main Agent saves it to `.claude/handoffs/issu
 | `NEEDS_USER_DECISION` | Stop; surface decision prompt to user |
 | `NEEDS_MORE_EVIDENCE` | Add the requested evidence (test output, AC citations) and resubmit |
 
-> **Rule:** When ChatGPT-gated mode is active, do NOT create a PR or merge until WORKDONE_REVIEW returns `APPROVED_FOR_PR`, **unless the user explicitly waives this gate** for a specific issue.
+**AC4 — Main Agent Pre-Merge Guard (Explicit Requirements)**
+
+The Main Agent MUST NOT create a PR or merge until ALL of these conditions are satisfied:
+
+1. ✅ ChatGPT WORKDONE_REVIEW verdict = `APPROVED_FOR_PR`
+2. ✅ Final diff scope validation passes (AC2) OR SCOPE_CHANGE_REVIEW is approved
+3. ✅ PR_REVIEW (if required) approves scope compliance
+
+Merge gate pseudo-code:
+```
+if workdone_review.verdict != "APPROVED_FOR_PR":
+  BLOCK("WORKDONE_REVIEW not approved")
+if scope_validation_verdict == "SCOPE_CHANGE_REQUIRED":
+  BLOCK("Scope change not reviewed — route to SCOPE_CHANGE_REVIEW")
+if pr_exists and pr_review_required:
+  if pr_review.scope_compliance != "APPROVE":
+    BLOCK("PR_REVIEW scope check failed")
+# All gates passed — safe to create PR / merge
+```
+
+> **Rule:** When ChatGPT-gated mode is active, do NOT create a PR or merge until WORKDONE_REVIEW returns `APPROVED_FOR_PR` AND final diff matches approved scope, **unless the user explicitly waives this gate** for a specific issue.
 
 ---
 

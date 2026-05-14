@@ -44,6 +44,33 @@ Never block for SUGGESTION alone.
 
 <100 lines diff: ≤5 findings · 100–500: ≤10 · >500: ≤15. Combine related. No BLOCKING → say so quickly, don't pad.
 
+---
+
+## Scope Compliance (AC3)
+
+**AC3 — Mandatory Scope Compliance Section (required output)**
+
+Include a "Scope Compliance" section in your review output:
+
+```
+## Scope Compliance
+
+Approved files (from current-approved-plan.toml):
+- [list from [scope].allowed_files]
+
+Actual changed files:
+- [list from PR diff]
+
+Unapproved files (in PR but not in approved list):
+- [list any discrepancies, or NONE]
+
+Verdict:
+- APPROVE (no unapproved files, or all unapproved files have explicit SCOPE_CHANGE_REVIEW approval)
+- REQUEST CHANGES (unapproved files present without SCOPE_CHANGE_REVIEW approval)
+```
+
+If unapproved files exist and no SCOPE_CHANGE_REVIEW approval is present, set verdict to REQUEST CHANGES and block approval until scope is resolved.
+
 If `known_repo_rules` provided: treat as intentional, don't flag.
 
 ---

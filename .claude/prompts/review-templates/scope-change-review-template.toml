@@ -1,0 +1,34 @@
+gate = "SCOPE_CHANGE_REVIEW"
+issue = 0
+# allowed values: SCOPE_EXPANSION_REQUESTED
+status = "SCOPE_EXPANSION_REQUESTED"
+branch = ""
+
+[scope_change]
+# Files that were in the approved plan
+approved_files = [
+]
+
+# Files that were actually changed in the implementation
+actual_changed_files = [
+]
+
+# Files in actual_changed_files but NOT in approved_files
+unapproved_files = [
+]
+
+# Why the scope expansion was necessary
+reason = ""
+
+# Which acceptance criterion(s) required this expansion
+why_required_for_ac = ""
+
+# Risk assessment of the unapproved changes
+risk = ""
+
+# Tests covering the unapproved changes
+tests_covering_change = [
+]
+
+[request_to_chatgpt]
+instruction = "Review scope expansion request. Verify: (1) unapproved files are necessary for AC coverage, (2) risk is acceptable, (3) tests adequately cover changes. Return APPROVED_EXPANSION (allow merge with expanded scope) or REJECTED (require removal of unapproved files before merge)."
