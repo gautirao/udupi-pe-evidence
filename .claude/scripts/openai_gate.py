@@ -188,7 +188,7 @@ def call_openai_structured_verdict(
     model: str,
     max_output_tokens: int,
     timeout_seconds: int,
-) -> dict:
+) -> tuple[dict, str | None]:
     """
     Spike-verified Responses API call (openai>=1.50,<2.0).
 
@@ -204,7 +204,8 @@ def call_openai_structured_verdict(
         result = json.loads(response.output_text)
 
     Returns:
-        Parsed dict (already JSON-decoded, pre-schema-validated by SDK).
+        Tuple of (parsed_dict, request_id). request_id is None if unavailable.
+        parsed_dict is already JSON-decoded, pre-schema-validated by SDK.
 
     Raises:
         NetworkTimeoutError — on httpx.TimeoutException or openai.APITimeoutError.
@@ -264,6 +265,9 @@ def call_openai_structured_verdict(
         # SDK shape mismatch — sanitized, no exc repr to avoid leaking config state
         raise OpenAIShapeError("Unexpected SDK attribute shape — check openai SDK version") from None
 
+    _raw_id = getattr(response, "id", None)
+    request_id: str | None = str(_raw_id) if _raw_id is not None else None
+
     raw_text = getattr(response, "output_text", None)
     if raw_text is None:
         raise MalformedResponseError(
@@ -271,7 +275,7 @@ def call_openai_structured_verdict(
         )
 
     try:
-        return json.loads(raw_text)
+        return json.loads(raw_text), request_id
     except json.JSONDecodeError as exc:
         raise MalformedResponseError(
             f"Response is not valid JSON: {exc}", raw_text=raw_text
@@ -282,6 +286,134 @@ def call_openai_structured_verdict(
 
 def _artifact_dir(issue: int, gate: str, ts: str) -> Path:
     return Path(".claude/openai-gates") / f"issue-{issue}" / f"{ts}-{gate}"
+
+
+# ── Compact verdict helpers ───────────────────────────────────────────────────
+
+# Exact set of fields written to verdict.json / verdict.toml.
+MINIMAL_VERDICT_FIELDS: frozenset[str] = frozenset({
+    "gate",
+    "issue",
+    "verdict",
+    "model",
+    "ts_start",
+    "ts_end",
+    "request_id",
+    "confidence",
+    "reasons_summary",
+    "blocking_issue_count",
+    "required_change_count",
+    "blocking_issues_summary",
+    "required_changes_summary",
+})
+
+# Character caps applied to AI-generated text before persistence.
+REASONS_SUMMARY_MAX: int = 500
+ITEM_SUMMARY_MAX: int = 200
+MAX_LIST_ITEMS: int = 5
+
+_TRUNCATION_MARKER: str = "... [truncated]"
+
+
+def _toml_str_value(v: object) -> str:
+    """
+    Render a Python value as a TOML right-hand side literal.
+
+    None is serialized as the empty string ``""`` because TOML 1.0 has no
+    ``null`` keyword.  Consumers that need to distinguish "not set" from an
+    empty string should check the companion JSON artifact (``verdict.json``),
+    which uses real JSON ``null``.
+    """
+    if v is None:
+        return '""'
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, int):
+        return str(v)
+    if isinstance(v, float):
+        return str(v)
+    if isinstance(v, list):
+        items = ", ".join(_toml_str_value(i) for i in v)
+        return f"[{items}]"
+    # str — escape backslashes and double-quotes
+    escaped = str(v).replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _truncate(text: str, cap: int) -> str:
+    """
+    Redact secrets from *text*, then clip to *cap* characters (marker-inclusive).
+
+    Truncation policy: clip body to ``cap - len(marker)`` then append the marker.
+    The total length is always <= cap.  If the text already fits within cap after
+    redaction, it is returned as-is (no marker appended).
+    """
+    redacted = redact_secrets(text)
+    if len(redacted) <= cap:
+        return redacted
+    body_cap = cap - len(_TRUNCATION_MARKER)
+    return redacted[:body_cap] + _TRUNCATION_MARKER
+
+
+def _compact_list(
+    items: list[str],
+    item_cap: int,
+    max_count: int,
+) -> list[str]:
+    """
+    Redact secrets in ALL items first, then clip to *max_count* entries.
+
+    Redaction precedes slicing so that any future increase of *max_count* never
+    exposes unredacted items.  Only the first *max_count* items are returned;
+    the rest are discarded (not persisted).
+
+    NOTE: the caller is responsible for recording ``len(items)`` as the count
+    field — counts must reflect the TRUE total, not the truncated list length.
+    """
+    return [_truncate(item, item_cap) for item in items][:max_count]
+
+
+def _minimal_verdict_record(
+    verdict_dict: dict,
+    *,
+    model: str,
+    ts_start: str,
+    ts_end: str,
+    request_id: str | None,
+) -> dict:
+    """
+    Build the compact 13-field dict written to verdict.json / verdict.toml.
+
+    This is called from the artifact-write layer only, AFTER _validate_verdict
+    has enforced the full schema.  The full in-process verdict_dict is not
+    modified — this function returns a new dict.
+
+    confidence is always None (forward-compat placeholder; OpenAI Responses API
+    does not supply confidence scores for text generations).
+    """
+    blocking_issues: list[str] = verdict_dict.get("blocking_issues") or []
+    required_changes: list[str] = verdict_dict.get("required_changes") or []
+    summary: str = verdict_dict.get("summary") or ""
+
+    return {
+        "gate": verdict_dict["gate"],
+        "issue": verdict_dict["issue"],
+        "verdict": verdict_dict["verdict"],
+        "model": model,
+        "ts_start": ts_start,
+        "ts_end": ts_end,
+        "request_id": request_id,
+        "confidence": None,
+        "reasons_summary": _truncate(summary, REASONS_SUMMARY_MAX),
+        "blocking_issue_count": len(blocking_issues),
+        "required_change_count": len(required_changes),
+        "blocking_issues_summary": _compact_list(
+            blocking_issues, ITEM_SUMMARY_MAX, MAX_LIST_ITEMS
+        ),
+        "required_changes_summary": _compact_list(
+            required_changes, ITEM_SUMMARY_MAX, MAX_LIST_ITEMS
+        ),
+    }
 
 
 def _write_artifacts(
@@ -296,6 +428,7 @@ def _write_artifacts(
     issue: int,
     ts_start: str,
     ts_end: str,
+    request_id: str | None = None,
 ) -> None:
     """Write all durable artifacts for one run. Key-redact raw_text before writing."""
     artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -313,16 +446,33 @@ def _write_artifacts(
     )
 
     if verdict_dict is not None:
-        # verdict.json
-        (artifact_dir / "verdict.json").write_text(
-            json.dumps(verdict_dict, indent=2), encoding="utf-8"
+        compact = _minimal_verdict_record(
+            verdict_dict,
+            model=model,
+            ts_start=ts_start,
+            ts_end=ts_end,
+            request_id=request_id,
         )
-        # verdict.toml (minimal hand-written; avoids extra dep on tomllib writer)
-        toml_lines = [f'gate = "{verdict_dict["gate"]}"']
-        toml_lines.append(f'issue = {verdict_dict["issue"]}')
-        toml_lines.append(f'verdict = "{verdict_dict["verdict"]}"')
-        toml_lines.append(f'summary = "{verdict_dict["summary"].replace(chr(34), chr(39))}"')
-        toml_lines.append(f'next_action = "{verdict_dict["next_action"].replace(chr(34), chr(39))}"')
+        # verdict.json — compact allowlisted shape only
+        (artifact_dir / "verdict.json").write_text(
+            json.dumps(compact, indent=2), encoding="utf-8"
+        )
+        # verdict.toml — same compact shape in TOML (uses module-level _toml_str_value)
+        toml_lines = [
+            f'gate = {_toml_str_value(compact["gate"])}',
+            f'issue = {_toml_str_value(compact["issue"])}',
+            f'verdict = {_toml_str_value(compact["verdict"])}',
+            f'model = {_toml_str_value(compact["model"])}',
+            f'ts_start = {_toml_str_value(compact["ts_start"])}',
+            f'ts_end = {_toml_str_value(compact["ts_end"])}',
+            f'request_id = {_toml_str_value(compact["request_id"])}',
+            f'confidence = {_toml_str_value(compact["confidence"])}',
+            f'reasons_summary = {_toml_str_value(compact["reasons_summary"])}',
+            f'blocking_issue_count = {_toml_str_value(compact["blocking_issue_count"])}',
+            f'required_change_count = {_toml_str_value(compact["required_change_count"])}',
+            f'blocking_issues_summary = {_toml_str_value(compact["blocking_issues_summary"])}',
+            f'required_changes_summary = {_toml_str_value(compact["required_changes_summary"])}',
+        ]
         (artifact_dir / "verdict.toml").write_text(
             "\n".join(toml_lines) + "\n", encoding="utf-8"
         )
@@ -601,6 +751,7 @@ def main(argv: list[str] | None = None) -> int:
     # ── AC4/AC5: call adapter ─────────────────────────────────────────────────
     raw_text = ""
     verdict_dict: dict | None = None
+    request_id: str | None = None
     error_dict: dict | None = None
     exit_code = 0
 
@@ -610,7 +761,7 @@ def main(argv: list[str] | None = None) -> int:
     while attempt < args.max_attempts:
         attempt += 1
         try:
-            verdict_dict = call_openai_structured_verdict(
+            verdict_dict, request_id = call_openai_structured_verdict(
                 packet=packet_text,
                 gate=args.gate,
                 schema=VERDICT_SCHEMA,
@@ -664,6 +815,7 @@ def main(argv: list[str] | None = None) -> int:
             issue=args.issue,
             ts_start=ts_start,
             ts_end=ts_end,
+            request_id=request_id,
         )
         _append_index(args.issue, args.gate, ts_dir, None, error_dict["error_type"])
         print(f"Gate run failed: {error_dict['message']}", file=sys.stderr)
@@ -686,6 +838,7 @@ def main(argv: list[str] | None = None) -> int:
             issue=args.issue,
             ts_start=ts_start,
             ts_end=ts_end,
+            request_id=request_id,
         )
         _append_index(args.issue, args.gate, ts_dir, None, "SchemaValidationFailed")
         print(f"Verdict schema validation failed: {exc}", file=sys.stderr)
@@ -703,6 +856,7 @@ def main(argv: list[str] | None = None) -> int:
         issue=args.issue,
         ts_start=ts_start,
         ts_end=ts_end,
+        request_id=request_id,
     )
     _append_index(args.issue, args.gate, ts_dir, verdict_dict["verdict"], None)
 

@@ -106,15 +106,59 @@ Run artifacts are written to `.claude/openai-gates/issue-<N>/<timestamp>-<gate>/
 |------|-------------|
 | `input-packet.toml` | Copy of the input packet |
 | `raw-response.txt` | Key-redacted raw API response |
-| `verdict.json` | Parsed verdict object |
-| `verdict.toml` | TOML summary of verdict |
-| `transcript.md` | Human-readable run transcript |
+| `verdict.json` | Compact allowlisted verdict shape (see below) |
+| `verdict.toml` | Same compact shape in TOML format |
+| `transcript.md` | Full human-readable run transcript (post-redaction) |
 | `metadata.json` | Model, usage, timestamps (no secrets) |
 | `error.json` | Present only on error runs |
 
 The `INDEX.md` in `.claude/openai-gates/` is append-only — each run adds one row.
 
 **Note:** Only `.gitkeep` and `README.md` are committed. All run artifacts are gitignored.
+
+## Verdict artifact shape
+
+`verdict.json` and `verdict.toml` contain exactly 13 fields (the compact allowlist). Full AI-generated narrative is available in `transcript.md`.
+
+**Backward-compat note:** `verdict.json` is audit-only. Consumers must read `transcript.md` for the full human-readable narrative.
+
+```json
+{
+  "gate": "PLAN_REVIEW",
+  "issue": 1080,
+  "verdict": "APPROVED",
+  "model": "gpt-4o-2024-08-06",
+  "ts_start": "2026-05-14T18:00:00Z",
+  "ts_end": "2026-05-14T18:00:03Z",
+  "request_id": "resp_abc123...",
+  "confidence": null,
+  "reasons_summary": "Approved. Implementation...",
+  "blocking_issue_count": 0,
+  "required_change_count": 0,
+  "blocking_issues_summary": [],
+  "required_changes_summary": []
+}
+```
+
+**Field caps (applied before persistence):**
+
+| Field | Cap |
+|-------|-----|
+| `reasons_summary` | 500 characters (marker-inclusive) |
+| each item in `blocking_issues_summary` | 200 characters (marker-inclusive) |
+| each item in `required_changes_summary` | 200 characters (marker-inclusive) |
+| `blocking_issues_summary` list length | 5 items max |
+| `required_changes_summary` list length | 5 items max |
+
+**Truncation policy:** body is clipped to `cap - len("... [truncated]")` then the marker is appended. Total field length is always `<= cap`.
+
+**Count fields:** `blocking_issue_count` and `required_change_count` reflect the TRUE total from the API response, not the truncated list length.
+
+**`confidence`:** Forward-compat placeholder. The OpenAI Responses API does not supply confidence scores for text generations. This field is reserved for future use and is always `null` in `verdict.json` and `""` (empty string) in `verdict.toml`.
+
+**`request_id`:** Captured from `response.id` (OpenAI Responses API). `null` in `verdict.json` / `""` in `verdict.toml` when the SDK response object has no `id` attribute.
+
+**TOML null sentinel:** TOML 1.0 has no `null` keyword. Fields that are `null` in `verdict.json` are serialized as `""` (empty string) in `verdict.toml`. Consumers reading `verdict.toml` should treat `""` as "not set". Use `verdict.json` when you need the distinction between `null` and an empty string.
 
 ## Approved-Plan Materialization
 
