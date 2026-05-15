@@ -1,13 +1,15 @@
-# TEMPLATE — .claude/handoffs/templates/workdone-candidate.toml
+# TEMPLATE — .claude/templates/workdone-candidate.toml
 #
-# Purpose: Team Lead → Main Agent. Internal-only return packet.
-# This is NOT a ChatGPT WORKDONE_REVIEW. Main Agent validates the fields below
-# with the 8-point intake checklist (see SKILL.md § Workdone Candidate) and
-# only then assembles workdone-review-request.toml for ChatGPT.
+# Purpose: Main Agent materialises this file from Team Lead's structured text
+# report (Path B, post-#1093). Team Lead does NOT have Write — Team Lead
+# returns a text report; Main Agent authors the TOML. This is an internal-only
+# packet; it is NOT a ChatGPT WORKDONE_REVIEW. Main Agent runs the 8-point
+# intake checklist (see SKILL.md § Workdone Candidate) and only then assembles
+# workdone-review-request.toml for ChatGPT.
 #
 # Schema follows #1076 scope-lock style: explicit machine-checkable fields
 # (approved_files, actual_changed_files, unapproved_files, scope_verdict,
-# requires_scope_change_review, review_verdicts.*) so the intake check can be
+# requires_scope_change_review, review_verdicts.*) so the intake check is
 # deterministic.
 #
 # Copy this file to:
@@ -17,9 +19,14 @@ gate = "WORKDONE_CANDIDATE"
 issue = 0
 branch = "feat/NNN-short-name"
 approved_plan_ref = ".claude/handoffs/issue-NNN/approved-plan.toml"
-approved_plan_sha256 = "<hex digest verified at execution start>"
+approved_plan_sha256 = "<hex digest verified by Main Agent BEFORE invoking Team Lead and AGAIN on intake>"
 handoff_ref = ".claude/handoffs/issue-NNN/approved-execution-handoff.toml"
 completed_at = "YYYY-MM-DDTHH:MM:SSZ"
+
+# Path B convention (post-#1093): Main Agent materialises this file from
+# Team Lead's structured text report. Team Lead does not have Write.
+materialised_by = "main-agent"                   # main-agent | team-lead (legacy Path A only)
+team_lead_report_summary = "One-line excerpt from Team Lead's returned status line, e.g. 'status = READY_FOR_WORKDONE_REVIEW'."
 
 [implemented]
 summary = "One-paragraph summary of the actual work done."
@@ -57,14 +64,29 @@ status = "done"
 evidence = "tests/path/spec.ts:L20-L80"
 
 # Tests — explicit run / not_run with reasons.
+# Path B (post-#1093): each test was run by a specialist (qa, qa-fast, engineer)
+# routed by Team Lead. Team Lead does not run tests itself. The `owner` field
+# records which specialist ran the command. Main Agent re-verifies the evidence
+# during intake.
 [[tests.run]]
 command = ".claude/scripts/.venv/bin/pytest .claude/scripts/tests/"
+owner = "qa"                                   # specialist that ran it
 result = "PASS"                                # PASS | FAIL | SKIPPED
+timestamp = "YYYY-MM-DDTHH:MM:SSZ"
 output_excerpt = "12 passed in 0.34s"
+known_skips_or_flakes = ""                     # e.g. pre-existing flake reference
+e2e_sentinel = ""                              # e.g. ".e2e-passed" if the project uses one; empty otherwise
 
 [[tests.not_run]]
 name = "Live OpenAI smoke"
 reason = "Explicitly out of scope per approved plan."
+
+# Path B QA/E2E readiness gate (post-#1093):
+# If the approved plan required E2E, [[tests.run]] MUST contain an E2E entry
+# with result = "PASS" before Team Lead may return status = "READY_FOR_WORKDONE_REVIEW".
+# If E2E could not be run, Team Lead returns status = "QA_BLOCKED" (or "WORKDONE_BLOCKED"
+# if broader) and Main Agent materialises a partial WORKDONE_CANDIDATE with
+# recommendation_to_main_agent.status = "BLOCKED".
 
 # Reviewer verdicts — machine-checkable strings.
 [review_verdicts]
@@ -79,5 +101,11 @@ items = []                                     # if non-empty, each MUST referen
 items = []
 
 [recommendation_to_main_agent]
-status = "READY_FOR_WORKDONE_REVIEW"           # READY_FOR_WORKDONE_REVIEW | NEEDS_FIX | BLOCKED
+status = "READY_FOR_WORKDONE_REVIEW"           # READY_FOR_WORKDONE_REVIEW | NEEDS_FIX | BLOCKED | QA_BLOCKED | WORKDONE_BLOCKED | TOOLING_BLOCKED
 reason = "All gates passed; scope clean; AC fully mapped."
+
+# Path B no-bypass invariant (post-#1093):
+# This file does NOT authorise skipping any downstream gate. PLAN_REVIEW,
+# scope-lock, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW, PR_REVIEW,
+# and Main Agent's 8-point intake checklist remain mandatory regardless of the
+# `recommendation_to_main_agent.status` value.

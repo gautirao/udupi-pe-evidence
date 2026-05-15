@@ -1,8 +1,14 @@
 # TOOLING_BLOCKED — Team Lead → Main Agent fallback signal
 #
-# Written by team-lead (Mode 3) at Step 0.5 when its runtime toolkit is
-# insufficient to execute Mode 3 (e.g. Task / Bash / Write missing despite
-# frontmatter declaration — root cause investigated in #1090).
+# Path B (post-#1093): Main Agent materialises this file from Team Lead's
+# structured text report when Team Lead reports `status = "TOOLING_BLOCKED"`
+# at Step 0.5 (e.g. `Task` not callable, or any required Path-B tool missing).
+# Team Lead does NOT write this file itself — under Path B Team Lead has no
+# Write tool.
+#
+# Background: see #1090 (frontmatter syntax + initial fallback) and #1093
+# (harness-layer filtering of Bash/Write/Edit for Haiku subagents — observable
+# only at runtime, not from agent definitions).
 #
 # TOOLING_BLOCKED is NOT a gate bypass. It does not authorise skipping
 # PLAN_REVIEW, scope-lock, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW,
@@ -18,6 +24,8 @@ branch = ""                                                              # requi
 handoff_ref = ""                                                         # required: path to approved-execution-handoff.toml
 approved_plan_ref = ""                                                   # required: path to per-issue approved-plan.toml
 approved_plan_sha256 = ""                                                # required: digest from the handoff
+materialised_by = "main-agent"                                           # main-agent | team-lead (legacy Path A only)
+team_lead_report_summary = ""                                            # one-line excerpt from Team Lead's returned status text
 emitted_at = ""                                                          # required: ISO-8601 timestamp
 
 [runtime]
