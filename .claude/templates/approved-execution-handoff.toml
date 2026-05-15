@@ -1,0 +1,80 @@
+# TEMPLATE — .claude/handoffs/templates/approved-execution-handoff.toml
+#
+# Purpose: Main Agent → Team Lead. Authorises Haiku Team Lead to execute the
+# approved plan within fixed bounds. Created ONLY after ChatGPT PLAN_REVIEW
+# verdict = "APPROVED" AND per-issue approved-plan.toml has been materialised.
+#
+# Internal-only artefact. NEVER submitted to ChatGPT. NEVER passed to
+# openai_gate.py. Team Lead is hard-blocked from those channels.
+#
+# Copy this file to:
+#   .claude/handoffs/issue-NNN/approved-execution-handoff.toml
+# Fill in the placeholders. The authority block MUST remain locked as shown.
+
+gate = "APPROVED_EXECUTION_HANDOFF"
+issue = 0                                                 # GitHub issue number
+branch = "feat/NNN-short-name"                            # working branch name
+source_plan = ".claude/handoffs/issue-NNN/approved-plan.toml"
+approved_plan_sha256 = "<hex digest of source_plan at materialisation>"
+materialised_at = "YYYY-MM-DDTHH:MM:SSZ"                  # ISO-8601 UTC
+execution_owner = "team-lead"
+execution_model = "haiku"
+
+# --- AUTHORITY BLOCK — LOCKED ------------------------------------------------
+# These values are non-negotiable for Team Lead. Do not change.
+[authority]
+may_execute = true
+may_route_subagents = true
+may_change_scope = false
+may_contact_chatgpt = false
+may_invoke_openai_gate_cli = false
+may_open_pr = false
+may_merge = false
+# -----------------------------------------------------------------------------
+
+[approved_scope]
+allowed_files = [
+  # exact list mirrored from approved-plan.toml [scope].allowed_files
+]
+forbidden_files = [
+  # explicit anti-list (e.g. "src/**", "backend/**", "db/migration/**")
+]
+
+[acceptance_criteria]
+items = [
+  # exact list mirrored from approved-plan.toml [scope].acceptance
+]
+
+[required_gates]
+items = [
+  "scope-lock diff check before WORKDONE_CANDIDATE",
+  "code-reviewer",
+  "security-reviewer if applicable",
+  "QA / E2E if applicable",
+  "gatekeeper pre-screen if applicable",
+]
+
+[required_evidence]
+items = [
+  "git diff --name-only origin/main...HEAD",
+  "git diff --stat origin/main...HEAD",
+  "test command output",
+  "scope compliance table",
+  "reviewer verdicts",
+  "known deviations",
+  "WORKDONE_CANDIDATE",
+]
+
+# Team Lead MUST halt and return to Main Agent on any of these conditions.
+# Do NOT continue past a stop_condition. Do NOT "creatively" reinterpret.
+[stop_conditions]
+items = [
+  "unapproved file needed",
+  "approved approach is wrong",
+  "new dependency needed",
+  "backend/schema/auth change needed but not approved",
+  "test requires changing acceptance criteria",
+  "security finding outside approved scope",
+  "specialist recommends scope expansion",
+  "approved_plan_sha256 mismatch at start of execution",
+]

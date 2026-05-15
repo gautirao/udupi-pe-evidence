@@ -71,12 +71,14 @@ The **Main Agent** is the lifecycle owner and routing orchestrator — **not** t
 - Decide whether `architect` is needed (see § Architect Trigger Rule)
 - Assemble compact **TOML PLAN_REVIEW** package
 - Handle ChatGPT verdict and revise if needed
-- Materialise the approved plan to `.claude/state/current-approved-plan.toml`
+- Materialise the approved plan to `.claude/state/current-approved-plan.toml` AND a stable per-issue copy at `.claude/handoffs/issue-NNN/approved-plan.toml` with `sha256` digest (see § 6.5)
 - Update `.claude/SPRINT_CHECKPOINT.md` and `.claude/STATE.md`
-- Route implementation to specialist engineer agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`, `qa`)
+- **Choose execution path:** (a) route implementation directly to specialist engineer agents (`frontend-engineer`, `backend-engineer`, `supabase-engineer`, `qa`) for simple issues, OR (b) hand off to Haiku Team Lead via APPROVED_EXECUTION_HANDOFF for Tier 2/Tier 3 and milestone batches (see § Main Planner → Haiku Team Lead Execution Handoff)
+- When using Team Lead handoff: receive WORKDONE_CANDIDATE, run the 8-point intake checklist, only then assemble `workdone-review-request.toml` for ChatGPT
 - Enforce gates, scope lock, evidence contracts
-- Detect blockers/deviations and route to BLOCKER_REVIEW / CLAIM_REVIEW / WORKDONE_REVIEW (see § Optional Review Gates)
+- Detect blockers/deviations and route to BLOCKER_REVIEW / CLAIM_REVIEW / WORKDONE_REVIEW / SCOPE_CHANGE_REVIEW (see § Optional Review Gates)
 - Coordinate PR/merge/cleanup/pull/reindex
+- Archive handoff dirs per § Handoff Storage Structure cleanup policy on issue closeout
 
 ### Coding boundary (Main Agent micro-fix exception)
 
@@ -296,15 +298,16 @@ If `architect` is skipped, PLAN_REVIEW TOML MUST include `architect = "skipped: 
 
 **Use `team-lead` only for:**
 
-- sprint kickoff analysis
-- genuine complex PR decomposition
-- Tier 3 / large issue requiring multi-workstream coordination
-- 3+ independent workstreams
-- frontend + backend + tests/migration sequencing
-- multiple specialist agents with file-conflict risk
-- Figma journey replication across multiple states
-- implementation deviates from approved plan and needs re-partitioning
-- milestone-level or multi-issue coordination
+- sprint kickoff analysis (Mode 1)
+- genuine complex PR decomposition (Mode 2)
+- Tier 3 / large issue requiring multi-workstream coordination (Mode 2)
+- 3+ independent workstreams (Mode 2)
+- frontend + backend + tests/migration sequencing (Mode 2)
+- multiple specialist agents with file-conflict risk (Mode 2)
+- Figma journey replication across multiple states (Mode 2)
+- implementation deviates from approved plan and needs re-partitioning (Mode 2)
+- milestone-level or multi-issue coordination (Mode 1 / Mode 3 milestone batch)
+- **execution-orchestrator (Mode 3) — post-PLAN_REVIEW handoff. Runs on Haiku. Main Agent SHOULD invoke with `model: "haiku"`.** See § Main Planner → Haiku Team Lead Execution Handoff.
 
 **`team-lead` does NOT:**
 
@@ -315,6 +318,11 @@ If `architect` is skipped, PLAN_REVIEW TOML MUST include `architect = "skipped: 
 - replace `architect`
 - replace specialist engineers
 - run for normal single-agent tasks
+- contact ChatGPT directly (Mode 3 hard rule)
+- invoke `.claude/scripts/openai_gate.py` (Mode 3 hard rule)
+- open a PR or merge (Mode 3 hard rule)
+- change approved scope (Mode 3 hard rule)
+- override specialist agent models (Mode 3 hard rule — specialists keep configured/default models)
 
 `team-lead` may help prepare decomposition evidence for WORKDONE_REVIEW, but the Main Agent remains lifecycle owner.
 
@@ -518,9 +526,13 @@ text = "Revise the PLAN_REVIEW TOML by adding evidence for X, mapping AC2 to imp
 
 After ChatGPT returns `verdict = "APPROVED"`, the Main Agent MUST:
 
-1. Write the durable plan to **`.claude/state/current-approved-plan.toml`** — this is the post-compaction execution source of truth.
-2. Update `.claude/SPRINT_CHECKPOINT.md` with the approved plan reference (one-line pointer; do not duplicate content).
-3. Optionally post a short approval checkpoint comment on the GitHub issue (do not paste the full plan).
+1. Write the durable plan to **`.claude/state/current-approved-plan.toml`** — this is the post-compaction execution source of truth for the SINGLE in-flight issue.
+2. Write a **per-issue stable copy** to **`.claude/handoffs/issue-NNN/approved-plan.toml`** — identical content, decouples handoff integrity from the global file. This is required for milestone mode (2-4 issues planned in batch) and for the APPROVED_EXECUTION_HANDOFF integrity check.
+3. Compute `sha256(.claude/handoffs/issue-NNN/approved-plan.toml)` and record the digest. It becomes `approved_plan_sha256` in the APPROVED_EXECUTION_HANDOFF (see § Main Planner → Haiku Team Lead Execution Handoff). Example: `shasum -a 256 .claude/handoffs/issue-NNN/approved-plan.toml`.
+4. Update `.claude/SPRINT_CHECKPOINT.md` with the approved plan reference (one-line pointer; do not duplicate content).
+5. Optionally post a short approval checkpoint comment on the GitHub issue (do not paste the full plan).
+
+> **Rule:** When milestone mode plans 2-4 issues, `.claude/state/current-approved-plan.toml` is overwritten as each issue rotates into the in-flight slot. The per-issue copy at `.claude/handoffs/issue-NNN/approved-plan.toml` is the **stable integrity source** for the Team Lead handoff — never overwritten.
 
 `current-approved-plan.toml` MUST contain:
 
@@ -937,6 +949,231 @@ Drift handled silently — i.e. engineer ships outside `allowed_files` without t
 
 ---
 
+## Main Planner → Haiku Team Lead Execution Handoff
+
+Token-efficient orchestration split that runs alongside the existing ROUTE_AND_RUN flow. Optional, not mandatory — Main Agent may continue direct specialist routing for simple issues. Recommended for Tier 2/Tier 3 issues and any milestone batch.
+
+### Authority split
+
+| Role | Model | Responsibilities |
+|------|-------|------------------|
+| **Main Agent** | Opus | Milestone triage; issue selection; PLAN_REVIEW authoring + ChatGPT submission; materialise per-issue approved plan + sha256; create APPROVED_EXECUTION_HANDOFF; receive + validate WORKDONE_CANDIDATE; submit WORKDONE_REVIEW / PR_REVIEW to ChatGPT; PR create / merge / closeout; next issue selection. |
+| **Team Lead (Mode 3)** | **Haiku** | Read approved plan + APPROVED_EXECUTION_HANDOFF; verify `approved_plan_sha256`; route specialists; enforce approved scope + stop conditions; collect evidence; run fix-verify loops (max 2 per specialist); prepare WORKDONE_CANDIDATE; hand back to Main Agent. |
+| **Specialist agents** | Configured/default | Implementation. Unchanged. Models NOT overridden by Team Lead. |
+
+**Team Lead MUST NOT** (binding — encoded in the handoff `[authority]` block):
+
+1. Contact ChatGPT directly (any channel).
+2. Invoke `.claude/scripts/openai_gate.py` or any ChatGPT-facing tool.
+3. Open a PR (`gh pr create`).
+4. Merge (`gh pr merge`).
+5. Approve own work or shortcut a reviewer verdict.
+6. Bypass code-reviewer, security-reviewer, or QA gates.
+7. Change scope without first returning to Main Agent for SCOPE_CHANGE_REVIEW.
+8. Continue past a stop condition.
+9. Edit files directly — always route to a specialist.
+10. Override specialist agents' model fields.
+
+### APPROVED_EXECUTION_HANDOFF (Main Agent → Team Lead)
+
+Created **only** after ChatGPT `verdict = "APPROVED"` on PLAN_REVIEW AND § 6.5 materialisation produces both the global plan and the per-issue copy + sha256.
+
+Path: `.claude/handoffs/issue-NNN/approved-execution-handoff.toml`
+Template: `.claude/templates/approved-execution-handoff.toml`
+
+Required shape:
+
+```toml
+gate = "APPROVED_EXECUTION_HANDOFF"
+issue = 999
+branch = "issue-999-short-name"
+source_plan = ".claude/handoffs/issue-999/approved-plan.toml"   # per-issue copy, NOT the global file
+approved_plan_sha256 = "<hex digest of source_plan at materialisation>"
+materialised_at = "2026-05-15T03:30:00Z"
+execution_owner = "team-lead"
+execution_model = "haiku"
+
+[authority]                                                       # LOCKED — do not edit
+may_execute = true
+may_route_subagents = true
+may_change_scope = false
+may_contact_chatgpt = false
+may_invoke_openai_gate_cli = false
+may_open_pr = false
+may_merge = false
+
+[approved_scope]
+allowed_files = [...]                                             # mirrored from approved-plan.toml [scope].allowed_files
+forbidden_files = [...]
+
+[acceptance_criteria]
+items = [...]                                                     # mirrored from approved-plan.toml [scope].acceptance
+
+[required_gates]
+items = [
+  "scope-lock diff check before WORKDONE_CANDIDATE",
+  "code-reviewer",
+  "security-reviewer if applicable",
+  "QA / E2E if applicable",
+  "gatekeeper pre-screen if applicable",
+]
+
+[required_evidence]
+items = [
+  "git diff --name-only origin/main...HEAD",
+  "git diff --stat origin/main...HEAD",
+  "test command output",
+  "scope compliance table",
+  "reviewer verdicts",
+  "known deviations",
+  "WORKDONE_CANDIDATE",
+]
+
+[stop_conditions]
+items = [
+  "unapproved file needed",
+  "approved approach is wrong",
+  "new dependency needed",
+  "backend/schema/auth change needed but not approved",
+  "test requires changing acceptance criteria",
+  "security finding outside approved scope",
+  "specialist recommends scope expansion",
+  "approved_plan_sha256 mismatch at start of execution",
+]
+```
+
+After writing, Main Agent invokes team-lead via the Task tool with `model: "haiku"` and passes the handoff path. Team Lead's Mode 3 entry-condition checks (§ team-lead.md Mode 3 Step 0) verify the sha256 before any specialist is invoked.
+
+### WORKDONE_CANDIDATE (Team Lead → Main Agent)
+
+**INTERNAL only.** This is NOT a ChatGPT-facing packet. Never submitted to `openai_gate.py`. Never pasted into ChatGPT. Main Agent converts it into `workdone-review-request.toml` for ChatGPT only after the intake checklist passes.
+
+Path: `.claude/handoffs/issue-NNN/workdone-candidate.toml`
+Template: `.claude/templates/workdone-candidate.toml`
+
+Required shape (machine-checkable, #1076-style):
+
+```toml
+gate = "WORKDONE_CANDIDATE"
+issue = 999
+branch = "issue-999-short-name"
+approved_plan_ref = ".claude/handoffs/issue-999/approved-plan.toml"
+approved_plan_sha256 = "<digest verified at execution start>"
+handoff_ref = ".claude/handoffs/issue-999/approved-execution-handoff.toml"
+completed_at = "2026-05-15T05:00:00Z"
+
+[implemented]
+summary = "..."
+
+# Machine-checkable scope-lock fields
+approved_files = [...]
+actual_changed_files = [...]                                      # = git diff --name-only origin/main...HEAD
+unapproved_files = [...]                                          # = actual_changed_files \ approved_files
+scope_verdict = "PASS"                                            # PASS | SCOPE_CHANGE_REQUIRED
+requires_scope_change_review = false
+
+[[ac_mapping]]
+ac = "..."
+status = "done"                                                   # done | partial | deferred
+evidence = "file:line"
+
+[[tests.run]]
+command = "..."
+result = "PASS"                                                   # PASS | FAIL | SKIPPED
+output_excerpt = "..."
+
+[[tests.not_run]]
+name = "..."
+reason = "..."
+
+[review_verdicts]
+code_reviewer = "APPROVE"                                         # APPROVE | REQUEST_CHANGES | N/A
+security_reviewer = "N/A"                                         # APPROVE | REQUEST_CHANGES | N/A
+qa = "PASS"                                                       # PASS | FAIL | SKIPPED
+
+[deviations]
+items = []
+
+[risks]
+items = []
+
+[recommendation_to_main_agent]
+status = "READY_FOR_WORKDONE_REVIEW"                              # READY_FOR_WORKDONE_REVIEW | NEEDS_FIX | BLOCKED
+reason = "..."
+```
+
+### Main Agent intake checklist (HARD GATE — before assembling WORKDONE_REVIEW)
+
+Run all 8 checks on the received WORKDONE_CANDIDATE. ALL must PASS.
+
+1. **Digest integrity:** recompute `sha256(approved_plan_ref)`; MUST equal `approved_plan_sha256`. Mismatch ⇒ tampering or stale handoff. STOP.
+2. **Scope verdict:** `scope_verdict == "PASS"` AND `unapproved_files == []`. If `SCOPE_CHANGE_REQUIRED` ⇒ route to SCOPE_CHANGE_REVIEW (do not assemble WORKDONE_REVIEW).
+3. **Diff cross-check:** independently run `git diff --name-only origin/main...HEAD`; result MUST equal `actual_changed_files`. Mismatch ⇒ re-route to Team Lead.
+4. **AC mapping completeness:** every AC from `approved-plan.toml [scope].acceptance` has a corresponding `[[ac_mapping]]` entry with `status` + `evidence`.
+5. **Reviewer verdicts:** `code_reviewer == APPROVE`; `security_reviewer ∈ {APPROVE, N/A with reason}`; `qa ∈ {PASS, SKIPPED with documented reason}`.
+6. **Test evidence:** every item from `approved-plan.toml [tests_required]` appears in `tests.run` (with PASS/FAIL/SKIPPED + output) or `tests.not_run` with explicit reason.
+7. **Deviations:** if non-empty, each item MUST reference a Main-Agent-authorised resolution (revised plan, SCOPE_CHANGE_REVIEW outcome, or explicit user waiver).
+8. **Stop-condition trace:** if any stop-condition fired during Team Lead execution, confirm Main Agent already authorised the resolution.
+
+If any check fails: do NOT assemble WORKDONE_REVIEW. Either (a) re-route to Team Lead with delta, or (b) escalate to user.
+
+### Milestone Mode
+
+- Main Agent MAY plan 2-4 issues in a milestone batch.
+- Each issue has its OWN `.claude/handoffs/issue-NNN/approved-plan.toml` + `approved-execution-handoff.toml` + `workdone-candidate.toml`.
+- Global `.claude/state/current-approved-plan.toml` is **resume anchor** for the single in-flight issue; NOT the integrity source for the Team Lead handoff.
+- Team Lead executes **one issue at a time** unless Main Agent explicitly authorises parallel execution.
+- Parallel issues MUST NOT share branches unless explicitly approved by Main Agent + user.
+- Main Agent holds milestone-wide context; Team Lead holds per-issue execution context only.
+
+### Dry-runs
+
+#### Dry-run 1 — Normal flow
+
+1. Main Agent triages issue → Tier 2 → assembles PLAN_REVIEW TOML.
+2. User submits to ChatGPT → `verdict = "APPROVED"`.
+3. Main Agent writes BOTH `.claude/handoffs/issue-NNN/approved-plan.toml` AND `.claude/state/current-approved-plan.toml`. Computes `sha256` of per-issue copy.
+4. Main Agent writes `approved-execution-handoff.toml` with `source_plan` + `approved_plan_sha256` + authority block locked.
+5. Main Agent invokes team-lead with `model: "haiku"` and handoff path.
+6. Team Lead Mode 3 Step 0: verifies sha256 matches → PASS.
+7. Team Lead routes specialists (qa-fast where applicable → engineer → code-reviewer → qa). All gates PASS.
+8. Team Lead runs scope-lock diff: `actual_changed_files \ approved_files == []` → `scope_verdict = PASS`.
+9. Team Lead writes `workdone-candidate.toml` with `recommendation_to_main_agent.status = READY_FOR_WORKDONE_REVIEW`.
+10. Team Lead returns to Main Agent.
+11. Main Agent runs 8-point intake checklist → ALL PASS.
+12. Main Agent assembles `workdone-review-request.toml` from candidate fields.
+13. User submits to ChatGPT → `verdict = "APPROVED_FOR_PR"`.
+14. Main Agent creates PR, merges, archives handoff dir per archive policy.
+
+#### Dry-run 2 — Scope drift discovery
+
+1. Steps 1-6 as in Dry-run 1.
+2. Team Lead routes `frontend-engineer`. Engineer reports: *"`src/utils/discoverPanelState.ts` must change but is NOT in `approved_files`."*
+3. Team Lead recognises stop condition `"unapproved file needed"`. **HALTS** specialist routing immediately.
+4. Team Lead writes a partial `workdone-candidate.toml` with:
+   - `scope_verdict = "SCOPE_CHANGE_REQUIRED"`
+   - `unapproved_files = ["src/utils/discoverPanelState.ts"]`
+   - `requires_scope_change_review = true`
+   - `deviations.items = ["unapproved file needed: src/utils/discoverPanelState.ts (frontend-engineer cycle 1)"]`
+   - `recommendation_to_main_agent.status = "BLOCKED"`
+5. Team Lead returns to Main Agent. Does NOT continue. Does NOT contact ChatGPT. Does NOT invoke `openai_gate.py`.
+6. Main Agent intake checklist FAILS at step 2 (scope verdict != PASS). Routes to SCOPE_CHANGE_REVIEW.
+7. Main Agent decides:
+   - **(a)** Revise PLAN_REVIEW + resubmit to ChatGPT. On `APPROVED` revised plan: re-write `approved-plan.toml` (new sha256), re-issue `approved-execution-handoff.toml` with expanded `allowed_files` + new digest, Team Lead resumes Mode 3.
+   - **(b)** Reject scope expansion + instruct Team Lead to find in-scope solution. Team Lead resumes within original scope.
+   - **(c)** Escalate BLOCKED to user.
+8. PR is NEVER created with unapproved files. Pre-Merge Guard (existing AC4 in § Scope Lock & Drift Control) hard-blocks per #1076.
+
+### OpenAI gate automation placement
+
+- Main Agent MAY invoke `.claude/scripts/openai_gate.py` for PLAN_REVIEW and WORKDONE_REVIEW packet submission.
+- Team Lead **MUST NOT** invoke `openai_gate.py` (encoded in `authority.may_invoke_openai_gate_cli = false`).
+- APPROVED_EXECUTION_HANDOFF and WORKDONE_CANDIDATE are NEVER passed to `openai_gate.py` — they are internal handoffs, not ChatGPT-facing packets.
+- Gate authority, verdict schema, exit codes, and CLI flags are unchanged by this workflow.
+- Verification: `.claude/scripts/.venv/bin/pytest .claude/scripts/tests/` (mocked suite). Live OpenAI smoke is out of scope for the workflow-introduction PR.
+
+---
+
 ## WORKDONE_REVIEW (HARD GATE — Before PR/Merge under ChatGPT-Gated Mode)
 
 Required for Tier 3 issues; usually required for Tier 2; optional for Tier 0/1. Runs **after** all per-PR gates pass (engineer materialisation, code-reviewer, security-reviewer if applicable, QA E2E) and **before** PR creation/merge.
@@ -1065,27 +1302,48 @@ All three formats are compact TOML, written under `.claude/handoffs/issue-<NNN>/
 While we are not using the OpenAI API, the Main Agent maintains a local audit trail of every ChatGPT exchange:
 
 ```text
-.claude/handoffs/
+.claude/templates/                    # TRACKED — reusable workflow templates
+  approved-execution-handoff.toml     # Main Agent → Team Lead handoff template
+  workdone-candidate.toml             # Team Lead → Main Agent return template
+
+.claude/handoffs/                     # GITIGNORED — per-issue runtime audit trail
   issue-NNN/
     001-plan-review-request.toml
     001-plan-review-response.toml
     002-plan-review-request.toml      # if revision was required
     002-plan-review-response.toml
-    approved-plan.toml                # local copy / mirror
+    approved-plan.toml                # per-issue stable copy (integrity source for handoff)
+    approved-execution-handoff.toml   # Main Agent → Team Lead (Mode 3 only)
+    workdone-candidate.toml           # Team Lead → Main Agent (Mode 3 only)
     workdone-review-request.toml
     workdone-review-response.toml
     blocker-review-request.toml       # only if used
     blocker-review-response.toml
+  archive/
+    issue-NNN/
+      YYYY-MM-DD/                     # archived handoffs on closeout
+        ...
+      summary-YYYY-MM-DD.md           # compact closeout summary (alternative to raw archive)
 ```
 
 Rules:
 
-- Main Agent **writes** request files; user **pastes** them into ChatGPT Pro manually.
+- Main Agent **writes** request files; user **pastes** them into ChatGPT Pro manually (or invokes `.claude/scripts/openai_gate.py`).
 - User **pastes ChatGPT's reply back**; Main Agent **stores** it as the response file.
-- On approval, Main Agent **normalises** the approved plan into `.claude/state/current-approved-plan.toml` (the durable execution truth) and references the handoff path inside it.
+- On approval, Main Agent normalises the approved plan into BOTH `.claude/state/current-approved-plan.toml` (durable execution truth for the in-flight issue) AND `.claude/handoffs/issue-NNN/approved-plan.toml` (stable per-issue integrity source for Team Lead handoff). See § 6.5.
+- `approved-execution-handoff.toml` and `workdone-candidate.toml` are **INTERNAL** to the Main Agent ↔ Team Lead exchange. NEVER submitted to ChatGPT. NEVER passed to `openai_gate.py`. Team Lead's authority block hard-blocks both channels.
 - GitHub issue checkpoint stays clean — post only the approved plan summary if the workflow requires it. Do not spam every revision.
 
-**`.gitignore` recommendation:** `.claude/state/` is already gitignored. `.claude/handoffs/` is a local audit trail — recommend adding it to `.gitignore` (it is not added automatically; defer to repo maintainer). If the team wants the audit trail tracked, leave it un-ignored intentionally.
+### Handoff Archive / Cleanup Policy
+
+- **Active:** `.claude/handoffs/issue-NNN/` for the current issue plus the most recent 3 closed issues by default.
+- **Archive on closeout (Main Agent action only):**
+  - **Option A — move:** `mv .claude/handoffs/issue-NNN/ .claude/handoffs/archive/issue-NNN/YYYY-MM-DD/`
+  - **Option B — summarise:** write `.claude/handoffs/archive/issue-NNN/summary-YYYY-MM-DD.md` containing the verdicts + AC mapping + final commit ref; delete raw handoffs ONLY with explicit user instruction.
+- **No automatic deletion.** Cleanup is user-triggered. Do not script silent purges.
+- **No secrets** in handoff TOML — no API keys, no raw transcripts, no live credentials. If a packet would contain a secret, redact before writing.
+- **OpenAI runtime artefacts** stay under `.claude/openai-gates/` (already gitignored). Those are CLI-generated; do not move them into `handoffs/`.
+- **`.gitignore` recommendation:** `.claude/state/` is already gitignored. `.claude/handoffs/` and `.claude/handoffs/archive/` are local audit trails — repo maintainer decides whether to add them to `.gitignore`. Not auto-added.
 
 ---
 

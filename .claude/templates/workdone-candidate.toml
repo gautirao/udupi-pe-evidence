@@ -1,0 +1,83 @@
+# TEMPLATE — .claude/handoffs/templates/workdone-candidate.toml
+#
+# Purpose: Team Lead → Main Agent. Internal-only return packet.
+# This is NOT a ChatGPT WORKDONE_REVIEW. Main Agent validates the fields below
+# with the 8-point intake checklist (see SKILL.md § Workdone Candidate) and
+# only then assembles workdone-review-request.toml for ChatGPT.
+#
+# Schema follows #1076 scope-lock style: explicit machine-checkable fields
+# (approved_files, actual_changed_files, unapproved_files, scope_verdict,
+# requires_scope_change_review, review_verdicts.*) so the intake check can be
+# deterministic.
+#
+# Copy this file to:
+#   .claude/handoffs/issue-NNN/workdone-candidate.toml
+
+gate = "WORKDONE_CANDIDATE"
+issue = 0
+branch = "feat/NNN-short-name"
+approved_plan_ref = ".claude/handoffs/issue-NNN/approved-plan.toml"
+approved_plan_sha256 = "<hex digest verified at execution start>"
+handoff_ref = ".claude/handoffs/issue-NNN/approved-execution-handoff.toml"
+completed_at = "YYYY-MM-DDTHH:MM:SSZ"
+
+[implemented]
+summary = "One-paragraph summary of the actual work done."
+
+# --- MACHINE-CHECKABLE SCOPE-LOCK FIELDS -------------------------------------
+# These mirror #1076 enforcement style. Main Agent intake checks them
+# algorithmically; no judgement required.
+
+approved_files = [
+  # mirrored from approved-execution-handoff.toml [approved_scope].allowed_files
+]
+
+actual_changed_files = [
+  # MUST equal: git diff --name-only origin/main...HEAD
+]
+
+unapproved_files = [
+  # = set(actual_changed_files) - set(approved_files)
+  # MUST be empty when scope_verdict = "PASS"
+]
+
+scope_verdict = "PASS"                         # PASS | SCOPE_CHANGE_REQUIRED
+requires_scope_change_review = false           # true when scope_verdict != PASS
+# -----------------------------------------------------------------------------
+
+# Acceptance-criterion mapping — every AC from approved-plan.toml must appear.
+[[ac_mapping]]
+ac = "AC1 short text"
+status = "done"                                # done | partial | deferred
+evidence = "path/to/File.tsx:L10-L40"
+
+[[ac_mapping]]
+ac = "AC2 short text"
+status = "done"
+evidence = "tests/path/spec.ts:L20-L80"
+
+# Tests — explicit run / not_run with reasons.
+[[tests.run]]
+command = ".claude/scripts/.venv/bin/pytest .claude/scripts/tests/"
+result = "PASS"                                # PASS | FAIL | SKIPPED
+output_excerpt = "12 passed in 0.34s"
+
+[[tests.not_run]]
+name = "Live OpenAI smoke"
+reason = "Explicitly out of scope per approved plan."
+
+# Reviewer verdicts — machine-checkable strings.
+[review_verdicts]
+code_reviewer = "APPROVE"                      # APPROVE | REQUEST_CHANGES | N/A
+security_reviewer = "N/A"                      # APPROVE | REQUEST_CHANGES | N/A
+qa = "PASS"                                    # PASS | FAIL | SKIPPED
+
+[deviations]
+items = []                                     # if non-empty, each MUST reference Main-Agent-authorised resolution
+
+[risks]
+items = []
+
+[recommendation_to_main_agent]
+status = "READY_FOR_WORKDONE_REVIEW"           # READY_FOR_WORKDONE_REVIEW | NEEDS_FIX | BLOCKED
+reason = "All gates passed; scope clean; AC fully mapped."
