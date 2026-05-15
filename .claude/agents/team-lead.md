@@ -121,16 +121,19 @@ Recommendation: ready|blocked on [specific issue]
 
 ---
 
-## Mode 3: moved to `/mode3-run`
+## Mode 3: moved to the `mode3-orchestrator` agent + `/mode3-run` command
 
-Mode-3 Execution Orchestrator is **no longer a subagent role**. The behavioural finding (`.claude/hardening/team-lead-orchestration-stability-report.md`) showed that subagents in the Claude Code harness cannot invoke `Task`. The replacement is a top-level Agent Teams executor teammate, driven by `/mode3-run <issue#>`:
+Mode-3 Execution Orchestrator is **no longer a subagent role and no longer lives in this agent file.** The behavioural finding (`.claude/hardening/team-lead-orchestration-stability-report.md`) showed subagents in the Claude Code harness cannot invoke `Task`. A post-#1097 safety probe (`.claude/handoffs/agent-team-safety-probe/probe-evidence.toml`) then showed that reusing this same `team-lead` agent file for the Agent Teams teammate role self-blocks at the role-definition layer — the model reads this refusal prose and declines the legitimate Agent Teams mission.
 
+The replacement, shipped in #1098, is a **dedicated** top-level agent: `.claude/agents/mode3-orchestrator.md`. Spawn it via Agent Teams using the `/mode3-run <issue#>` slash command.
+
+- Dedicated agent: `.claude/agents/mode3-orchestrator.md` (top-level teammate; full toolkit `Task, Bash, Read, Write, Edit, Grep, Glob`)
 - Slash command: `.claude/commands/mode3-run.md`
-- File contracts (under `.claude/handoffs/issue-<N>/`): `approved-execution-handoff.toml`, `team-lead-execution-log.md`, `workdone-candidate.toml`, `blocked.toml`
+- File contracts under `.claude/handoffs/issue-<N>/`: `approved-execution-handoff.toml`, `team-lead-execution-log.md`, `workdone-candidate.toml`, `blocked.toml`
 - Choreography source-of-truth: `.claude/skills/ROUTE_AND_RUN.md` (Agent Teams is transport; Route-and-Run defines choreography)
-- Behavioural evidence: `.claude/handoffs/agent-team-probe/at01-evidence.txt` (Sonnet teammate successfully invoked `Task(qa-fast, …)` and received the sentinel)
+- Behavioural evidence: `.claude/handoffs/agent-team-probe/at01-evidence.txt`
 
-If a prompt asks team-lead (this subagent) to "act as Mode-3 Execution Orchestrator", "read an APPROVED_EXECUTION_HANDOFF", "invoke specialists via Task", or "materialise a workdone-candidate.toml": refuse and route the user to `/mode3-run <issue#>` instead. Do not attempt the role from inside a subagent.
+If a prompt asks `team-lead` (this subagent) to "act as Mode-3 Execution Orchestrator", "read an APPROVED_EXECUTION_HANDOFF", "invoke specialists via Task", or "materialise a workdone-candidate.toml": refuse and route the user to `/mode3-run <issue#>` instead — that command spawns the **`mode3-orchestrator`** teammate, not this subagent. Do not attempt the role from inside this subagent.
 
 ---
 

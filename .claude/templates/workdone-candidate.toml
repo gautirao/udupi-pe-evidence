@@ -17,7 +17,7 @@
 # Copy this file to:
 #   .claude/handoffs/issue-<N>/workdone-candidate.toml
 
-schema_version = "1"
+schema_version = "2"
 gate = "WORKDONE_CANDIDATE"
 issue = 0
 branch = "feat/<N>-short-name"
@@ -99,6 +99,26 @@ specialist_skipped = ""
 reason = ""
 rule_citation = ""  # e.g. "ROUTE_AND_RUN.md:369 Lean-mode"
 replacement_evidence = ""  # path or "NONE"
+
+# --- ROUTING DECISION LOG (NEW in #1098, schema v2) -------------------------
+# Summarises the routing decision the Orchestrator made BEFORE invoking the
+# first specialist. Main Agent WORKDONE_REVIEW intake verifies this section
+# matches the ROUTING DECISION entry in team-lead-execution-log.md and that
+# all selected specialists fall within the handoff's category_allowlist and
+# all mandatory_gates appear in selected_sequence. Missing or empty section
+# → WORKDONE_REVIEW fails.
+
+[routing_decision_log]
+risk_tier = ""          # mirror from handoff
+issue_type = ""         # mirror from handoff
+selected_sequence = [
+  # Ordered list of specialists invoked. Format: "specialist-name — rule citation".
+  # Example: "qa-fast — ROUTE_AND_RUN.md:352 (pre-implementation mandatory)"
+]
+gate_f_triggers_detected = []  # e.g. ["auth/JWT changes in src/auth/**"] or empty
+expected_evidence = []         # e.g. ["qa-fast: risk register", "code-reviewer: APPROVE verdict"]
+routing_log_entry_ref = ".claude/handoffs/issue-<N>/team-lead-execution-log.md ROUTING DECISION at <ISO-8601>"
+notes = ""
 
 [deviations]
 items = []

@@ -1,25 +1,44 @@
 # TEMPLATE — .claude/templates/approved-execution-handoff.toml
 #
-# Purpose: Main Agent (lead) → Executor teammate (Agent Teams). Authorises the
-# Sonnet executor teammate to execute the approved plan within fixed bounds.
+# Purpose: Main Agent (lead) → mode3-orchestrator teammate (Agent Teams).
+# Authorises the Sonnet Orchestrator to execute the approved plan within a
+# fixed BOUNDARY. The Orchestrator decides the per-call specialist sequence
+# inside this boundary per Route-and-Run policy and logs every routing
+# decision; Main Agent verifies the routing log before WORKDONE_REVIEW.
+#
 # Created ONLY after ChatGPT PLAN_REVIEW verdict = "APPROVED" AND per-issue
 # approved-plan.toml has been materialised.
 #
 # Internal-only artefact. NEVER submitted to ChatGPT. NEVER passed to
-# openai_gate.py. Executor is hard-blocked from those channels.
+# openai_gate.py. Orchestrator is hard-blocked from those channels.
 #
 # Agent Teams is the runtime transport. Route-and-Run defines the choreography.
-# The executor follows Route-and-Run (.claude/skills/ROUTE_AND_RUN.md); it does
-# NOT redefine it.
+# The Orchestrator follows Route-and-Run (.claude/skills/ROUTE_AND_RUN.md);
+# it does NOT redefine it. The Orchestrator may ADD mandatory gates discovered
+# at runtime (e.g. late-detected Gate F triggers); it may NEVER REMOVE them.
+#
+# Schema v2 (post-#1098): replaces `executor.allowed_specialists` with the
+# richer [executor.specialist_policy] block. Adds top-level risk_tier and
+# issue_type. Adds [escalation_rules].
 #
 # Copy this file to:
 #   .claude/handoffs/issue-<N>/approved-execution-handoff.toml
 # Fill in the placeholders. The [authority] block MUST remain locked as shown.
 
-schema_version = "1"
+schema_version = "2"
 gate = "APPROVED_EXECUTION_HANDOFF"
 issue = 0
 created_at = "YYYY-MM-DDTHH:MM:SSZ"
+
+# Risk tier per ROUTE_AND_RUN.md Step 1B + tier table at ROUTE_AND_RUN.md:64.
+# Drives the high-risk minimum specialist set (qa-fast + engineer +
+# code-reviewer(opus) + security-reviewer + qa verification).
+risk_tier = "normal"  # trivial | normal | high-risk | doc-only
+
+# Issue type per ROUTE_AND_RUN.md Step 1. Used by the Orchestrator together
+# with risk_tier to map to the appropriate engineer specialist via
+# ROUTE_AND_RUN_TABLES.md sections A-I.
+issue_type = "feature"  # bugfix | small-change | feature | refactor | perf | security | incident | ui
 
 [plan]
 approved_plan_path = ".claude/handoffs/issue-<N>/approved-plan.toml"
@@ -29,13 +48,9 @@ plan_review_evidence = ".claude/openai-gates/issue-<N>/<timestamp>-PLAN_REVIEW/v
 
 [executor]
 # MVP default model = "sonnet" for the first 3 dry-runs.
-# After 3 successful Sonnet runs, "haiku" may be compared separately for cost.
+# After 3 successful Sonnet runs, a separate cost-optimisation issue evaluates
+# Haiku. NO silent model escalation.
 model = "sonnet"
-allowed_specialists = [
-  # From approved plan routing. Subset of: frontend-engineer, backend-engineer,
-  # supabase-engineer, qa, qa-fast, code-reviewer, architect, security-reviewer,
-  # ui-designer.
-]
 allowed_file_globs = [
   # From approved plan files.likely_change.
 ]
@@ -47,8 +62,59 @@ forbidden_globs = [
 max_specialist_invocations = 12
 max_minutes = 45
 
+# --- SPECIALIST POLICY (Option C — Hybrid) ----------------------------------
+# Main Agent declares the BOUNDARY (this block).
+# Orchestrator decides the SEQUENCE within the boundary per Route-and-Run.
+# Main Agent verifies the routing log against this boundary before
+# WORKDONE_REVIEW.
+
+[executor.specialist_policy]
+
+# Broad categories the Orchestrator may pick from. Replaces the old exact
+# allowed_specialists list. The Orchestrator picks specifically WHICH engineer
+# (frontend vs backend vs supabase) based on issue_type + allowed_file_globs.
+category_allowlist = { engineers = ["frontend-engineer", "backend-engineer", "supabase-engineer"], reviewers = ["code-reviewer", "security-reviewer"], qa = ["qa-fast", "qa"], design = [] }
+# Add to design = ["architect"] when architecture gate triggers, or
+# ["ui-designer"] when UI design gate triggers, or both. Empty by default.
+
+# Specialists the Orchestrator MUST invoke. Derived from risk_tier and
+# Gate F triggers. The Orchestrator MAY ADD entries (e.g. late-detected
+# Gate F → add "security-reviewer"); it MAY NEVER REMOVE entries.
+mandatory_gates = [
+  "qa-fast",          # ROUTE_AND_RUN.md:352 — mandatory unless Lean-mode skip
+  "code-reviewer",    # ROUTE_AND_RUN.md:471 — mandatory unless single-file low-risk
+  "qa-verification",  # ROUTE_AND_RUN.md:495 — mandatory for Normal/High-risk
+  # Add "security-reviewer" for Gate F triggers
+  # Add "architect" if architecture gate triggers
+]
+
+# Always-forbidden agent types — Orchestrator refuses to invoke any of these.
+always_forbidden = ["general-purpose", "Plan", "Explore", "explorer-planner", "spec-enricher", "chatgpt-gatekeeper"]
+
+# Specialists with conditional triggers. Orchestrator adds them when the
+# trigger fires; otherwise they are not invoked.
+[[executor.specialist_policy.conditional_gates]]
+name = "ui-designer"
+trigger = "ui_design_gate (visible UI redesign or new screen)"
+
+[[executor.specialist_policy.conditional_gates]]
+name = "architect"
+trigger = "architecture_gate (new schema, contract, or unresolved design decision)"
+
+[[executor.specialist_policy.conditional_gates]]
+name = "qa-e2e-authoring"
+trigger = "qa-fast recommends 'E2E authoring recommended: YES'"
+
+# Verbatim Route-and-Run citations for when a mandatory_gate may be skipped.
+# Lifted directly from the policy docs; do NOT reword.
+[executor.specialist_policy.skip_authority]
+qa_fast = "Lean-mode only — ALL conditions at ROUTE_AND_RUN.md:357-369 must hold; skip log entry MUST cite that section and include replacement_evidence (e.g. doc-only diff)."
+code_reviewer = "Risk=low AND single-file AND no logic/behaviour change (ROUTE_AND_RUN.md:472). Skip log entry MUST cite this and replacement_evidence MAY be NONE."
+security_reviewer = "NO skip authority when Gate F triggers (auth/JWT/secrets/PII/payments/CORS/CSP/RLS) per ROUTE_AND_RUN_TABLES.md:68-72."
+qa_verification = "NO skip authority for Normal/High-risk. May be skipped only for trivial/doc-only changes documented in the approved plan."
+
 # --- AUTHORITY BLOCK — LOCKED ------------------------------------------------
-# These values are non-negotiable for the executor. Do not change.
+# These values are non-negotiable for the Orchestrator. Do not change.
 [authority]
 openai_gates = false
 chatgpt_contact = false
@@ -86,7 +152,7 @@ indexed_at = "YYYY-MM-DDTHH:MM:SSZ"
 index_authority_note = "Optimisation only; direct file content + git state win on conflict."
 
 [choreography]
-# Source-of-truth pointer. Executor MUST follow this; MUST NOT redefine it.
+# Source-of-truth pointer. Orchestrator MUST follow this; MUST NOT redefine it.
 source = ".claude/skills/ROUTE_AND_RUN.md"
 table = ".claude/skills/ROUTE_AND_RUN_TABLES.md"
 binding_statement = "Agent Teams is transport; Route-and-Run defines choreography."
@@ -106,11 +172,18 @@ high_risk_minimum_set = [
   "qa (verification)",
 ]
 reroute_cycle_limit = 2  # per ROUTE_AND_RUN.md:473-474 and SKILL.md:57
-skip_authority = "Extremely narrow. qa-fast only in Lean mode (ROUTE_AND_RUN.md:369). code-reviewer only for risk=low+single-file+no-logic (ROUTE_AND_RUN.md:472). security-reviewer and qa verification: NO skip authority on Normal/High-risk."
+
+[escalation_rules]
+# What the Orchestrator does on common runtime escalations.
+gate_f_discovered_late = "ADD security-reviewer to the remaining sequence; log the discovery + trigger in team-lead-execution-log.md as a 'ROUTING DECISION (REVISED)' entry citing the file:line that triggered Gate F. Continue execution. Do NOT halt unless adding security-reviewer is structurally impossible."
+scope_expansion_needed = "Halt immediately. Write blocked.toml(reason_code=SCOPE_EXPANSION_REQUIRED) with detail naming the required path/scope. Main Agent decides whether to re-plan."
+lean_mode_skip_eligible = "Orchestrator MAY skip qa-fast under Lean-mode only if ALL conditions at ROUTE_AND_RUN.md:357-369 hold. The skip MUST be recorded in team-lead-execution-log.md with all four AC26 fields (specialist_skipped, reason, rule_citation, replacement_evidence)."
+ambiguous_plan = "Halt. Write blocked.toml(reason_code=AMBIGUOUS_PLAN) with detail quoting the contradictory or incomplete section of approved-plan.toml. Main Agent routes back to Planner."
+model_routing_failure = "Halt. Write blocked.toml(reason_code=UNKNOWN, detail='model_routing_failure: <description>'). NO silent model switch. User decides retry on same model, escalation to Sonnet/Opus, or rollback."
+specialist_unavailable = "Halt. Write blocked.toml(reason_code=SPECIALIST_FAILURE | SPECIALIST_NOT_ALLOWED) per the cause."
 
 [stop_conditions]
-# Executor MUST halt and write blocked.toml on any of these. Do NOT continue
-# past a stop_condition. Do NOT "creatively" reinterpret.
+# Orchestrator MUST halt and write blocked.toml on any of these.
 items = [
   "unapproved file needed (write blocked.toml(OUT_OF_SCOPE) or (SCOPE_EXPANSION_REQUIRED))",
   "approved approach is wrong (AMBIGUOUS_PLAN)",
@@ -124,9 +197,9 @@ items = [
   "qa verification FAIL (QA_FAILED) — no fix attempt; qa is read-only",
   "rate limit hit (RATE_LIMITED)",
   "timebox exceeded (TIMEBOX_EXCEEDED)",
-  "Task tool not callable on executor (TOOL_UNAVAILABLE)",
+  "Task tool not callable on Orchestrator (TOOL_UNAVAILABLE)",
   "approved_plan_sha256 mismatch at start of execution (AMBIGUOUS_PLAN)",
-  "specialist not in allowed_specialists (SPECIALIST_NOT_ALLOWED)",
+  "specialist not in category_allowlist or in always_forbidden (SPECIALIST_NOT_ALLOWED)",
 ]
 
 [references]
@@ -134,5 +207,7 @@ route_and_run = ".claude/skills/ROUTE_AND_RUN.md"
 route_and_run_tables = ".claude/skills/ROUTE_AND_RUN_TABLES.md"
 skill_doc = ".claude/skills/route-and-run/SKILL.md"
 mode3_run_command = ".claude/commands/mode3-run.md"
+mode3_orchestrator_agent = ".claude/agents/mode3-orchestrator.md"
 behavioural_evidence = ".claude/handoffs/agent-team-probe/at01-evidence.txt"
 hardening_report = ".claude/hardening/team-lead-orchestration-stability-report.md"
+design_validation = ".claude/hardening/mode3-routing-authority-design-validation.md"
