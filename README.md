@@ -1,4 +1,4 @@
-# Welcome to your Lovable project
+# Udupi Property Explorer
 
 ## Project info
 
