@@ -985,6 +985,14 @@ def test_call_openai_structured_verdict_returns_request_id():
     assert result2 == APPROVED_VERDICT
 
 
+# ── VERDICT_SCHEMA strict-mode invariant ──────────────────────────────────────
+
+def test_verdict_schema_required_matches_properties():
+    # OpenAI strict structured-output mode requires every key in `properties`
+    # to also appear in `required`. Regression guard for issue #1087.
+    assert set(VERDICT_SCHEMA["required"]) == set(VERDICT_SCHEMA["properties"].keys())
+
+
 # ── _toml_str_value unit tests ────────────────────────────────────────────────
 
 def test_toml_str_value_serializes_none_as_empty_string():

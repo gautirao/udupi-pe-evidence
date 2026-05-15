@@ -164,6 +164,8 @@ VERDICT_SCHEMA: dict = {
         "summary",
         "blocking_issues",
         "required_changes",
+        "approved_scope",
+        "approved_files",
         "next_action",
     ],
     "additionalProperties": False,
