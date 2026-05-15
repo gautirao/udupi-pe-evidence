@@ -1044,6 +1044,10 @@ items = [
 
 After writing, Main Agent invokes team-lead via the Task tool with `model: "haiku"` and passes the handoff path. Team Lead's Mode 3 entry-condition checks (§ team-lead.md Mode 3 Step 0) verify the sha256 before any specialist is invoked.
 
+### TOOLING_BLOCKED fallback (Team Lead → Main Agent, #1090)
+
+Before routing any specialist, Team Lead runs a **Step 0.5 toolkit self-check** (`Task`, `Bash`, `Read`, `Write`, `Edit` must all be present at runtime). If any required tool is missing — the failure mode observed on #1086, before the team-lead.md frontmatter fix landed — Team Lead writes `.claude/handoffs/issue-NNN/tooling-blocked.toml` (template at `.claude/templates/tooling-blocked.toml`) listing `observed_tools` and `missing_tools`, then returns to Main Agent without invoking specialists. On receipt of `gate = "TOOLING_BLOCKED"`, Main Agent treats it as a **recoverable BLOCKED state**: it MUST NOT proceed to specialist routing under Mode 3, MUST NOT bypass any downstream gate (PLAN_REVIEW, scope-lock, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW, PR_REVIEW), and MAY only fall back to Main Agent direct orchestration with **explicit user authorisation** (same path used for #1086). TOOLING_BLOCKED is a process signal, not an execution authority.
+
 ### WORKDONE_CANDIDATE (Team Lead → Main Agent)
 
 **INTERNAL only.** This is NOT a ChatGPT-facing packet. Never submitted to `openai_gate.py`. Never pasted into ChatGPT. Main Agent converts it into `workdone-review-request.toml` for ChatGPT only after the intake checklist passes.

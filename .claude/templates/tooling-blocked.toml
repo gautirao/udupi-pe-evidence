@@ -1,0 +1,65 @@
+# TOOLING_BLOCKED — Team Lead → Main Agent fallback signal
+#
+# Written by team-lead (Mode 3) at Step 0.5 when its runtime toolkit is
+# insufficient to execute Mode 3 (e.g. Task / Bash / Write missing despite
+# frontmatter declaration — root cause investigated in #1090).
+#
+# TOOLING_BLOCKED is NOT a gate bypass. It does not authorise skipping
+# PLAN_REVIEW, scope-lock, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW,
+# or PR_REVIEW. It only signals that Mode-3 execution by Team Lead is not
+# possible in this runtime. Main Agent must obtain explicit user authorisation
+# before falling back to direct orchestration (same path used for #1086).
+#
+# Path: .claude/handoffs/issue-NNN/tooling-blocked.toml
+
+gate = "TOOLING_BLOCKED"
+issue = 0                                                                # required: GitHub issue number
+branch = ""                                                              # required: branch the handoff targeted
+handoff_ref = ""                                                         # required: path to approved-execution-handoff.toml
+approved_plan_ref = ""                                                   # required: path to per-issue approved-plan.toml
+approved_plan_sha256 = ""                                                # required: digest from the handoff
+emitted_at = ""                                                          # required: ISO-8601 timestamp
+
+[runtime]
+agent = "team-lead"
+mode = "3"
+model = ""                                                               # e.g. "haiku" — whatever model team-lead was spawned with
+
+[toolkit_check]
+required_tools = [
+  "Task",                                                                # specialist routing
+  "Bash",                                                                # sha256, scope-lock diff, tests, typecheck
+  "Read",                                                                # plan + source inspection
+  "Write",                                                               # workdone-candidate.toml authoring
+  "Edit",                                                                # iterative refinement (optional but expected)
+  "Grep",
+  "Glob",
+]
+observed_tools = []                                                      # tools actually available at runtime
+missing_tools = []                                                       # required_tools \ observed_tools
+
+[execution_state]
+specialists_invoked = []                                                 # MUST be empty — Step 0.5 fires before any invocation
+gates_run = []                                                           # MUST be empty
+files_modified = []                                                      # MUST be empty
+scope_changed = false                                                    # MUST be false
+
+[authority_audit]
+# Confirm Team Lead did not violate authority while detecting the block.
+contacted_chatgpt = false                                                # MUST be false
+invoked_openai_gate_cli = false                                          # MUST be false
+opened_pr = false                                                        # MUST be false
+merged = false                                                           # MUST be false
+changed_scope = false                                                    # MUST be false
+
+[recommendation_to_main_agent]
+status = "TOOLING_BLOCKED"
+reason = ""                                                              # short, factual — what's missing and why Mode 3 cannot proceed
+suggested_action = "Re-spawn team-lead OR obtain explicit user authorisation to fall back to Main Agent direct orchestration."
+
+[do_not]
+items = [
+  "do not skip PLAN_REVIEW, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW, or PR_REVIEW",
+  "do not commit, push, open PR, or merge based on TOOLING_BLOCKED alone",
+  "do not edit application code (src/**, backend/**, supabase/**, migrations, e2e/**) — TOOLING_BLOCKED is a process signal, not an execution authority",
+]
