@@ -186,4 +186,28 @@ describe('SchoolSelectedPanel', () => {
       }),
     );
   });
+
+  // ── AC: active-radius-chip ────────────────────────────────────────────────
+
+  it('active-radius-chip shows "Within 1 km" when radiusKm={1}', () => {
+    renderPanel({ radiusKm: 1 });
+    expect(screen.getByTestId('active-radius-chip')).toHaveTextContent('Within 1 km');
+  });
+
+  it('active-radius-chip shows "Within 3 km" when radiusKm={3}', () => {
+    renderPanel({ radiusKm: 3 });
+    expect(screen.getByTestId('active-radius-chip')).toHaveTextContent('Within 3 km');
+  });
+
+  it('active-radius-chip renders with the default effectiveRadius (3 km) when radiusKm is null', () => {
+    renderPanel({ radiusKm: null });
+    expect(screen.getByTestId('active-radius-chip')).toHaveTextContent('Within 3 km');
+  });
+
+  it('active-radius-chip is not a button and has no button role', () => {
+    renderPanel();
+    const chip = screen.getByTestId('active-radius-chip');
+    expect(chip.tagName).not.toBe('BUTTON');
+    expect(chip.getAttribute('role')).not.toBe('button');
+  });
 });

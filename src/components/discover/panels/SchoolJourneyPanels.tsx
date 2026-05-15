@@ -442,6 +442,14 @@ export function SchoolSelectedPanel({
           {school.address && (
             <p className="text-xs text-muted-foreground truncate">{school.address}</p>
           )}
+          <span
+            data-testid="active-radius-chip"
+            role="status"
+            aria-live="polite"
+            className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-muted text-xs text-muted-foreground"
+          >
+            Within {effectiveRadius} km
+          </span>
         </div>
       )}
 
