@@ -1,111 +1,116 @@
 # TEMPLATE — .claude/templates/workdone-candidate.toml
 #
-# Purpose: Main Agent materialises this file from Team Lead's structured text
-# report (Path B, post-#1093). Team Lead does NOT have Write — Team Lead
-# returns a text report; Main Agent authors the TOML. This is an internal-only
-# packet; it is NOT a ChatGPT WORKDONE_REVIEW. Main Agent runs the 8-point
-# intake checklist (see SKILL.md § Workdone Candidate) and only then assembles
-# workdone-review-request.toml for ChatGPT.
+# Purpose: Executor teammate → Main Agent (lead). Written by the executor on
+# SUCCESS only, after all Route-and-Run gates have passed.
 #
-# Schema follows #1076 scope-lock style: explicit machine-checkable fields
-# (approved_files, actual_changed_files, unapproved_files, scope_verdict,
-# requires_scope_change_review, review_verdicts.*) so the intake check is
-# deterministic.
+# Internal-only packet; this is NOT the ChatGPT WORKDONE_REVIEW. Main Agent
+# runs the 8-point intake checklist (sha256 verify, scope-lock diff, QA/E2E
+# evidence verify) before assembling workdone-review-request.toml for ChatGPT.
+#
+# Preconditions (executor MUST NOT write this unless ALL hold):
+#   (a) unit_tests in {PASS, NOT_REQUIRED} with justification when NOT_REQUIRED
+#   (b) e2e_tests in {PASS, NOT_REQUIRED} with justification when NOT_REQUIRED
+#   (c) scope_lock_self_check (advisory) computed and shows no violation
+#   (d) sha256(approved-plan.toml) still matches approved-execution-handoff.toml
+# Otherwise executor writes blocked.toml instead.
 #
 # Copy this file to:
-#   .claude/handoffs/issue-NNN/workdone-candidate.toml
+#   .claude/handoffs/issue-<N>/workdone-candidate.toml
 
+schema_version = "1"
 gate = "WORKDONE_CANDIDATE"
 issue = 0
-branch = "feat/NNN-short-name"
-approved_plan_ref = ".claude/handoffs/issue-NNN/approved-plan.toml"
-approved_plan_sha256 = "<hex digest verified by Main Agent BEFORE invoking Team Lead and AGAIN on intake>"
-handoff_ref = ".claude/handoffs/issue-NNN/approved-execution-handoff.toml"
-completed_at = "YYYY-MM-DDTHH:MM:SSZ"
+branch = "feat/<N>-short-name"
+handoff_sha256 = "<hex digest of approved-execution-handoff.toml at completion time>"
+executor_model = "sonnet"
+started_at = "YYYY-MM-DDTHH:MM:SSZ"
+finished_at = "YYYY-MM-DDTHH:MM:SSZ"
 
-# Path B convention (post-#1093): Main Agent materialises this file from
-# Team Lead's structured text report. Team Lead does not have Write.
-materialised_by = "main-agent"                   # main-agent | team-lead (legacy Path A only)
-team_lead_report_summary = "One-line excerpt from Team Lead's returned status line, e.g. 'status = READY_FOR_WORKDONE_REVIEW'."
+# Path E convention (post-#1096, Agent Teams MVP): the executor teammate is a
+# top-level CC session and writes this file directly. Main Agent reads from
+# disk; plain pane output is NOT authoritative.
+materialised_by = "executor-teammate"
 
-[implemented]
-summary = "One-paragraph summary of the actual work done."
+[summary]
+description = "One-paragraph summary of the actual work done."
+specialists_invoked = 0  # count of distinct specialist calls (excluding sentinel probe)
+specialist_call_log = ".claude/handoffs/issue-<N>/team-lead-execution-log.md"
 
-# --- MACHINE-CHECKABLE SCOPE-LOCK FIELDS -------------------------------------
-# These mirror #1076 enforcement style. Main Agent intake checks them
-# algorithmically; no judgement required.
-
-approved_files = [
-  # mirrored from approved-execution-handoff.toml [approved_scope].allowed_files
-]
-
-actual_changed_files = [
-  # MUST equal: git diff --name-only origin/main...HEAD
-]
-
-unapproved_files = [
-  # = set(actual_changed_files) - set(approved_files)
-  # MUST be empty when scope_verdict = "PASS"
-]
-
-scope_verdict = "PASS"                         # PASS | SCOPE_CHANGE_REQUIRED
-requires_scope_change_review = false           # true when scope_verdict != PASS
-# -----------------------------------------------------------------------------
-
-# Acceptance-criterion mapping — every AC from approved-plan.toml must appear.
+# --- ACCEPTANCE-CRITERION MAPPING -------------------------------------------
+# Every AC from approved-plan.toml MUST appear.
 [[ac_mapping]]
 ac = "AC1 short text"
-status = "done"                                # done | partial | deferred
+status = "done"  # done | partial | deferred
 evidence = "path/to/File.tsx:L10-L40"
 
-[[ac_mapping]]
-ac = "AC2 short text"
-status = "done"
-evidence = "tests/path/spec.ts:L20-L80"
+# --- SCOPE-LOCK FIELDS (advisory) -------------------------------------------
+# Executor's self-check is ADVISORY. Main Agent runs authoritative scope-lock
+# via `git diff --name-status origin/main...HEAD` during WORKDONE_REVIEW intake.
+[evidence]
+scope_lock_self_check = "PASS"  # PASS | VIOLATION_DETECTED
+scope_lock_authoritative_note = "Main Agent runs `git diff --name-status` as the authoritative check."
 
-# Tests — explicit run / not_run with reasons.
-# Path B (post-#1093): each test was run by a specialist (qa, qa-fast, engineer)
-# routed by Team Lead. Team Lead does not run tests itself. The `owner` field
-# records which specialist ran the command. Main Agent re-verifies the evidence
-# during intake.
+# --- QA / E2E EVIDENCE (HARD GATE) ------------------------------------------
+# ready_for = "WORKDONE_REVIEW" is only permitted when:
+#   unit_tests in {PASS, NOT_REQUIRED} AND
+#   e2e_tests in {PASS, NOT_REQUIRED} AND
+#   every NOT_REQUIRED has a non-empty justification traceable to the approved plan.
+unit_tests = "PASS"  # PASS | FAIL | NOT_REQUIRED
+unit_tests_justification = ""  # required when NOT_REQUIRED
+unit_tests_evidence_path = "path/to/test-output.txt"
+e2e_tests = "PASS"  # PASS | FAIL | NOT_REQUIRED
+e2e_tests_justification = ""  # required when NOT_REQUIRED
+e2e_tests_evidence_path = "path/to/e2e-output.txt"
+
+# Indexed-first navigation usage summary (AC15-AC19, AC29)
+index_usage_summary = "<count of indexed lookups; count of direct-read fallbacks; fallback reasons logged in team-lead-execution-log.md>"
+
+# --- TEST RUN DETAILS -------------------------------------------------------
 [[tests.run]]
-command = ".claude/scripts/.venv/bin/pytest .claude/scripts/tests/"
-owner = "qa"                                   # specialist that ran it
-result = "PASS"                                # PASS | FAIL | SKIPPED
+command = "<verbatim>"
+owner = "qa"  # specialist that ran it
+result = "PASS"  # PASS | FAIL | SKIPPED
 timestamp = "YYYY-MM-DDTHH:MM:SSZ"
-output_excerpt = "12 passed in 0.34s"
-known_skips_or_flakes = ""                     # e.g. pre-existing flake reference
-e2e_sentinel = ""                              # e.g. ".e2e-passed" if the project uses one; empty otherwise
+output_excerpt = "<short>"
+known_skips_or_flakes = ""
+e2e_sentinel = ""
 
 [[tests.not_run]]
-name = "Live OpenAI smoke"
-reason = "Explicitly out of scope per approved plan."
+name = ""
+reason = ""
 
-# Path B QA/E2E readiness gate (post-#1093):
-# If the approved plan required E2E, [[tests.run]] MUST contain an E2E entry
-# with result = "PASS" before Team Lead may return status = "READY_FOR_WORKDONE_REVIEW".
-# If E2E could not be run, Team Lead returns status = "QA_BLOCKED" (or "WORKDONE_BLOCKED"
-# if broader) and Main Agent materialises a partial WORKDONE_CANDIDATE with
-# recommendation_to_main_agent.status = "BLOCKED".
+# --- FILES CHANGED ----------------------------------------------------------
+[files_changed]
+paths = [
+  # Should equal: git diff --name-only origin/main...HEAD
+  # Each entry MUST match executor.allowed_file_globs from the handoff.
+]
 
-# Reviewer verdicts — machine-checkable strings.
+# --- REVIEWER VERDICTS ------------------------------------------------------
 [review_verdicts]
-code_reviewer = "APPROVE"                      # APPROVE | REQUEST_CHANGES | N/A
-security_reviewer = "N/A"                      # APPROVE | REQUEST_CHANGES | N/A
-qa = "PASS"                                    # PASS | FAIL | SKIPPED
+code_reviewer = "APPROVE"  # APPROVE | REQUEST_CHANGES | N/A
+security_reviewer = "N/A"  # APPROVE | REQUEST_CHANGES | N/A
+qa = "PASS"                # PASS | FAIL | SKIPPED
+
+# Skip-with-justification entries — one per specialist skipped (AC26).
+# Empty list when no skips. Every entry MUST have all four fields.
+[[skip_log]]
+specialist_skipped = ""
+reason = ""
+rule_citation = ""  # e.g. "ROUTE_AND_RUN.md:369 Lean-mode"
+replacement_evidence = ""  # path or "NONE"
 
 [deviations]
-items = []                                     # if non-empty, each MUST reference Main-Agent-authorised resolution
+items = []
 
 [risks]
 items = []
 
-[recommendation_to_main_agent]
-status = "READY_FOR_WORKDONE_REVIEW"           # READY_FOR_WORKDONE_REVIEW | NEEDS_FIX | BLOCKED | QA_BLOCKED | WORKDONE_BLOCKED | TOOLING_BLOCKED
-reason = "All gates passed; scope clean; AC fully mapped."
+[handoff_back]
+ready_for = "WORKDONE_REVIEW"  # only set when ALL preconditions above are satisfied
+reason = "All Route-and-Run gates passed; scope clean; AC fully mapped; QA/E2E evidence verified."
 
-# Path B no-bypass invariant (post-#1093):
+# Path E no-bypass invariant:
 # This file does NOT authorise skipping any downstream gate. PLAN_REVIEW,
 # scope-lock, code-reviewer, security-reviewer, QA, WORKDONE_REVIEW, PR_REVIEW,
-# and Main Agent's 8-point intake checklist remain mandatory regardless of the
-# `recommendation_to_main_agent.status` value.
+# and Main Agent's 8-point intake checklist remain mandatory.

@@ -45,6 +45,14 @@ tool Y at runtime", that assertion requires a fresh-spawn runtime probe before
 the PR can merge. A frontmatter diff alone is insufficient evidence for any
 runtime-availability claim.
 
+## Behavioural-only rule (post-#1096)
+
+For any runtime claim about `Task` callability, the probe MUST be **behavioural** — the agent under test must actually invoke a no-op specialist via `Task` and the specialist's verbatim sentinel response must be captured. Self-report of "Task is in my function schema" is explicitly **rejected** evidence. The #1093 false-positive arose precisely because schema-visible tools were treated as callable; the AT01 evidence in `.claude/handoffs/agent-team-probe/at01-evidence.txt` proved this in the opposite direction (an Agent Teams teammate's schema looked identical to a subagent's but the teammate could actually invoke Task).
+
+The harness invariant **"`Task` is not available inside subagents"** (`.claude/hardening/team-lead-orchestration-stability-report.md`) is now the baseline assumption. Any change that asserts a subagent has Task callability is rejected at runtime-probe acceptance unless the probe shows a real sentinel return.
+
+For Agent Teams Mode-3 (`/mode3-run`), the executor teammate's behavioural sentinel probe in `mode3-run.md` Phase 0.2 is the binding pre-flight. The lead reads the sentinel from `.claude/handoffs/issue-<N>/preflight-probe.txt`; the executor's plain pane output is not authoritative.
+
 ## Probe design
 
 ### Inputs

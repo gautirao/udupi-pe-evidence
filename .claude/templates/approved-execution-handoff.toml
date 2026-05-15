@@ -1,80 +1,138 @@
-# TEMPLATE — .claude/handoffs/templates/approved-execution-handoff.toml
+# TEMPLATE — .claude/templates/approved-execution-handoff.toml
 #
-# Purpose: Main Agent → Team Lead. Authorises Haiku Team Lead to execute the
-# approved plan within fixed bounds. Created ONLY after ChatGPT PLAN_REVIEW
-# verdict = "APPROVED" AND per-issue approved-plan.toml has been materialised.
+# Purpose: Main Agent (lead) → Executor teammate (Agent Teams). Authorises the
+# Sonnet executor teammate to execute the approved plan within fixed bounds.
+# Created ONLY after ChatGPT PLAN_REVIEW verdict = "APPROVED" AND per-issue
+# approved-plan.toml has been materialised.
 #
 # Internal-only artefact. NEVER submitted to ChatGPT. NEVER passed to
-# openai_gate.py. Team Lead is hard-blocked from those channels.
+# openai_gate.py. Executor is hard-blocked from those channels.
+#
+# Agent Teams is the runtime transport. Route-and-Run defines the choreography.
+# The executor follows Route-and-Run (.claude/skills/ROUTE_AND_RUN.md); it does
+# NOT redefine it.
 #
 # Copy this file to:
-#   .claude/handoffs/issue-NNN/approved-execution-handoff.toml
-# Fill in the placeholders. The authority block MUST remain locked as shown.
+#   .claude/handoffs/issue-<N>/approved-execution-handoff.toml
+# Fill in the placeholders. The [authority] block MUST remain locked as shown.
 
+schema_version = "1"
 gate = "APPROVED_EXECUTION_HANDOFF"
-issue = 0                                                 # GitHub issue number
-branch = "feat/NNN-short-name"                            # working branch name
-source_plan = ".claude/handoffs/issue-NNN/approved-plan.toml"
-approved_plan_sha256 = "<hex digest of source_plan at materialisation>"
-materialised_at = "YYYY-MM-DDTHH:MM:SSZ"                  # ISO-8601 UTC
-execution_owner = "team-lead"
-execution_model = "haiku"
+issue = 0
+created_at = "YYYY-MM-DDTHH:MM:SSZ"
+
+[plan]
+approved_plan_path = ".claude/handoffs/issue-<N>/approved-plan.toml"
+approved_plan_sha256 = "<hex digest of approved_plan_path at materialisation>"
+plan_review_verdict = "APPROVED"
+plan_review_evidence = ".claude/openai-gates/issue-<N>/<timestamp>-PLAN_REVIEW/verdict.toml"
+
+[executor]
+# MVP default model = "sonnet" for the first 3 dry-runs.
+# After 3 successful Sonnet runs, "haiku" may be compared separately for cost.
+model = "sonnet"
+allowed_specialists = [
+  # From approved plan routing. Subset of: frontend-engineer, backend-engineer,
+  # supabase-engineer, qa, qa-fast, code-reviewer, architect, security-reviewer,
+  # ui-designer.
+]
+allowed_file_globs = [
+  # From approved plan files.likely_change.
+]
+forbidden_globs = [
+  # From approved plan forbidden.
+  "**/.env*",
+  "**/secrets/**",
+]
+max_specialist_invocations = 12
+max_minutes = 45
 
 # --- AUTHORITY BLOCK — LOCKED ------------------------------------------------
-# These values are non-negotiable for Team Lead. Do not change.
+# These values are non-negotiable for the executor. Do not change.
 [authority]
-may_execute = true
-may_route_subagents = true
-may_change_scope = false
-may_contact_chatgpt = false
-may_invoke_openai_gate_cli = false
-may_open_pr = false
-may_merge = false
+openai_gates = false
+chatgpt_contact = false
+pr_creation = false
+merge = false
+scope_change = false
 # -----------------------------------------------------------------------------
 
-[approved_scope]
-allowed_files = [
-  # exact list mirrored from approved-plan.toml [scope].allowed_files
+[contract]
+must_write = [
+  ".claude/handoffs/issue-<N>/team-lead-execution-log.md",
+  # Plus exactly ONE of:
+  #   .claude/handoffs/issue-<N>/workdone-candidate.toml  (success path)
+  #   .claude/handoffs/issue-<N>/blocked.toml             (failure / safe halt)
 ]
-forbidden_files = [
-  # explicit anti-list (e.g. "src/**", "backend/**", "db/migration/**")
-]
-
-[acceptance_criteria]
-items = [
-  # exact list mirrored from approved-plan.toml [scope].acceptance
-]
-
-[required_gates]
-items = [
-  "scope-lock diff check before WORKDONE_CANDIDATE",
-  "code-reviewer",
-  "security-reviewer if applicable",
-  "QA / E2E if applicable",
-  "gatekeeper pre-screen if applicable",
+must_not_touch = [
+  "**/.env*",
+  "**/secrets/**",
+  # Plus all forbidden_globs above.
 ]
 
-[required_evidence]
-items = [
-  "git diff --name-only origin/main...HEAD",
-  "git diff --stat origin/main...HEAD",
-  "test command output",
-  "scope compliance table",
-  "reviewer verdicts",
-  "known deviations",
-  "WORKDONE_CANDIDATE",
-]
+[qa_requirements]
+# From approved plan. unit_tests / e2e_tests are required for Normal and
+# High-risk changes per Route-and-Run policy.
+unit_tests_required = true
+unit_tests_not_required_justification = ""  # required if unit_tests_required = false
+e2e_tests_required = true
+e2e_tests_not_required_justification = ""  # required if e2e_tests_required = false
 
-# Team Lead MUST halt and return to Main Agent on any of these conditions.
-# Do NOT continue past a stop_condition. Do NOT "creatively" reinterpret.
+[indexing]
+# Recorded by Main Agent during /mode3-run Phase 0.1.
+index_command = "mcp__jcodemunch__index_folder { path: '.', incremental: true }"
+index_result_summary = "<files_indexed=N; symbols=N; duration=Ns>"
+indexed_at = "YYYY-MM-DDTHH:MM:SSZ"
+index_authority_note = "Optimisation only; direct file content + git state win on conflict."
+
+[choreography]
+# Source-of-truth pointer. Executor MUST follow this; MUST NOT redefine it.
+source = ".claude/skills/ROUTE_AND_RUN.md"
+table = ".claude/skills/ROUTE_AND_RUN_TABLES.md"
+binding_statement = "Agent Teams is transport; Route-and-Run defines choreography."
+expected_normal_sequence = [
+  "qa-fast (pre-implementation, mandatory unless Lean-mode ALL skip conditions)",
+  "engineer specialist (frontend-engineer | backend-engineer | supabase-engineer; architect/ui-designer first if gate triggers)",
+  "code-reviewer (sonnet default; opus for high-risk auth/payments/migrations/data-integrity)",
+  "security-reviewer (mandatory when Gate F triggers: auth/JWT/secrets/PII/payments/CORS/CSP/RLS)",
+  "qa E2E authoring (conditional; only when qa-fast recommends YES)",
+  "qa verification (mandatory for Normal/High-risk before commit/push/PR; prompt prefix 'Mode: verification')",
+]
+high_risk_minimum_set = [
+  "qa-fast",
+  "engineer",
+  "code-reviewer (opus override)",
+  "security-reviewer",
+  "qa (verification)",
+]
+reroute_cycle_limit = 2  # per ROUTE_AND_RUN.md:473-474 and SKILL.md:57
+skip_authority = "Extremely narrow. qa-fast only in Lean mode (ROUTE_AND_RUN.md:369). code-reviewer only for risk=low+single-file+no-logic (ROUTE_AND_RUN.md:472). security-reviewer and qa verification: NO skip authority on Normal/High-risk."
+
 [stop_conditions]
+# Executor MUST halt and write blocked.toml on any of these. Do NOT continue
+# past a stop_condition. Do NOT "creatively" reinterpret.
 items = [
-  "unapproved file needed",
-  "approved approach is wrong",
-  "new dependency needed",
-  "backend/schema/auth change needed but not approved",
-  "test requires changing acceptance criteria",
-  "security finding outside approved scope",
-  "specialist recommends scope expansion",
-  "approved_plan_sha256 mismatch at start of execution",
+  "unapproved file needed (write blocked.toml(OUT_OF_SCOPE) or (SCOPE_EXPANSION_REQUIRED))",
+  "approved approach is wrong (AMBIGUOUS_PLAN)",
+  "new dependency needed (SCOPE_EXPANSION_REQUIRED)",
+  "backend/schema/auth change needed but not approved (OUT_OF_SCOPE)",
+  "test requires changing acceptance criteria (AMBIGUOUS_PLAN)",
+  "security finding outside approved scope (SECURITY_FAILED)",
+  "specialist recommends scope expansion (SCOPE_EXPANSION_REQUIRED)",
+  "code-reviewer terminal REQUEST_CHANGES (REVIEW_FAILED)",
+  "code-reviewer cycle limit exceeded (REROUTE_LIMIT_EXCEEDED)",
+  "qa verification FAIL (QA_FAILED) — no fix attempt; qa is read-only",
+  "rate limit hit (RATE_LIMITED)",
+  "timebox exceeded (TIMEBOX_EXCEEDED)",
+  "Task tool not callable on executor (TOOL_UNAVAILABLE)",
+  "approved_plan_sha256 mismatch at start of execution (AMBIGUOUS_PLAN)",
+  "specialist not in allowed_specialists (SPECIALIST_NOT_ALLOWED)",
 ]
+
+[references]
+route_and_run = ".claude/skills/ROUTE_AND_RUN.md"
+route_and_run_tables = ".claude/skills/ROUTE_AND_RUN_TABLES.md"
+skill_doc = ".claude/skills/route-and-run/SKILL.md"
+mode3_run_command = ".claude/commands/mode3-run.md"
+behavioural_evidence = ".claude/handoffs/agent-team-probe/at01-evidence.txt"
+hardening_report = ".claude/hardening/team-lead-orchestration-stability-report.md"

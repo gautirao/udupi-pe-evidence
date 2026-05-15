@@ -1,0 +1,106 @@
+# TEMPLATE — .claude/templates/blocked.toml
+#
+# Purpose: Executor teammate → Main Agent (lead). Written by the executor on
+# FAILURE or UNSAFE CONDITION. Halts the run; Reviewer phase short-circuits
+# (does NOT call WORKDONE_REVIEW) for terminal-state reason codes.
+#
+# Supersedes the older .claude/templates/tooling-blocked.toml for #1096
+# Agent-Teams-based Mode-3 MVP. tooling-blocked.toml may be retired in a
+# follow-up cleanup PR.
+#
+# Copy this file to:
+#   .claude/handoffs/issue-<N>/blocked.toml
+
+schema_version = "1"
+gate = "BLOCKED"
+issue = 0
+blocked_at = "YYYY-MM-DDTHH:MM:SSZ"
+executor_model = "sonnet"
+
+# One of the 18 reason codes (15 from base packet + 3 from supplement).
+# Reviewer routing per code is documented in mode3-run.md Phase 6 and Phase 7.
+#
+#   AGENT_TEAMS_UNAVAILABLE     — TeamCreate/spawn failed; Reviewer does NOT call WORKDONE_REVIEW.
+#   TOOL_UNAVAILABLE            — Task not callable on executor; ditto.
+#   SPECIALIST_NOT_ALLOWED      — requested specialist not in approved allowlist.
+#   SPECIALIST_FAILURE          — specialist returned terminal error.
+#   OUT_OF_SCOPE                — edit attempted outside allowed_file_globs.
+#   SCOPE_EXPANSION_REQUIRED    — work cannot complete without expanding scope; user decides.
+#   AMBIGUOUS_PLAN              — approved plan is contradictory or incomplete; route to Planner.
+#   QA_FAILED                   — qa verification reported FAIL; no fix attempt (qa is read-only).
+#   E2E_FAILED                  — E2E required but evidence is FAIL or missing.
+#   RATE_LIMITED                — model/rate-limit; Reviewer does NOT call WORKDONE_REVIEW.
+#   TIMEBOX_EXCEEDED            — wall-clock exceeded executor.max_minutes; ditto.
+#   CONFLICTING_EVIDENCE        — both workdone-candidate.toml AND blocked.toml present; stop.
+#   INDEX_UNAVAILABLE           — JCode Munch / RTK indexing service not reachable.
+#   INDEX_STALE                 — index stale and refresh failed.
+#   UNKNOWN                     — fallback when none of the above fit; detail MUST explain.
+#
+# Supplement reason codes (#1096 PLAN_REVIEW supplement 2026-05-15):
+#   REVIEW_FAILED               — code-reviewer terminal REQUEST_CHANGES.
+#   SECURITY_FAILED             — security-reviewer blocking findings.
+#   REROUTE_LIMIT_EXCEEDED      — fix-verify cycle limit (2 per specialist per PR) exceeded.
+reason_code = "UNKNOWN"
+
+# One paragraph human-readable explanation. Cite specific specialist, file,
+# command, error message, or rule citation where applicable.
+detail = ""
+
+# Path to last known good artefact or commit. May be a path under
+# .claude/handoffs/issue-<N>/, a git sha, or "NONE" if the run never advanced
+# past pre-flight.
+last_safe_state = ""
+
+# Path to the execution log. Always set to:
+#   .claude/handoffs/issue-<N>/team-lead-execution-log.md
+state_dump = ".claude/handoffs/issue-<N>/team-lead-execution-log.md"
+
+# Authority audit — one-line confirmation that the executor did not attempt
+# any forbidden action while reaching this blocked state.
+authority_audit = "No forbidden actions attempted. Executor did not invoke OpenAI gates, did not create a PR, did not merge, did not change scope, did not touch secrets/env files."
+
+# Whether the run is resumable from this state. Most reason codes are NOT
+# resumable without Planner / Reviewer action.
+resumable = false  # bool
+
+# Optional: structured fields specific to certain reason codes.
+
+[scope_violation]  # populated when reason_code in {OUT_OF_SCOPE, SCOPE_EXPANSION_REQUIRED}
+attempted_path = ""
+violated_glob = ""  # which forbidden_glob matched, or which allowed_glob this falls outside
+
+[review_failure]  # populated when reason_code in {REVIEW_FAILED, SECURITY_FAILED}
+reviewer = ""        # "code-reviewer" | "security-reviewer"
+verdict = ""         # "REQUEST_CHANGES" | "BLOCKING_FINDINGS"
+findings_summary = ""
+cycles_attempted = 0
+cycles_limit = 2
+
+[qa_failure]  # populated when reason_code in {QA_FAILED, E2E_FAILED}
+test_command = ""
+exit_code = 0
+output_excerpt = ""
+evidence_path = ""
+
+[rate_limit]  # populated when reason_code in {RATE_LIMITED, TIMEBOX_EXCEEDED}
+# Executor-facing values only. The executor never invokes OpenAI gates, so
+# "openai-gate" is NOT a valid trigger value here. If an OpenAI gate rate-limit
+# occurs during a Reviewer phase, Main Agent reports it separately — not in the
+# executor's blocked.toml.
+trigger = ""  # "specialist-call" | "elapsed-wallclock"
+detail = ""
+elapsed_minutes = 0
+
+[tool_failure]  # populated when reason_code in {AGENT_TEAMS_UNAVAILABLE, TOOL_UNAVAILABLE}
+tool_name = ""
+attempted_invocation = ""
+verbatim_error = ""
+
+[index_failure]  # populated when reason_code in {INDEX_UNAVAILABLE, INDEX_STALE}
+index_command = ""
+verbatim_error = ""
+
+[references]
+approved_execution_handoff = ".claude/handoffs/issue-<N>/approved-execution-handoff.toml"
+execution_log = ".claude/handoffs/issue-<N>/team-lead-execution-log.md"
+mode3_run_command = ".claude/commands/mode3-run.md"
