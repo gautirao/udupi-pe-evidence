@@ -65,5 +65,9 @@ export function useDiscoverFilteredMarkers(
     },
     enabled: enabled && city.length > 0,
     staleTime: 60_000,
+    // Keep previous markers visible while a new school-proximity refetch is in-flight.
+    // Without this, TanStack Query v5 resets data to undefined on queryKey change,
+    // causing a transient empty-markers flash (Issue #1109).
+    placeholderData: (previousData) => previousData,
   });
 }

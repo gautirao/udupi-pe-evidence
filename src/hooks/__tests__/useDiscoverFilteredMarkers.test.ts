@@ -277,6 +277,63 @@ describe('useDiscoverFilteredMarkers', () => {
   });
   // ─── End regression #1109 ─────────────────────────────────────────────────
 
+  // ─── Regression: Issue #1109 run 2 — placeholderData preserves markers during school-proximity refetch ──
+  it('placeholderData_preserves_previous_markers_during_school_proximity_refetch', async () => {
+    // First fetch: no school filters → returns markers
+    const INITIAL_MARKERS = {
+      city: 'udupi',
+      markers: [{ id: 'p1', lat: 13.34, lon: 74.74, pricePaise: 5000000 }],
+      truncated: false,
+    };
+    // Second fetch: school proximity added → simulates slow in-flight refetch
+    const SCHOOL_MARKERS = {
+      city: 'udupi',
+      markers: [{ id: 'p2', lat: 13.35, lon: 74.75, pricePaise: 6000000 }],
+      truncated: false,
+    };
+
+    let resolveSecondFetch!: (value: typeof SCHOOL_MARKERS) => void;
+    const secondFetchPromise = new Promise<typeof SCHOOL_MARKERS>((res) => {
+      resolveSecondFetch = res;
+    });
+
+    mockGet
+      .mockResolvedValueOnce(INITIAL_MARKERS)
+      .mockReturnValueOnce(secondFetchPromise);
+
+    // Use a shared QueryClient so rerenders share the same cache
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+    // Render with no-school filters
+    const { result, rerender } = renderHook(
+      ({ filters }: { filters: Record<string, unknown> }) =>
+        useDiscoverFilteredMarkers('udupi', filters, true),
+      { wrapper, initialProps: { filters: {} } },
+    );
+
+    // Wait for first successful fetch
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.markers).toHaveLength(1);
+
+    // Rerender with school proximity filters — triggers new queryKey → in-flight refetch
+    rerender({ filters: { schoolLat: 13.34, schoolLon: 74.74, schoolRadiusKm: 2 } });
+
+    // While second fetch is in-flight, placeholderData must serve previous markers (non-empty)
+    // isFetching=true means the refetch is in-progress
+    await waitFor(() => expect(result.current.isFetching).toBe(true));
+    expect(result.current.data?.markers).toHaveLength(1);  // previous data preserved, not []
+
+    // Resolve the second fetch and confirm data updates to new result
+    resolveSecondFetch(SCHOOL_MARKERS);
+    await waitFor(() => expect(result.current.data?.markers).toHaveLength(1));
+    await waitFor(() => expect(result.current.data?.markers[0].id).toBe('p2'));
+  });
+  // ─── End regression #1109 run 2 ───────────────────────────────────────────────────────────────────────
+
   it('bbox_omitted_when_contains_NaN', async () => {
     mockGet.mockResolvedValue(BASE_MARKERS);
 
