@@ -223,6 +223,60 @@ describe('useDiscoverFilteredMarkers', () => {
     expect(params.has('bbox')).toBe(false);
   });
 
+  // ─── Regression: Issue #1109 — school-first marker enablement ─────────────
+  // MapDiscovery now sets enabled=true when schoolId is present (unauthenticated
+  // school-first users). These tests guard the enabled-prop boundary in the hook.
+
+  it('school_first_enabled_true_with_school_params_fetches', async () => {
+    // Simulates: schoolId set → markersEnabled=true passed to hook
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          { schoolLat: 13.34, schoolLon: 74.74, schoolRadiusKm: 2 },
+          true, // enabled=true (from !!urlState.schoolId being truthy)
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockGet).toHaveBeenCalledTimes(1);
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    expect(url).toContain('schoolLat=13.34');
+    expect(url).toContain('schoolLon=74.74');
+  });
+
+  it('school_first_enabled_false_when_school_cleared_blocks_fetch', () => {
+    // Simulates: schoolId cleared + unauthenticated → markersEnabled=false
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          { schoolLat: 13.34, schoolLon: 74.74, schoolRadiusKm: 2 },
+          false, // enabled=false (schoolId absent, not authenticated, not area-first)
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('empty_schoolId_does_not_enable_fetch', () => {
+    // Simulates: urlState.schoolId = '' → !!'' = false → markersEnabled stays false
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, false),
+      { wrapper: makeWrapper() },
+    );
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+  // ─── End regression #1109 ─────────────────────────────────────────────────
+
   it('bbox_omitted_when_contains_NaN', async () => {
     mockGet.mockResolvedValue(BASE_MARKERS);
 

@@ -161,7 +161,7 @@ export default function MapDiscovery() {
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
-    markersEnabled: (isAuthenticated || urlState.journey === 'area-first') && mapZoom > AREA_LAYER_MAX_ZOOM,
+    markersEnabled: (isAuthenticated || urlState.journey === 'area-first' || !!urlState.schoolId) && mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
     bbox: mapBbox,
   });
