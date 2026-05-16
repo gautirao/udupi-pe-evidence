@@ -22,15 +22,16 @@ test('Home → Discover (Manipal pre-selected) → View Trends → Trends shows 
   await page.screenshot({ path: SS('01-home-loaded'), fullPage: false });
 
   // ── Step 2: Select Udupi city ─────────────────────────────────────────────
-  // First combobox is city selector
-  const cityTrigger = page.locator('[role="combobox"]').first();
+  // Use aria-label selectors from HomepageFilterPanel (desktop right-column panel).
+  // The positional .first()/.nth(1) selectors resolved to lg:hidden mobile elements.
+  const cityTrigger = page.locator('[aria-label="Select city"]');
   await cityTrigger.click();
   await page.getByRole('option', { name: 'Udupi', exact: true }).click();
   await page.screenshot({ path: SS('02-udupi-selected'), fullPage: false });
 
   // ── Step 3: Select Manipal area ───────────────────────────────────────────
-  // Second combobox is area selector — wait for it to populate
-  const areaTrigger = page.locator('[role="combobox"]').nth(1);
+  // Area selector in HomepageFilterPanel has aria-label="Select area"
+  const areaTrigger = page.locator('[aria-label="Select area"]');
   await areaTrigger.click();
   await expect(page.getByRole('option', { name: 'Manipal', exact: true })).toBeVisible({ timeout: 8_000 });
   await page.getByRole('option', { name: 'Manipal', exact: true }).click();
@@ -47,18 +48,20 @@ test('Home → Discover (Manipal pre-selected) → View Trends → Trends shows 
   expect(discoverUrl.searchParams.get('city')).toBe('udupi');
   expect(discoverUrl.searchParams.get('areaKey')).toBe('IN|KA|Udupi|Manipal');
 
-  // ── Step 6: Manipal is shown as selected in the Locality filter ───────────
-  await expect(page.getByRole('heading', { name: 'Filters' })).toBeVisible({ timeout: 10_000 });
-  // The Manipal chip is visible in the filter panel
+  // ── Step 6: Manipal is shown as selected ─────────────────────────────────
+  await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
+  // The Manipal chip/text is visible in the right panel
   await expect(page.getByText('Manipal').first()).toBeVisible({ timeout: 8_000 });
   await page.screenshot({ path: SS('05-manipal-chip-visible'), fullPage: false });
 
-  // ── Step 7: "View Trends" button is visible ────────────────────────────────
-  const trendsBtn = page.getByRole('button', { name: /View Trends/i });
+  // ── Step 7: "Trends" button/link is visible in the area panel header ────────
+  // After #887 the area panel header shows a "Trends" link button (not "View Trends").
+  // Scope to the discover right panel to avoid the nav bar "Trends" link.
+  const trendsBtn = page.getByTestId('discover-right-panel').getByRole('link', { name: /^Trends$/i });
   await expect(trendsBtn).toBeVisible({ timeout: 12_000 });
   await page.screenshot({ path: SS('06-view-trends-visible'), fullPage: false });
 
-  // ── Step 8: Click "View Trends" ──────────────────────────────────────────
+  // ── Step 8: Click "Trends" ───────────────────────────────────────────────
   await trendsBtn.click();
   await page.waitForLoadState('domcontentloaded');
   await page.screenshot({ path: SS('07-trends-loading'), fullPage: false });

@@ -181,7 +181,8 @@ test.describe('[E2E] Anonymous gallery behaviour', () => {
     const ctaLink = page.getByRole('link', { name: /sign in to view all photos/i });
     await expect(ctaLink).toBeVisible({ timeout: 3_000 });
     const href = await ctaLink.getAttribute('href');
-    expect(href).toContain(`/auth?returnTo=/listing/${id}`);
+    // href may have the returnTo path URL-encoded (%2Flisting%2F…) or plain
+    expect(decodeURIComponent(href ?? '')).toContain(`/auth?returnTo=/listing/${id}`);
   });
 
   test('A4 — clicking Prev from locked state dismisses overlay and returns to image 1', async ({ page }) => {

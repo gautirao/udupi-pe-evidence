@@ -179,7 +179,8 @@ test.describe('[E2E] Anonymous homepage → listing detail journey', () => {
     await expect(cta).toBeVisible({ timeout: 5_000 });
 
     const href = await cta.getAttribute('href');
-    expect(href).toBe(`/auth?returnTo=/listing/${listingId}`);
+    // returnTo may be URL-encoded (%2Flisting%2F…) or plain-slash depending on Link implementation
+    expect(decodeURIComponent(href ?? '')).toBe(`/auth?returnTo=/listing/${listingId}`);
   });
 });
 

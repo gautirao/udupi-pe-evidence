@@ -113,7 +113,7 @@ test('Journey 2: Discover → Listing → Trends — exact areaKey continuity', 
   // ── Step 1: Start at Discover (journey origin) ────────────────────────────
   await page.goto(`/discover?city=${CITY}`);
   await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByRole('heading', { name: 'Filters' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
   await page.screenshot({ path: SS('01-discover-start'), fullPage: false });
 
   // ── Step 2: Navigate to listing detail (mirrors "View Details" button click) ─
@@ -122,7 +122,8 @@ test('Journey 2: Discover → Listing → Trends — exact areaKey continuity', 
   await page.screenshot({ path: SS('02-listing-detail-loaded'), fullPage: false });
 
   // ── Step 3: Locality Insights card is present ─────────────────────────────
-  const trendsLink = page.getByRole('link', { name: /View Area Trends/i });
+  // ListingDetailSidebar renders the link as "View Trends" (not "View Area Trends")
+  const trendsLink = page.getByRole('link', { name: /View Trends/i });
   await expect(trendsLink).toBeVisible({ timeout: 12_000 });
   await page.screenshot({ path: SS('03-locality-insights-visible'), fullPage: false });
 

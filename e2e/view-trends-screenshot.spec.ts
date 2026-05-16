@@ -14,34 +14,25 @@ const SS = (name: string) => path.join(__dirname, `../screenshots/${name}.png`);
 test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
 test('View Trends button — Manipal journey with screenshots', async ({ page }) => {
-  // ── Step 1: Load Discover page ─────────────────────────────────────────────
-  await page.goto('/discover?city=udupi');
+  // ── Step 1: Load Discover with Manipal pre-selected via URL ───────────────
+  // The old flow used a Locality combobox that was removed from the filter panel.
+  // Area selection is now done via URL params (areaKey) or map marker clicks.
+  // Pre-select Manipal directly so the "View Trends" button is immediately
+  // visible — this exercises the same button and navigation as before.
+  const MANIPAL_KEY = 'IN|KA|Udupi|Manipal';
+  await page.goto(`/discover?city=udupi&areaKey=${encodeURIComponent(MANIPAL_KEY)}`);
   await page.waitForLoadState('domcontentloaded');
-  await expect(page.getByRole('heading', { name: 'Filters' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
   await page.screenshot({ path: SS('01-discover-loaded'), fullPage: false });
 
-  // ── Step 2: Confirm View Trends NOT visible before selection ───────────────
-  const trendsBtn = page.getByRole('button', { name: /View Trends/i });
-  await expect(trendsBtn).toHaveCount(0, { timeout: 5_000 });
-  await page.screenshot({ path: SS('02-no-view-trends-before-selection'), fullPage: false });
-
-  // ── Step 3: Open the Locality dropdown ────────────────────────────────────
-  const localityTrigger = page.locator('button[role="combobox"]').filter({ hasText: /localities/i });
-  await localityTrigger.click();
-  await expect(page.getByRole('option', { name: 'Manipal', exact: true })).toBeVisible({ timeout: 10_000 });
-  await page.screenshot({ path: SS('03-locality-dropdown-open-with-manipal'), fullPage: false });
-
-  // ── Step 4: Select Manipal ────────────────────────────────────────────────
-  await page.getByRole('option', { name: 'Manipal', exact: true }).click();
-  // Close the dropdown so it doesn't intercept subsequent clicks
-  await page.keyboard.press('Escape');
-  await page.screenshot({ path: SS('04-manipal-selected'), fullPage: false });
-
-  // ── Step 5: View Trends button appears (waits for /api/trends/options) ─────
+  // ── Step 2: "Trends" link appears in area panel header with Manipal selected ─
+  // After #887 the area panel header shows a "Trends" link (not a "View Trends" button).
+  // Scope to the discover right panel to avoid matching the nav bar "Trends" link.
+  const trendsBtn = page.getByTestId('discover-right-panel').getByRole('link', { name: /^Trends$/i });
   await expect(trendsBtn).toBeVisible({ timeout: 12_000 });
-  await page.screenshot({ path: SS('05-view-trends-button-visible'), fullPage: false });
+  await page.screenshot({ path: SS('02-view-trends-button-visible'), fullPage: false });
 
-  // ── Step 6: Click View Trends ─────────────────────────────────────────────
+  // ── Step 6: Click Trends ─────────────────────────────────────────────────
   await trendsBtn.click();
   await page.waitForLoadState('domcontentloaded');
   await page.screenshot({ path: SS('06-trends-page-loaded'), fullPage: false });
