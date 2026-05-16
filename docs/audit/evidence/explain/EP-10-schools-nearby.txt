@@ -1,4 +1,4 @@
-=== EP-10 — /api/public/schools/nearby (lat=13.29 lon=74.74 radius=5km — uses ST_DWithin on ST_Point(lon,lat) — RECOMPUTED point, NOT s.geog stored column) ===
+=== EP-10 — /api/public/schools/nearby (lat=13.29 lon=74.74 radius=5km — BEFORE fix: uses ST_DWithin on ST_Point(lon,lat) — RECOMPUTED point, NOT s.geog stored column) ===
 Captured: 2026-05-10T21:50:56Z
 Dataset (at capture): property_listings=1466 total / 76 LIVE / 13 LIVE+visible; schools=294; listing_images=2706; areas=33; cities=4 (udupi has 12/13 visible).
 
@@ -26,3 +26,43 @@ Planning Time: 0.166 ms
 Execution Time: 83.695 ms
 (15 rows)
 ROLLBACK
+
+=== EP-10 AFTER — post-fix query (issue #1063 / branch fix/1063-schools-nearby-geog-index) ===
+Fix applied: 2026-05-16
+Fix: SchoolRepository.findNearbySchools now uses s.geog (stored V75 GENERATED ALWAYS column) instead
+     of recomputed ST_Point(s.longitude, s.latitude)::geography, allowing idx_schools_geog (V76 GiST)
+     to be used by the query planner.
+
+--- Fixed SQL (params: lat=13.34, lon=74.74, radius=5000) ---
+SELECT s.id, s.name, s.board_type AS "boardType", s.board, s.latitude, s.longitude, s.address,
+       s.prominence_tier AS "prominenceTier", s.school_category AS "schoolCategory",
+       ST_Distance(s.geog, ST_MakePoint(74.74, 13.34)::geography) / 1000.0 AS "distanceKm"
+FROM schools s
+WHERE ST_DWithin(s.geog, ST_MakePoint(74.74, 13.34)::geography, 5000)
+ORDER BY "distanceKm" ASC
+
+--- AFTER plan (PREDICTED — production DB unreachable; to be captured at next dev DB session) ---
+NOTE: The production DB is not reachable from the CI/development environment — connection
+requires Supabase credentials (SUPABASE_DB_HOST/USER/PASSWORD env vars; see application.yml).
+The AFTER EXPLAIN plan will be captured in the next dev DB session once the branch is deployed
+or credentials are available locally.
+
+Expected plan shape (based on PostGIS GiST semantics):
+  Index Scan using idx_schools_geog on public.schools s
+    Index Cond: (geog && ST_Expand(ST_MakePoint(74.74, 13.34)::geography, 5000))
+    Filter: ST_DWithin(geog, ST_MakePoint(74.74, 13.34)::geography, 5000)
+  ->  Sort on "distanceKm"
+  Execution time: sub-millisecond at 294 rows (vs 83.7 ms Seq Scan BEFORE).
+
+Rationale for confidence:
+  - idx_schools_geog (V76) is a GiST index on schools.geog WHERE geog IS NOT NULL.
+  - V75 declares geog GENERATED ALWAYS AS (ST_MakePoint(longitude, latitude)::geography) STORED
+    from NOT NULL lat/lon columns (V58) — so geog IS NOT NULL is guaranteed for all rows,
+    meaning all 294 rows are covered by the partial index.
+  - ST_DWithin(s.geog, <geography>, radius) matches the index predicate column exactly, so
+    the planner can use a GiST index scan with an ST_Expand envelope filter — the canonical
+    two-stage predicate pattern (envelope filter + exact distance check) that PostGIS GiST
+    indexes are designed for.
+  - SchoolAreaMatchingIntegrationTest.java (AC10) confirms idx_schools_geog exists in pg_indexes.
+  - DiscoverListingPredicateBuilder.java:189-202 uses the identical pattern (pl.geog + ST_MakePoint)
+    and its EXPLAIN plans (EP-1.d) confirm GiST eligibility at the same dataset scale.

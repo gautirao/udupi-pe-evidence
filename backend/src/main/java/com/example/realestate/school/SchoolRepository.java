@@ -58,7 +58,13 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
 
     /**
      * Finds schools within a given radius of a point, ordered by distance ascending.
-     * Uses PostGIS ST_DWithin with geography casts for accurate great-circle distance.
+     * Uses PostGIS ST_DWithin against the stored {@code s.geog} geography column so the
+     * {@code idx_schools_geog} GiST index (V76) can be used instead of performing a
+     * full sequential scan with a recomputed {@code ST_Point(lon,lat)::geography} expression.
+     *
+     * <p>PostGIS convention: {@code ST_MakePoint(lon, lat)} — longitude first, latitude second.
+     * V75 generated {@code s.geog} as {@code ST_MakePoint(longitude, latitude)::geography},
+     * so the query-point must use the same lon/lat argument order.
      *
      * @param lat          latitude of the centre point
      * @param lon          longitude of the centre point
@@ -77,13 +83,13 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
                 s.prominence_tier AS "prominenceTier",
                 s.school_category AS "schoolCategory",
                 ST_Distance(
-                    ST_Point(s.longitude, s.latitude)::geography,
-                    ST_Point(:lon, :lat)::geography
+                    s.geog,
+                    ST_MakePoint(:lon, :lat)::geography
                 ) / 1000.0 AS "distanceKm"
             FROM schools s
             WHERE ST_DWithin(
-                ST_Point(s.longitude, s.latitude)::geography,
-                ST_Point(:lon, :lat)::geography,
+                s.geog,
+                ST_MakePoint(:lon, :lat)::geography,
                 :radiusMeters
             )
             ORDER BY "distanceKm" ASC
