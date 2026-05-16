@@ -46,7 +46,6 @@ public class DiscoverListingsController {
     public ResponseEntity<DiscoverListingsPage> getListings(
             @RequestParam(name = "city") String city,
             @RequestParam(name = "propertyTypes", required = false) List<String> propertyTypes,
-            @RequestParam(name = "localities", required = false) List<String> localities,
             @RequestParam(name = "priceMin", required = false) Long priceMin,
             @RequestParam(name = "priceMax", required = false) Long priceMax,
             @RequestParam(name = "dateFrom", required = false) String dateFrom,
@@ -94,7 +93,6 @@ public class DiscoverListingsController {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 city,
                 propertyTypes,
-                localities,
                 priceMinPaise,
                 priceMaxPaise,
                 dateFrom,

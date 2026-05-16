@@ -40,7 +40,6 @@ class DiscoverListingsMarkersConsistencyTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi",
                 List.of("apartment"),
-                null,
                 1_000_000L,
                 10_000_000L,
                 null, null, null, null, null, null, null, null, null, null, null, null, null);
@@ -54,7 +53,6 @@ class DiscoverListingsMarkersConsistencyTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "mangalore",
                 null, null, null, null, null, null, null, null, null, null, null, null,
-                null,
                 12.86, 74.84, 1.5, null);
         assertConsistent(f);
     }
@@ -70,22 +68,9 @@ class DiscoverListingsMarkersConsistencyTest {
         );
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi",
-                null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
                 polygon,
                 null, null, null, null);
-        assertConsistent(f);
-    }
-
-    // ── 4. Multi-locality filter ──────────────────────────────────────────────
-
-    @Test
-    void consistent_multiLocality() {
-        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi",
-                null,
-                List.of("Malpe", "Manipal", "Karkala"),
-                null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null);
         assertConsistent(f);
     }
 
@@ -95,7 +80,7 @@ class DiscoverListingsMarkersConsistencyTest {
     void consistent_backOnMarket() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi",
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
                 Boolean.TRUE,
                 null, null, null, null, null, null, null, null);
         assertConsistent(f);
@@ -107,7 +92,7 @@ class DiscoverListingsMarkersConsistencyTest {
     void consistent_newToMarket() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi",
-                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
                 null,
                 Boolean.TRUE,
                 null, null, null, null, null, null, null);

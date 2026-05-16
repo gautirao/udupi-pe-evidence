@@ -197,7 +197,6 @@ public class DiscoverListingsService {
         return new DiscoverListingPredicateBuilder.Filters(
                 q.city(),
                 q.propertyTypes(),
-                q.localities(),
                 q.priceMinPaise(),
                 q.priceMaxPaise(),
                 q.dateFrom(),

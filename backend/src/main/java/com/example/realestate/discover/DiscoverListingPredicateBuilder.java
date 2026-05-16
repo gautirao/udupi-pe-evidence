@@ -24,7 +24,6 @@ public class DiscoverListingPredicateBuilder {
     public record Filters(
             String city,
             List<String> propertyTypes,
-            List<String> localities,
             Long priceMinPaise,       // already converted from rupees by caller
             Long priceMaxPaise,
             String dateFrom,          // ISO-8601 date string, nullable
@@ -61,16 +60,6 @@ public class DiscoverListingPredicateBuilder {
             for (int i = 0; i < f.propertyTypes().size(); i++) {
                 sb.append(i == 0 ? "?" : ",?");
                 params.add(f.propertyTypes().get(i));
-            }
-            sb.append(")");
-        }
-
-        // localities
-        if (f.localities() != null && !f.localities().isEmpty()) {
-            sb.append(" AND pl.locality IN (");
-            for (int i = 0; i < f.localities().size(); i++) {
-                sb.append(i == 0 ? "?" : ",?");
-                params.add(f.localities().get(i));
             }
             sb.append(")");
         }

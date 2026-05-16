@@ -6,7 +6,6 @@ import java.util.List;
 public record DiscoverListingsQuery(
         String city,
         List<String> propertyTypes,
-        List<String> localities,
         Long priceMinPaise,
         Long priceMaxPaise,
         String dateFrom,

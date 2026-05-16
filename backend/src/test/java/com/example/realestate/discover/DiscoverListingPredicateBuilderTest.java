@@ -14,7 +14,7 @@ class DiscoverListingPredicateBuilderTest {
 
     private static DiscoverListingPredicateBuilder.Filters minimal(String city) {
         return new DiscoverListingPredicateBuilder.Filters(
-                city, null, null, null, null, null, null,
+                city, null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null);
     }
@@ -38,7 +38,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_propertyTypes_generatesInClause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", List.of("house"), null, null, null, null, null,
+                "udupi", List.of("house"), null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null);
 
@@ -54,7 +54,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_bedrooms4Only_generatesGte4Clause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 List.of(4), null, null, null, null, null,
                 null, null, null, null, null);
 
@@ -70,7 +70,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_bedrooms2And4_generatesOrClause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 List.of(2, 4), null, null, null, null, null,
                 null, null, null, null, null);
 
@@ -86,7 +86,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_priceMinPaise_generatesGteClause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, 10_000L, null, null, null,
+                "udupi", null, 10_000L, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, null);
 
@@ -101,7 +101,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_backOnMarketTrue_generatesBackToMarketClause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, Boolean.TRUE, null, null, null,
                 null, null, null, null, null);
 
@@ -116,7 +116,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_newToMarketTrue_generatesFirstPublishedAtClause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, Boolean.TRUE, null, null,
                 null, null, null, null, null);
 
@@ -141,7 +141,7 @@ class DiscoverListingPredicateBuilderTest {
                 List.of(13.3, 74.8)
         );
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 polygon, null, null, null, null);
 
@@ -189,7 +189,7 @@ class DiscoverListingPredicateBuilderTest {
                 List.of(13.4, 74.8)
         );
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 twoPoints, null, null, null, null);
 
@@ -213,7 +213,7 @@ class DiscoverListingPredicateBuilderTest {
                 List.of(13.3, 74.8)
         );
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 polygon, null, null, null, null);
 
@@ -240,7 +240,7 @@ class DiscoverListingPredicateBuilderTest {
                 List.of(13.3, 74.8)
         );
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 polygon, null, null, null, null);
 
@@ -259,7 +259,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_schoolProximity_generatesStDWithin() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, 13.0, 74.0, 3.0, null);
 
@@ -286,7 +286,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_schoolProximityNullRadius_defaults2km() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, 13.0, 74.0, null, null); // schoolRadiusKm = null
 
@@ -305,7 +305,7 @@ class DiscoverListingPredicateBuilderTest {
         // Documents the contract: both schoolLat AND schoolLon must be non-null
         // to generate the proximity predicate. A partial pair is silently skipped.
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, 13.0, null, 2.0, null); // schoolLon = null
 
@@ -322,7 +322,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Bbox bbox =
                 new DiscoverListingPredicateBuilder.Bbox(13.3, 74.7, 13.4, 74.8);
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
                 null, null, null, null, bbox);
 
@@ -357,7 +357,7 @@ class DiscoverListingPredicateBuilderTest {
     @Test
     void build_reraRegistered_generatesRegexClause() {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
-                "udupi", null, null, null, null, null, null,
+                "udupi", null, null, null, null, null,
                 null, null, null, null, Boolean.TRUE, null,
                 null, null, null, null, null);
 
