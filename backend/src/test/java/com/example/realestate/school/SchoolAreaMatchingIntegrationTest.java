@@ -56,7 +56,12 @@ import static org.assertj.core.api.Assertions.assertThat;
         // non-transactional CREATE INDEX CONCURRENTLY. Spring Boot Flyway requires
         // `mixed=true` (or a sidecar .conf) to honor this. Production sets it via
         // sidecar conf; tests opt in here so V73 + V79 can apply against PostGIS.
-        "spring.flyway.mixed=true"
+        "spring.flyway.mixed=true",
+        // Override the concurrently_keyword placeholder to empty string so V73 runs
+        // synchronous CREATE INDEX (no CONCURRENTLY) inside Testcontainers on arm64/Rosetta,
+        // where CONCURRENTLY deadlocks due to Flyway's persistent VID. Production uses
+        // "CONCURRENTLY " (default set in application.yml).
+        "spring.flyway.placeholders.concurrently_keyword="
 })
 class SchoolAreaMatchingIntegrationTest {
 

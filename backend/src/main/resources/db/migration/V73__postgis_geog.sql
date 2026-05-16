@@ -14,6 +14,6 @@ ALTER TABLE property_listings
             END
         ) STORED;
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_property_listings_geog
+CREATE INDEX ${concurrently_keyword}IF NOT EXISTS idx_property_listings_geog
     ON property_listings USING GIST (geog)
     WHERE geog IS NOT NULL;
