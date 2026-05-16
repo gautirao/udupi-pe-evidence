@@ -45,11 +45,33 @@ describe('PopularSchoolCard', () => {
     expect(screen.queryByText(/km away/)).not.toBeInTheDocument();
   });
 
-  it('does NOT render a nearbyListingCount badge (constraint #968)', () => {
+  it('does not render a listing count badge when nearbyListingCount is undefined', () => {
     render(<PopularSchoolCard school={baseSchool} onSelect={vi.fn()} />);
-    // Nothing matching "listings" or "properties" should appear on the card.
-    expect(screen.queryByText(/listing/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/propert/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/listings nearby/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render a listing count badge when nearbyListingCount is null', () => {
+    const school: SchoolResult = { ...baseSchool, nearbyListingCount: null };
+    render(<PopularSchoolCard school={school} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/listings nearby/i)).not.toBeInTheDocument();
+  });
+
+  it('does not render a listing count badge when nearbyListingCount is 0', () => {
+    const school: SchoolResult = { ...baseSchool, nearbyListingCount: 0 };
+    render(<PopularSchoolCard school={school} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/listings nearby/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the listing count badge when nearbyListingCount is 5', () => {
+    const school: SchoolResult = { ...baseSchool, nearbyListingCount: 5 };
+    render(<PopularSchoolCard school={school} onSelect={vi.fn()} />);
+    expect(screen.getByText('5 listings nearby')).toBeInTheDocument();
+  });
+
+  it('renders the listing count badge when nearbyListingCount is 1', () => {
+    const school: SchoolResult = { ...baseSchool, nearbyListingCount: 1 };
+    render(<PopularSchoolCard school={school} onSelect={vi.fn()} />);
+    expect(screen.getByText('1 listings nearby')).toBeInTheDocument();
   });
 
   it('calls onSelect with the school when clicked', async () => {

@@ -7,10 +7,13 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Service for {@link School} business logic.
@@ -27,10 +30,35 @@ public class SchoolService {
     /** Maximum allowed radius in km for nearby queries (prevents abuse). */
     private static final double MAX_RADIUS_KM = 50.0;
 
+    /** Radius used when counting nearby listings for popular-school responses. */
+    public static final double LISTING_COUNT_RADIUS_KM = 1.0;
+
     private final SchoolRepository repository;
 
     public SchoolService(SchoolRepository repository) {
         this.repository = repository;
+    }
+
+    /**
+     * Batch-fetches nearby listing counts for a list of school IDs.
+     *
+     * <p>Returns a map from school ID → count. Schools with no nearby listings are returned
+     * by the LEFT JOIN query with count=0, so callers can use {@link Map#getOrDefault} safely.
+     *
+     * @param schoolIds list of school UUIDs to count for
+     * @return map from school UUID to listing count (empty map if schoolIds is empty)
+     */
+    private Map<UUID, Integer> fetchListingCounts(List<UUID> schoolIds) {
+        if (schoolIds.isEmpty()) {
+            return Map.of();
+        }
+        return repository.countNearbyListings(
+                        new HashSet<>(schoolIds),
+                        LISTING_COUNT_RADIUS_KM * 1000)
+                .stream()
+                .collect(Collectors.toMap(
+                        SchoolRepository.SchoolListingCountProjection::getSchoolId,
+                        SchoolRepository.SchoolListingCountProjection::getListingCount));
     }
 
     /**
@@ -80,7 +108,8 @@ public class SchoolService {
                                 ? Math.round(p.getDistanceKm() * 100.0) / 100.0
                                 : null,
                         p.getProminenceTier(),
-                        p.getSchoolCategory()
+                        p.getSchoolCategory(),
+                        null
                 ))
                 .toList();
     }
@@ -107,9 +136,11 @@ public class SchoolService {
     public List<SchoolResponse> findPopularByCity(String citySlug, int limit) {
         int clampedLimit = Math.max(1, Math.min(50, limit));
         log.debug("findPopularByCity citySlug='{}' limit={}", citySlug, clampedLimit);
-        return repository.findPopularByCity(citySlug, clampedLimit)
-                .stream()
-                .map(SchoolResponse::from)
+        List<School> schools = repository.findPopularByCity(citySlug, clampedLimit);
+        List<UUID> ids = schools.stream().map(School::getId).toList();
+        Map<UUID, Integer> counts = fetchListingCounts(ids);
+        return schools.stream()
+                .map(s -> SchoolResponse.from(s, counts.getOrDefault(s.getId(), 0)))
                 .toList();
     }
 
@@ -138,19 +169,11 @@ public class SchoolService {
         List<SchoolRepository.AreaSchoolProjection> rows =
                 repository.findPopularByAreaKey(areaKey, clampedLimit);
 
+        List<UUID> ids = rows.stream().map(SchoolRepository.AreaSchoolProjection::getId).toList();
+        Map<UUID, Integer> counts = fetchListingCounts(ids);
+
         return rows.stream()
-                .map(p -> new SchoolResponse(
-                        p.getId().toString(),
-                        p.getName(),
-                        p.getBoardType(),
-                        p.getBoard(),
-                        p.getLatitude(),
-                        p.getLongitude(),
-                        p.getAddress(),
-                        null,
-                        p.getProminenceTier(),
-                        p.getSchoolCategory()
-                ))
+                .map(p -> SchoolResponse.from(p, counts.getOrDefault(p.getId(), 0)))
                 .toList();
     }
 
@@ -215,7 +238,8 @@ public class SchoolService {
                         p.getAddress(),
                         null,
                         p.getProminenceTier(),
-                        p.getSchoolCategory()
+                        p.getSchoolCategory(),
+                        null
                 ))
                 .toList();
     }
@@ -255,9 +279,12 @@ public class SchoolService {
         log.debug("getPopularSchoolsWithFilters citySlug='{}' boards={} categories={} limit={}",
                 citySlug, normalizedBoards, normalizedCategories, clampedLimit);
 
-        return repository.findPopularByCityWithFilters(citySlug, normalizedBoards, normalizedCategories, clampedLimit)
-                .stream()
-                .map(SchoolResponse::from)
+        List<School> schools = repository.findPopularByCityWithFilters(
+                citySlug, normalizedBoards, normalizedCategories, clampedLimit);
+        List<UUID> ids = schools.stream().map(School::getId).toList();
+        Map<UUID, Integer> counts = fetchListingCounts(ids);
+        return schools.stream()
+                .map(s -> SchoolResponse.from(s, counts.getOrDefault(s.getId(), 0)))
                 .toList();
     }
 }

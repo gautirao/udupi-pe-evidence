@@ -8,10 +8,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -45,6 +47,8 @@ class SchoolServiceTest {
         when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
         when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), anyInt()))
                 .thenReturn(List.of(proj));
+        when(repository.countNearbyListings(any(Set.class), anyDouble()))
+                .thenReturn(List.of(stubListingCount(id, 7)));
 
         List<SchoolResponse> results = service.findPopularByArea("IN|KA|Udupi|Manipal", 10);
 
@@ -53,6 +57,7 @@ class SchoolServiceTest {
         assertThat(results.get(0).name()).isEqualTo("Sharada Vidyalaya");
         assertThat(results.get(0).prominenceTier()).isEqualTo("notable");
         assertThat(results.get(0).distanceKm()).isNull();
+        assertThat(results.get(0).nearbyListingCount()).isEqualTo(7);
     }
 
     // ==================== findPopularByArea — unknown area throws AreaNotFoundException ====================
@@ -75,6 +80,8 @@ class SchoolServiceTest {
                 null, null, 13.3, 74.7, "Udupi", null, null);
 
         when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
+        when(repository.countNearbyListings(any(Set.class), anyDouble()))
+                .thenReturn(List.of(stubListingCount(id, 0)));
 
         // limit=0 → clamped to 1
         when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), eq(1)))
@@ -89,6 +96,64 @@ class SchoolServiceTest {
 
         List<SchoolResponse> resultsMax = service.findPopularByArea("IN|KA|Udupi|Manipal", 51);
         assertThat(resultsMax).hasSize(1);
+    }
+
+    // ==================== nearbyListingCount merging ====================
+
+    @Test
+    void findPopularByArea_zeroListings_countIsZero() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000010");
+        SchoolRepository.AreaSchoolProjection proj = stubProjection(id, "Empty Area School",
+                "CBSE", "CBSE", 13.3511, 74.7871, "Manipal", "notable", null);
+
+        when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
+        when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), anyInt()))
+                .thenReturn(List.of(proj));
+        // LEFT JOIN returns count=0 for this school
+        when(repository.countNearbyListings(any(Set.class), anyDouble()))
+                .thenReturn(List.of(stubListingCount(id, 0)));
+
+        List<SchoolResponse> results = service.findPopularByArea("IN|KA|Udupi|Manipal", 10);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).nearbyListingCount()).isEqualTo(0);
+    }
+
+    @Test
+    void findPopularByArea_missingFromCountMap_defaultsToZero() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000011");
+        SchoolRepository.AreaSchoolProjection proj = stubProjection(id, "Missing Count School",
+                "CBSE", "CBSE", 13.3511, 74.7871, "Manipal", "notable", null);
+
+        when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
+        when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), anyInt()))
+                .thenReturn(List.of(proj));
+        // Count query returns empty list (school absent from result set — defensive path)
+        when(repository.countNearbyListings(any(Set.class), anyDouble()))
+                .thenReturn(List.of());
+
+        List<SchoolResponse> results = service.findPopularByArea("IN|KA|Udupi|Manipal", 10);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).nearbyListingCount()).isEqualTo(0);
+    }
+
+    @Test
+    void findPopularByArea_multipleListings_countReflectsValue() {
+        UUID id = UUID.fromString("00000000-0000-0000-0000-000000000012");
+        SchoolRepository.AreaSchoolProjection proj = stubProjection(id, "Busy Area School",
+                "STATE", "STATE", 13.3511, 74.7871, "Manipal", "notable", null);
+
+        when(repository.countByAreaKey(eq("IN|KA|Udupi|Manipal"))).thenReturn(1);
+        when(repository.findPopularByAreaKey(eq("IN|KA|Udupi|Manipal"), anyInt()))
+                .thenReturn(List.of(proj));
+        when(repository.countNearbyListings(any(Set.class), anyDouble()))
+                .thenReturn(List.of(stubListingCount(id, 12)));
+
+        List<SchoolResponse> results = service.findPopularByArea("IN|KA|Udupi|Manipal", 10);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).nearbyListingCount()).isEqualTo(12);
     }
 
     // ==================== helpers ====================
@@ -112,6 +177,14 @@ class SchoolServiceTest {
             @Override public String getAddress()      { return address; }
             @Override public String getProminenceTier(){ return prominenceTier; }
             @Override public String getSchoolCategory(){ return schoolCategory; }
+        };
+    }
+
+    /** Returns a minimal {@link SchoolRepository.SchoolListingCountProjection}. */
+    private SchoolRepository.SchoolListingCountProjection stubListingCount(UUID schoolId, int count) {
+        return new SchoolRepository.SchoolListingCountProjection() {
+            @Override public UUID getSchoolId()       { return schoolId; }
+            @Override public Integer getListingCount() { return count; }
         };
     }
 }

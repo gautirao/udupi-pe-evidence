@@ -12,6 +12,8 @@ export interface SchoolResult {
   longitude: number;
   address: string;
   distanceKm: number;
+  /** Count of property listings within 1 km. Populated for /popular responses; null for other endpoints. */
+  nearbyListingCount?: number | null;
 }
 
 export interface NearbySchoolsResponse {

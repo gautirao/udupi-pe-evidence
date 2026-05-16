@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -97,6 +98,43 @@ public interface SchoolRepository extends JpaRepository<School, UUID> {
     List<NearbySchoolProjection> findNearbySchools(
             @Param("lat") double lat,
             @Param("lon") double lon,
+            @Param("radiusMeters") double radiusMeters);
+
+    /**
+     * Projection interface for the batch listing-count query.
+     * Maps each school ID to its count of nearby SCRAPED/LIVE listings.
+     */
+    interface SchoolListingCountProjection {
+        UUID getSchoolId();
+        Integer getListingCount();
+    }
+
+    /**
+     * Counts nearby SCRAPED/LIVE (non-duplicate, valid, non-null geography) property listings
+     * for each school in {@code schoolIds} within {@code radiusMeters}.
+     *
+     * <p>Uses a LEFT JOIN so schools with zero matching listings still appear in the result set,
+     * preventing them from being silently dropped (which would cause the service to treat them
+     * as missing and default to {@code 0} via {@code getOrDefault}).
+     *
+     * @param schoolIds    set of school IDs to compute counts for
+     * @param radiusMeters radius in metres (typically 1000 for 1 km)
+     * @return one projection per school in {@code schoolIds}
+     */
+    @Query(value = """
+            SELECT s.id AS schoolId, COUNT(pl.id) AS listingCount
+            FROM schools s
+            LEFT JOIN property_listings pl
+              ON ST_DWithin(pl.geog, s.geog, :radiusMeters)
+             AND pl.status IN ('SCRAPED', 'LIVE')
+             AND pl.is_duplicate = false
+             AND pl.is_valid = true
+             AND pl.geog IS NOT NULL
+            WHERE s.id IN (:schoolIds)
+            GROUP BY s.id
+            """, nativeQuery = true)
+    List<SchoolListingCountProjection> countNearbyListings(
+            @Param("schoolIds") Set<UUID> schoolIds,
             @Param("radiusMeters") double radiusMeters);
 
     /**

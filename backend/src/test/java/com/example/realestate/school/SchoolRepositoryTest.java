@@ -15,6 +15,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -101,6 +105,32 @@ class SchoolRepositoryTest {
                 VALUES (?::uuid, ?, ?, ?, ?, 'Test fixture')
                 ON CONFLICT (id) DO NOTHING
                 """, id, name, board, lat, lon);
+    }
+
+    /**
+     * Inserts a property listing at the given coordinates with the given status.
+     * {@code isValid}, {@code isDuplicate} default to their AC2 requirements.
+     *
+     * @param lat       latitude (may be null to produce a NULL geog — excluded from counts)
+     * @param lon       longitude (may be null)
+     * @param status    listing_status string (e.g. 'SCRAPED', 'LIVE', 'DRAFT')
+     * @param isDuplicate true to set is_duplicate=true
+     * @param isValid     true to set is_valid=true
+     */
+    private void insertListing(Double lat, Double lon, String status,
+                               boolean isDuplicate, boolean isValid) {
+        // The listing_status enum requires a literal cast in the SQL — JDBC cannot bind a
+        // String parameter to a PostgreSQL enum column even with stringtype=unspecified.
+        // Since the status values are a controlled, internal test-only enum set (SCRAPED/LIVE/DRAFT),
+        // we embed the status directly in the SQL via String.format rather than as a bind parameter.
+        // lat/lon/isDuplicate/isValid remain bound parameters.
+        String sql = String.format("""
+                INSERT INTO property_listings
+                    (status, latitude, longitude, is_duplicate, is_valid)
+                VALUES
+                    ('%s', ?, ?, ?, ?)
+                """, status);
+        jdbc.update(sql, lat, lon, isDuplicate, isValid);
     }
 
     // ── Test #1: ordered by ascending distance ────────────────────────────────────────────────
@@ -206,5 +236,86 @@ class SchoolRepositoryTest {
         assertThat(nullGeogCount)
                 .as("schools.geog must never be NULL — V75 GENERATED ALWAYS STORED from NOT NULL lat/lon (V58)")
                 .isEqualTo(0);
+    }
+
+    // ── countNearbyListings tests ─────────────────────────────────────────────────────────────
+
+    /**
+     * Scenario A (AC4): a school with no nearby property_listings returns count=0.
+     * LEFT JOIN must ensure schools with zero matches are still included in the result.
+     */
+    @Test
+    @DisplayName("Scenario A: school with 0 nearby listings returns count=0 (LEFT JOIN)")
+    void countNearbyListings_noListings_returnsZero() {
+        UUID manipalId = UUID.fromString(ID_MANIPAL);
+
+        List<SchoolRepository.SchoolListingCountProjection> results =
+                schoolRepository.countNearbyListings(Set.of(manipalId), 1000);
+
+        Map<UUID, Integer> counts = results.stream().collect(
+                Collectors.toMap(
+                        SchoolRepository.SchoolListingCountProjection::getSchoolId,
+                        SchoolRepository.SchoolListingCountProjection::getListingCount));
+
+        assertThat(counts).containsKey(manipalId);
+        assertThat(counts.get(manipalId))
+                .as("School with no nearby listings must return count=0")
+                .isEqualTo(0);
+    }
+
+    /**
+     * Scenario B (AC2): one SCRAPED listing at 999 m from the school — must be counted.
+     * Confirms the ST_DWithin 1 km threshold includes listings just under the boundary.
+     */
+    @Test
+    @DisplayName("Scenario B: 1 SCRAPED listing at 999m is counted")
+    void countNearbyListings_oneListingJustInside_returnsOne() {
+        UUID manipalId = UUID.fromString(ID_MANIPAL);
+
+        // Manipal school: lat=13.3511, lon=74.7871
+        // Offset ~999 m north: lat += 0.009 ≈ 1 km but land within threshold
+        insertListing(13.3511 + 0.0089, 74.7871, "SCRAPED", false, true);
+
+        List<SchoolRepository.SchoolListingCountProjection> results =
+                schoolRepository.countNearbyListings(Set.of(manipalId), 1000);
+
+        Map<UUID, Integer> counts = results.stream().collect(
+                Collectors.toMap(
+                        SchoolRepository.SchoolListingCountProjection::getSchoolId,
+                        SchoolRepository.SchoolListingCountProjection::getListingCount));
+
+        assertThat(counts.get(manipalId))
+                .as("One SCRAPED listing within 1 km must produce count=1")
+                .isEqualTo(1);
+    }
+
+    /**
+     * Scenario C (AC2): 3 SCRAPED/LIVE listings within 1 km + 1 DRAFT listing + 1 duplicate
+     * + 1 invalid listing. Only the 3 qualifying listings must be counted.
+     */
+    @Test
+    @DisplayName("Scenario C: DRAFT/duplicate/invalid listings not counted; SCRAPED+LIVE are")
+    void countNearbyListings_mixedListings_countsOnlyQualifying() {
+        UUID manipalId = UUID.fromString(ID_MANIPAL);
+
+        // Manipal school at 13.3511, 74.7871 — insert all listings at same point (0m away)
+        insertListing(13.3511, 74.7871, "SCRAPED", false, true);  // counted
+        insertListing(13.3511, 74.7871, "LIVE",    false, true);  // counted
+        insertListing(13.3511, 74.7871, "SCRAPED", false, true);  // counted (3rd)
+        insertListing(13.3511, 74.7871, "DRAFT",   false, true);  // NOT counted (wrong status)
+        insertListing(13.3511, 74.7871, "SCRAPED", true,  true);  // NOT counted (duplicate)
+        insertListing(13.3511, 74.7871, "SCRAPED", false, false); // NOT counted (invalid)
+
+        List<SchoolRepository.SchoolListingCountProjection> results =
+                schoolRepository.countNearbyListings(Set.of(manipalId), 1000);
+
+        Map<UUID, Integer> counts = results.stream().collect(
+                Collectors.toMap(
+                        SchoolRepository.SchoolListingCountProjection::getSchoolId,
+                        SchoolRepository.SchoolListingCountProjection::getListingCount));
+
+        assertThat(counts.get(manipalId))
+                .as("Only SCRAPED/LIVE non-duplicate valid listings within 1 km must be counted")
+                .isEqualTo(3);
     }
 }

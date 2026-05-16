@@ -11,9 +11,9 @@ export interface PopularSchoolCardProps {
 /**
  * Compact presentational card for a "popular" (notable) school.
  *
- * Renders the school name, board, and address. Distance is shown only when the
- * backend supplied one (proximity-narrowed responses). Per product constraint
- * (issue #968) this card intentionally does NOT show a nearby-listing-count badge.
+ * Renders the school name, board, address, and an optional nearby-listing-count
+ * badge when the backend supplies a non-zero count (issue #977).
+ * Distance is shown only when the backend supplied one (proximity-narrowed responses).
  */
 export function PopularSchoolCard({
   school,
@@ -56,6 +56,11 @@ export function PopularSchoolCard({
           {hasDistance && (
             <p className="text-xs text-muted-foreground mt-0.5">
               {school.distanceKm.toFixed(1)} km away
+            </p>
+          )}
+          {school.nearbyListingCount != null && school.nearbyListingCount > 0 && (
+            <p className="text-xs text-primary font-medium mt-0.5">
+              {school.nearbyListingCount} listings nearby
             </p>
           )}
         </div>
