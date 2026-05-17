@@ -201,12 +201,41 @@ export default function MapDiscovery() {
     [schoolsQuery.data?.pages],
   );
 
-  // Handler: clicking a school marker selects the school and sets the default radius.
-  const handleSelectSchoolMarker = useCallback(
+  // Handler: selecting a school by ID from either the map marker click (Path A) or the
+  // right-panel school card click (Path B — SchoolsInAreaPanel).
+  //
+  // Issue #1109 root cause: previously both paths called only urlActions.setSchoolParams,
+  // which set urlState.schoolId without touching filters.schoolLat/schoolLon/schoolRadiusKm.
+  // That caused useDiscoverFilteredMarkers to immediately fire a refetch (markersEnabled
+  // became true) with NO school coordinates, producing a settled-state response with
+  // wrong/empty markers. The school coords were only applied later when useSchoolById
+  // resolved asynchronously — too late to prevent the settled-state disappearance.
+  //
+  // Fix: look up the school in the already-loaded schools[] array and immediately set
+  // selectedSchool + filters.schoolLat/Lon/RadiusKm in the same synchronous batch.
+  // This ensures useDiscoverFilteredMarkers always fires with correct school params,
+  // so both the intermediate and settled-state responses contain the proximity markers.
+  const handleSelectSchoolById = useCallback(
     (schoolId: string) => {
-      urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM });
+      const radiusKm = DEFAULT_SCHOOL_RADIUS_KM;
+      urlActions.setSchoolParams({ schoolId, radiusKm });
+      // Look up the school from the already-loaded schools[] (from useSchoolsByArea).
+      // schools is derived from schoolsQuery which is fetched before the user can click.
+      const school = schools.find((s) => s.id === schoolId) ?? null;
+      if (school) {
+        setSelectedSchool(school);
+        setFilters((prev) => ({
+          ...prev,
+          schoolLat: school.latitude,
+          schoolLon: school.longitude,
+          schoolRadiusKm: radiusKm,
+        }));
+      }
+      // If not found in the local list (edge case: stale/paginated data), fall back to
+      // the existing useSchoolById async path in MapDiscovery which will set state once
+      // the fetch resolves. The placeholderData in useDiscoverFilteredMarkers bridges the gap.
     },
-    [urlActions],
+    [urlActions, schools, setSelectedSchool, setFilters],
   );
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
@@ -527,7 +556,7 @@ export default function MapDiscovery() {
               journey={urlState.journey}
               selectedSchool={selectedSchool}
               schools={schools}
-              onSelectSchool={handleSelectSchoolMarker}
+              onSelectSchool={handleSelectSchoolById}
               schoolsIsLoading={schoolsQuery.isLoading}
               schoolsIsError={schoolsQuery.isError}
               schoolsError={schoolsQuery.error}
@@ -620,7 +649,7 @@ export default function MapDiscovery() {
               urlActions.selectArea(areaKey);
             }
           }}
-          onSelectSchool={(schoolId) => urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM })}
+          onSelectSchool={handleSelectSchoolById}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
           isFetching={isFetching}
