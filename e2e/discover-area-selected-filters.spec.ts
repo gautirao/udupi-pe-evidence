@@ -34,7 +34,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await expect(apartmentChip).toHaveClass(/bg-primary/);
 
     // URL should contain type filter (canonical param name)
-    await page.waitForTimeout(300); // Allow debounce
+    await page.waitForURL(/type=apartment/, { timeout: 5_000 });
     const url = page.url();
     expect(url).toContain('type=apartment');
   });
@@ -48,7 +48,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await expect(bhk2Chip).toHaveClass(/bg-primary/);
 
     // URL should contain beds filter (canonical param name)
-    await page.waitForTimeout(300);
+    await page.waitForURL(/beds=2/, { timeout: 5_000 });
     const url = page.url();
     expect(url).toContain('beds=2');
   });
@@ -58,7 +58,10 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await page.locator('[data-testid="quick-chip-apartment"]').click();
     await page.locator('[data-testid="quick-chip-2-bhk"]').click();
 
-    await page.waitForTimeout(300);
+    await page.waitForURL(
+      (url) => url.toString().includes('type=apartment') && url.toString().includes('beds=2'),
+      { timeout: 5_000 }
+    );
     const url = page.url();
     expect(url).toContain('type=apartment');
     expect(url).toContain('beds=2');
@@ -76,7 +79,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await expect(apartmentChip).not.toHaveClass(/bg-primary/);
 
     // URL should no longer contain propertyTypes
-    await page.waitForTimeout(300);
+    await page.waitForURL((url) => !url.toString().includes('type='), { timeout: 5_000 });
     const url = page.url();
     expect(url).not.toContain('propertyTypes');
   });
@@ -86,8 +89,15 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await page.locator('[data-testid="quick-chip-apartment"]').click();
     await page.locator('[data-testid="quick-chip-3-bhk"]').click();
 
-    // Wait for refetch + empty state to render
-    await page.waitForTimeout(1000);
+    // Wait for refetch + empty state to render — guard on both chips being reflected in URL
+    await page.waitForURL(
+      (url) => url.toString().includes('type=apartment') && url.toString().includes('beds=3'),
+      { timeout: 5_000 }
+    ).catch(() => {});
+    await page.waitForResponse(
+      (resp) => resp.url().includes('/api/properties') || resp.url().includes('properties'),
+      { timeout: 5_000 }
+    ).catch(() => {}); // guard for refetch to settle
 
     // Empty state with clear button should be visible
     const emptyState = page.locator('text=No listings match these filters');
@@ -105,7 +115,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await page.locator('[data-testid="quick-chip-apartment"]').click();
     await page.locator('[data-testid="quick-chip-2-bhk"]').click();
 
-    await page.waitForTimeout(300);
+    await page.waitForURL(/beds=2/, { timeout: 5_000 });
     let url = page.url();
     expect(url).toContain('type=apartment');
     expect(url).toContain('beds=2');
@@ -114,7 +124,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     const clearButton = page.locator('[data-testid="clear-filters-button"]');
     if (await clearButton.isVisible()) {
       await clearButton.click();
-      await page.waitForTimeout(300);
+      await page.waitForURL((url) => !url.toString().includes('type=') && !url.toString().includes('beds='), { timeout: 5_000 });
 
       url = page.url();
       expect(url).not.toMatch(/[&?]type=/);
@@ -134,7 +144,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await cta.click();
 
     // URL should now have journey=school-first and preserve areaKey
-    await page.waitForTimeout(300);
+    await page.waitForURL(/journey=school-first/, { timeout: 5_000 });
     url = page.url();
     expect(url).toContain('journey=school-first');
     expect(url).toContain('areaKey');
@@ -143,14 +153,14 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
   test('preserves property filters when adding school', async ({ page }) => {
     // Apply property filters first
     await page.locator('[data-testid="quick-chip-apartment"]').click();
-    await page.waitForTimeout(300);
+    await page.waitForURL(/type=apartment/, { timeout: 5_000 });
 
     let url = page.url();
     expect(url).toContain('type=apartment');
 
     // Click add school CTA
     await page.locator('[data-testid="add-school-cta"]').click();
-    await page.waitForTimeout(300);
+    await page.waitForURL(/journey=school-first/, { timeout: 5_000 });
 
     // Property filters should still be in URL
     url = page.url();
@@ -161,7 +171,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
   test('city switch clears property filters', async ({ page }) => {
     // Apply property filters
     await page.locator('[data-testid="quick-chip-apartment"]').click();
-    await page.waitForTimeout(300);
+    await page.waitForURL(/type=apartment/, { timeout: 5_000 });
 
     let url = page.url();
     expect(url).toContain('type=apartment');
@@ -175,7 +185,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
       const cityOption = page.locator('[data-testid="city-option"]').first();
       if (await cityOption.isVisible()) {
         await cityOption.click();
-        await page.waitForTimeout(500);
+        await page.waitForURL(/city=/, { timeout: 5_000 });
 
         // Property filters should be cleared on city change per the rule
         // (Note: This may vary based on implementation; the requirement says
@@ -188,7 +198,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
   test('active context chips render alongside quick chips', async ({ page }) => {
     // Apply a filter
     await page.locator('[data-testid="quick-chip-apartment"]').click();
-    await page.waitForTimeout(300);
+    await page.waitForURL(/type=apartment/, { timeout: 5_000 });
 
     // Both quick chips and active context chips should be visible
     const quickChip = page.locator('[data-testid="quick-chip-apartment"]');

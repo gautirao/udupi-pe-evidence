@@ -39,7 +39,7 @@ test.describe('@integration-ui Discover — viewport restoration on browser Back
     const areaZoomedUrl = `/discover?city=udupi&areaKey=${ENCODED_AREA_KEY}&lat=13.35&lon=74.79&zoom=14`;
     await page.goto(areaZoomedUrl);
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(600); // Allow URLViewportController effect to apply setView
+    await page.waitForURL(/areaKey=/, { timeout: 5_000 }); // Allow URLViewportController effect to apply setView
 
     // Verify area is selected in URL
     expect(page.url()).toContain('areaKey=');
@@ -47,7 +47,7 @@ test.describe('@integration-ui Discover — viewport restoration on browser Back
 
     // Step 3: Browser Back — should restore city level viewport
     await page.goBack();
-    await page.waitForTimeout(600); // Allow setView to apply
+    await page.waitForURL((url) => !url.toString().includes('areaKey='), { timeout: 5_000 }); // Allow setView to apply
 
     // Verify URL no longer has areaKey
     const backUrl = page.url();
@@ -72,7 +72,7 @@ test.describe('@integration-ui Discover — viewport restoration on browser Back
     const areaZoomedUrl = `/discover?city=udupi&areaKey=${ENCODED_AREA_KEY}&lat=13.35&lon=74.79&zoom=14`;
     await page.goto(areaZoomedUrl);
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(600);
+    await page.waitForURL(/areaKey=/, { timeout: 5_000 });
 
     // Verify area context
     expect(page.url()).toContain('areaKey=');
@@ -80,13 +80,13 @@ test.describe('@integration-ui Discover — viewport restoration on browser Back
 
     // Step 3: Go Back (restores city)
     await page.goBack();
-    await page.waitForTimeout(600);
+    await page.waitForURL((url) => !url.toString().includes('areaKey='), { timeout: 5_000 });
     const backUrl = page.url();
     expect(backUrl).not.toContain('areaKey=');
 
     // Step 4: Go Forward (should restore area zoom)
     await page.goForward();
-    await page.waitForTimeout(600);
+    await page.waitForURL(/areaKey=/, { timeout: 5_000 });
 
     // Verify area context is restored
     const forwardUrl = page.url();
