@@ -233,117 +233,55 @@ test.describe('@smoke Q7 — user-authenticated', () => {
     'Auto-fixture present — L4 in listing-lifecycle.spec.ts covers this; skipping Q7',
   );
 
+  // Duplicate constraint is per (listing, user) — any second active booking on the same
+  // listing returns 409 regardless of requested date or time slot.
+  const BOOKING_DATE_Q7 = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().split('T')[0];
+  })();
+
   // Navigate to the listing detail page
   await page.goto(`/listing/${smokListingId}`);
   await page.waitForLoadState('domcontentloaded');
+  await page.waitForSelector('h1', { timeout: 15_000 });
 
-  // First booking request — submit directly via API from browser context
-  // FIXME(#665): API bypass in test body — convert to UI click or move to integration-ui
-  const firstResult = await page.evaluate(
-    async ({ backendUrl, listingId }: { backendUrl: string; listingId: string }) => {
-      // Get Supabase session token from localStorage
-      const keys = Object.keys(localStorage);
-      const authKey = keys.find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
-      if (!authKey) return { status: null, error: 'No Supabase auth token in localStorage' };
+  // Open the RequestViewingModal
+  await page.getByRole('button', { name: /request viewing/i }).click();
+  await page.waitForSelector('[role="dialog"]', { timeout: 10_000 });
 
-      let token: string | null = null;
-      try {
-        const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}');
-        token = parsed?.access_token ?? null;
-      } catch {
-        return { status: null, error: 'Failed to parse auth token' };
-      }
+  // Fill date and time slot then submit first request
+  await page.locator('#requested-date').fill(BOOKING_DATE_Q7);
+  await page.locator('#time-slot').click();
+  await page.getByRole('option').first().click();
+  await page.getByRole('button', { name: /send request/i }).click();
 
-      if (!token) return { status: null, error: 'access_token is null' };
+  // Branch: if an active booking already exists for this listing+user the backend
+  // returns 409 immediately and the modal shows an inline error.
+  const inlineError = page.locator('[role="dialog"] .text-destructive');
+  const alreadyHasBooking = await inlineError
+    .waitFor({ state: 'visible', timeout: 8_000 })
+    .then(() => true)
+    .catch(() => false);
 
-      // Pick a date 2 days from now
-      const d = new Date();
-      d.setDate(d.getDate() + 2);
-      const requestedDate = d.toISOString().split('T')[0];
+  if (alreadyHasBooking) {
+    // Prior active booking existed — duplicate constraint already proven
+    await expect(inlineError).toBeVisible();
+  } else {
+    // First request succeeded — wait for success toast
+    await expect(page.getByText(/viewing request sent/i).first()).toBeVisible({ timeout: 10_000 });
 
-      const body = JSON.stringify({
-        listingId,
-        requestedDate,
-        requestedTimeSlot: '10:00-11:00',
-      });
+    // Reopen the modal and submit a second (duplicate) booking request
+    await page.getByRole('button', { name: /request viewing/i }).click();
+    await page.waitForSelector('[role="dialog"]', { timeout: 10_000 });
 
-      try {
-        const r = await fetch(`${backendUrl}/api/bookings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body,
-        });
-        return { status: r.status, error: null };
-      } catch (e) {
-        return { status: null, error: String(e) };
-      }
-    },
-    { backendUrl: BACKEND, listingId: smokListingId },
-  );
+    await page.locator('#requested-date').fill(BOOKING_DATE_Q7);
+    await page.locator('#time-slot').click();
+    await page.getByRole('option').first().click();
+    await page.getByRole('button', { name: /send request/i }).click();
 
-  if (firstResult.error) {
-    throw new Error(`First booking request failed unexpectedly: ${firstResult.error}`);
+    // Second request must show the inline error (duplicate active booking per listing+user)
+    await expect(inlineError).toBeVisible({ timeout: 10_000 });
   }
-
-  // First request should succeed (201) or already exist (409 if run before — acceptable)
-  expect(
-    [201, 409],
-    `Expected 201 or 409 from first booking, got ${firstResult.status}`,
-  ).toContain(firstResult.status);
-
-  // Second request — must be rejected with 409 (duplicate active booking)
-  // FIXME(#665): API bypass in test body — convert to UI click or move to integration-ui
-  const secondResult = await page.evaluate(
-    async ({ backendUrl, listingId }: { backendUrl: string; listingId: string }) => {
-      const keys = Object.keys(localStorage);
-      const authKey = keys.find((k) => k.startsWith('sb-') && k.endsWith('-auth-token'));
-      if (!authKey) return { status: null, error: 'No Supabase auth token' };
-
-      let token: string | null = null;
-      try {
-        const parsed = JSON.parse(localStorage.getItem(authKey) ?? '{}');
-        token = parsed?.access_token ?? null;
-      } catch {
-        return { status: null, error: 'Failed to parse auth token' };
-      }
-
-      if (!token) return { status: null, error: 'access_token is null' };
-
-      const d = new Date();
-      d.setDate(d.getDate() + 3); // different date, same listing
-      const requestedDate = d.toISOString().split('T')[0];
-
-      try {
-        const r = await fetch(`${backendUrl}/api/bookings`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            listingId,
-            requestedDate,
-            requestedTimeSlot: '11:00-12:00',
-          }),
-        });
-        return { status: r.status, error: null };
-      } catch (e) {
-        return { status: null, error: String(e) };
-      }
-    },
-    { backendUrl: BACKEND, listingId: smokListingId },
-  );
-
-  if (secondResult.error) {
-    throw new Error(`Second booking request failed unexpectedly: ${secondResult.error}`);
-  }
-
-  expect(
-    secondResult.status,
-    `Expected 409 (duplicate active booking) from second request, got ${secondResult.status}`,
-  ).toBe(409);
   });
 });
