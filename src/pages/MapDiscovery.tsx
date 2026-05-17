@@ -161,7 +161,13 @@ export default function MapDiscovery() {
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
-    markersEnabled: (isAuthenticated || urlState.journey === 'area-first' || !!urlState.schoolId) && mapZoom > AREA_LAYER_MAX_ZOOM,
+    // Issue #1118: do NOT include !!urlState.schoolId here. The /api/discover/markers
+    // endpoint is auth-gated (returns 401 for anonymous users). Enabling the query for
+    // unauthenticated school-first users caused a delayed marker disappearance: placeholderData
+    // kept stale markers visible briefly, then the 401 settled and markers vanished while the
+    // right panel was already empty (useDiscoverListings is also auth-gated synchronously).
+    // Unauthenticated school-first users fall back to areaMarkerListings in the IIFE below.
+    markersEnabled: (isAuthenticated || urlState.journey === 'area-first') && mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
     bbox: mapBbox,
   });
@@ -517,7 +523,14 @@ export default function MapDiscovery() {
                   // placeholderData has no previous data. Keep area markers visible until
                   // the school-proximity query settles to avoid a blank-map flash.
                   if (urlState.schoolId) {
-                    if (markerListings.length === 0 && markersLoading && selectedArea && areaMarkerListings.length > 0) {
+                    // Fall back to areaMarkerListings while the school-proximity query is
+                    // either in-flight (authenticated) OR disabled (unauthenticated — #1118).
+                    // Without this, unauthenticated users see a blank map because markersEnabled
+                    // is false (no query fires), markerListings stays [], and markersLoading is
+                    // false (disabled queries are not "loading"). Both paths are covered by the
+                    // single guard: markersLoading covers the in-flight case; !isAuthenticated
+                    // covers the disabled/never-fired case.
+                    if (markerListings.length === 0 && (markersLoading || !isAuthenticated) && selectedArea && areaMarkerListings.length > 0) {
                       return areaMarkerListings;
                     }
                     return markerListings;
