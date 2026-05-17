@@ -581,3 +581,152 @@ test.describe('@integration-ui school-first journey (#1003)', () => {
   });
 
 });
+
+// ---------------------------------------------------------------------------
+// Issue #1118 regression: property markers must NOT disappear while the
+// school-proximity markers request is in-flight after school selection.
+//
+// Root cause: MapDiscovery.tsx line 516 — when schoolId is set in URL,
+// the IIFE returned markerListings which was empty because the query was
+// initially disabled. The area markers (areaMarkerListings) were discarded.
+// Fix: the IIFE now falls back to areaMarkerListings while the markers
+// query is still loading (isLoadingMarkers guard).
+//
+// Marker source chain:
+//   areaMarkerListings  ← /api/discover/cities/{city}/listings  (city-level)
+//   markerListings      ← /api/discover/markers                 (school-proximity)
+//
+// For property-marker elements to render the map zoom must be > 12
+// (AREA_LAYER_MAX_ZOOM). URL param zoom=14 satisfies this.
+// ---------------------------------------------------------------------------
+
+test.describe('Issue #1118 regression — markers persist during school-proximity in-flight', () => {
+
+  /**
+   * E2E-1118: School card click while in school-first+areaKey state must NOT
+   * blank the map during the in-flight school-proximity markers request.
+   *
+   * Strategy:
+   *   1. Cold-load with zoom=14 + areaKey set; stub city-listings with a
+   *      fixture that has lat/lon so areaMarkerListings is non-empty.
+   *   2. Verify property markers are visible before school selection.
+   *   3. Intercept the school-proximity /api/discover/markers request and
+   *      hold it via a deferred Promise.
+   *   4. Click a school card to trigger the in-flight request.
+   *   5. While the request is pending, assert markers have NOT disappeared.
+   *   6. Release the deferred request and verify settled state.
+   */
+  test('E2E-1118: markers remain visible while school-proximity request is in-flight', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolsByArea(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+
+    // City-listings stub: one listing with lat/lon so areaMarkerListings is non-empty.
+    // areaMarkerListings filters by selectedArea.areaKey, so the area key must match.
+    const CITY_LISTINGS_FIXTURE = {
+      areas: [
+        {
+          areaKey: MANIPAL_AREA_KEY,
+          listings: [
+            {
+              id: 'listing-1118',
+              title: 'Regression Test Property',
+              propertyType: 'house',
+              price: 4_500_000,
+              lat: 13.3525,
+              lon: 74.7864,
+              latitude: 13.3525,
+              longitude: 74.7864,
+              locality: 'Manipal',
+              bedrooms: 3,
+              status: 'LIVE',
+            },
+          ],
+        },
+      ],
+    };
+    await page.route('**/api/discover/cities/*/listings**', (route) =>
+      fulfillJson(route, 200, CITY_LISTINGS_FIXTURE),
+    );
+
+    // Deferred gate: hold the school-proximity markers request in-flight.
+    let releaseInFlightRequest!: () => void;
+    const inFlightGate = new Promise<void>((resolve) => {
+      releaseInFlightRequest = resolve;
+    });
+    let markersRequestCount = 0;
+
+    const SCHOOL_PROXIMITY_MARKERS_RESPONSE = {
+      city: 'udupi',
+      markers: [
+        {
+          id: 'prop-marker-1118-settled',
+          latitude: 13.3525,
+          longitude: 74.7864,
+          pricePaise: 4_500_000,
+          title: 'Regression Test Property',
+          propertyType: 'house',
+        },
+      ],
+    };
+
+    await page.route('**/api/discover/markers**', async (route) => {
+      markersRequestCount += 1;
+      // Hold every markers request in-flight until the gate is released.
+      // This simulates the school-proximity fetch latency window.
+      await inFlightGate;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(SCHOOL_PROXIMITY_MARKERS_RESPONSE),
+      });
+    });
+
+    // Cold-load: school-first + areaKey + zoom=14 (above AREA_LAYER_MAX_ZOOM=12).
+    // zoom=14 is required for PropertyMap to render property-marker elements.
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&zoom=14&areaKey=${ENCODED_AREA_KEY}`,
+      { waitUntil: 'domcontentloaded' },
+    );
+
+    // Step 1: Wait for school cards to confirm the schools-in-area panel is ready.
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 10_000 });
+    const schoolCard = rightPanel.locator('[data-testid="school-card"]').first();
+    await expect(schoolCard).toBeVisible({ timeout: 15_000 });
+
+    // Step 2: Verify area property markers are visible before school selection.
+    // These come from areaMarkerListings (city-listings fixture), not the markers API.
+    const propertyMarkers = page.locator('[data-testid="property-marker"]');
+    await expect(propertyMarkers.first()).toBeVisible({ timeout: 15_000 });
+    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+
+    // Step 3: Register listener for the school-proximity markers request BEFORE clicking.
+    const schoolProximityRequestPromise = page.waitForRequest(
+      (req) => req.url().includes('/api/discover/markers'),
+    );
+
+    // Step 4: Click school card — sets schoolId in URL and enables the markers query.
+    await schoolCard.click();
+
+    // Step 5: Wait for the school-proximity request to be intercepted (in-flight, not resolved).
+    await schoolProximityRequestPromise;
+
+    // Step 6: While the request is still pending, markers must NOT have disappeared.
+    // Prior to the #1118 fix: IIFE returned empty markerListings, blanking the map.
+    // After the fix: IIFE falls back to areaMarkerListings while loading.
+    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+
+    // Step 7: Release the gate and wait for schoolId to appear in URL.
+    releaseInFlightRequest();
+    await expect(page).toHaveURL(/schoolId=/, { timeout: 8_000 });
+
+    // Step 8: Settled state — proximity markers now visible (stub returns 1 marker).
+    await expect(propertyMarkers.first()).toBeVisible({ timeout: 12_000 });
+    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+  });
+
+});

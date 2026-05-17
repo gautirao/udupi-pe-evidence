@@ -512,8 +512,16 @@ export default function MapDiscovery() {
                 if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
                 // school-first journey
                 if (urlState.journey === 'school-first') {
-                  // schoolId set: proximity markerListings drive the school-radius surface
-                  if (urlState.schoolId) return markerListings;
+                  // schoolId set: proximity markerListings drive the school-radius surface.
+                  // Issue #1118: before school selection, markersEnabled was false so
+                  // placeholderData has no previous data. Keep area markers visible until
+                  // the school-proximity query settles to avoid a blank-map flash.
+                  if (urlState.schoolId) {
+                    if (markerListings.length === 0 && markersLoading && selectedArea && areaMarkerListings.length > 0) {
+                      return areaMarkerListings;
+                    }
+                    return markerListings;
+                  }
                   // Issue #1074 Slice A: school-first + areaKey (no schoolId) → surface
                   // the area's property markers alongside the schools list. Mirrors the
                   // area-first fallback below.
