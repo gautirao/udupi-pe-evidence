@@ -64,7 +64,7 @@ async function loginAsBroker(page: import('@playwright/test').Page): Promise<voi
 // Route-intercepts the /pois/suggestions endpoint to avoid Overpass dependency.
 // ---------------------------------------------------------------------------
 
-test.describe('POI Curation (POI1–POI2)', () => {
+test.describe('@journey POI Curation (POI1–POI2)', () => {
   let draftId: string | null = null;
   let brokerToken: string | null = null;
 
@@ -154,6 +154,7 @@ test.describe('POI Curation (POI1–POI2)', () => {
     let skeletonSeen = false;
 
     // Intercept suggestions endpoint — delay response to ensure skeleton visibility
+    // INTEGRATION-UI: stub justified — force delayed response to assert skeleton loading UI
     await page.route(`**/api/listings/${draftId}/pois/suggestions`, async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue();
@@ -209,6 +210,7 @@ test.describe('POI Curation (POI1–POI2)', () => {
     // State: track whether approve was called. After approve, return updated list.
     let approvedPoiId: string | null = null;
 
+    // INTEGRATION-UI: stub justified — serve dynamic approval state to assert POI approval UI
     await page.route(`**/api/listings/${draftId}/pois/suggestions`, async (route) => {
       if (route.request().method() !== 'GET') {
         await route.continue();
@@ -227,6 +229,7 @@ test.describe('POI Curation (POI1–POI2)', () => {
     });
 
     // Intercept approve endpoint
+    // INTEGRATION-UI: stub justified — isolate approve PATCH from backend to assert UI state after approval
     await page.route(`**/api/listings/${draftId}/pois/*/approve`, async (route) => {
       if (route.request().method() !== 'PATCH') {
         await route.continue();
@@ -340,6 +343,7 @@ test.describe('Locality Gate (LG1–LG3)', () => {
     await loginAsBroker(page);
 
     // Stub POI suggestions to avoid Overpass calls
+    // INTEGRATION-UI: stub justified — force empty results to assert locality-required guard UI
     await page.route(`**/api/listings/${draftId}/pois/suggestions`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -396,6 +400,7 @@ test.describe('Locality Gate (LG1–LG3)', () => {
     await loginAsBroker(page);
 
     // Stub POI suggestions
+    // INTEGRATION-UI: stub justified — force empty results to isolate locality-saving flow
     await page.route(`**/api/listings/${draftId}/pois/suggestions`, async (route) => {
       await route.fulfill({
         status: 200,

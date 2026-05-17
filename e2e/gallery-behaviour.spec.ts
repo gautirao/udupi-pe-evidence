@@ -112,7 +112,7 @@ async function navigateAndWaitForGallery(
 // ---------------------------------------------------------------------------
 // Anonymous describe — no storageState (browser starts with no session)
 // ---------------------------------------------------------------------------
-test.describe('[E2E] Anonymous gallery behaviour', () => {
+test.describe('@journey [E2E] Anonymous gallery behaviour', () => {
   test.setTimeout(60_000); // backend cold-start after restart can take 10-15s
   test('A1 — gallery area renders and nav arrows are visible', async ({ page }) => {
     test.skip(fixtureAbsent, SKIP_NO_FIXTURE);

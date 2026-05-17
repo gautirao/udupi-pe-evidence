@@ -69,7 +69,7 @@ function getUserIdFromToken(token: string): string {
 // RR1 — Rejection + Re-submit lifecycle
 // ---------------------------------------------------------------------------
 
-test.describe('Listing rejection + broker re-submit (RR1)', () => {
+test.describe('@integration-ui Listing rejection + broker re-submit (RR1)', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   let listingId: string | null = null;

@@ -1,6 +1,6 @@
 import { test } from '@playwright/test';
 
-test.describe('Area-first journey visual verification', () => {
+test.describe('@capture Area-first journey visual verification', () => {
   test('should capture area-first entry with no groupId', async ({ page }) => {
     await page.goto('http://localhost:5174/discover?city=udupi&journey=area-first');
     await page.waitForLoadState('networkidle');

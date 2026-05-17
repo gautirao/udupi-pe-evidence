@@ -11,6 +11,7 @@ import { test, expect } from '@playwright/test';
  * 4. latitude/longitude coordinate mapping
  */
 
+// @regression-correctness
 test('#1065: Area-first Manipal journey loads and renders', async ({ page }) => {
   // Navigate to area-first Manipal URL (no authentication required)
   await page.goto(

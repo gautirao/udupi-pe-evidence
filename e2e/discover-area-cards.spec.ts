@@ -38,7 +38,7 @@ function getUrlParam(page: import('@playwright/test').Page, key: string): string
   return new URL(page.url()).searchParams.get(key);
 }
 
-test.describe('Discover — area cards (B-switch)', () => {
+test.describe('@integration-ui Discover — area cards (B-switch)', () => {
   test('area markers appear on the map for default Udupi city', async ({ page }) => {
     // ── Step 1: Load Discover with Udupi at default zoom ─────────────────────
     await page.goto('/discover?city=udupi');
@@ -192,6 +192,7 @@ test.describe('Discover — right-panel listing cards (#887)', () => {
   // Intercept both endpoints before navigation so mocks are in place for all
   // requests, including the initial page load that triggers useDiscoverAreas.
   test.beforeEach(async ({ page }) => {
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route('**/api/discover/areas**', (route) =>
       route.fulfill({
         status: 200,
@@ -200,6 +201,7 @@ test.describe('Discover — right-panel listing cards (#887)', () => {
       }),
     );
 
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route('**/api/discover/cities/**/listings**', (route) =>
       route.fulfill({
         status: 200,

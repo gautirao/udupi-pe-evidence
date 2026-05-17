@@ -62,6 +62,7 @@ function getListingStatus(): 'LIVE' | 'DRAFT' {
 const smokListingId = getListingId();
 const smokeListingStatus = getListingStatus();
 
+// @smoke
 // ---------------------------------------------------------------------------
 // Q1 — App loads; no blank screen; Sentry error boundary not triggered
 // ---------------------------------------------------------------------------
@@ -215,7 +216,7 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
 // Q7 — Booking duplicate: second request to same listing returns error
 //      Skipped if SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD / SMOKE_LISTING_ID not set
 // ---------------------------------------------------------------------------
-test.describe('Q7 — user-authenticated', () => {
+test.describe('@smoke Q7 — user-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   test('Q7 — duplicate booking request is rejected', async ({ page }) => {
@@ -237,6 +238,7 @@ test.describe('Q7 — user-authenticated', () => {
   await page.waitForLoadState('domcontentloaded');
 
   // First booking request — submit directly via API from browser context
+  // FIXME(#665): API bypass in test body — convert to UI click or move to integration-ui
   const firstResult = await page.evaluate(
     async ({ backendUrl, listingId }: { backendUrl: string; listingId: string }) => {
       // Get Supabase session token from localStorage
@@ -293,6 +295,7 @@ test.describe('Q7 — user-authenticated', () => {
   ).toContain(firstResult.status);
 
   // Second request — must be rejected with 409 (duplicate active booking)
+  // FIXME(#665): API bypass in test body — convert to UI click or move to integration-ui
   const secondResult = await page.evaluate(
     async ({ backendUrl, listingId }: { backendUrl: string; listingId: string }) => {
       const keys = Object.keys(localStorage);

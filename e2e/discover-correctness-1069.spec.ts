@@ -35,7 +35,7 @@ async function readLeafletZoom(page: import('@playwright/test').Page): Promise<n
   });
 }
 
-test.describe('Issue #1069 — area-group fitBounds maxZoom clamp', () => {
+test.describe('@regression-correctness Issue #1069 — area-group fitBounds maxZoom clamp', () => {
   test('Spec 1 (AC4) — University Belt click keeps area markers visible (zoom ≤ AREA_LAYER_MAX_ZOOM)', async ({ page }) => {
     // Area-first journey with no area selected → right-panel shows
     // AreaGroupsLandingPanel with the group cards (derivePanelContent rule:

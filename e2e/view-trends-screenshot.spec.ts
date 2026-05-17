@@ -13,6 +13,7 @@ const SS = (name: string) => path.join(__dirname, `../screenshots/${name}.png`);
 
 test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
+// @capture
 test('View Trends button — Manipal journey with screenshots', async ({ page }) => {
   // ── Step 1: Load Discover with Manipal pre-selected via URL ───────────────
   // The old flow used a Locality combobox that was removed from the filter panel.

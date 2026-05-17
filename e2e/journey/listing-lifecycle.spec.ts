@@ -90,7 +90,7 @@ function getUserIdFromToken(token: string): string {
 // ---------------------------------------------------------------------------
 // L1, L2, L5 — Broker-authenticated tests
 // ---------------------------------------------------------------------------
-test.describe('broker-authenticated', () => {
+test.describe('@integration-ui broker-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   // ---------------------------------------------------------------------------

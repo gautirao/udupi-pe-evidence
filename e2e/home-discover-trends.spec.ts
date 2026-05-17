@@ -14,6 +14,7 @@ const SS = (name: string) => path.join(__dirname, `../screenshots/h2d-${name}.pn
 
 // Anonymous flow — no storageState
 
+// @smoke
 test('Home → Discover (Manipal pre-selected) → View Trends → Trends shows Manipal', async ({ page }) => {
   // ── Step 1: Home page ─────────────────────────────────────────────────────
   await page.goto('/');

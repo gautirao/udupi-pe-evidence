@@ -94,7 +94,7 @@ test.afterAll(async () => {
 
 // ─── AO5 — Nav rename ──────────────────────────────────────────────────────────
 
-test.describe('AO5 — nav rename', () => {
+test.describe('@integration-ui AO5 — nav rename', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   test('AO5 — Trends nav link visible; Insights absent; click navigates to /trends', async ({ page }) => {

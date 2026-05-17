@@ -89,6 +89,7 @@ const MOCK_CITY_LISTINGS_RESPONSE = {
 // ── Helper ─────────────────────────────────────────────────────────────────
 
 async function mockDiscoverApis(page: import('@playwright/test').Page) {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     route.fulfill({
       status: 200,
@@ -101,6 +102,7 @@ async function mockDiscoverApis(page: import('@playwright/test').Page) {
     }),
   );
 
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/cities/**/listings**', (route) =>
     route.fulfill({
       status: 200,
@@ -115,7 +117,7 @@ const AREA_MARKER = '.leaflet-marker-icon.area-marker';
 
 // ── Journey 1: Click → Back → Forward ─────────────────────────────────────
 
-test.describe('Journey 1 — area marker click → back → forward', () => {
+test.describe('@integration-ui Journey 1 — area marker click → back → forward', () => {
   test('clicking area marker pushes areaKey; Back removes it; Forward restores it', async ({
     page,
   }) => {

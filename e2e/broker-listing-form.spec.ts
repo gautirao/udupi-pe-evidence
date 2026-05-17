@@ -64,7 +64,7 @@ async function openEditListing(
 // One DRAFT listing is created for the group and deleted after all tests run.
 // ---------------------------------------------------------------------------
 
-test.describe('PriceField / EditListing (P1–P5)', () => {
+test.describe('@integration-ui PriceField / EditListing (P1–P5)', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   let draftId: string | null = null;

@@ -74,6 +74,7 @@ async function mockNominatim(
   page: import('@playwright/test').Page,
   result: ReturnType<typeof nominatimMockResult>,
 ) {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/nominatim.openstreetmap.org/**', (route) => {
     void route.fulfill({
       status: 200,
@@ -82,6 +83,7 @@ async function mockNominatim(
     });
   });
   // Also mock the backend proxy path used by geocode.ts
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/geocode**', (route) => {
     void route.fulfill({
       status: 200,
@@ -95,7 +97,7 @@ async function mockNominatim(
 // Test suite
 // ---------------------------------------------------------------------------
 
-test.describe('Address Reconciliation (AR1–AR3)', () => {
+test.describe('@integration-ui Address Reconciliation (AR1–AR3)', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   let draftId: string | null = null;
@@ -213,6 +215,7 @@ test.describe('Address Reconciliation (AR1–AR3)', () => {
 
     // Switch mock to Udupi before navigating to Step 3
     await page.unroute('**/api/geocode**');
+    // INTEGRATION-UI: stub justified — re-stub geocode with Udupi coordinates to test address reconciliation UI switch
     await page.route('**/api/geocode**', (route) => {
       void route.fulfill({
         status: 200,

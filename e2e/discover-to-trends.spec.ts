@@ -23,12 +23,13 @@ const LISTING_MARKER = '.leaflet-marker-icon.custom-marker';
 // Cluster icon class for MarkerClusterGroup
 const CLUSTER_MARKER = '.leaflet-marker-icon.leaflet-div-icon .custom-marker-cluster, .custom-marker-cluster';
 
-test.describe('Discover → C-switch skinny markers + popover (authenticated)', () => {
+test.describe('@journey Discover → C-switch skinny markers + popover (authenticated)', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   // Intercept the skinny-markers endpoint with a fixture listing at the Manipal center.
   // This makes the listing-marker assertions deterministic regardless of live DB state.
   test.beforeEach(async ({ page }) => {
+    // INTEGRATION-UI: stub justified — force known marker coordinates for deterministic marker-visibility assertions
     await page.route('**/api/listings/markers*', (route) =>
       route.fulfill({
         status: 200,

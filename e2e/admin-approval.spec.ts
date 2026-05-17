@@ -171,7 +171,7 @@ async function createPendingListing(brokerToken: string, title: string): Promise
 // Test suite
 // ---------------------------------------------------------------------------
 
-test.describe('AA — Admin approval action (#652)', () => {
+test.describe('@integration-ui AA — Admin approval action (#652)', () => {
   test.describe.configure({ mode: 'serial' });
   test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
 

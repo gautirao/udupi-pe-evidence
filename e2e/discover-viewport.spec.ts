@@ -25,7 +25,7 @@ const AREA_MARKER = '.leaflet-marker-icon.area-marker';
 
 // ── Browser Back/Forward viewport restoration tests ────────────────────────
 
-test.describe('Discover — viewport restoration on browser Back/Forward (#1043)', () => {
+test.describe('@integration-ui Discover — viewport restoration on browser Back/Forward (#1043)', () => {
   test('browser Back restores map viewport from URL state', async ({ page }) => {
     const MOCK_AREA_KEY = 'IN|KA|Udupi|Manipal';
     const ENCODED_AREA_KEY = encodeURIComponent(MOCK_AREA_KEY);

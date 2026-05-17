@@ -123,42 +123,49 @@ function fulfillJson(route: Route, status: number, body: unknown): Promise<void>
 }
 
 async function stubTrendsOptions(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/trends/options**', (route) =>
     fulfillJson(route, 200, TRENDS_OPTIONS_FIXTURE),
   );
 }
 
 async function stubDiscoverAreas(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     fulfillJson(route, 200, DISCOVER_AREAS_UDUPI),
   );
 }
 
 async function stubPopularSchools(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/public/schools/popular**', (route) =>
     fulfillJson(route, 200, POPULAR_SCHOOLS_FIXTURE),
   );
 }
 
 async function stubSchoolsByArea(page: Page, schools: unknown[] = SCHOOLS_BY_AREA_FIXTURE): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/public/schools/by-area**', (route) =>
     fulfillJson(route, 200, schools),
   );
 }
 
 async function stubSchoolSearch(page: Page, results: unknown[] = POPULAR_SCHOOLS_FIXTURE): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/public/schools/search**', (route) =>
     fulfillJson(route, 200, results),
   );
 }
 
 async function stubDiscoverListings(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/listings**', (route) =>
     fulfillJson(route, 200, EMPTY_LISTINGS_PAGE),
   );
 }
 
 async function stubSchoolById(page: Page, school: typeof MANIPAL_SCHOOL): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route(`**/api/public/schools/${school.id}`, (route) =>
     fulfillJson(route, 200, school),
   );
@@ -172,7 +179,7 @@ function getUrlParam(page: Page, key: string): string | null {
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe('school-first journey (#1003)', () => {
+test.describe('@integration-ui school-first journey (#1003)', () => {
 
   /**
    * E2E-1: Journey switcher card click writes journey=school-first to URL.
@@ -519,6 +526,7 @@ test.describe('school-first journey (#1003)', () => {
     await stubDiscoverListings(page);
 
     // Intercept /api/public/schools/by-area and return 500 error
+    // INTEGRATION-UI: stub justified — force error response to assert error-state UI
     await page.route('/api/public/schools/by-area*', (route) => {
       route.abort('failed');
     });

@@ -109,6 +109,7 @@ test.beforeAll(async () => {
 
 // ── Journey 2 proof ───────────────────────────────────────────────────────────
 
+// @capture
 test('Journey 2: Discover → Listing → Trends — exact areaKey continuity', async ({ page }) => {
   // ── Step 1: Start at Discover (journey origin) ────────────────────────────
   await page.goto(`/discover?city=${CITY}`);

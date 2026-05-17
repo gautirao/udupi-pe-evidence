@@ -24,7 +24,7 @@ const KNOWN_MALPE_SCHOOLS = [
 // `api.get(... { skipAuth: true })`. With the absolute API base URL, the local
 // backend's anonymous endpoint serves Malpe schools natively in the E2E env.
 
-test.describe('Issue #1064 — Discover correctness (Symptoms 2 + 3)', () => {
+test.describe('@regression-correctness Issue #1064 — Discover correctness (Symptoms 2 + 3)', () => {
   test('Spec 2 — Start Over resets URL and viewport to city overview', async ({ page }) => {
     // Step 1: deep-link to Manipal area at zoom=14 (deeper than DEFAULT_ZOOM=11).
     // journey=area-first is required for PanelHeader to render the Start Over

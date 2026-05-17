@@ -136,6 +136,7 @@ function fulfillJson(route: Route, status: number, body: unknown): Promise<void>
 }
 
 async function stubTrendsOptions(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/trends/options**', (route) =>
     fulfillJson(route, 200, TRENDS_OPTIONS_FIXTURE),
   );
@@ -147,6 +148,7 @@ async function stubPopularSchools(
 ): Promise<void> {
   const all = opts.all ?? POPULAR_SCHOOLS_FIXTURE;
   const manipal = opts.manipal ?? POPULAR_SCHOOLS_MANIPAL_FIXTURE;
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/public/schools/popular**', (route) => {
     const url = route.request().url();
     const hasAreaKey = /[?&]areaKey=/.test(url);
@@ -155,6 +157,7 @@ async function stubPopularSchools(
 }
 
 async function stubDiscoverAreas(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) => {
     const url = route.request().url();
     if (/city=bangalore/.test(url)) return fulfillJson(route, 200, DISCOVER_AREAS_BANGALORE);
@@ -170,6 +173,7 @@ interface ListingsCapture {
 /** Stub /api/discover/listings and capture the most recent request URL/params. */
 async function stubDiscoverListings(page: Page): Promise<ListingsCapture> {
   const capture: ListingsCapture = { lastRequest: null, count: 0 };
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/listings**', (route) => {
     capture.lastRequest = route.request();
     capture.count += 1;
@@ -185,6 +189,7 @@ async function stubDiscoverListings(page: Page): Promise<ListingsCapture> {
  * This stub provides the school detail response for exact ID lookup.
  */
 async function stubSchoolByIdLookup(page: Page, school: typeof MANIPAL_SCHOOL): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route(`**/api/public/schools/${school.id}**`, (route) =>
     fulfillJson(route, 200, school),
   );
@@ -222,7 +227,7 @@ function getUrlParam(page: Page, key: string): string | null {
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe('Discover school-first journey (#970)', () => {
+test.describe('@integration-ui Discover school-first journey (#970)', () => {
   test('happy path — narrowing area in sheet, picking school writes URL state and chip', async ({ page }) => {
     await stubTrendsOptions(page);
     await stubDiscoverAreas(page);
@@ -403,6 +408,7 @@ test.describe('Discover school-first journey (#970)', () => {
     await stubDiscoverAreas(page);
 
     let failNext = true;
+    // INTEGRATION-UI: stub justified — force error then empty results to assert error-state and empty-state UI
     await page.route('**/api/public/schools/popular**', (route) => {
       if (failNext) {
         return route.fulfill({
@@ -475,6 +481,7 @@ test.describe('Discover school-first journey (#970)', () => {
       }
     });
 
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route('**/api/public/schools/by-area**', (route) =>
       fulfillJson(route, 200, SCHOOLS_BY_AREA_FIXTURE),
     );
@@ -551,6 +558,7 @@ test.describe('Discover school-first journey (#970)', () => {
       },
     ];
 
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route('**/api/public/schools/by-area**', (route) =>
       fulfillJson(route, 200, SCHOOLS_BY_AREA_FIXTURE),
     );
@@ -599,6 +607,7 @@ test.describe('Discover school-first journey (#970)', () => {
 
     // Stub by-area just in case — it must NOT be called in area-first
     let byAreaCallCount = 0;
+    // INTEGRATION-UI: stub justified — assert by-area endpoint is not called in area-first journey
     await page.route('**/api/public/schools/by-area**', (route) => {
       byAreaCallCount += 1;
       return fulfillJson(route, 200, []);

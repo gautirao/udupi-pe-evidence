@@ -21,7 +21,7 @@ const KNOWN_PADUBIDRI_SCHOOLS = [
   'School Play Ground',
 ];
 
-test.describe('Issue #1067 — School-first Discover correctness', () => {
+test.describe('@regression-correctness Issue #1067 — School-first Discover correctness', () => {
   test('Spec 1 (AC1+AC2) — Padubidri school-first deep link renders SchoolsInAreaPanel with school names', async ({ page }) => {
     // No stubs — useSchoolsByArea now goes through api.get (absolute URL) so the
     // local backend's anonymous endpoint serves the Padubidri schools natively.

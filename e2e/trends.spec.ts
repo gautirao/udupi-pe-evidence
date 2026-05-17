@@ -111,7 +111,7 @@ test.afterAll(async () => {
 
 // ─── T1 — Direct URL renders heading, metric cards, tabs ──────────────────────
 
-test.describe('T1 — direct URL access', () => {
+test.describe('@journey T1 — direct URL access', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   test('T1 — heading, metric cards, and tabs visible for seeded area', async ({ page }) => {

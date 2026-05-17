@@ -67,12 +67,15 @@ const MOCK_AREA_GROUPS_RESPONSE = {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function stubApis(page: Page) {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     route.fulfill({ json: MOCK_AREAS_RESPONSE }),
   );
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/area-groups**', (route) =>
     route.fulfill({ json: MOCK_AREA_GROUPS_RESPONSE }),
   );
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route(`**/api/discover/cities/${MOCK_CITY}/listings**`, (route) =>
     route.fulfill({ json: { city: MOCK_CITY, limitPerArea: 5, areas: [] } }),
   );
@@ -93,7 +96,7 @@ async function gotoGroupLanding(page: Page, groupId = MOCK_GROUP_ID) {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-test.describe('A3 #993 — Focused-group map behaviour', () => {
+test.describe('@integration-ui A3 #993 — Focused-group map behaviour', () => {
 
   /**
    * Test 1: clicking a group card updates the URL's groupId.

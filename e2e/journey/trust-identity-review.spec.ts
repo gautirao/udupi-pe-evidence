@@ -248,7 +248,7 @@ async function teardownListing(id: string, aToken: string, bToken: string): Prom
 // Test suite
 // ---------------------------------------------------------------------------
 
-test.describe('TIR — Trust Identity Review', () => {
+test.describe('@integration-ui TIR — Trust Identity Review', () => {
   test.describe.configure({ mode: 'serial' });
   test.skip(!hasAllCreds, 'BROKER + ADMIN credentials not configured');
 

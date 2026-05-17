@@ -143,7 +143,7 @@ let createdBookingId: string | null = null;
 // UB3 opens its own broker context via browser.newContext().
 // ---------------------------------------------------------------------------
 
-test.describe('UB — Booking UI journey', () => {
+test.describe('@journey UB — Booking UI journey', () => {
   test.describe.configure({ mode: 'serial' });
 
   // Apply user storageState to all tests in this describe block.

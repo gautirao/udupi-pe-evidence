@@ -122,7 +122,7 @@ test('AT2b — anon: first image visible, image 2 blocked with locked overlay', 
 // ---------------------------------------------------------------------------
 // AT2c — logged-in: full gallery browsable
 // ---------------------------------------------------------------------------
-test.describe('AT2c — logged-in: full gallery browsable', () => {
+test.describe('@journey AT2c — logged-in: full gallery browsable', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   test('logged-in user can navigate to image 2 without locked overlay', async ({ page }) => {

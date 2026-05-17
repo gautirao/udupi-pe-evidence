@@ -24,7 +24,7 @@ const hasBrokerCreds = hasRealCredentials(brokerEmail, brokerPassword);
 // ---------------------------------------------------------------------------
 // D1–D3 — Broker-authenticated tests
 // ---------------------------------------------------------------------------
-test.describe('broker-authenticated', () => {
+test.describe('@smoke broker-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   // ---------------------------------------------------------------------------

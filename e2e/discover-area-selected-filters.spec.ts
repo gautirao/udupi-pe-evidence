@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Discover: Area-Selected Panel + Quick Filters', () => {
+test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', () => {
   test.beforeEach(async ({ page }) => {
     // Load discover page with area selected (use a test area key from seed data)
     // Format: Country|State|City|Area — using Manipal, a known area in Udupi city

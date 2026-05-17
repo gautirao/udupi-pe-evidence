@@ -122,18 +122,22 @@ function fulfillJson(route: Route, status: number, body: unknown): Promise<void>
 }
 
 async function stubCommonEndpoints(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/trends/options**', (route) =>
     fulfillJson(route, 200, TRENDS_OPTIONS_FIXTURE),
   );
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     fulfillJson(route, 200, DISCOVER_AREAS_UDUPI),
   );
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/public/schools/popular**', (route) =>
     fulfillJson(route, 200, []),
   );
 }
 
 async function stubSchoolById(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route(`**/api/public/schools/${MANIPAL_SCHOOL.id}**`, (route) =>
     fulfillJson(route, 200, MANIPAL_SCHOOL),
   );
@@ -149,6 +153,7 @@ async function stubDiscoverListings(
   fixture: unknown = EMPTY_LISTINGS_PAGE,
 ): Promise<ListingsCapture> {
   const capture: ListingsCapture = { requests: [], lastRequest: null };
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/listings**', (route) => {
     capture.requests.push(route.request());
     capture.lastRequest = route.request();
@@ -166,7 +171,7 @@ async function waitForSchoolPanel(page: Page): Promise<void> {
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe('SchoolSelectedPanel', () => {
+test.describe('@integration-ui SchoolSelectedPanel', () => {
   // Use authenticated user for listing fetches to work
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 

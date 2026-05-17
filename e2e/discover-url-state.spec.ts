@@ -69,6 +69,7 @@ const ENCODED_AREA_KEY = encodeURIComponent(MOCK_AREA_KEY); // IN%7CKA%7CUdupi%7
 // ── Helper: register API mocks before page navigation ─────────────────────────
 
 async function mockDiscoverApis(page: import('@playwright/test').Page) {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     route.fulfill({
       status: 200,
@@ -77,6 +78,7 @@ async function mockDiscoverApis(page: import('@playwright/test').Page) {
     }),
   );
 
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/cities/**/listings**', (route) =>
     route.fulfill({
       status: 200,
@@ -88,7 +90,7 @@ async function mockDiscoverApis(page: import('@playwright/test').Page) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-test.describe('Discover — URL-backed state (#910)', () => {
+test.describe('@integration-ui Discover — URL-backed state (#910)', () => {
   /**
    * AC12: Bookmarked URL with ?areaKey= loads correct area listings on fresh page load.
    *

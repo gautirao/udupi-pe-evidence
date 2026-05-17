@@ -104,7 +104,7 @@ async function stubCommonRoutes1109(page: Page): Promise<void> {
   );
 }
 
-test.describe('Issue #1074 — school-first markers', () => {
+test.describe('@integration-ui Issue #1074 — school-first markers', () => {
   test('Slice A: school-first + Manipal area → schools + property markers + right-panel cards', async ({ page }) => {
     await page.goto(
       `http://localhost:5174/discover?city=udupi&journey=school-first&zoom=14&areaKey=${MANIPAL_AREA_KEY}`,

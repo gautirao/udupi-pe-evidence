@@ -20,7 +20,7 @@ const MANIPAL_AREA_KEY = encodeURIComponent('IN|KA|Udupi|Manipal');
 
 // ── Anonymous tests (no auth required) ──────────────────────────────────────
 
-test.describe('Discover — city switch (anonymous)', () => {
+test.describe('@journey Discover — city switch (anonymous)', () => {
   test('?city= URL param is reflected in the City selector', async ({ page }) => {
     // ── Step 1: Load with city=kundapur ───────────────────────────────────────
     await page.goto('/discover?city=kundapur');

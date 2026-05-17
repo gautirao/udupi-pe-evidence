@@ -96,6 +96,7 @@ const POI_FIXTURES = [
 
 /** Intercept Spring backend public listing endpoint to return a deterministic listing fixture. */
 async function stubListing(page: import('@playwright/test').Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route(`**/api/public/listings/${FIXTURE_LISTING_ID}`, async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
@@ -109,6 +110,7 @@ async function stubListing(page: import('@playwright/test').Page): Promise<void>
   });
 }
 
+// @integration-ui
 // ---------------------------------------------------------------------------
 // P1 — NearbyPois renders when API returns approved POIs
 // ---------------------------------------------------------------------------
@@ -118,6 +120,7 @@ test('P1 — NearbyPois section renders with approved POIs from backend', async 
   await stubListing(page);
 
   // Stub the Spring backend POI endpoint with approved POIs
+  // INTEGRATION-UI: stub justified — force known POI data to assert NearbyPois rendering
   await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
     await route.fulfill({
       status: 200,
@@ -149,6 +152,7 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
   await stubListing(page);
 
   // Stub POI endpoint with empty array
+  // INTEGRATION-UI: stub justified — force empty results to assert empty-state UI
   await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
     await route.fulfill({
       status: 200,
@@ -175,7 +179,7 @@ test('P2 — NearbyPois section is hidden when backend returns no POIs', async (
 // ---------------------------------------------------------------------------
 // P3/P4 — Broker-authenticated POI verification
 // ---------------------------------------------------------------------------
-test.describe('Broker-authenticated POI display', () => {
+test.describe('@integration-ui Broker-authenticated POI display', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   test('P3 — broker sees approved POIs on listing detail', async ({ page }) => {
@@ -183,6 +187,7 @@ test.describe('Broker-authenticated POI display', () => {
 
     await stubListing(page);
 
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -221,6 +226,7 @@ test.describe('Broker-authenticated POI display', () => {
 
     await stubListing(page);
 
+    // INTEGRATION-UI: stub justified — force known POI set to assert correct names and categories
     await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -250,7 +256,7 @@ test.describe('Broker-authenticated POI display', () => {
 // ---------------------------------------------------------------------------
 // PM1 — Broker POI curation: approve in PoiManager → verify in Approved tab → verify on listing detail
 // ---------------------------------------------------------------------------
-test.describe('Broker POI curation flow', () => {
+test.describe('@integration-ui Broker POI curation flow', () => {
   test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
 
   test('PM1 — approve POI in PoiManager, verify in Approved tab, verify on listing detail', async ({ page }) => {
@@ -318,6 +324,7 @@ test.describe('Broker POI curation flow', () => {
     // Register POI sub-routes FIRST so they take priority over the listing route.
 
     // Stub images endpoint (EditListing step 4 needs this)
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/images`, async (route) => {
       if (route.request().method() !== 'GET') { await route.continue(); return; }
       await route.fulfill({
@@ -329,6 +336,7 @@ test.describe('Broker POI curation flow', () => {
 
     // Stub suggestions endpoint — initially returns pre-approve data
     const suggestionsUrl = `**/api/listings/${FIXTURE_LISTING_ID}/pois/suggestions`;
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(suggestionsUrl, async (route) => {
       await route.fulfill({
         status: 200,
@@ -338,12 +346,14 @@ test.describe('Broker POI curation flow', () => {
     });
 
     // Stub the approve PATCH endpoint
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois/poi-10/approve`, async (route) => {
       if (route.request().method() !== 'PATCH') { await route.continue(); return; }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 
     // Stub broker listing endpoint — must NOT intercept /pois or /images sub-paths
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(`**/api/listings/${FIXTURE_LISTING_ID}`, async (route) => {
       if (route.request().method() !== 'GET') { await route.continue(); return; }
       const url = route.request().url();
@@ -378,6 +388,7 @@ test.describe('Broker POI curation flow', () => {
 
     // Re-stub suggestions to return post-approve data before clicking
     await page.unroute(suggestionsUrl);
+    // INTEGRATION-UI: stub justified — re-stub to return post-approve data to assert approved-tab UI
     await page.route(suggestionsUrl, async (route) => {
       await route.fulfill({
         status: 200,
@@ -411,6 +422,7 @@ test.describe('Broker POI curation flow', () => {
     // ── Navigate to listing detail and verify NearbyPois ──────────────────
 
     // Stub the public approved-POIs endpoint for listing detail
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(`**/api/listings/${FIXTURE_LISTING_ID}/pois`, async (route) => {
       // Skip if this is the /pois/suggestions sub-path
       if (route.request().url().includes('/suggestions')) { await route.continue(); return; }

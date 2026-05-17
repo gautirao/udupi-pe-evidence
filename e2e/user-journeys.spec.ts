@@ -202,7 +202,7 @@ test('U4 — listing detail: AreaMarketWidget renders without crash', async ({ p
 // UJ1 — Full User Journey: Browse → View Listing → Book Viewing → My Bookings
 //       Requires a LIVE test fixture from global-setup.
 // ---------------------------------------------------------------------------
-test.describe('UJ1 — Browse → Detail → Request Viewing → My Bookings', () => {
+test.describe('@journey UJ1 — Browse → Detail → Request Viewing → My Bookings', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
   // Run serially within this describe to avoid parallel duplicate-booking conflicts
   test.describe.configure({ mode: 'serial' });

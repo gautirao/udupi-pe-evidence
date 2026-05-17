@@ -27,7 +27,7 @@ const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 // ---------------------------------------------------------------------------
 // N1 — User role: correct nav links after login
 // ---------------------------------------------------------------------------
-test.describe('N1 — user-authenticated', () => {
+test.describe('@smoke N1 — user-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
   test('N1 — user role (owner): Trends, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer or admin links', async ({ page }) => {

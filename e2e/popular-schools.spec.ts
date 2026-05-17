@@ -124,6 +124,7 @@ function fulfillJson(route: Route, status: number, body: unknown): Promise<void>
  * stubbing it unconditionally keeps the test hermetic.
  */
 async function stubTrendsOptions(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/trends/options**', (route) =>
     fulfillJson(route, 200, TRENDS_OPTIONS_FIXTURE),
   );
@@ -140,6 +141,7 @@ async function stubPopularSchools(
 ): Promise<void> {
   const all = opts.all ?? POPULAR_SCHOOLS_FIXTURE;
   const manipal = opts.manipal ?? POPULAR_SCHOOLS_MANIPAL_FIXTURE;
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/public/schools/popular**', (route) => {
     const url = route.request().url();
     const hasAreaKey = /[?&]areaKey=/.test(url);
@@ -163,7 +165,7 @@ async function openNearSchoolSheet(page: Page): Promise<void> {
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe('Popular schools grid (#968)', () => {
+test.describe('@journey Popular schools grid (#968)', () => {
   test('renders 3+ school cards with name + board + address and no listing count badge', async ({
     page,
   }) => {
@@ -319,6 +321,7 @@ test.describe('Popular schools grid (#968)', () => {
     // UI never appears. Toggling on user click also proves Retry actually
     // refetches (vs the auto-retries that fired without user input).
     let failNext = true;
+    // INTEGRATION-UI: stub justified — force error then success to assert error-state and retry UI
     await page.route('**/api/public/schools/popular**', (route) => {
       if (failNext) {
         return route.fulfill({
@@ -354,6 +357,7 @@ test.describe('Popular schools grid (#968)', () => {
 
   test('empty state shows "No popular schools found near {city}"', async ({ page }) => {
     await stubTrendsOptions(page);
+    // INTEGRATION-UI: stub justified — force empty results to assert empty-state UI
     await page.route('**/api/public/schools/popular**', (route) =>
       fulfillJson(route, 200, []),
     );

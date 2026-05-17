@@ -231,7 +231,7 @@ async function createAndSubmitListing(
 // AM1, AM2, AM3 — serial test suite
 // ---------------------------------------------------------------------------
 
-test.describe('AM — Admin moderation UI journey', () => {
+test.describe('@integration-ui AM — Admin moderation UI journey', () => {
   test.describe.configure({ mode: 'serial' });
 
   // AM1 and AM2 use admin storageState. AM3 overrides with broker context manually.

@@ -84,16 +84,19 @@ const MOCK_EMPTY_GROUPS_RESPONSE = { groups: [] };
 
 async function stubApis(page: Page, groupsResponse = MOCK_AREA_GROUPS_RESPONSE) {
   // Stub the areas endpoint (used by the map layer)
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/areas**', (route) =>
     route.fulfill({ json: MOCK_AREAS_RESPONSE }),
   );
 
   // Stub the area-groups endpoint
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/discover/area-groups**', (route) =>
     route.fulfill({ json: groupsResponse }),
   );
 
   // Stub city listings (may be fetched on area select)
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route(`**/api/discover/cities/${MOCK_CITY}/listings**`, (route) =>
     route.fulfill({ json: { city: MOCK_CITY, limitPerArea: 5, areas: [] } }),
   );
@@ -101,7 +104,7 @@ async function stubApis(page: Page, groupsResponse = MOCK_AREA_GROUPS_RESPONSE) 
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
-test.describe('Discover — area-groups-landing panel', () => {
+test.describe('@integration-ui Discover — area-groups-landing panel', () => {
   test('loads panel with group cards when journey=area-first and groupId is set', async ({ page }) => {
     await stubApis(page);
 
@@ -156,14 +159,17 @@ test.describe('Discover — area-groups-landing panel', () => {
 
   test('shows loading skeletons while area-groups fetch is in-flight', async ({ page }) => {
     // Delay the groups response to observe the loading state
+    // INTEGRATION-UI: stub justified — force delayed response to assert loading skeleton UI
     await page.route('**/api/discover/areas**', (route) =>
       route.fulfill({ json: MOCK_AREAS_RESPONSE }),
     );
+    // INTEGRATION-UI: stub justified — force delayed response to assert loading skeleton UI
     await page.route('**/api/discover/area-groups**', async (route) => {
       // Delay 800ms so the loading skeleton is visible on page load
       await new Promise((r) => setTimeout(r, 800));
       await route.fulfill({ json: MOCK_AREA_GROUPS_RESPONSE });
     });
+    // INTEGRATION-UI: stub justified — isolate from backend variability
     await page.route(`**/api/discover/cities/${MOCK_CITY}/listings**`, (route) =>
       route.fulfill({ json: { city: MOCK_CITY, limitPerArea: 5, areas: [] } }),
     );

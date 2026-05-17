@@ -79,7 +79,7 @@ async function openListingDetail(
 // ---------------------------------------------------------------------------
 // Anonymous journey tests — no storageState (browser starts with no session)
 // ---------------------------------------------------------------------------
-test.describe('[E2E] Anonymous homepage → listing detail journey', () => {
+test.describe('@journey [E2E] Anonymous homepage → listing detail journey', () => {
   test.setTimeout(90_000);
 
   test('H1 — anonymous user visits / without redirect or spinner hang', async ({ page }) => {

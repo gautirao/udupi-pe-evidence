@@ -24,7 +24,7 @@ const hasAdminCreds = hasRealCredentials(adminEmail, adminPassword);
 // ---------------------------------------------------------------------------
 // A1–A3 — Admin-authenticated tests
 // ---------------------------------------------------------------------------
-test.describe('admin-authenticated', () => {
+test.describe('@smoke admin-authenticated', () => {
   test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
 
   // ---------------------------------------------------------------------------

@@ -175,6 +175,7 @@ test.afterEach(async () => {
   ]);
 });
 
+// @journey
 test('DL1 — full broker listing creation journey', async ({ page }) => {
   test.setTimeout(120_000);
   test.skip(

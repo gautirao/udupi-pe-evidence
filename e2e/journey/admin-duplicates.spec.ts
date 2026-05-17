@@ -196,7 +196,7 @@ interface SuiteFixture {
 // NOTE: mode: 'serial' is required. Do NOT shard this file.
 // ---------------------------------------------------------------------------
 
-test.describe('Admin duplicates (/admin/duplicates)', () => {
+test.describe('@integration-ui Admin duplicates (/admin/duplicates)', () => {
   test.describe.configure({ mode: 'serial' });
   test.use({ storageState: 'e2e/fixtures/admin-auth.json' });
 

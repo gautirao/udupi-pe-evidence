@@ -24,6 +24,7 @@ const hasUserCreds = hasRealCredentials(userEmail, userPassword);
 // All tests in this file need user auth — start with pre-authenticated session.
 test.use({ storageState: 'e2e/fixtures/user-auth.json' });
 
+// @integration-ui
 // ---------------------------------------------------------------------------
 // M1 — Map page loads; filter panel visible
 // ---------------------------------------------------------------------------
@@ -135,6 +136,7 @@ test('M5 — Leaflet map renders at least one custom-marker pin when listings ha
   // C-switch: the map now sources markers from useDiscoverMarkers (GET /api/listings/markers)
   // rather than the Supabase property_listings REST endpoint. Intercept the skinny-markers
   // endpoint and return a single fixture marker with known coordinates.
+  // INTEGRATION-UI: stub justified — force known coordinates to assert marker rendering
   await page.route('**/api/listings/markers*', async (route) => {
     await route.fulfill({
       status: 200,
