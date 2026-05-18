@@ -196,8 +196,6 @@ test('Q6 — logged-out: role-specific nav links are not present', async ({ page
   await page.goto('/');
   await page.waitForLoadState('domcontentloaded');
 
-  // Wait for auth state to resolve (ProtectedRoute may briefly show loading state)
-  await page.waitForTimeout(2_000);
 
   // Dealer-only nav links must NOT appear
   await expect(page.getByRole('link', { name: /my listings/i })).toHaveCount(0);

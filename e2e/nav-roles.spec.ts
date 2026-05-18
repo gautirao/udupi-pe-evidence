@@ -34,8 +34,6 @@ test.describe('@smoke N1 — user-authenticated', () => {
     test.skip(!hasUserCreds, 'SMOKE_USER_EMAIL / SMOKE_USER_PASSWORD not set — skipping N1');
 
     await page.goto('/discover');
-    // Wait for auth context to settle so nav renders with the correct role
-    await page.waitForTimeout(2_000);
 
     // Owner nav items must be visible (superset of old user nav + listing management)
     await expect(page.getByRole('link', { name: /^trends$/i }).first()).toBeVisible({ timeout: 8_000 });
@@ -64,7 +62,6 @@ test.describe('N2 — admin-authenticated', () => {
     test.skip(!hasAdminCreds, 'ADMIN_EMAIL / ADMIN_PASSWORD not set — skipping N2');
 
     await page.goto('/discover');
-    await page.waitForTimeout(2_000);
 
     // On desktop, admin nav renders as a dropdown behind an "Admin" button trigger.
     // The trigger itself must be visible for admin users.
