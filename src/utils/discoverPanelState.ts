@@ -46,6 +46,9 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   const { journey, areaKey, schoolId } = urlState;
 
   if (journey === 'school-first') {
+    if (areaKey && schoolId) {
+      return 'area-school-combined';
+    }
     if (schoolId) {
       return 'school-selected';
     }
@@ -56,6 +59,9 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   }
 
   if (journey === 'area-first') {
+    if (areaKey && schoolId) {
+      return 'area-school-combined';
+    }
     if (areaKey) {
       return 'area-selected';
     }
