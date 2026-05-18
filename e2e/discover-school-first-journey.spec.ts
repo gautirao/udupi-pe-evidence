@@ -527,8 +527,8 @@ test.describe('@integration-ui school-first journey (#1003)', () => {
 
     // Intercept /api/public/schools/by-area and return 500 error
     // INTEGRATION-UI: stub justified — force error response to assert error-state UI
-    await page.route('/api/public/schools/by-area*', (route) => {
-      route.abort('failed');
+    await page.route('**/api/public/schools/by-area**', async (route) => {
+      await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Internal Server Error"}' });
     });
 
     await page.goto(`/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}`);
@@ -572,8 +572,7 @@ test.describe('@integration-ui school-first journey (#1003)', () => {
     await expect(emptyDiv).toContainText(/no schools found/i);
 
     // Verify console.warn was called for empty state
-    // Note: console.warn calls are collected asynchronously, so this is a soft check
-    await page.waitForTimeout(500);
+    // toBeVisible() above ensures the component has rendered and console.warn has already fired
     const hasEmptyWarning = warnings.some((w) =>
       w.includes('[SchoolMarkerLayer]') && w.includes('No schools found')
     );
