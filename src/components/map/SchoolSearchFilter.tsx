@@ -203,10 +203,12 @@ export function SchoolSearchFilter({
         <Label className="text-xs text-muted-foreground">Board type</Label>
         <div className="flex gap-1.5 flex-wrap">
           {BOARD_TYPES.map((board) => {
-            const active = boardFilter.includes(board);
+            const active = (boardFilter ?? []).includes(board);
             return (
               <Badge
                 key={board}
+                role="button"
+                aria-pressed={active}
                 variant={active ? 'default' : 'outline'}
                 className={cn(
                   'cursor-pointer text-xs',

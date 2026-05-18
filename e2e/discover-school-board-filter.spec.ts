@@ -182,6 +182,8 @@ test.describe('@integration-ui school-first board-type filter (#1131)', () => {
       () => new URL(page.url()).searchParams.getAll('board'),
       { timeout: 8_000 },
     ).toEqual(['CBSE']);
+
+    await expect(cbseChip).toHaveAttribute('aria-pressed', 'true');
   });
 
   /**
@@ -263,6 +265,7 @@ test.describe('@integration-ui school-first board-type filter (#1131)', () => {
     // Chip must be present and reflect the active state (aria-pressed=true).
     const cbseChip = page.locator('[data-testid="board-chip-cbse"]');
     await expect(cbseChip).toBeVisible({ timeout: 15_000 });
+    await expect(cbseChip).toHaveAttribute('aria-pressed', 'true');
 
     // Right panel must show CBSE school only.
     const rightPanel = page.getByTestId('discover-right-panel');
@@ -270,5 +273,32 @@ test.describe('@integration-ui school-first board-type filter (#1131)', () => {
       timeout: 15_000,
     });
     await expect(rightPanel.getByText('Manipal ICSE Academy')).toHaveCount(0);
+  });
+
+  /**
+   * AC4 — Clicking an active board chip deactivates it: aria-pressed returns to
+   * false and the board param is removed from the URL.
+   */
+  test('clicking active board chip deactivates it (AC4)', async ({ page }) => {
+    await stubAll(page);
+
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}&board=CBSE`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+
+    const cbseChip = page.locator('[data-testid="board-chip-cbse"]');
+    await expect(cbseChip).toBeVisible({ timeout: 15_000 });
+    await expect(cbseChip).toHaveAttribute('aria-pressed', 'true');
+
+    // Click to deactivate
+    await cbseChip.click();
+
+    await expect.poll(
+      () => new URL(page.url()).searchParams.getAll('board'),
+      { timeout: 8_000 },
+    ).toEqual([]);
+
+    await expect(cbseChip).toHaveAttribute('aria-pressed', 'false');
   });
 });

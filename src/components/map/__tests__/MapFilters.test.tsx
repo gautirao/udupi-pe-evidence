@@ -407,4 +407,33 @@ describe('SchoolSearchFilter — board chips (issue #1131)', () => {
       expect(chip.className).not.toMatch(/\bbg-primary\b/);
     }
   });
+
+  // AC1 — single active board chip has bg-primary class and aria-pressed=true
+  it('CBSE chip has bg-primary class and aria-pressed when boardFilter contains CBSE (AC1)', () => {
+    renderChips(['CBSE']);
+    const cbseChip = screen.getByText('CBSE');
+    // Active chip carries bg-primary from cn() merge
+    expect(cbseChip.className).toMatch(/\bbg-primary\b/);
+    // aria-pressed is set on the element itself (Badge renders a div with role=button)
+    expect(cbseChip.closest('[role="button"]')).toHaveAttribute('aria-pressed', 'true');
+    // Non-selected chips must not have bg-primary or aria-pressed=true
+    const icseChip = screen.getByText('ICSE');
+    expect(icseChip.className).not.toMatch(/\bbg-primary\b/);
+    expect(icseChip.closest('[role="button"]')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  // AC2 — multiple active boards all highlighted simultaneously
+  it('both CBSE and ICSE chips have bg-primary when boardFilter contains both (AC2)', () => {
+    renderChips(['CBSE', 'ICSE']);
+    const cbseChip = screen.getByText('CBSE');
+    const icseChip = screen.getByText('ICSE');
+    const stateChip = screen.getByText('State');
+    expect(cbseChip.className).toMatch(/\bbg-primary\b/);
+    expect(cbseChip.closest('[role="button"]')).toHaveAttribute('aria-pressed', 'true');
+    expect(icseChip.className).toMatch(/\bbg-primary\b/);
+    expect(icseChip.closest('[role="button"]')).toHaveAttribute('aria-pressed', 'true');
+    // State board is not selected — must not be active
+    expect(stateChip.className).not.toMatch(/\bbg-primary\b/);
+    expect(stateChip.closest('[role="button"]')).toHaveAttribute('aria-pressed', 'false');
+  });
 });

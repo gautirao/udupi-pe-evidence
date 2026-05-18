@@ -52,8 +52,8 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
   } = useSchoolsByArea(
     // Disable internal fetch when parent owns the data
     schoolsProp !== undefined ? null : urlState.areaKey,
-    urlState.boardFilters || [],
-    urlState.categoryFilters || [],
+    urlState.filters.boardFilters || [],
+    urlState.filters.categoryFilters || [],
   );
 
   const isLoading = schoolsProp !== undefined ? (schoolsLoadingProp ?? false) : hookLoading;
@@ -66,43 +66,43 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
 
   // Handler to toggle board filter
   const handleBoardToggle = (board: string) => {
-    const next = (urlState.boardFilters || []).includes(board)
-      ? (urlState.boardFilters || []).filter((b) => b !== board)
-      : [...(urlState.boardFilters || []), board];
+    const next = (urlState.filters.boardFilters || []).includes(board)
+      ? (urlState.filters.boardFilters || []).filter((b) => b !== board)
+      : [...(urlState.filters.boardFilters || []), board];
 
     urlActions.setFiltersLive({
-      propertyTypes: urlState.propertyTypes,
-      bedrooms: urlState.bedrooms,
-      priceMin: urlState.priceMin,
-      priceMax: urlState.priceMax,
-      sellerTypes: urlState.sellerTypes,
+      propertyTypes: urlState.filters.propertyTypes,
+      bedrooms: urlState.filters.bedrooms,
+      priceMin: urlState.filters.priceMin,
+      priceMax: urlState.filters.priceMax,
+      sellerTypes: urlState.filters.sellerTypes,
       boardFilters: next,
-      categoryFilters: urlState.categoryFilters,
-      backOnMarket: urlState.backOnMarket,
-      newToMarket: urlState.newToMarket,
-      reraRegistered: urlState.reraRegistered,
-      readyToMove: urlState.readyToMove,
+      categoryFilters: urlState.filters.categoryFilters,
+      backOnMarket: urlState.filters.backOnMarket,
+      newToMarket: urlState.filters.newToMarket,
+      reraRegistered: urlState.filters.reraRegistered,
+      readyToMove: urlState.filters.readyToMove,
     });
   };
 
   // Handler to toggle category filter
   const handleCategoryToggle = (category: string) => {
-    const next = (urlState.categoryFilters || []).includes(category)
-      ? (urlState.categoryFilters || []).filter((c) => c !== category)
-      : [...(urlState.categoryFilters || []), category];
+    const next = (urlState.filters.categoryFilters || []).includes(category)
+      ? (urlState.filters.categoryFilters || []).filter((c) => c !== category)
+      : [...(urlState.filters.categoryFilters || []), category];
 
     urlActions.setFiltersLive({
-      propertyTypes: urlState.propertyTypes,
-      bedrooms: urlState.bedrooms,
-      priceMin: urlState.priceMin,
-      priceMax: urlState.priceMax,
-      sellerTypes: urlState.sellerTypes,
-      boardFilters: urlState.boardFilters,
+      propertyTypes: urlState.filters.propertyTypes,
+      bedrooms: urlState.filters.bedrooms,
+      priceMin: urlState.filters.priceMin,
+      priceMax: urlState.filters.priceMax,
+      sellerTypes: urlState.filters.sellerTypes,
+      boardFilters: urlState.filters.boardFilters,
       categoryFilters: next,
-      backOnMarket: urlState.backOnMarket,
-      newToMarket: urlState.newToMarket,
-      reraRegistered: urlState.reraRegistered,
-      readyToMove: urlState.readyToMove,
+      backOnMarket: urlState.filters.backOnMarket,
+      newToMarket: urlState.filters.newToMarket,
+      reraRegistered: urlState.filters.reraRegistered,
+      readyToMove: urlState.filters.readyToMove,
     });
   };
 
@@ -114,17 +114,17 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
   // Handler to clear filters
   const handleClearFilters = () => {
     urlActions.setFiltersLive({
-      propertyTypes: urlState.propertyTypes,
-      bedrooms: urlState.bedrooms,
-      priceMin: urlState.priceMin,
-      priceMax: urlState.priceMax,
-      sellerTypes: urlState.sellerTypes,
+      propertyTypes: urlState.filters.propertyTypes,
+      bedrooms: urlState.filters.bedrooms,
+      priceMin: urlState.filters.priceMin,
+      priceMax: urlState.filters.priceMax,
+      sellerTypes: urlState.filters.sellerTypes,
       boardFilters: [],
       categoryFilters: [],
-      backOnMarket: urlState.backOnMarket,
-      newToMarket: urlState.newToMarket,
-      reraRegistered: urlState.reraRegistered,
-      readyToMove: urlState.readyToMove,
+      backOnMarket: urlState.filters.backOnMarket,
+      newToMarket: urlState.filters.newToMarket,
+      reraRegistered: urlState.filters.reraRegistered,
+      readyToMove: urlState.filters.readyToMove,
     });
   };
 
@@ -146,12 +146,13 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
       {/* Board Filter Chips */}
       <div className="px-4 py-3 border-b flex flex-wrap gap-2">
         {BOARD_OPTIONS.map((board) => {
-          const isSelected = (urlState.boardFilters || []).includes(board);
+          const isSelected = (urlState.filters.boardFilters || []).includes(board);
           return (
             <button
               key={board}
               onClick={() => handleBoardToggle(board)}
               data-testid={`board-chip-${board.toLowerCase()}`}
+              aria-pressed={isSelected}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 isSelected
                   ? 'bg-primary text-white'
@@ -167,12 +168,13 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
       {/* Category Filter Chips */}
       <div className="px-4 py-3 border-b flex flex-wrap gap-2">
         {CATEGORY_OPTIONS.map(({ value, label }) => {
-          const isSelected = (urlState.categoryFilters || []).includes(value);
+          const isSelected = (urlState.filters.categoryFilters || []).includes(value);
           return (
             <button
               key={value}
               onClick={() => handleCategoryToggle(value)}
               data-testid={`category-chip-${value}`}
+              aria-pressed={isSelected}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 isSelected
                   ? 'bg-primary text-white'
