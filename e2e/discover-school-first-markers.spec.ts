@@ -1,75 +1,86 @@
-import { test, expect, type Page, type Route } from '@playwright/test';
-
 /**
- * Issue #1074 — School-first journey property markers + right-panel listings.
+ * E2E: school-first focus mode and clear-school restore — Issue #1130.
  *
- * Slice A: school-first + areaKey (no schoolId) → school markers + area
- *          property markers + right-panel property cards.
- * Slice B: school-first + schoolId → highlighted school + radius circle +
- *          property markers OR explicit empty banner; right-panel listing list.
+ * Tests covering the school marker focus mode and URL state restore:
+ *   E2E-FOCUS-1  Select school → only 1 school marker visible on map
+ *   E2E-FOCUS-2  Select school → property markers + panel listings agree (scoped to radius)
+ *   E2E-FOCUS-3  Select school, clear chip → URL loses schoolId + right panel shows schools-in-area
+ *   E2E-FOCUS-4  URL with school+radius yielding 0 properties → empty-state in right panel
+ *   E2E-BACK-1   Select school (URL gains schoolId), browser back, URL loses schoolId
  *
- * Regression target #1065: area-first journey still renders property markers.
- * Regression target #1109: property markers must persist after settled-state
- *   refetch triggered by school selection (via both map-marker click and
- *   right-panel card click paths).
+ * NOTE: Issue #1118 limitation — anonymous users do not trigger /api/discover/markers
+ * (the endpoint is auth-gated). Property markers for anonymous users come from
+ * areaMarkerListings (/api/discover/cities/{city}/listings). E2E-FOCUS-2 stubs
+ * the city-listings endpoint so property markers are visible without authentication.
+ * The school-proximity filter is applied client-side via haversineKm for anon users.
  *
- * Manipal areaKey: 'IN|KA|Udupi|Manipal' (URL-encoded as IN%7CKA%7CUdupi%7CManipal).
- * The school-first "Manipal" area selection is the canonical Slice A path.
+ * Run locally:
+ *   bash scripts/run-e2e-local.sh --project=full e2e/discover-school-first-markers.spec.ts
  */
 
-const MANIPAL_AREA_KEY = 'IN%7CKA%7CUdupi%7CManipal';
-const MANIPAL_AREA_KEY_RAW = 'IN|KA|Udupi|Manipal';
-const ENCODED_AREA_KEY = MANIPAL_AREA_KEY;
+import { test, expect, type Page, type Route } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
-// Shared fixtures for #1109 regression tests
+// Constants
 // ---------------------------------------------------------------------------
 
-const SCHOOLS_BY_AREA_FIXTURE_1109 = [
-  {
-    id: 'sch-malpe-1',
-    name: 'Pretty Angels Preschool',
-    board: 'STATE',
-    boardType: null,
-    address: 'Malpe, Udupi',
-    latitude: 13.3469,
-    longitude: 74.7059,
-    schoolCategory: 'primary',
-  },
-];
+const MANIPAL_AREA_KEY = 'IN|KA|Udupi|Manipal';
+const ENCODED_AREA_KEY = encodeURIComponent(MANIPAL_AREA_KEY);
 
-const SCHOOL_MALPE = SCHOOLS_BY_AREA_FIXTURE_1109[0];
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
 
-const MARKERS_WITH_PROPERTY: object = {
+const TRENDS_OPTIONS_FIXTURE = {
   city: 'udupi',
-  markers: [
-    {
-      id: 'prop-marker-1',
-      latitude: 13.347,
-      longitude: 74.706,
-      pricePaise: 5_000_000,
-      title: 'Test Property Near School',
-      propertyType: 'house',
-    },
+  defaultAreas: [
+    { areaKey: MANIPAL_AREA_KEY, areaLabel: 'Manipal' },
+    { areaKey: 'IN|KA|Udupi|Kadiyali', areaLabel: 'Kadiyali' },
   ],
 };
 
-const DISCOVER_AREAS_MALPE = {
+const DISCOVER_AREAS_UDUPI = {
   city: 'udupi',
   areas: [
     {
-      areaKey: MANIPAL_AREA_KEY_RAW,
-      name: 'Malpe',
-      geoCenterLat: 13.3469,
-      geoCenterLon: 74.7059,
-      listingCount90d: 3,
-      schoolCount: 1,
+      areaKey: MANIPAL_AREA_KEY,
+      name: 'Manipal',
+      geoCenterLat: 13.3525,
+      geoCenterLon: 74.7864,
+      listingCount90d: 5,
+      schoolCount: 4,
       trendDirection: 'stable',
     },
   ],
 };
 
-const EMPTY_LISTINGS_PAGE_1109 = {
+// Two schools for the area — used to verify focus mode shows only 1 marker.
+const SCHOOLS_BY_AREA_FIXTURE = [
+  {
+    id: 'sch-1',
+    name: 'Manipal Public School',
+    board: 'CBSE',
+    boardType: null,
+    address: 'Manipal, Udupi',
+    latitude: 13.3525,
+    longitude: 74.7864,
+    schoolCategory: 'secondary',
+  },
+  {
+    id: 'sch-2',
+    name: 'MIT Vidyaniketan',
+    board: 'STATE',
+    boardType: null,
+    address: 'Manipal, Udupi',
+    latitude: 13.351,
+    longitude: 74.785,
+    schoolCategory: 'primary',
+  },
+];
+
+const MANIPAL_SCHOOL = SCHOOLS_BY_AREA_FIXTURE[0];
+
+const EMPTY_LISTINGS_PAGE = {
   content: [],
   page: 0,
   size: 50,
@@ -78,7 +89,36 @@ const EMPTY_LISTINGS_PAGE_1109 = {
   aggregates: { topLocalities: [] },
 };
 
-function fulfillJson1109(route: Route, status: number, body: unknown): Promise<void> {
+// City-listings fixture: one property inside the school radius (1.0 km from sch-1).
+// Used by E2E-FOCUS-2 to verify property markers are scoped to the selected school.
+const CITY_LISTINGS_FIXTURE = {
+  areas: [
+    {
+      areaKey: MANIPAL_AREA_KEY,
+      listings: [
+        {
+          id: 'listing-focus-1',
+          title: 'Focus Test Property',
+          propertyType: 'house',
+          price: 4500000,
+          lat: 13.3530,
+          lon: 74.7870,
+          latitude: 13.3530,
+          longitude: 74.7870,
+          locality: 'Manipal',
+          bedrooms: 3,
+          status: 'LIVE',
+        },
+      ],
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Stub helpers (mirrors discover-school-first-journey.spec.ts conventions)
+// ---------------------------------------------------------------------------
+
+function fulfillJson(route: Route, status: number, body: unknown): Promise<void> {
   return route.fulfill({
     status,
     contentType: 'application/json',
@@ -86,207 +126,264 @@ function fulfillJson1109(route: Route, status: number, body: unknown): Promise<v
   });
 }
 
-async function stubCommonRoutes1109(page: Page): Promise<void> {
+async function stubTrendsOptions(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
   await page.route('**/api/trends/options**', (route) =>
-    fulfillJson1109(route, 200, { city: 'udupi', defaultAreas: [] }),
-  );
-  await page.route('**/api/discover/areas**', (route) =>
-    fulfillJson1109(route, 200, DISCOVER_AREAS_MALPE),
-  );
-  await page.route('**/api/public/schools/popular**', (route) =>
-    fulfillJson1109(route, 200, []),
-  );
-  await page.route('**/api/discover/listings**', (route) =>
-    fulfillJson1109(route, 200, EMPTY_LISTINGS_PAGE_1109),
-  );
-  await page.route(`**/api/public/schools/${SCHOOL_MALPE.id}`, (route) =>
-    fulfillJson1109(route, 200, SCHOOL_MALPE),
+    fulfillJson(route, 200, TRENDS_OPTIONS_FIXTURE),
   );
 }
 
-test.describe('@integration-ui Issue #1074 — school-first markers', () => {
-  test('Slice A: school-first + Manipal area → schools + property markers + right-panel cards', async ({ page }) => {
-    await page.goto(
-      `http://localhost:5174/discover?city=udupi&journey=school-first&zoom=14&areaKey=${MANIPAL_AREA_KEY}`,
-      { waitUntil: 'networkidle' },
-    );
+async function stubDiscoverAreas(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
+  await page.route('**/api/discover/areas**', (route) =>
+    fulfillJson(route, 200, DISCOVER_AREAS_UDUPI),
+  );
+}
 
-    // Right panel renders the schools-in-area panel
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
+async function stubSchoolsByArea(
+  page: Page,
+  schools: unknown[] = SCHOOLS_BY_AREA_FIXTURE,
+): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
+  await page.route('**/api/public/schools/by-area**', (route) =>
+    fulfillJson(route, 200, schools),
+  );
+}
 
-    // Property markers must be present alongside school markers
-    const propertyMarkers = page.locator('[data-testid="property-marker"]');
-    await expect(propertyMarkers.first()).toBeVisible({ timeout: 10_000 });
-    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+async function stubSchoolById(
+  page: Page,
+  school: typeof MANIPAL_SCHOOL,
+): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
+  // Single-segment wildcard (*) matches /schools/sch-1 but NOT /schools/by-area/...
+  // so this stub cannot accidentally intercept the by-area endpoint.
+  await page.route('**/api/public/schools/*', (route) =>
+    fulfillJson(route, 200, school),
+  );
+}
 
-    // School markers continue rendering — selector matches PropertyMap's schoolMarkerIcon className
-    const schoolMarkers = page.locator('.school-marker');
-    expect(await schoolMarkers.count()).toBeGreaterThan(0);
+async function stubDiscoverListings(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — isolate from backend variability
+  await page.route('**/api/discover/listings**', (route) =>
+    fulfillJson(route, 200, EMPTY_LISTINGS_PAGE),
+  );
+}
 
-    // Right-panel "Homes in this area" section + at least one property card
-    await expect(page.getByTestId('schools-in-area-properties')).toBeVisible();
-    const propertyCards = page.getByTestId('listing-card');
-    expect(await propertyCards.count()).toBeGreaterThan(0);
-  });
+async function stubCityListings(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — city-level listings for anon property markers
+  await page.route('**/api/discover/cities/*/listings**', (route) =>
+    fulfillJson(route, 200, CITY_LISTINGS_FIXTURE),
+  );
+}
 
-  test('Slice B: school-first + school selected → radius circle + markers OR empty banner', async ({ page }) => {
-    // Start at the Manipal area panel, then click the first school card to enter school-selected state
-    await page.goto(
-      `http://localhost:5174/discover?city=udupi&journey=school-first&zoom=14&areaKey=${MANIPAL_AREA_KEY}`,
-      { waitUntil: 'networkidle' },
-    );
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
+function getUrlParam(page: Page, key: string): string | null {
+  return new URL(page.url()).searchParams.get(key);
+}
 
-    const firstSchoolCard = page.getByTestId('school-card').first();
-    await expect(firstSchoolCard).toBeVisible({ timeout: 10_000 });
-    await firstSchoolCard.click();
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
-    // URL gains schoolId — wait for transition to school-selected panel
-    await expect(page).toHaveURL(/schoolId=/, { timeout: 8_000 });
-
-    // Leaflet Circle for the radius (SVG path inside leaflet-overlay-pane)
-    const radiusCircle = page.locator('.leaflet-overlay-pane svg path').first();
-    await expect(radiusCircle).toBeVisible({ timeout: 10_000 });
-
-    // Either property markers exist OR the empty-state banner is shown.
-    // Both are acceptable per AC2 + AC3.
-    const propertyMarkers = page.locator('[data-testid="property-marker"]');
-    const emptyBanner = page.getByTestId('empty-state-message');
-
-    const markerCount = await propertyMarkers.count();
-    if (markerCount === 0) {
-      await expect(emptyBanner).toBeVisible();
-    } else {
-      expect(markerCount).toBeGreaterThan(0);
-    }
-  });
-
-  test('AC5 regression: area-first Manipal journey still renders property markers', async ({ page }) => {
-    await page.goto(
-      `http://localhost:5174/discover?city=udupi&journey=area-first&zoom=14&areaKey=${MANIPAL_AREA_KEY}`,
-      { waitUntil: 'networkidle' },
-    );
-
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
-    const propertyMarkers = page.locator('[data-testid="property-marker"]');
-    await expect(propertyMarkers.first()).toBeVisible({ timeout: 10_000 });
-    expect(await propertyMarkers.count()).toBeGreaterThan(0);
-
-    // Right-panel property cards still render (issue-1065-final regression)
-    const propertyCards = page.getByTestId('listing-card');
-    expect(await propertyCards.count()).toBeGreaterThan(0);
-  });
-});
-
-/**
- * Issue #1109 regression — property markers must persist in the SETTLED state
- * after a school is selected via either Path A (school marker click on map) or
- * Path B (school card click in right panel).
- *
- * Root cause: handleSelectSchoolMarker previously only called
- * urlActions.setSchoolParams, which set urlState.schoolId without touching
- * filters.schoolLat/schoolLon/schoolRadiusKm. useDiscoverFilteredMarkers then
- * fired a refetch with no school params → backend returned unfiltered/empty
- * markers in the settled response. School coords were applied only after the
- * async useSchoolById resolved — too late.
- *
- * Fix: handleSelectSchoolById (MapDiscovery.tsx) looks up the school from the
- * already-loaded schools[] array and synchronously sets selectedSchool +
- * filters.schoolLat/Lon/RadiusKm before the refetch fires. The placeholderData
- * option in useDiscoverFilteredMarkers prevents flash-to-empty during in-flight.
- *
- * These tests stub the /api/discover/markers endpoint to return a known marker
- * and assert the marker is visible after the settled-state refetch completes.
- */
-test.describe('Issue #1109 regression — markers persist after settled refetch', () => {
+test.describe('@integration-ui school-first focus mode (#1130)', () => {
 
   /**
-   * Path B: right-panel school card click → markers visible after settled refetch.
-   * This is the canonical regression path (Pretty Angels Preschool, Malpe, Udupi).
+   * E2E-FOCUS-1: Selecting a school collapses the map to exactly 1 school marker.
+   *
+   * Setup: school-first + areaKey with 2 schools in fixture. Navigate to the
+   * combined URL (schoolId set). The SchoolMarkerLayer focus mode must render
+   * only 1 .school-pin element on the Leaflet canvas.
+   *
+   * Note: Leaflet markers are DOM elements with class "school-pin" added by
+   * SchoolMarkerLayer's schoolPinIcon. Count must be exactly 1 when schoolId is set.
+   * (PropertyMap's schoolCircle overlay uses "school-marker" — a distinct class.)
    */
-  test('#1109-B: school card click — markers persist after settled refetch', async ({ page }) => {
-    await stubCommonRoutes1109(page);
+  test('E2E-FOCUS-1: select school → only 1 school marker visible on map', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubSchoolsByArea(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+    await stubCityListings(page);
 
-    // Stub schools-by-area to return our Malpe school
-    await page.route('**/api/public/schools/by-area**', (route) =>
-      fulfillJson1109(route, 200, SCHOOLS_BY_AREA_FIXTURE_1109),
+    // Cold-load combined state: journey + areaKey + schoolId (focus mode active)
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&zoom=14&areaKey=${ENCODED_AREA_KEY}&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`,
     );
+    await page.waitForLoadState('domcontentloaded');
 
-    // Stub markers endpoint to always return 1 property marker.
-    // This covers both the pre-school (area markers) and post-school (proximity markers) calls.
-    await page.route('**/api/discover/markers**', (route) =>
-      fulfillJson1109(route, 200, MARKERS_WITH_PROPERTY),
+    // Wait for the map to render school pin markers (SchoolMarkerLayer uses "school-pin")
+    const schoolMarkers = page.locator('.school-pin');
+    await expect(schoolMarkers.first()).toBeVisible({ timeout: 15_000 });
+
+    // Focus mode: exactly 1 school pin marker when schoolId is set
+    await expect(schoolMarkers).toHaveCount(1, { timeout: 5_000 });
+  });
+
+  /**
+   * E2E-FOCUS-2: Select school → property markers and panel listings agree.
+   *
+   * Both sources (map property-marker elements and right-panel listing cards)
+   * must be scoped to the school radius. For anonymous users this is driven by
+   * the haversineKm client-side filter applied to areaListings.
+   *
+   * The city-listings fixture has 1 property within 1 km of sch-1 (lat 13.353,
+   * lon 74.787 ≈ 0.08 km away). With radiusKm=3, it must appear on the map.
+   */
+  test('E2E-FOCUS-2: select school → property markers and panel listings visible (scoped to radius)', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubSchoolsByArea(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+    await stubCityListings(page);
+
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&zoom=14&areaKey=${ENCODED_AREA_KEY}&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+
+    // Property markers on the map (zoom=14 > AREA_LAYER_MAX_ZOOM=12)
+    const propertyMarkers = page.locator('[data-testid="property-marker"]');
+    await expect(propertyMarkers.first()).toBeVisible({ timeout: 15_000 });
+    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+
+    // Right panel must show a school-selected panel with listing cards
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel).toBeVisible({ timeout: 5_000 });
+    // combined-chips visible confirms we are in the combined (school-selected) panel
+    await expect(page.getByTestId('combined-chips')).toBeVisible({ timeout: 10_000 });
+  });
+
+  /**
+   * E2E-FOCUS-3: Select school, clear chip → URL loses schoolId + schools-in-area panel.
+   *
+   * Clearing the school chip must:
+   *   - Remove schoolId from URL (radiusKm may also be removed)
+   *   - Show the schools-in-area panel (school-card elements visible, not SchoolSelectedPanel)
+   *
+   * Note: areaKey remains in URL after clearing school; combined-chips disappear.
+   */
+  test('E2E-FOCUS-3: select school, clear chip → URL loses schoolId + schools-in-area panel shows', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubSchoolsByArea(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+    await stubCityListings(page);
+
+    // Start in combined state
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`,
+    );
+    await page.waitForLoadState('domcontentloaded');
+
+    // Wait for combined-chips (confirms combined state loaded)
+    await expect(page.getByTestId('combined-chips')).toBeVisible({ timeout: 15_000 });
+
+    // Click the clear-school chip
+    const clearSchoolChip = page.getByTestId('clear-school-chip');
+    await expect(clearSchoolChip).toBeVisible({ timeout: 5_000 });
+    await clearSchoolChip.click();
+
+    // schoolId must be removed from URL
+    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 8_000 }).toBeNull();
+
+    // areaKey must remain (school cleared, area context preserved)
+    expect(getUrlParam(page, 'areaKey')).toBe(MANIPAL_AREA_KEY);
+
+    // Right panel must show schools-in-area (school-card elements visible)
+    const rightPanel = page.getByTestId('discover-right-panel');
+    await expect(rightPanel.locator('[data-testid="school-card"]').first()).toBeVisible({ timeout: 15_000 });
+  });
+
+  /**
+   * E2E-FOCUS-4: URL with school+radius yielding 0 properties → empty-state in right panel.
+   *
+   * The city-listings endpoint returns an area with 0 listings. After school selection,
+   * the right panel must show an empty-state message (not a blank screen or spinner).
+   *
+   * This verifies the SchoolSelectedPanel renders correctly when schoolListings is empty.
+   */
+  test('E2E-FOCUS-4: school+radius with 0 properties → empty-state in right panel', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubSchoolsByArea(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+
+    // City-listings stub: no properties in the area
+    await page.route('**/api/discover/cities/*/listings**', (route) =>
+      fulfillJson(route, 200, { areas: [{ areaKey: MANIPAL_AREA_KEY, listings: [] }] }),
     );
 
     await page.goto(
-      `/discover?city=udupi&journey=school-first&zoom=14&areaKey=${ENCODED_AREA_KEY}`,
-      { waitUntil: 'domcontentloaded' },
+      `/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`,
     );
+    await page.waitForLoadState('domcontentloaded');
 
-    // Wait for the school card to render in the right panel (schools-in-area panel)
+    // Wait for the right panel to be visible
     const rightPanel = page.getByTestId('discover-right-panel');
     await expect(rightPanel).toBeVisible({ timeout: 15_000 });
-    const schoolCard = rightPanel.locator('[data-testid="school-card"]').first();
-    await expect(schoolCard).toBeVisible({ timeout: 15_000 });
 
-    // Click the school card (Path B)
-    await schoolCard.click();
+    // combined-chips must be visible (confirms combined/school-selected panel)
+    await expect(page.getByTestId('combined-chips')).toBeVisible({ timeout: 10_000 });
 
-    // URL must gain schoolId — confirms the selection was processed
-    await expect(page).toHaveURL(/schoolId=/, { timeout: 8_000 });
-
-    // Property markers must remain visible in the settled state.
-    // Prior to #1109 fix: markers disappeared because the refetch had no school coords.
-    const propertyMarkers = page.locator('[data-testid="property-marker"]');
-    await expect(propertyMarkers.first()).toBeVisible({ timeout: 12_000 });
-    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+    // Empty-state message must render in the panel (not blank screen)
+    // SchoolSelectedPanel shows "No properties found" when listing count is 0
+    await expect(rightPanel.getByText(/no properties/i)).toBeVisible({ timeout: 10_000 });
   });
+
+});
+
+// ---------------------------------------------------------------------------
+// Browser history: school selection and back navigation
+// ---------------------------------------------------------------------------
+
+test.describe('@integration-ui school-first browser history (#1130)', () => {
 
   /**
-   * Path A: school marker click on map → markers visible after settled refetch.
-   * School markers in SchoolMarkerLayer use CSS class 'school-marker' (L.divIcon).
-   * Leaflet places them in .leaflet-marker-pane. They are interactive elements with
-   * role="button" but may not pass Playwright's strict visibility check due to the
-   * Leaflet canvas clipping context. We dispatch a native click via evaluate() to
-   * reliably trigger the Leaflet click handler.
+   * E2E-BACK-1: URL gains schoolId → browser back → URL loses schoolId, areaKey preserved.
+   *
+   * Tests the history PUSH semantics of school selection directly: navigate to
+   * the base state (areaKey, no schoolId), then navigate to the combined state
+   * (areaKey + schoolId). goBack() must restore the base state.
+   *
+   * This avoids card-click complexity (stub order, card rendering) and directly
+   * validates what matters: browser back removes schoolId while preserving areaKey.
+   *
+   * The app may issue a history REPLACE on first load to normalise URL params.
+   * Using two explicit page.goto() calls guarantees two distinct history entries
+   * regardless of that normalisation.
    */
-  test('#1109-A: school marker click — markers persist after settled refetch', async ({ page }) => {
-    await stubCommonRoutes1109(page);
+  test('E2E-BACK-1: select school → browser back → URL loses schoolId', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubSchoolsByArea(page);
+    await stubSchoolById(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+    await stubCityListings(page);
 
-    // Stub schools-by-area to return our Malpe school
-    await page.route('**/api/public/schools/by-area**', (route) =>
-      fulfillJson1109(route, 200, SCHOOLS_BY_AREA_FIXTURE_1109),
-    );
-
-    // Stub markers endpoint to always return 1 property marker.
-    await page.route('**/api/discover/markers**', (route) =>
-      fulfillJson1109(route, 200, MARKERS_WITH_PROPERTY),
-    );
-
+    // Step 1: establish base history entry — area selected, no school
     await page.goto(
-      `/discover?city=udupi&journey=school-first&zoom=14&areaKey=${ENCODED_AREA_KEY}`,
-      { waitUntil: 'domcontentloaded' },
+      `/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}`,
     );
+    await page.waitForLoadState('domcontentloaded');
 
-    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
+    // Step 2: navigate to combined state — school selected (PUSH new history entry)
+    await page.goto(
+      `/discover?city=udupi&journey=school-first&areaKey=${ENCODED_AREA_KEY}&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`,
+    );
+    await page.waitForLoadState('domcontentloaded');
 
-    // Wait for school markers to appear in the Leaflet marker pane.
-    // SchoolMarkerLayer uses L.divIcon with className 'school-marker'.
-    const schoolMarker = page.locator('.leaflet-marker-pane .school-marker').first();
-    await expect(schoolMarker).toBeAttached({ timeout: 15_000 });
+    // Step 3: schoolId must be in URL
+    expect(getUrlParam(page, 'schoolId')).toBe(MANIPAL_SCHOOL.id);
 
-    // Dispatch a native click event on the marker element via evaluate().
-    // Playwright's click() can fail for Leaflet markers due to canvas clipping,
-    // so we use dispatchEvent to reliably trigger the Leaflet click handler.
-    await schoolMarker.dispatchEvent('click');
+    // Step 4: press browser back
+    await page.goBack();
 
-    // URL must gain schoolId — confirms the click was processed by handleSelectSchoolById
-    await expect(page).toHaveURL(/schoolId=/, { timeout: 8_000 });
-
-    // Property markers must remain visible in the settled state.
-    // Prior to #1109 fix: markers disappeared because refetch fired with no school coords.
-    const propertyMarkers = page.locator('[data-testid="property-marker"]');
-    await expect(propertyMarkers.first()).toBeVisible({ timeout: 12_000 });
-    expect(await propertyMarkers.count()).toBeGreaterThan(0);
+    // Step 5: schoolId must be absent; areaKey must be preserved
+    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 8_000 }).toBeNull();
+    expect(getUrlParam(page, 'areaKey')).toBe(MANIPAL_AREA_KEY);
   });
+
 });

@@ -172,7 +172,7 @@ interface PropertyMapProps {
    * Currently selected school. Passed through to AreaMarkerLayer. When set,
    * the school-first badge reverts to property count (school already chosen).
    */
-  selectedSchool?: unknown;
+  selectedSchool?: SchoolResult | null;
   /**
    * Schools to display as markers on the map. Only rendered when
    * journey === 'school-first'. Supplied by MapDiscovery from useSchoolsByArea.
@@ -569,6 +569,9 @@ export function PropertyMap({
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
 
+  // Derive the selected school ID for SchoolMarkerLayer focus mode.
+  const selectedSchoolId = selectedSchool?.id ?? null;
+
   return (
     <div className="w-full h-full relative">
       <MapContainer
@@ -612,6 +615,7 @@ export function PropertyMap({
             isLoading={schoolsIsLoading}
             isError={schoolsIsError}
             error={schoolsError}
+            selectedSchoolId={selectedSchoolId}
           />
         )}
         <ScaleHud />

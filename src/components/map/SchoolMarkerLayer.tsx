@@ -16,6 +16,11 @@ export interface SchoolMarkerLayerProps {
   isError?: boolean;
   /** Error object from useSchoolsByArea. Displayed when isError=true. */
   error?: Error | null;
+  /**
+   * When set, only the marker for this school ID is rendered (focus mode).
+   * All other school markers are suppressed. Null/undefined = show all.
+   */
+  selectedSchoolId?: string | null;
 }
 
 /**
@@ -24,7 +29,7 @@ export interface SchoolMarkerLayerProps {
  * `schoolMarkerIcon` (which is not exported).
  */
 const schoolPinIcon = L.divIcon({
-  className: 'school-marker',
+  className: 'school-pin',
   html: `
     <div style="
       width: 36px;
@@ -49,6 +54,10 @@ const schoolPinIcon = L.divIcon({
  * Only mounts markers when `journey === 'school-first'` and there is at least
  * one school to show. Clicking a marker calls `onSelectSchool(school.id)`.
  *
+ * When `selectedSchoolId` is non-null, only the marker for that school is
+ * rendered (focus mode). All other school markers are suppressed so the user
+ * sees exactly one pin — the selected school.
+ *
  * Also handles loading, error, and empty-state diagnostics:
  * - Loading: shows spinner while fetching (only in school-first journey)
  * - Error: shows error message when API fails (only in school-first journey)
@@ -64,6 +73,7 @@ export function SchoolMarkerLayer({
   isLoading = false,
   isError = false,
   error = null,
+  selectedSchoolId = null,
 }: SchoolMarkerLayerProps) {
   const map = useMap();
 
@@ -80,6 +90,9 @@ export function SchoolMarkerLayer({
     const markers: L.Marker[] = [];
 
     for (const school of schools) {
+      // Focus mode: when a school is selected, only render its marker.
+      if (selectedSchoolId !== null && school.id !== selectedSchoolId) continue;
+
       const marker = L.marker([school.latitude, school.longitude], {
         icon: schoolPinIcon,
         title: escapeHtml(school.name),
@@ -102,7 +115,7 @@ export function SchoolMarkerLayer({
     return () => {
       markers.forEach((m) => m.remove());
     };
-  }, [schools, map, onSelectSchool, journey]);
+  }, [schools, map, onSelectSchool, journey, selectedSchoolId]);
 
   // Render diagnostics only in school-first journey
   if (journey !== 'school-first') {
