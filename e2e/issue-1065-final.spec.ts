@@ -13,6 +13,14 @@ import { test, expect } from '@playwright/test';
 
 // @regression-correctness
 test('#1065: Area-first Manipal journey loads and renders', async ({ page }) => {
+  // No critical JavaScript errors
+  const errors: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') {
+      errors.push(msg.text());
+    }
+  });
+
   // Navigate to area-first Manipal URL (no authentication required)
   await page.goto(
     'http://localhost:5174/discover?city=udupi&journey=area-first&zoom=14&areaKey=IN%7CKA%7CUdupi%7CManipal',
@@ -32,17 +40,6 @@ test('#1065: Area-first Manipal journey loads and renders', async ({ page }) => 
   const markers = page.locator('.leaflet-marker-icon');
   const markerCount = await markers.count();
   expect(markerCount).toBeGreaterThan(0);
-
-  // No critical JavaScript errors
-  const errors: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') {
-      errors.push(msg.text());
-    }
-  });
-
-  // Wait a bit for any errors to be logged
-  await page.waitForTimeout(1000);
 
   const criticalErrors = errors.filter(
     (e) => !e.includes('404') && !e.includes('Network error') && !e.includes('401')

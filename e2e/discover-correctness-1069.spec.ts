@@ -59,7 +59,7 @@ test.describe('@regression-correctness Issue #1069 — area-group fitBounds maxZ
     await expect(page).toHaveURL(/groupId=university-belt/, { timeout: 5_000 });
 
     // Wait for AreaPanner to settle (fitBounds + reportViewport debounce).
-    await page.waitForTimeout(2_000);
+    await page.waitForFunction(() => new URL(location.href).searchParams.has('zoom'), { timeout: 5_000 });
 
     // AC4: area markers must remain visible — without the fix, narrow groups
     // (Manipal + Katapadi only ~4 km apart) fit at zoom ~14 and the
@@ -83,7 +83,7 @@ test.describe('@regression-correctness Issue #1069 — area-group fitBounds maxZ
 
     await coastalStripCard.click();
     await expect(page).toHaveURL(/groupId=coastal-strip/, { timeout: 5_000 });
-    await page.waitForTimeout(2_000);
+    await page.waitForFunction(() => new URL(location.href).searchParams.has('zoom'), { timeout: 5_000 });
 
     // Wider group naturally fits at a lower zoom — verify both invariants hold.
     const areaMarkerCount = await page.locator(AREA_MARKER).count();

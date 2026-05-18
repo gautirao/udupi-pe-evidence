@@ -167,10 +167,7 @@ test.describe('@integration-ui PriceField / EditListing (P1–P5)', () => {
     const initialValue = await slider.getAttribute('aria-valuenow');
 
     await page.locator('input#price').fill('1 crore');
-    await page.waitForTimeout(300);
-
-    const updatedValue = await slider.getAttribute('aria-valuenow');
-    expect(updatedValue).not.toBe(initialValue);
+    await expect(page.locator('[role="slider"]')).not.toHaveAttribute('aria-valuenow', initialValue!, { timeout: 2_000 });
   });
 
   test('P5 — Save Changes persists the correct numeric price', async ({ page }) => {

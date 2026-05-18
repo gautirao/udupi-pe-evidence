@@ -146,9 +146,6 @@ test.describe('@integration-ui Journey 1 — area marker click → back → forw
     // Right panel transitions to area-selected state
     await expect(page.getByTestId('back-button')).toBeVisible({ timeout: 8_000 });
 
-    // Map zooms in via fitBounds/flyTo (zoomend → setZoom(13)). Allow animation to settle.
-    await page.waitForTimeout(1_200);
-
     // Area ring markers must no longer be visible (zoom > AREA_LAYER_MAX_ZOOM=12, areas=[] passed to AreaMarkerLayer)
     await expect(page.locator(AREA_MARKER)).toHaveCount(0, { timeout: 5_000 });
 
@@ -217,9 +214,6 @@ test.describe('Journey 2 — bookmarked URL fidelity', () => {
 
     // Back button confirms area-selected mode
     await expect(page.getByTestId('back-button')).toBeVisible();
-
-    // Map zoomed in by AreaPanner/fitBounds: allow animation to settle before checking layer
-    await page.waitForTimeout(1_200);
 
     // Area ring markers not visible at zoom > AREA_LAYER_MAX_ZOOM
     await expect(page.locator(AREA_MARKER)).toHaveCount(0, { timeout: 5_000 });
