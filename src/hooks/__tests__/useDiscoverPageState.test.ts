@@ -1,5 +1,8 @@
+import * as React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+import { useDiscoverUrlState } from '../useDiscoverUrlState';
 import type { DiscoverUrlState, DiscoverUrlActions } from '../useDiscoverUrlState';
 import type { SchoolResult } from '../useSchoolSearch';
 
@@ -40,6 +43,7 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     setBoardFilters: vi.fn(),
     setCategoryFilters: vi.fn(),
     clearAreaContext: vi.fn(),
+    clearSchoolContext: vi.fn(),
     startOver: vi.fn(),
     ...overrides,
   };
@@ -507,5 +511,75 @@ describe('useDiscoverPageState — handleFiltersChange passes all new fields to 
         categoryFilters: ['primary', 'secondary'],
       }),
     );
+  });
+});
+
+// ─── Board-filter URL state (issue #1131) ─────────────────────
+//
+// These tests render the actual useDiscoverUrlState hook (not the mocked makeUrlActions
+// helper) inside a MemoryRouter so we exercise real URLSearchParams parsing/serialisation.
+// They cover three contractual properties:
+//   1. Repeated ?board=CBSE&board=ICSE params hydrate filters.boardFilters as an array.
+//   2. clearSchoolContext() preserves the `board` URL param (AC7).
+//   3. startOver() removes the `board` URL param (AC11).
+
+describe('useDiscoverUrlState — board filters (issue #1131)', () => {
+  function makeWrapper(initialUrl: string) {
+    // Use React.createElement so this file can remain .ts (no JSX).
+    return ({ children }: { children: React.ReactNode }) =>
+      React.createElement(MemoryRouter, { initialEntries: [initialUrl] }, children);
+  }
+
+  function useHookAndLocation() {
+    const [state, actions] = useDiscoverUrlState();
+    const location = useLocation();
+    return { state, actions, location };
+  }
+
+  it('hydrates boardFilters from repeated ?board=CBSE&board=ICSE params', () => {
+    const { result } = renderHook(() => useHookAndLocation(), {
+      wrapper: makeWrapper('/discover?city=udupi&board=CBSE&board=ICSE'),
+    });
+    expect(result.current.state.filters.boardFilters).toEqual(['CBSE', 'ICSE']);
+  });
+
+  it('clearSchoolContext() preserves boardFilters (AC7)', () => {
+    const { result } = renderHook(() => useHookAndLocation(), {
+      wrapper: makeWrapper(
+        '/discover?city=udupi&schoolId=sch-1&radiusKm=3&board=CBSE&board=ICSE',
+      ),
+    });
+
+    act(() => {
+      result.current.actions.clearSchoolContext();
+    });
+
+    // boardFilters must survive; schoolId and radiusKm must be removed.
+    expect(result.current.state.filters.boardFilters).toEqual(['CBSE', 'ICSE']);
+    expect(result.current.state.schoolId).toBeNull();
+    expect(result.current.state.radiusKm).toBeNull();
+    // URL search string still contains both board entries (repeated-param form).
+    const search = new URLSearchParams(result.current.location.search);
+    expect(search.getAll('board')).toEqual(['CBSE', 'ICSE']);
+  });
+
+  it('startOver() clears boardFilters (AC11)', () => {
+    const { result } = renderHook(() => useHookAndLocation(), {
+      wrapper: makeWrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN|KA|Udupi|Manipal&board=CBSE&board=ICSE',
+      ),
+    });
+
+    act(() => {
+      result.current.actions.startOver();
+    });
+
+    expect(result.current.state.filters.boardFilters).toBeUndefined();
+    const search = new URLSearchParams(result.current.location.search);
+    expect(search.getAll('board')).toEqual([]);
+    // City is preserved; journey/areaKey are cleared per startOver contract.
+    expect(result.current.state.city).toBe('udupi');
+    expect(result.current.state.journey).toBeNull();
+    expect(result.current.state.areaKey).toBeNull();
   });
 });

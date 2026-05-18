@@ -688,9 +688,9 @@ describe('useDiscoverUrlState — journey and groupId from URL', () => {
 // ─── board / category filter reads ───────────────────────────────────────────
 
 describe('useDiscoverUrlState — boardFilters and categoryFilters from URL', () => {
-  it('reads board param as comma-separated boardFilters', () => {
+  it('reads board param as repeated params (?board=cbse&board=icse) → array (issue #1131)', () => {
     const { result } = renderHook(() => useDiscoverUrlState(), {
-      wrapper: wrapper('/discover?board=cbse,icse'),
+      wrapper: wrapper('/discover?board=cbse&board=icse'),
     });
     expect(result.current[0].filters.boardFilters).toEqual(['cbse', 'icse']);
   });

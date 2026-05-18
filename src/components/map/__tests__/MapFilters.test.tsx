@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MapFilters } from '../MapFilters';
+import { SchoolSearchFilter } from '../SchoolSearchFilter';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { isNew } from '@/pages/MapDiscovery';
 
 // jsdom doesn't provide ResizeObserver (used by Radix primitives)
@@ -352,5 +354,57 @@ describe('isNew', () => {
   it('returns false for a date 8 days ago', () => {
     const eightDaysAgo = new Date(Date.now() - 8 * 86400_000).toISOString();
     expect(isNew(eightDaysAgo)).toBe(false);
+  });
+});
+
+// ─── Board-filter chips (issue #1131) ─────────────────────────
+//
+// Board-filter chips live inside SchoolSearchFilter (rendered by NearSchoolSheet, not by
+// MapFilters itself per #951). These tests assert chip-toggle behaviour at the source —
+// the chip widget — so the contract is verified regardless of which parent mounts it.
+
+describe('SchoolSearchFilter — board chips (issue #1131)', () => {
+  function renderChips(boardFilter: string[], onBoardFilterChange = vi.fn()) {
+    return render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <SchoolSearchFilter
+          selectedSchool={null}
+          onSchoolSelect={vi.fn()}
+          radiusKm={3}
+          onRadiusChange={vi.fn()}
+          boardFilter={boardFilter}
+          onBoardFilterChange={onBoardFilterChange}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('chip click invokes onBoardFilterChange with toggled array (add)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderChips([], onChange);
+    // Click "CBSE" — should add it to the selection.
+    await user.click(screen.getByText('CBSE'));
+    expect(onChange).toHaveBeenCalledWith(['CBSE']);
+  });
+
+  it('chip click invokes onBoardFilterChange with toggled array (remove)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderChips(['CBSE', 'ICSE'], onChange);
+    // Click an already-active chip — should remove it.
+    await user.click(screen.getByText('CBSE'));
+    expect(onChange).toHaveBeenCalledWith(['ICSE']);
+  });
+
+  it('with all chips deselected, none have the active default-variant class (AC2)', () => {
+    renderChips([]);
+    // BOARD_TYPES = ['CBSE', 'ICSE', 'State', 'IGCSE', 'IB']. None should carry the active
+    // default-variant primary classes when boardFilter is empty.
+    for (const label of ['CBSE', 'ICSE', 'State', 'IGCSE', 'IB']) {
+      const chip = screen.getByText(label);
+      // Active chips get `bg-primary` from the cn() merge — empty boardFilter ⇒ no chip has it.
+      expect(chip.className).not.toMatch(/\bbg-primary\b/);
+    }
   });
 });

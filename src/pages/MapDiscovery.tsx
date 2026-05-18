@@ -208,17 +208,62 @@ export default function MapDiscovery() {
   // Schools for SchoolMarkerLayer — fetched only in school-first journey when an area is selected.
   // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
   // SchoolsInAreaPanel (via DiscoverRightPanel) to avoid duplicate API calls.
+  // Issue #1131 — URL-backed board filter for schools. The board filters live in
+  // urlState.filters.boardFilters (parsed from repeated ?board=CBSE&board=ICSE params).
+  // The previous code read `urlState.boardFilters`, which is undefined on the URL state
+  // shape — boardFilters live under `filters`. That bug meant the URL never reached the
+  // schools query.
+  const urlBoardFilters = useMemo(
+    () => urlState.filters.boardFilters ?? [],
+    [urlState.filters.boardFilters],
+  );
+
   const schoolsQuery = useSchoolsByArea(
     urlState.journey === 'school-first' ? (urlState.areaKey ?? undefined) : undefined,
-    urlState.boardFilters ?? [],
-    urlState.categoryFilters ?? [],
+    urlBoardFilters,
+    urlState.filters.categoryFilters ?? [],
     20,
   );
-  const schools = useMemo(
+  const allSchools = useMemo(
     () => schoolsQuery.data?.pages.flatMap((p) => p.schools) ?? [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [schoolsQuery.data?.pages],
   );
+
+  // Sync URL → local schoolBoardFilter (which drives the chip UI inside NearSchoolSheet).
+  // The URL is the source of truth; local state mirrors it so chip-toggle UI reads the
+  // active set without re-parsing the URL. Both arrays are compared via JSON to avoid an
+  // infinite loop when the array identity changes but the contents are equal.
+  const urlBoardKey = urlBoardFilters.join('|');
+  useEffect(() => {
+    if (schoolBoardFilter.join('|') !== urlBoardKey) {
+      setSchoolBoardFilter(urlBoardFilters);
+    }
+    // urlBoardKey alone captures the contents; setSchoolBoardFilter is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlBoardKey]);
+
+  // Single setter consumed by chip UI: updates URL (canonical) and local state (mirror).
+  // Always uses REPLACE semantics (urlActions.setBoardFilters is REPLACE-only).
+  const handleBoardFilterChange = useCallback(
+    (boards: string[]) => {
+      setSchoolBoardFilter(boards);
+      urlActions.setBoardFilters(boards);
+    },
+    [setSchoolBoardFilter, urlActions],
+  );
+
+  // Client-side filter — defends against stale server responses and provides instant
+  // feedback before the next useSchoolsByArea refetch resolves. Board comparison is
+  // case-insensitive (uppercased on both sides) per AC: "CBSE", "cbse", "Cbse" all match.
+  const schools = useMemo(() => {
+    if (urlBoardFilters.length === 0) return allSchools;
+    const wanted = new Set(urlBoardFilters.map((b) => b.toUpperCase()));
+    return allSchools.filter((s) => {
+      const board = (s.board ?? s.boardType ?? '').toUpperCase();
+      return wanted.has(board);
+    });
+  }, [allSchools, urlBoardFilters]);
 
   // Handler: selecting a school by ID from either the map marker click (Path A) or the
   // right-panel school card click (Path B — SchoolsInAreaPanel).
@@ -494,7 +539,7 @@ export default function MapDiscovery() {
     <MapFilters
       filters={filters} onFiltersChange={handleFiltersChange}
       selectedSchool={selectedSchool} onSchoolSelect={handleSchoolSelect}
-      schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={setSchoolBoardFilter}
+      schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
       city={city}
       trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
       isFetching={isFetching}
@@ -759,7 +804,7 @@ export default function MapDiscovery() {
         radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
         onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
         boardFilter={schoolBoardFilter}
-        onBoardFilterChange={setSchoolBoardFilter}
+        onBoardFilterChange={handleBoardFilterChange}
         city={isCityValid ? city : null}
       />
     </AppLayout>

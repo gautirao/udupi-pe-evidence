@@ -20,7 +20,7 @@
  *   priceMin   – rupees
  *   priceMax   – rupees
  *   seller     – comma-joined seller types (e.g. "owner,broker"); legacy singular value also accepted
- *   board      – comma-joined school board filters (e.g. "cbse,icse")
+ *   board      – school board filters as REPEATED params (e.g. "?board=CBSE&board=ICSE")
  *   category   – comma-joined school category filters (e.g. "primary,secondary")
  *   bom        – "1" when backOnMarket=true
  *   ntm        – "1" when newToMarket=true
@@ -67,7 +67,10 @@ export interface DiscoverUrlFilters {
   priceMax?: number;
   /** Comma-separated seller types in the URL; replaces the former singular sellerType. */
   sellerTypes?: string[];
-  /** Comma-separated school board filters (e.g. "cbse,icse"). School-journey only. */
+  /**
+   * School board filters. Serialised in URL as REPEATED `board` params
+   * (e.g. `?board=CBSE&board=ICSE`). School-journey only.
+   */
   boardFilters?: string[];
   /** Comma-separated school category filters (e.g. "primary,secondary"). School-journey only. */
   categoryFilters?: string[];
@@ -226,10 +229,13 @@ function serializeFilters(
   } else {
     params.delete('seller');
   }
+  // `board` is emitted as repeated params (?board=CBSE&board=ICSE), NOT comma-joined.
+  // This matches AC: each board is its own URL key/value pair.
+  params.delete('board');
   if (filters.boardFilters && filters.boardFilters.length > 0) {
-    params.set('board', filters.boardFilters.join(','));
-  } else {
-    params.delete('board');
+    for (const b of filters.boardFilters) {
+      params.append('board', b);
+    }
   }
   if (filters.categoryFilters && filters.categoryFilters.length > 0) {
     params.set('category', filters.categoryFilters.join(','));
@@ -326,7 +332,12 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     priceMin: urlParams.get('priceMin') ? Number(urlParams.get('priceMin')) : undefined,
     priceMax: urlParams.get('priceMax') ? Number(urlParams.get('priceMax')) : undefined,
     sellerTypes,
-    boardFilters: parseCommaStrings(urlParams.get('board')),
+    boardFilters: (() => {
+      // Read all repeated `board` params (?board=CBSE&board=ICSE).
+      // Trim and drop empties; return undefined when none present.
+      const all = urlParams.getAll('board').map((s) => s.trim()).filter(Boolean);
+      return all.length > 0 ? all : undefined;
+    })(),
     categoryFilters: parseCommaStrings(urlParams.get('category')),
     backOnMarket: urlParams.get('bom') === '1' ? true : undefined,
     newToMarket: urlParams.get('ntm') === '1' ? true : undefined,
@@ -612,10 +623,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
-          if (boards.length > 0) {
-            next.set('board', boards.join(','));
-          } else {
-            next.delete('board');
+          // REPLACE semantics: drop all existing `board` entries, then re-append the new set.
+          // Emits as repeated params (?board=CBSE&board=ICSE), NOT comma-joined.
+          next.delete('board');
+          for (const b of boards) {
+            next.append('board', b);
           }
           return next;
         },
