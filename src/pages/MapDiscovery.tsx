@@ -32,6 +32,19 @@ export { isNew } from '@/lib/isNew';
 /** Zoom-band threshold: area overview rings show at zoom ≤ this; individual listing clusters show above it. */
 const AREA_LAYER_MAX_ZOOM = 12;
 
+/** Haversine great-circle distance in kilometres between two lat/lon points. */
+const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 export default function MapDiscovery() {
   const { user, isLoading: authLoading } = useAuth();
   const [urlState, urlActions] = useDiscoverUrlState();
@@ -261,9 +274,35 @@ export default function MapDiscovery() {
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
   // set when schoolLat/Lon/RadiusKm filters are active.
+  //
+  // Issue #1122 — anonymous school-first path: filteredListings is always [] for anon
+  // users because useDiscoverListings / useDiscoverFilteredMarkers are auth-gated.
+  // Fall back to areaListings (from the public /api/discover/cities/{city}/listings
+  // endpoint) so SchoolSelectedPanel cards are populated with full listing data.
+  // areaListings is already typed as DiscoverCityListingItem[] — no mapping needed.
   const schoolListings = useMemo(
-    (): DiscoverCityListingItem[] =>
-      filteredListings.map((l) => ({
+    (): DiscoverCityListingItem[] => {
+      if (!isAuthenticated) {
+        // Anonymous path: use full-field public data scoped to the selected area.
+        // Issue #1122 Cycle 2: when school coords + radius are set, filter
+        // areaListings to only those within the selected radius. This mirrors
+        // the auth path which uses the backend-filtered filteredListings.
+        // When no school is selected, return all areaListings (area-scoped browse).
+        const sLat = filters.schoolLat;
+        const sLon = filters.schoolLon;
+        const radius = filters.schoolRadiusKm;
+        if (sLat != null && sLon != null && radius != null) {
+          return areaListings.filter((l) => {
+            const lat = l.lat ?? l.latitude;
+            const lon = l.lon ?? l.longitude;
+            if (lat == null || lon == null) return false;
+            return haversineKm(sLat, sLon, lat, lon) <= radius;
+          });
+        }
+        return areaListings;
+      }
+      // Authenticated path: map proximity-filtered listings (unchanged behaviour).
+      return filteredListings.map((l) => ({
         id: l.id,
         propertyType: l.property_type,
         title: l.title,
@@ -284,8 +323,9 @@ export default function MapDiscovery() {
         trustTier: l.trustTier,
         lat: l.latitude,
         lon: l.longitude,
-      })),
-    [filteredListings],
+      }));
+    },
+    [isAuthenticated, areaListings, filteredListings, filters],
   );
 
   // Radius change handler for SchoolSelectedPanel — uses REPLACE (not PUSH) per AC1.

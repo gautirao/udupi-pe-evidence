@@ -144,7 +144,7 @@ export function useDiscoverMapData({
   const { data: cityListingsData, isLoading: isLoadingAreaListings } = useDiscoverCityListings({
     city,
     areaKeys: selectedArea ? [selectedArea.areaKey] : [],
-    limitPerArea: 5,
+    limitPerArea: 50, // Issue #1122: raised from 5; backend clamps at 20 server-side (effective ceiling = 20)
     minPrice: discoverMinPrice,
     maxPrice: discoverMaxPrice,
     bedrooms: discoverBedrooms,
