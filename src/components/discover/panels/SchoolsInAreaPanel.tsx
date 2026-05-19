@@ -71,17 +71,8 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
       : [...(urlState.filters.boardFilters || []), board];
 
     urlActions.setFiltersLive({
-      propertyTypes: urlState.filters.propertyTypes,
-      bedrooms: urlState.filters.bedrooms,
-      priceMin: urlState.filters.priceMin,
-      priceMax: urlState.filters.priceMax,
-      sellerTypes: urlState.filters.sellerTypes,
+      ...urlState.filters,
       boardFilters: next,
-      categoryFilters: urlState.filters.categoryFilters,
-      backOnMarket: urlState.filters.backOnMarket,
-      newToMarket: urlState.filters.newToMarket,
-      reraRegistered: urlState.filters.reraRegistered,
-      readyToMove: urlState.filters.readyToMove,
     });
   };
 
@@ -92,17 +83,8 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
       : [...(urlState.filters.categoryFilters || []), category];
 
     urlActions.setFiltersLive({
-      propertyTypes: urlState.filters.propertyTypes,
-      bedrooms: urlState.filters.bedrooms,
-      priceMin: urlState.filters.priceMin,
-      priceMax: urlState.filters.priceMax,
-      sellerTypes: urlState.filters.sellerTypes,
-      boardFilters: urlState.filters.boardFilters,
+      ...urlState.filters,
       categoryFilters: next,
-      backOnMarket: urlState.filters.backOnMarket,
-      newToMarket: urlState.filters.newToMarket,
-      reraRegistered: urlState.filters.reraRegistered,
-      readyToMove: urlState.filters.readyToMove,
     });
   };
 
@@ -114,17 +96,9 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
   // Handler to clear filters
   const handleClearFilters = () => {
     urlActions.setFiltersLive({
-      propertyTypes: urlState.filters.propertyTypes,
-      bedrooms: urlState.filters.bedrooms,
-      priceMin: urlState.filters.priceMin,
-      priceMax: urlState.filters.priceMax,
-      sellerTypes: urlState.filters.sellerTypes,
+      ...urlState.filters,
       boardFilters: [],
       categoryFilters: [],
-      backOnMarket: urlState.filters.backOnMarket,
-      newToMarket: urlState.filters.newToMarket,
-      reraRegistered: urlState.filters.reraRegistered,
-      readyToMove: urlState.filters.readyToMove,
     });
   };
 
