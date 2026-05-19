@@ -12,6 +12,12 @@ interface SchoolsInAreaPanelProps {
   journey: 'area-first' | 'school-first';
   onStartOver: () => void;
   /**
+   * When provided, renders a Back chevron in the panel header.
+   * Used by school-first Level 1 to step back to Level 0 (school-browse).
+   * Issue #1143 AC3.
+   */
+  onBack?: () => void;
+  /**
    * When provided by MapDiscovery (the single useSchoolsByArea owner), the panel
    * uses this array directly and skips its own hook call to avoid a duplicate request.
    * Omit when using the panel standalone (e.g. in tests or outside MapDiscovery).
@@ -28,7 +34,7 @@ const CATEGORY_OPTIONS = [
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp, schoolsLoading: schoolsLoadingProp }: SchoolsInAreaPanelProps) {
+export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp }: SchoolsInAreaPanelProps) {
   const [urlState, urlActions] = useDiscoverUrlState();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
@@ -114,6 +120,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, schools: schoolsProp,
         title={`Schools in ${areaLabel}`}
         journey={journey}
         onStartOver={onStartOver}
+        onBack={onBack}
         subtitle="Choose a school to view nearby homes"
       />
 

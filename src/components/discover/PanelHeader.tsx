@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
@@ -20,6 +20,12 @@ interface PanelHeaderProps {
   title: string;
   journey?: DiscoverJourney | null;
   onStartOver?: () => void;
+  /**
+   * When provided, renders a Back chevron button before the title.
+   * Used by school-first journey panels (Level 1 and Level 2) to step back
+   * without a full Start Over reset. Issue #1143.
+   */
+  onBack?: () => void;
   /** Contextual chips rendered in the centre of the header (e.g. active area/school pills). */
   activeContextChips?: React.ReactNode;
   /** Extra action buttons rendered to the right of the title, before Start Over. */
@@ -30,6 +36,7 @@ export function PanelHeader({
   title,
   journey,
   onStartOver,
+  onBack,
   activeContextChips,
   actions,
 }: PanelHeaderProps) {
@@ -37,6 +44,18 @@ export function PanelHeader({
 
   return (
     <div className="sticky top-0 z-20 bg-card border-b border-border flex-shrink-0 flex items-center gap-2 px-4 py-3">
+      {/* Optional Back button — rendered before the title for Level 1 / Level 2 school-first states */}
+      {onBack != null && (
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          data-testid="panel-header-back-button"
+          className="shrink-0 flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
       {/* Title + optional journey pill */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <h2 className="text-sm font-semibold truncate">{title}</h2>

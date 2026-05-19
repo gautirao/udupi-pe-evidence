@@ -398,6 +398,48 @@ export default function MapDiscovery() {
     [urlState.schoolId, urlActions, setFilters],
   );
 
+  // Issue #1143 — in-page Back for school-first journey levels.
+  //
+  // Level 2 (school-selected): clears schoolId + radiusKm, preserves areaKey.
+  //   clearSchoolSelection is REPLACE — does not add a history entry.
+  //   Local school state mirrors are cleared to keep filters consistent.
+  //
+  // Level 1 (schools-in-area): clears areaKey, preserves journey.
+  //   clearAreaSelection is REPLACE.
+  //   Local selectedArea is cleared so the map re-centres to city level.
+  //
+  // Level 0 (school-browse): no Back — onBack undefined, PanelHeader hides button.
+  const handleSchoolFirstBackLevel2 = useCallback(() => {
+    urlActions.clearSchoolSelection();
+    setSelectedSchool(null);
+    setFilters((prev) => {
+      const next = { ...prev };
+      delete next.schoolLat;
+      delete next.schoolLon;
+      delete next.schoolRadiusKm;
+      return next;
+    });
+  }, [urlActions, setSelectedSchool, setFilters]);
+
+  const handleSchoolFirstBackLevel1 = useCallback(() => {
+    urlActions.clearAreaSelection();
+    setSelectedArea(null);
+    setPanToArea(null);
+  }, [urlActions, setSelectedArea, setPanToArea]);
+
+  // schoolFirstOnBack: the correct in-page Back handler for the current school-first
+  // panel level, or undefined when Back should be hidden (Level 0 or non-school journey).
+  // Level-2 panels: 'school-selected' (school-only) and 'area-school-combined' (area + school).
+  // Level-1 panel: 'schools-in-area'. Level 0 and non-school-first journeys → undefined.
+  const schoolFirstOnBack: (() => void) | undefined =
+    urlState.journey !== 'school-first'
+      ? undefined
+      : panelContent === 'school-selected' || panelContent === 'area-school-combined'
+        ? handleSchoolFirstBackLevel2
+        : panelContent === 'schools-in-area'
+          ? handleSchoolFirstBackLevel1
+          : undefined;
+
   // Clear handlers for AreaSchoolCombinedPanel — stable references so the panel does
   // not re-render on every map pan/zoom that re-runs the MapDiscovery render.
   const onClearSchool = useCallback(() => {
@@ -747,7 +789,10 @@ export default function MapDiscovery() {
           isLoadingListings={isLoadingAreaListings}
           isAuthenticated={isAuthenticated}
           onAreaSelect={handleAreaSelect}
-          onBack={handleAreaBack}
+          // schoolFirstOnBack is undefined when panelContent is not 'school-browse' or
+          // 'school-selected' (i.e. Level 0), so Back correctly hides at Level 0.
+          // 'school-selected' panelContent is only reachable in the school-first journey.
+          onBack={urlState.journey === 'school-first' ? schoolFirstOnBack : handleAreaBack}
           onStartOver={handleStartOver}
           isLoadingAreas={areasLoading}
           urlAreaKey={urlState.areaKey}

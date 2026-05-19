@@ -123,11 +123,27 @@ export interface DiscoverUrlActions {
   /** Set filters as a committed Apply action — pushes a new history entry */
   setFiltersCommitted: (filters: DiscoverUrlFilters) => void;
   /**
-   * Write school params (schoolId + radiusKm) to URL — replace, not push.
+   * Write school params (schoolId + radiusKm) to URL — PUSH, not replace.
+   * Each school selection creates a history entry so browser Back works as
+   * a step-back within the school-first journey (AC7 / Issue #1143).
    * Pass null to remove both params. Single path so Index.tsx needs no bare
    * useSearchParams instance for school writes.
    */
   setSchoolParams: (params: { schoolId: string; radiusKm: number } | null) => void;
+  /**
+   * In-page Back from Level 2 (school selected) — clears schoolId + radiusKm.
+   * Preserves journey, areaKey, city, board/category filters, property filters,
+   * and viewport. Single REPLACE — returns to Level 1 (schools-in-area).
+   * Issue #1143 AC2.
+   */
+  clearSchoolSelection: () => void;
+  /**
+   * In-page Back from Level 1 (area selected, no school) — clears areaKey only.
+   * Preserves journey, city, property filters, and viewport.
+   * Single REPLACE — returns to Level 0 (school-browse).
+   * Issue #1143 AC3.
+   */
+  clearAreaSelection: () => void;
   /** Set the free-text search query — debounced replace. Empty string removes the param. */
   setSearchQuery: (q: string) => void;
   /** Set the active journey — pushes a new history entry. Null removes the journey param. */
@@ -505,11 +521,44 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           }
           return next;
         },
-        { replace: true }, // REPLACE — school selection is not a history destination
+        // Issue #1143 AC7 — PUSH so browser Back works as a step-back within
+        // the school-first journey. Previously replace:true silently swallowed
+        // browser Back after a school selection.
+        { replace: false },
       );
     },
     [setUrlParams],
   );
+
+  const clearSchoolSelection = useCallback(() => {
+    // Issue #1143 AC2 — in-page Back from Level 2.
+    // Removes schoolId + radiusKm only. Preserves journey, areaKey, city,
+    // board/category filters, property filters, and viewport. Single REPLACE.
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('schoolId');
+        next.delete('radiusKm');
+        return next;
+      },
+      { replace: true }, // REPLACE — not a new navigation destination
+    );
+  }, [setUrlParams]);
+
+  const clearAreaSelection = useCallback(() => {
+    // Issue #1143 AC3 — in-page Back from Level 1.
+    // Removes areaKey only. Preserves journey, city, property filters, and viewport.
+    // Single REPLACE — returns to Level 0 (school-browse).
+    // Does NOT cancel viewportTimer — viewport stays valid (contrast with deselectArea).
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('areaKey');
+        return next;
+      },
+      { replace: true }, // REPLACE — not a new navigation destination
+    );
+  }, [setUrlParams]);
 
   const setSearchQuery = useCallback(
     (newQ: string) => {
@@ -728,6 +777,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setBoardFilters,
     setCategoryFilters,
     startOver,
+    clearSchoolSelection,
+    clearAreaSelection,
   };
 
   return [state, actions];

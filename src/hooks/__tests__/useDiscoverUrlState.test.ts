@@ -1258,3 +1258,148 @@ describe('useDiscoverUrlState — clearAreaContext', () => {
     expect(result.current[0].radiusKm).toBe(3);
   });
 });
+
+// ─── Issue #1143: setSchoolParams PUSH + clearSchoolSelection + clearAreaSelection ─
+
+// PUSH semantics for setSchoolParams (Issue #1143 AC7 / BN-4):
+// jsdom's MemoryRouter does not increment window.history.length on push, so
+// history-stack depth cannot be asserted in unit tests. The authoritative
+// coverage lives in BN-4 E2E (school-first-back-nav.spec.ts): browser Back
+// after school selection must navigate to Level 1, which only passes if
+// setSchoolParams uses replace:false (push). The state-equality test that
+// previously lived here was removed because it passed with both push and
+// replace semantics and therefore provided no signal about AC7.
+
+describe('useDiscoverUrlState — setSchoolParams uses PUSH (Issue #1143 AC7)', () => {
+  it('setSchoolParams writes schoolId and radiusKm to URL state', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].setSchoolParams({ schoolId: 'sch-1', radiusKm: 2 });
+    });
+
+    expect(result.current[0].schoolId).toBe('sch-1');
+    expect(result.current[0].radiusKm).toBe(2);
+  });
+});
+
+describe('useDiscoverUrlState — clearSchoolSelection (Issue #1143 AC2)', () => {
+  it('removes schoolId and radiusKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=2',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearSchoolSelection();
+    });
+
+    expect(result.current[0].schoolId).toBeNull();
+    expect(result.current[0].radiusKm).toBeNull();
+  });
+
+  it('preserves areaKey after clearSchoolSelection', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=2',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearSchoolSelection();
+    });
+
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Manipal');
+  });
+
+  it('preserves journey after clearSchoolSelection', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=2',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearSchoolSelection();
+    });
+
+    expect(result.current[0].journey).toBe('school-first');
+  });
+
+  it('preserves city after clearSchoolSelection', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=2',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearSchoolSelection();
+    });
+
+    expect(result.current[0].city).toBe('udupi');
+  });
+});
+
+describe('useDiscoverUrlState — clearAreaSelection (Issue #1143 AC3)', () => {
+  it('removes areaKey', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearAreaSelection();
+    });
+
+    expect(result.current[0].areaKey).toBeNull();
+  });
+
+  it('preserves journey after clearAreaSelection', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearAreaSelection();
+    });
+
+    expect(result.current[0].journey).toBe('school-first');
+  });
+
+  it('preserves city after clearAreaSelection', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearAreaSelection();
+    });
+
+    expect(result.current[0].city).toBe('udupi');
+  });
+
+  it('does not remove schoolId or radiusKm when present', () => {
+    // Edge case: clearAreaSelection called with both params present
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=3',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearAreaSelection();
+    });
+
+    expect(result.current[0].schoolId).toBe('sch-1');
+    expect(result.current[0].radiusKm).toBe(3);
+  });
+});

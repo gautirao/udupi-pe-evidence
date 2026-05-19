@@ -245,6 +245,7 @@ export interface SchoolsInAreaPanelProps {
 }
 export function SchoolsInAreaPanel({
   onStartOver,
+  onBack,
   journey,
   schools,
   schoolsLoading,
@@ -261,6 +262,7 @@ export function SchoolsInAreaPanel({
         <RealSchoolsInAreaPanel
           journey={journey ?? 'area-first'}
           onStartOver={onStartOver || (() => undefined)}
+          onBack={onBack}
           schools={schools}
           schoolsLoading={schoolsLoading}
         />
@@ -392,25 +394,17 @@ export function SchoolSelectedPanel({
 
   return (
     <>
+      {/* onBack is forwarded to PanelHeader which renders the single canonical Back
+          chevron before the title — do NOT add a second Back button in the actions
+          slot here (Option B from Issue #1143 review: unified affordance position). */}
       <PanelHeader
         title={school ? school.name : 'School'}
         journey={journey}
         onStartOver={onStartOver}
+        onBack={onBack}
         activeContextChips={activeContextChips}
         actions={
           <>
-            {onBack && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={onBack}
-                aria-label="Back"
-                data-testid="school-panel-back-button"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-            )}
             {filtersContent && (
               <Sheet>
                 <SheetTrigger asChild>
@@ -635,6 +629,7 @@ export function AreaSchoolCombinedPanel({
           title="Area + School"
           journey={journey}
           onStartOver={onStartOver}
+          onBack={onBack}
           activeContextChips={activeContextChips}
         />
         <div className="space-y-3 p-4" data-testid="combined-loading-skeleton">
@@ -690,21 +685,10 @@ export function AreaSchoolCombinedPanel({
         title={title}
         journey={journey}
         onStartOver={onStartOver}
+        onBack={onBack}
         activeContextChips={activeContextChips}
         actions={
           <>
-            {onBack && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={onBack}
-                aria-label="Back"
-                data-testid="combined-panel-back-button"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </Button>
-            )}
             {filtersContent && (
               <Sheet>
                 <SheetTrigger asChild>
