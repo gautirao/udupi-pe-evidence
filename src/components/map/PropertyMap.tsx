@@ -194,6 +194,49 @@ interface PropertyMapProps {
    * Error object from useSchoolsByArea. Passed to SchoolMarkerLayer for error message display.
    */
   schoolsError?: Error | null;
+  /**
+   * Incrementing tick that triggers a school-focus fitBounds/flyTo.
+   * Incremented once per school-id change and once per radiusKm change in the
+   * school-first journey. Uses the same handledTickRef guard as resetMapTick so
+   * the fit fires exactly once per tick and never re-fires on viewport events.
+   * Must only be non-zero when journey === 'school-first' and the school is hydrated.
+   */
+  schoolFocusTick?: number;
+  /** School centre latitude for SchoolFocusPanner — companion to schoolFocusTick. */
+  schoolFocusLat?: number;
+  /** School centre longitude for SchoolFocusPanner — companion to schoolFocusTick. */
+  schoolFocusLon?: number;
+  /** School radius in km for SchoolFocusPanner — companion to schoolFocusTick. Falls back to flyTo zoom=14 when 0 or absent. */
+  schoolFocusRadiusKm?: number;
+  /**
+   * Issue #1160 GAP 1 — Incrementing tick that triggers SchoolMarkerFocusPanner to fitBounds
+   * over the school centre + marker positions. Fires after listings have settled (non-empty).
+   * Phase-2 fit complements Phase-1 (SchoolFocusPanner) by tightening to actual marker extent.
+   * Only fires when schoolMarkerPositions is non-empty. Uses handledTickRef guard.
+   */
+  schoolMarkerFocusTick?: number;
+  /** Marker positions (lat/lon) for SchoolMarkerFocusPanner bounds computation. */
+  schoolMarkerPositions?: Array<{ lat: number; lon: number }>;
+  /**
+   * Issue #1160 GAP 2 — Incrementing tick that triggers AreaRestorePanner to fly/fit to the
+   * area context after Back is pressed from school-selected (level 2 → 1). Uses handledTickRef.
+   */
+  areaRestoreTick?: number;
+  /** Area geo-centre latitude for AreaRestorePanner fallback flyTo. */
+  areaRestoreLat?: number;
+  /** Area geo-centre longitude for AreaRestorePanner fallback flyTo. */
+  areaRestoreLon?: number;
+  /** Area bbox [[s,w],[n,e]] for AreaRestorePanner fitBounds. Takes precedence over lat/lon flyTo. */
+  areaRestoreBbox?: [[number, number], [number, number]];
+  /**
+   * Issue #1160 GAP 2 — Incrementing tick that triggers CityRestorePanner to fly to city
+   * center after Back is pressed from schools-in-area (level 1 → 0). Uses handledTickRef.
+   */
+  cityRestoreTick?: number;
+  /** City center [lat, lon] for CityRestorePanner flyTo. */
+  cityRestoreCenter?: [number, number];
+  /** City zoom for CityRestorePanner flyTo. */
+  cityRestoreZoom?: number;
 }
 
 /**
@@ -316,6 +359,224 @@ function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
       map.flyTo([panToArea.geo_center_lat, panToArea.geo_center_lon], 13);
     }
   }, [panToArea, map]);
+  return null;
+}
+
+/**
+ * SchoolFocusPanner — Issue #1160
+ *
+ * Fires fitBounds (or flyTo when radius is zero) to frame the selected school
+ * and its radius circle in the viewport. Triggered by schoolFocusTick, which
+ * is incremented once per school-id change and once per radiusKm change in
+ * MapDiscovery. The handledTickRef guard ensures the effect fires exactly once
+ * per tick increment and never re-triggers on viewport events (no feedback loop
+ * with ViewportWatcher → reportViewport).
+ *
+ * Degrees-per-km approximation: 1 km ≈ 1/111 degrees latitude; longitude is
+ * adjusted by cos(lat). The resulting bounding box is passed to fitBounds with
+ * 40 px padding so the radius circle sits comfortably within the viewport.
+ *
+ * Reuse note: adapted from AreaPanner (same file, ~line 301) and the
+ * handledTickRef guard from MapController.resetMapTick (~line 442).
+ */
+function SchoolFocusPanner({
+  schoolFocusTick,
+  lat,
+  lon,
+  radiusKm,
+}: {
+  schoolFocusTick?: number;
+  lat?: number;
+  lon?: number;
+  radiusKm?: number;
+}) {
+  const map = useMap();
+  const handledTickRef = useRef(0);
+
+  useEffect(() => {
+    const tick = schoolFocusTick ?? 0;
+    // Fire only when tick strictly exceeds the last handled value.
+    // This prevents re-firing on every render and eliminates any feedback loop
+    // where a fit-triggered moveend (→ ViewportWatcher → reportViewport) would
+    // increment tick and cause another fit.
+    if (tick === 0 || tick <= handledTickRef.current) return;
+    handledTickRef.current = tick;
+
+    if (lat == null || lon == null) return;
+
+    const radius = radiusKm ?? 0;
+    if (radius > 0) {
+      // Derive a bounding box from centre ± radiusKm in degrees.
+      // 1 degree lat ≈ 111.32 km; 1 degree lon ≈ 111.32 * cos(lat) km.
+      const deltaLat = radius / 111.32;
+      const deltaLon = radius / (111.32 * Math.cos((lat * Math.PI) / 180));
+      const bounds: [[number, number], [number, number]] = [
+        [lat - deltaLat, lon - deltaLon],
+        [lat + deltaLat, lon + deltaLon],
+      ];
+      map.fitBounds(bounds, { padding: [40, 40] });
+    } else {
+      // Zero or absent radius: fly to school centre at a fixed zoom suitable for
+      // a neighbourhood view so the school marker is clearly visible.
+      map.flyTo([lat, lon], 14, { duration: 1 });
+    }
+  }, [schoolFocusTick, lat, lon, radiusKm, map]);
+
+  return null;
+}
+
+/**
+ * SchoolMarkerFocusPanner — Issue #1160 GAP 1 (Phase 2)
+ *
+ * After listings settle (schoolMarkerFocusTick > 0), fitBounds to include both
+ * the school centre and all marker positions. The bounds are further intersected
+ * with the school's radius bounding box so a single far-outlier marker cannot
+ * blow the viewport well outside the radius circle.
+ *
+ * Algorithm:
+ *   1. Start from L.latLngBounds([school centre, ...marker positions]).
+ *   2. Derive radiusBounds from school centre ± radiusKm in degrees.
+ *   3. Intersect: clamp the bounds to radiusBounds so the fit never exceeds the
+ *      radius circle's outer extent. Fall back to flyTo(school, 14) if bounds degenerate.
+ *
+ * Feedback-loop safety: same handledTickRef guard as SchoolFocusPanner. ViewportWatcher
+ * writes only to URL params, never to schoolMarkerFocusTick.
+ */
+function SchoolMarkerFocusPanner({
+  schoolMarkerFocusTick,
+  lat,
+  lon,
+  radiusKm,
+  markerPositions,
+}: {
+  schoolMarkerFocusTick?: number;
+  lat?: number;
+  lon?: number;
+  radiusKm?: number;
+  markerPositions?: Array<{ lat: number; lon: number }>;
+}) {
+  const map = useMap();
+  const handledTickRef = useRef(0);
+
+  useEffect(() => {
+    const tick = schoolMarkerFocusTick ?? 0;
+    if (tick === 0 || tick <= handledTickRef.current) return;
+    handledTickRef.current = tick;
+
+    if (lat == null || lon == null) return;
+    if (!markerPositions || markerPositions.length === 0) return;
+
+    const radius = radiusKm ?? 0;
+
+    // Build bounds from school centre + all marker positions
+    const allPoints: [number, number][] = [
+      [lat, lon],
+      ...markerPositions.map((p) => [p.lat, p.lon] as [number, number]),
+    ];
+    const markerBounds = L.latLngBounds(allPoints);
+
+    if (radius > 0) {
+      // Clamp to radius bounding box so far outliers don't blow the viewport.
+      const deltaLat = radius / 111.32;
+      const deltaLon = radius / (111.32 * Math.cos((lat * Math.PI) / 180));
+      const sw = L.latLng(lat - deltaLat, lon - deltaLon);
+      const ne = L.latLng(lat + deltaLat, lon + deltaLon);
+      const radiusBounds = L.latLngBounds(sw, ne);
+      // Intersect: keep the tighter of the two bounds on each side.
+      const south = Math.max(markerBounds.getSouth(), radiusBounds.getSouth());
+      const west = Math.max(markerBounds.getWest(), radiusBounds.getWest());
+      const north = Math.min(markerBounds.getNorth(), radiusBounds.getNorth());
+      const east = Math.min(markerBounds.getEast(), radiusBounds.getEast());
+      if (south < north && west < east) {
+        map.fitBounds([[south, west], [north, east]], { padding: [40, 40] });
+        return;
+      }
+    }
+
+    // Fallback: fit to raw marker bounds if radius clamp produces degenerate result
+    if (markerBounds.isValid()) {
+      map.fitBounds(markerBounds, { padding: [40, 40] });
+    } else {
+      map.flyTo([lat, lon], 14, { duration: 1 });
+    }
+  }, [schoolMarkerFocusTick, lat, lon, radiusKm, markerPositions, map]);
+
+  return null;
+}
+
+/**
+ * AreaRestorePanner — Issue #1160 GAP 2
+ *
+ * Fires fitBounds (bbox) or flyTo (geo-centre) to restore the map to the area
+ * context after Back is pressed from school-selected (level 2 → 1) in school-first
+ * journey. Uses handledTickRef guard (same pattern as SchoolFocusPanner).
+ *
+ * Feedback-loop safety: areaRestoreTick is only incremented by handleSchoolFirstBackLevel2,
+ * never by ViewportWatcher or any map-event handler.
+ */
+function AreaRestorePanner({
+  areaRestoreTick,
+  lat,
+  lon,
+  bbox,
+}: {
+  areaRestoreTick?: number;
+  lat?: number;
+  lon?: number;
+  bbox?: [[number, number], [number, number]];
+}) {
+  const map = useMap();
+  const handledTickRef = useRef(0);
+
+  useEffect(() => {
+    const tick = areaRestoreTick ?? 0;
+    if (tick === 0 || tick <= handledTickRef.current) return;
+    handledTickRef.current = tick;
+
+    if (bbox) {
+      map.fitBounds(bbox, { padding: [40, 40] });
+    } else if (lat != null && lon != null) {
+      map.flyTo([lat, lon], 13, { duration: 1 });
+    }
+    // If both bbox and lat/lon are absent, skip gracefully (discoverAreas not loaded).
+  }, [areaRestoreTick, lat, lon, bbox, map]);
+
+  return null;
+}
+
+/**
+ * CityRestorePanner — Issue #1160 GAP 2
+ *
+ * Fires flyTo(cityCenter, cityZoom) to restore the map to city overview after Back
+ * is pressed from schools-in-area (level 1 → 0) in school-first journey.
+ * Uses handledTickRef guard (same pattern as MapController.resetMapTick).
+ *
+ * Feedback-loop safety: cityRestoreTick is only incremented by handleSchoolFirstBackLevel1,
+ * never by ViewportWatcher or any map-event handler.
+ */
+function CityRestorePanner({
+  cityRestoreTick,
+  cityCenter,
+  cityZoom,
+}: {
+  cityRestoreTick?: number;
+  cityCenter?: [number, number];
+  cityZoom?: number;
+}) {
+  const map = useMap();
+  const handledTickRef = useRef(0);
+
+  useEffect(() => {
+    const tick = cityRestoreTick ?? 0;
+    if (tick === 0 || tick <= handledTickRef.current) return;
+    handledTickRef.current = tick;
+
+    if (cityCenter) {
+      map.flyTo(cityCenter, cityZoom ?? DEFAULT_ZOOM, { duration: 1 });
+    }
+    // If cityCenter is absent (unlikely), skip gracefully.
+  }, [cityRestoreTick, cityCenter, cityZoom, map]);
+
   return null;
 }
 
@@ -564,6 +825,19 @@ export function PropertyMap({
   schoolsIsLoading = false,
   schoolsIsError = false,
   schoolsError = null,
+  schoolFocusTick,
+  schoolFocusLat,
+  schoolFocusLon,
+  schoolFocusRadiusKm,
+  schoolMarkerFocusTick,
+  schoolMarkerPositions,
+  areaRestoreTick,
+  areaRestoreLat,
+  areaRestoreLon,
+  areaRestoreBbox,
+  cityRestoreTick,
+  cityRestoreCenter,
+  cityRestoreZoom,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -597,6 +871,30 @@ export function PropertyMap({
         <ViewportWatcher onViewportChange={onViewportChange} />
         <BoundsWatcher onBoundsChange={onBoundsChange} />
         <AreaPanner panToArea={panToArea} />
+        <SchoolFocusPanner
+          schoolFocusTick={schoolFocusTick}
+          lat={schoolFocusLat}
+          lon={schoolFocusLon}
+          radiusKm={schoolFocusRadiusKm}
+        />
+        <SchoolMarkerFocusPanner
+          schoolMarkerFocusTick={schoolMarkerFocusTick}
+          lat={schoolFocusLat}
+          lon={schoolFocusLon}
+          radiusKm={schoolFocusRadiusKm}
+          markerPositions={schoolMarkerPositions}
+        />
+        <AreaRestorePanner
+          areaRestoreTick={areaRestoreTick}
+          lat={areaRestoreLat}
+          lon={areaRestoreLon}
+          bbox={areaRestoreBbox}
+        />
+        <CityRestorePanner
+          cityRestoreTick={cityRestoreTick}
+          cityCenter={cityRestoreCenter}
+          cityZoom={cityRestoreZoom}
+        />
         <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
         {areas.length > 0 && (
           <AreaMarkerLayer

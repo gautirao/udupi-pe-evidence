@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
+import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
@@ -49,6 +51,9 @@ export default function MapDiscovery() {
   const { user, isLoading: authLoading } = useAuth();
   const [urlState, urlActions] = useDiscoverUrlState();
   const isAuthenticated = !authLoading && user !== null;
+  // Issue #1160 v3 Bug A1 — TanStack Query client used to read cached useSchoolById
+  // result synchronously inside handleSelectSchoolById. See that callback for details.
+  const queryClient = useQueryClient();
 
   const panelContent = derivePanelContent(urlState);
 
@@ -72,6 +77,28 @@ export default function MapDiscovery() {
   // PropertyMap.resetMapTick; MapController's handledTickRef-based guard correctly
   // detects any net increase and triggers the flyTo(cityCenter, cityZoom).
   const [startOverTick, setStartOverTick] = useState(0);
+
+  // Issue #1160 — school-focus tick for SchoolFocusPanner in PropertyMap.
+  // Incremented when the selected school changes (new school ID) or when radiusKm
+  // changes while a school is selected in school-first journey. The tick pattern
+  // mirrors resetMapTick/startOverTick so SchoolFocusPanner fires exactly once per
+  // increment without creating a feedback loop with ViewportWatcher.
+  const [schoolFocusTick, setSchoolFocusTick] = useState(0);
+
+  // Issue #1160 GAP 1 — SchoolMarkerFocusPanner: fires fitBounds after listings settle.
+  // schoolMarkerFocusTick is incremented when listings are ready (non-empty, query settled).
+  // Feedback-loop safety: the tick is only incremented by the listingsReadyKey effect, which
+  // gates on a primitive string (not array identity). schoolMarkerFocusTick itself is NOT in
+  // the dep array. ViewportWatcher does not write to this tick.
+  const [schoolMarkerFocusTick, setSchoolMarkerFocusTick] = useState(0);
+
+  // Issue #1160 GAP 2 — Back restoration ticks.
+  // areaRestoreTick: incremented when Back is pressed from school-selected (level 2 → 1),
+  //   only when areaKey is set (so AreaRestorePanner has a valid area to fly to).
+  // cityRestoreTick: incremented when Back is pressed from schools-in-area (level 1 → 0).
+  // Neither is incremented from handleStartOver (Start Over uses composedResetMapTick).
+  const [areaRestoreTick, setAreaRestoreTick] = useState(0);
+  const [cityRestoreTick, setCityRestoreTick] = useState(0);
 
   // Transient map bbox — not stored in URL. Updated on pan/zoom via onBoundsChange.
   // Stored as a ref for the debounce timer and as state to trigger re-renders/refetches.
@@ -156,6 +183,31 @@ export default function MapDiscovery() {
     setMapBbox(null);
   }, [city]);
 
+  // Issue #1160 — increment schoolFocusTick when the selected school changes or when
+  // radiusKm changes while a school is selected in the school-first journey.
+  //
+  // Guards:
+  //   1. journey === 'school-first': area-first journey must not be affected.
+  //   2. selectedSchool with lat/lon present: SchoolFocusPanner requires hydrated coords.
+  //      This handles the hydration-race edge case — the tick is not incremented until
+  //      the school object (with latitude/longitude) is actually available.
+  //   3. Dependency array contains selectedSchool?.id and urlState.radiusKm so the
+  //      effect fires once per school change and once per radius change — NOT on every
+  //      map-move event. schoolFocusTick itself is NOT in the dep array (would loop).
+  //
+  // Feedback-loop safety: SchoolFocusPanner reads schoolFocusTick and uses a
+  // handledTickRef guard to act at most once per increment. ViewportWatcher fires
+  // reportViewport on moveend/zoomend, but that only updates URL viewport params —
+  // it does NOT write to schoolFocusTick, so no loop can form.
+  const selectedSchoolId = selectedSchool?.id;
+  const selectedSchoolLat = selectedSchool?.latitude;
+  const selectedSchoolLon = selectedSchool?.longitude;
+  useEffect(() => {
+    if (urlState.journey !== 'school-first') return;
+    if (selectedSchoolLat == null || selectedSchoolLon == null) return;
+    setSchoolFocusTick((t) => t + 1);
+  }, [selectedSchoolId, urlState.radiusKm, urlState.journey, selectedSchoolLat, selectedSchoolLon]);
+
   const isCityValid = city in CITY_CONFIG;
 
   // Area-scoping for the combined panel (AC4): when BOTH area and school are selected
@@ -195,7 +247,21 @@ export default function MapDiscovery() {
     // kept stale markers visible briefly, then the 401 settled and markers vanished while the
     // right panel was already empty (useDiscoverListings is also auth-gated synchronously).
     // Unauthenticated school-first users fall back to areaMarkerListings in the IIFE below.
-    markersEnabled: (isAuthenticated || urlState.journey === 'area-first') && mapZoom > AREA_LAYER_MAX_ZOOM,
+    // Issue #1160 v3 Bug A2 — explicit auth+journey gating.
+    //   Area-first: auth users only (matches existing behaviour).
+    //   School-first: auth users only AND only when a schoolId is selected
+    //     (top-level school-first browsing without schoolId leaves markers disabled
+    //     since useDiscoverFilteredMarkers needs schoolLat/schoolLon to be meaningful).
+    //   Anon school-first remains disabled (Issue #1118 regression guard — /api/discover/markers
+    //     returns 401 for anon, which causes a delayed marker disappearance).
+    markersEnabled:
+      isAuthenticated &&
+      (urlState.journey === 'area-first' ||
+        (urlState.journey === 'school-first' &&
+          !!urlState.schoolId &&
+          filters.schoolLat != null &&
+          filters.schoolLon != null)) &&
+      mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
     bbox: mapBbox,
   });
@@ -216,9 +282,23 @@ export default function MapDiscovery() {
       mapState: {
         zoom: mapZoom,
         city,
+        // Issue #1160 — expose school centre for E2E viewport assertions.
+        // SchoolFocusPanner pans the Leaflet map imperatively (no URL write),
+        // so E2E must read the map centre from this debug object rather than
+        // from URL params.
+        schoolCenter: selectedSchool
+          ? { lat: selectedSchool.latitude, lon: selectedSchool.longitude }
+          : null,
+        // Issue #1160 GAP 1+2 — expose restoration ticks for E2E assertability.
+        // MF-6 asserts schoolMarkerFocusTick > 0 after listings settle.
+        // MF-7 asserts areaRestoreTick incremented on Back from school-selected.
+        // MF-8 asserts cityRestoreTick incremented on Back from schools-in-area.
+        schoolMarkerFocusTick,
+        areaRestoreTick,
+        cityRestoreTick,
       },
     };
-  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city]);
+  }, [areaListings, areaMarkerListings, markerListings, selectedArea, mapZoom, city, selectedSchool, schoolMarkerFocusTick, areaRestoreTick, cityRestoreTick]);
 
   // Schools for SchoolMarkerLayer — fetched only in school-first journey when an area is selected.
   // Single owner: MapDiscovery fetches once and passes down to both SchoolMarkerLayer and
@@ -309,12 +389,33 @@ export default function MapDiscovery() {
           schoolLon: school.longitude,
           schoolRadiusKm: radiusKm,
         }));
+        return;
       }
-      // If not found in the local list (edge case: stale/paginated data), fall back to
-      // the existing useSchoolById async path in MapDiscovery which will set state once
-      // the fetch resolves. The placeholderData in useDiscoverFilteredMarkers bridges the gap.
+
+      // Issue #1160 v3 Bug A1 — top-level school-first selection (no areaKey) means
+      // useSchoolsByArea is disabled, so schools[] is empty and the lookup above fails.
+      // Before falling through to the async useSchoolById restore path (which causes
+      // delayed markers/no markers), check the React Query cache: if the useSchoolById
+      // query has already resolved for this id (e.g. another mount, deep-link prefetch,
+      // or a previous click in the same session), reuse it synchronously so the markers
+      // query fires immediately with the school coordinates.
+      // Key shape must match useSchoolSearch.ts (SCHOOL_BY_ID_KEY = ['school-by-id']).
+      const cachedSchool = queryClient.getQueryData<SchoolResult>(['school-by-id', schoolId]);
+      if (cachedSchool) {
+        setSelectedSchool(cachedSchool);
+        setFilters((prev) => ({
+          ...prev,
+          schoolLat: cachedSchool.latitude,
+          schoolLon: cachedSchool.longitude,
+          schoolRadiusKm: radiusKm,
+        }));
+        return;
+      }
+      // If neither path resolves, fall through to the existing useSchoolById async
+      // restore effect which will set state once the fetch resolves. The placeholderData
+      // in useDiscoverFilteredMarkers bridges the visual gap.
     },
-    [urlActions, schools, setSelectedSchool, setFilters],
+    [urlActions, schools, setSelectedSchool, setFilters, queryClient],
   );
 
   // isLoading depends on both hooks and useAuth — must be computed here (Rule 1).
@@ -388,6 +489,29 @@ export default function MapDiscovery() {
     [isAuthenticated, areaListings, filteredListings, filters],
   );
 
+  // Issue #1160 GAP 1 — listingsReadyKey: a stable primitive string that changes only when
+  // all three conditions are true simultaneously:
+  //   1. a school is selected (selectedSchoolId non-null)
+  //   2. the area listings query has settled (!isLoadingAreaListings — boolean, not array identity)
+  //   3. at least one listing is within the school radius (schoolListings.length > 0 — a number)
+  // When null, SchoolMarkerFocusPanner does not fire. schoolListings.length is a number
+  // (primitive) so it does not cause spurious identity changes; only isLoadingAreaListings
+  // is guarded to prevent the array-identity concern flagged in qa-fast risk (b).
+  const listingsReadyKey = useMemo((): string | null => {
+    if (selectedSchoolId == null) return null;
+    if (isLoadingAreaListings) return null;
+    if (schoolListings.length === 0) return null;
+    return `${selectedSchoolId}_${urlState.radiusKm ?? 0}_ready`;
+  }, [selectedSchoolId, isLoadingAreaListings, schoolListings.length, urlState.radiusKm]);
+
+  // Increment schoolMarkerFocusTick when listingsReadyKey transitions to a new non-null value.
+  // listingsReadyKey is null when listings are empty or query not settled → Phase-1 SchoolFocusPanner
+  // still fires first (handles the school-center focus); this only fires when markers are present.
+  useEffect(() => {
+    if (listingsReadyKey == null) return;
+    setSchoolMarkerFocusTick((t) => t + 1);
+  }, [listingsReadyKey]);
+
   // Radius change handler for SchoolSelectedPanel — uses REPLACE (not PUSH) per AC1.
   const handleRadiusChange = useCallback(
     (newRadiusKm: number) => {
@@ -410,6 +534,19 @@ export default function MapDiscovery() {
   //
   // Level 0 (school-browse): no Back — onBack undefined, PanelHeader hides button.
   const handleSchoolFirstBackLevel2 = useCallback(() => {
+    // Issue #1160 GAP 2: if areaKey is set, increment areaRestoreTick so AreaRestorePanner
+    // re-fits the map to the area bounds after the school context is cleared.
+    // Read urlState.areaKey at call-time (stable closure — urlState is re-derived each render).
+    // Do NOT increment from handleStartOver (Start Over uses composedResetMapTick instead).
+    //
+    // Issue #1160 v3 Bug B: when areaKey is null (top-level school-selected deep-link with
+    // no area context), there is no area to restore to — instead fly back to city center
+    // via CityRestorePanner.
+    if (urlState.areaKey != null) {
+      setAreaRestoreTick((t) => t + 1);
+    } else {
+      setCityRestoreTick((t) => t + 1);
+    }
     urlActions.clearSchoolSelection();
     setSelectedSchool(null);
     setFilters((prev) => {
@@ -419,9 +556,14 @@ export default function MapDiscovery() {
       delete next.schoolRadiusKm;
       return next;
     });
-  }, [urlActions, setSelectedSchool, setFilters]);
+  }, [urlState.areaKey, urlActions, setSelectedSchool, setFilters]);
 
   const handleSchoolFirstBackLevel1 = useCallback(() => {
+    // Issue #1160 GAP 2: increment cityRestoreTick so CityRestorePanner re-flies
+    // the map to city center/zoom after the area context is cleared.
+    // Only fires in school-first journey (this handler is only called from schoolFirstOnBack).
+    // Do NOT increment from handleStartOver.
+    setCityRestoreTick((t) => t + 1);
     urlActions.clearAreaSelection();
     setSelectedArea(null);
     setPanToArea(null);
@@ -481,12 +623,34 @@ export default function MapDiscovery() {
   urlActionsRef.current = urlActions;
 
   useEffect(() => {
-    if (urlSchoolId && schoolById && !selectedSchool) {
+    // Issue #1160 v5 — outer guard change: fire when selectedSchool is missing OR when
+    // filters.schoolLat is not yet set. The original `!selectedSchool` guard was too
+    // strict: in the top-level cold-cache path, handleSelectSchoolById falls through
+    // without setting selectedSchool or filters.schoolLat. If selectedSchool was
+    // subsequently set by another path (e.g. a prior in-session selection that was not
+    // fully cleared) while filters.schoolLat remained null, the !selectedSchool guard
+    // would skip the entire effect body — markersEnabled stays false permanently because
+    // markersEnabled requires filters.schoolLat != null.
+    // Fix: also enter the body when filters.schoolLat is not yet synced, regardless of
+    // selectedSchool state. The inner dedup guard below prevents redundant setFilters
+    // calls when coords are already in sync.
+    if (urlSchoolId && schoolById && (!selectedSchool || filters.schoolLat == null)) {
+      // Dedup guard: when coords are already in sync (e.g. Bug A1 sync injection already
+      // applied them), skip redundant setFilters to avoid an extra render. Still ensure
+      // selectedSchool is set so downstream effects (SchoolFocusPanner, panel routing)
+      // observe a non-null school.
+      if (filters.schoolLat === schoolById.latitude && filters.schoolLon === schoolById.longitude) {
+        if (!selectedSchool) setSelectedSchool(schoolById);
+        return;
+      }
       const radius = urlRadiusKm ?? 3;
       setSelectedSchool(schoolById);
       setFilters((prev) => ({ ...prev, schoolLat: schoolById.latitude, schoolLon: schoolById.longitude, schoolRadiusKm: radius }));
     }
-  }, [urlSchoolId, urlRadiusKm, schoolById, selectedSchool, setSelectedSchool, setFilters]);
+    // filters.schoolLat/schoolLon are read inside the guard above to detect prior sync injection,
+    // so they belong in the dep array. selectedSchool is already listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlSchoolId, urlRadiusKm, schoolById, selectedSchool, filters.schoolLat, filters.schoolLon, setSelectedSchool, setFilters]);
 
   // 404 cleanup — if the school no longer exists, silently drop the URL param without error toast.
   useEffect(() => {
@@ -635,6 +799,20 @@ export default function MapDiscovery() {
     [urlState.viewport?.lat, urlState.viewport?.lon],
   );
 
+  // Issue #1160 GAP 2 — derive area coordinates for AreaRestorePanner.
+  // Re-derived from discoverAreas at render time (not captured at click time) so the
+  // panner always has fresh coords. If discoverAreas hasn't loaded yet, the panner
+  // receives null values and skips the restore (no crash).
+  const areaRestoreArea = useMemo(() => {
+    if (!urlState.areaKey) return null;
+    return discoverAreas.find((a) => a.areaKey === urlState.areaKey) ?? null;
+  }, [urlState.areaKey, discoverAreas]);
+
+  // Issue #1160 GAP 2 — city coords for CityRestorePanner.
+  // cityCenter and cityZoom from useDiscoverMapData are the canonical city-level viewport.
+  // These are already available as props in MapDiscovery; just alias them for clarity.
+  // CityRestorePanner uses them when cityRestoreTick increments (Back from schools-in-area).
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
@@ -723,6 +901,28 @@ export default function MapDiscovery() {
               schoolsIsLoading={schoolsQuery.isLoading}
               schoolsIsError={schoolsQuery.isError}
               schoolsError={schoolsQuery.error}
+              schoolFocusTick={schoolFocusTick}
+              schoolFocusLat={selectedSchoolLat}
+              schoolFocusLon={selectedSchoolLon}
+              schoolFocusRadiusKm={urlState.radiusKm ?? filters.schoolRadiusKm}
+              schoolMarkerFocusTick={schoolMarkerFocusTick}
+              schoolMarkerPositions={schoolListings
+                .filter((l) => l.lat != null && l.lon != null)
+                .map((l) => ({ lat: l.lat as number, lon: l.lon as number }))}
+              areaRestoreTick={areaRestoreTick}
+              areaRestoreLat={areaRestoreArea?.geoCenterLat}
+              areaRestoreLon={areaRestoreArea?.geoCenterLon}
+              areaRestoreBbox={
+                areaRestoreArea?.minLat != null &&
+                areaRestoreArea?.minLon != null &&
+                areaRestoreArea?.maxLat != null &&
+                areaRestoreArea?.maxLon != null
+                  ? [[areaRestoreArea.minLat, areaRestoreArea.minLon], [areaRestoreArea.maxLat, areaRestoreArea.maxLon]]
+                  : undefined
+              }
+              cityRestoreTick={cityRestoreTick}
+              cityRestoreCenter={cityCenter}
+              cityRestoreZoom={cityZoom}
             />
           )}
 
