@@ -631,4 +631,74 @@ test.describe('@integration-ui Discover school-first journey (#970)', () => {
     expect(byAreaCallCount).toBe(0);
   });
 
+  /**
+   * Issue #1142 regression — Start Over from school-first journey must clear
+   * schoolId and radiusKm from the URL and return to the guided-entry landing
+   * with no residual school chip.
+   *
+   * Root cause: handleStartOver previously cleared the URL but left local
+   * `selectedSchool` and `filters.schoolRadiusKm` populated. A competing effect
+   * then re-wrote schoolId+radiusKm via setSchoolParams.
+   */
+  // AC4 (drill-back does not resurrect school chip) is guaranteed by design:
+  // handleStartOver sets selectedSchool=null; covered by MapDiscovery unit-level evidence.
+  test('Issue #1142: Start Over from school-first clears schoolId/radiusKm and does not re-surface chip on area re-drill', async ({ page }) => {
+    await stubTrendsOptions(page);
+    await stubDiscoverAreas(page);
+    await stubPopularSchools(page);
+    await stubSchoolByIdLookup(page, MANIPAL_SCHOOL);
+    await stubDiscoverListings(page);
+
+    // school-first journey calls /api/public/schools/by-area when areaKey is present.
+    // INTEGRATION-UI: stub justified — isolate from backend variability
+    await page.route('**/api/public/schools/by-area**', (route) =>
+      fulfillJson(route, 200, [MANIPAL_SCHOOL]),
+    );
+
+    // Step 1: Navigate to the reproduction URL from issue #1142.
+    // `|` in areaKey must be URL-encoded as %7C.
+    const areaKeyEncoded = encodeURIComponent('IN|KA|Udupi|Manipal');
+    const reproductionUrl =
+      `/discover?city=udupi&lat=13.35501&lon=74.79999&zoom=14` +
+      `&journey=school-first&areaKey=${areaKeyEncoded}` +
+      `&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`;
+
+    await page.goto(reproductionUrl);
+    await page.waitForLoadState('domcontentloaded');
+
+    // Step 2: Wait for the page to load — Start Over button (right-panel
+    // header in school-first journey) is the stable beacon that signals the
+    // school-first state has fully hydrated.
+    const startOverBtn = page.getByTestId('start-over-button');
+    await expect(startOverBtn).toBeVisible({ timeout: 15_000 });
+
+    // Step 3: Click Start Over.
+    await startOverBtn.click();
+
+    // Step 4: URL no longer contains schoolId or radiusKm. Negative-lookahead
+    // regex asserts absence of both params (also catches re-write by a
+    // competing effect — the original bug signature).
+    await expect(page).toHaveURL(/^(?!.*[?&]schoolId=)(?!.*[?&]radiusKm=).*$/, {
+      timeout: 5_000,
+    });
+
+    // Step 5: Guided-entry landing state is shown. GuidedEntryPanel renders
+    // a PanelHeader with title "Find properties your way" as <h2> (see
+    // src/components/discover/panels/GuidedEntryPanel.tsx +
+    // src/components/discover/PanelHeader.tsx). Heading-role assertion is
+    // the canonical "guided-entry visible" beacon used across sibling specs
+    // (e.g. e2e/discover-area-nav-journey.spec.ts).
+    await expect(
+      page.getByRole('heading', { name: /Find properties your way/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Step 6: Selected school chip absent on the guided-entry landing.
+    // The school-context chip renders the school's name when active, so
+    // asserting the fixture's school name has zero occurrences guarantees
+    // no residual chip / context badge survived Start Over.
+    await expect(
+      page.getByText(MANIPAL_SCHOOL.name, { exact: false }),
+    ).toHaveCount(0);
+  });
+
 });

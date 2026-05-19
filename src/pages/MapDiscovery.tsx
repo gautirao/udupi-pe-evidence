@@ -134,7 +134,22 @@ export default function MapDiscovery() {
   const handleStartOver = useCallback(() => {
     urlActions.startOver();
     setStartOverTick((t) => t + 1);
-  }, [urlActions]);
+    // Issue #1142 — Start Over must also clear local state that mirrors URL
+    // school/area context. Without these, a competing effect re-writes schoolId
+    // and radiusKm via handleFiltersChange → setSchoolParams, leaving stale params
+    // in the URL after Start Over.
+    setSelectedSchool(null);
+    setSelectedArea(null);
+    setPanToArea(null);
+    setFilters((prev) => {
+      const next = { ...prev };
+      delete next.schoolLat;
+      delete next.schoolLon;
+      delete next.schoolRadiusKm;
+      return next;
+    });
+    setSchoolBoardFilter([]);
+  }, [urlActions, setSelectedSchool, setSelectedArea, setPanToArea, setFilters, setSchoolBoardFilter]);
 
   // Reset bbox when city changes — the previous city's viewport is out-of-bounds for the new city.
   useEffect(() => {
