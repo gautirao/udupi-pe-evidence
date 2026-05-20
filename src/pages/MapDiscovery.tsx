@@ -23,6 +23,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { ApiError } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -153,6 +154,7 @@ const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): nu
 
 export default function MapDiscovery() {
   const { user, isLoading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [urlState, urlActions] = useDiscoverUrlState();
   const isAuthenticated = !authLoading && user !== null;
   // Issue #1160 v3 Bug A1 — TanStack Query client used to read cached useSchoolById
@@ -767,13 +769,24 @@ export default function MapDiscovery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlSchoolId, urlRadiusKm, schoolById, selectedSchool, filters.schoolLat, filters.schoolLon, setSelectedSchool, setFilters]);
 
-  // 404 cleanup — if the school no longer exists, silently drop the URL param without error toast.
+  // Error cleanup — if the school lookup fails, clear the URL param and inform the user.
+  // 404: silently drop (school no longer exists, no need to alarm the user).
+  // Non-404 ApiError or network error (TypeError): clear param + show recoverable toast so the
+  // user knows what happened and can search again.
   useEffect(() => {
     if (!urlSchoolId || !schoolByIdError) return;
     if (schoolByIdError instanceof ApiError && schoolByIdError.status === 404) {
       urlActionsRef.current.setSchoolParams(null);
+    } else {
+      // Non-404 server errors and network failures (TypeError from fetch rejection).
+      urlActionsRef.current.setSchoolParams(null);
+      toast({
+        title: 'School details unavailable',
+        description: 'Could not load the selected school. Please search again.',
+        variant: 'destructive',
+      });
     }
-  }, [urlSchoolId, schoolByIdError]);
+  }, [urlSchoolId, schoolByIdError, toast]);
 
   // Refs kept current every render so the resolution effect can read them without
   // adding unstable objects to its dep array.
