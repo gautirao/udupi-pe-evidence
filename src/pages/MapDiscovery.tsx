@@ -34,6 +34,110 @@ export { isNew } from '@/lib/isNew';
 /** Zoom-band threshold: area overview rings show at zoom ≤ this; individual listing clusters show above it. */
 const AREA_LAYER_MAX_ZOOM = 12;
 
+// ── Discover badge derivation ─────────────────────────────────────────────────
+//
+// Pure helper — exported so it can be unit-tested without mounting the page.
+// Determines what the "Showing X properties" badge should display, given the
+// current area/filter/loading context.
+//
+// Priority (highest to lowest):
+//   1. Area selected + loading area listings → hide (AC5: no stale number).
+//   2. Area selected + property filters active → show areaListings.length (AC2+AC4:
+//      areaListings is the filter-aware response from useDiscoverCityListings, so its
+//      length matches the right panel exactly). Falls back to hide if areaListings is
+//      not yet an array (defensive — should not occur after load settles).
+//   3. Area selected + no property filters → show selectedArea.listingCount (AC1).
+//      Falls back to hide if listingCount is null/undefined (AC4 safety).
+//   4. No area, property filters active → hide (AC2 + AC4: filtered count is
+//      auth-gated / unreliable; safer to hide than contradict right panel).
+//   5. No area, no property filters → show cityTotal (AC3).
+//   6. cityTotal === 0 (areas not yet loaded) → hide (AC5).
+
+export interface DiscoverBadgeInput {
+  selectedArea: { listingCount?: number | null } | null;
+  filters: {
+    propertyTypes?: unknown[];
+    bedrooms?: unknown[];
+    priceMin?: number;
+    priceMax?: number;
+    sellerTypes?: string[];
+    dateFrom?: Date | null;
+    dateTo?: Date | null;
+    backOnMarket?: boolean;
+    newToMarket?: boolean;
+    reraRegistered?: boolean;
+    readyToMove?: boolean;
+  };
+  isLoadingAreaListings: boolean;
+  cityTotal: number;
+  areaListings?: ReadonlyArray<unknown> | null;
+}
+
+export interface DiscoverBadgeResult {
+  visible: boolean;
+  count: number | null;
+  loading: boolean;
+}
+
+export function deriveDiscoverBadge({
+  selectedArea,
+  filters,
+  isLoadingAreaListings,
+  cityTotal,
+  areaListings,
+}: DiscoverBadgeInput): DiscoverBadgeResult {
+  // Compute hasPropertyFilters once — used by both the area branch and the no-area branch.
+  const hasPropertyFilters =
+    (filters.propertyTypes?.length ?? 0) > 0 ||
+    (filters.bedrooms?.length ?? 0) > 0 ||
+    filters.priceMin != null ||
+    filters.priceMax != null ||
+    (filters.sellerTypes?.filter((s) => s.trim() !== '').length ?? 0) > 0 ||
+    filters.dateFrom != null ||
+    filters.dateTo != null ||
+    !!filters.backOnMarket ||
+    !!filters.newToMarket ||
+    !!filters.reraRegistered ||
+    !!filters.readyToMove;
+
+  // Area selected path (AC1, AC2 combined, AC4, AC5)
+  if (selectedArea != null) {
+    if (isLoadingAreaListings) {
+      return { visible: false, count: null, loading: true };
+    }
+    if (hasPropertyFilters) {
+      // Area + property filters combined: show the filtered count from areaListings
+      // (filter-aware, matches right panel and map markers — AC4).
+      // areaListings is undefined while the first fetch is in flight but
+      // isLoadingAreaListings already caught that above; here it should be an array.
+      if (Array.isArray(areaListings)) {
+        return { visible: true, count: areaListings.length, loading: false };
+      }
+      // Defensive fallback: areaListings not yet an array (should not reach here
+      // after loading settles, but hide rather than show a stale number).
+      return { visible: false, count: null, loading: false };
+    }
+    const count = selectedArea.listingCount ?? null;
+    if (count == null) {
+      // AC4 safety: don't show a number we can't verify
+      return { visible: false, count: null, loading: false };
+    }
+    return { visible: true, count, loading: false };
+  }
+
+  // No area: check for active property filters (AC2 + AC4)
+  if (hasPropertyFilters) {
+    // Filtered count is auth-gated and unreliable — hide to avoid AC4 contradiction.
+    return { visible: false, count: null, loading: false };
+  }
+
+  // Baseline city total (AC3)
+  if (cityTotal === 0) {
+    return { visible: false, count: null, loading: false };
+  }
+  return { visible: true, count: cityTotal, loading: false };
+}
+
 /** Haversine great-circle distance in kilometres between two lat/lon points. */
 const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371;
@@ -430,6 +534,17 @@ export default function MapDiscovery() {
   const cityTotal = useMemo(
     () => discoverAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0),
     [discoverAreas],
+  );
+
+  // Issue #1152 — derive the correct badge count given area/filter/loading context.
+  // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
+  // Cycle 7: areaListings re-added (Option B). areaListings comes from useDiscoverCityListings
+  // which already applies bedrooms/propertyType/price at the backend, so its .length matches
+  // the right panel exactly — satisfying AC4. The Cycle 3 failure was a test-side bug
+  // (?bedrooms= vs ?beds= URL param); that URL contract is fixed in Cycle 5/6.
+  const discoverBadge = useMemo(
+    () => deriveDiscoverBadge({ selectedArea, filters, isLoadingAreaListings, cityTotal, areaListings }),
+    [selectedArea, filters, isLoadingAreaListings, cityTotal, areaListings],
   );
 
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
@@ -985,12 +1100,12 @@ export default function MapDiscovery() {
             </Button>
           </div>
 
-          {/* City listing count — bottom-right */}
-          {discoverAreas.length > 0 && (
-            <div className="absolute bottom-16 right-4 z-[1000]">
+          {/* City / area listing count — bottom-right (Issue #1152) */}
+          {discoverBadge.visible && discoverBadge.count != null && (
+            <div className="absolute bottom-16 right-4 z-[1000]" data-testid="discover-badge">
               <div className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-sm border border-border">
                 Showing{' '}
-                <strong>{cityTotal.toLocaleString()}</strong>
+                <strong>{discoverBadge.count.toLocaleString()}</strong>
                 {' '}properties
               </div>
             </div>
