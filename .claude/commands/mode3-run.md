@@ -495,3 +495,293 @@ On attempted authority violation, Orchestrator writes `blocked.toml(reason_code=
 > **Agent Teams is the runtime transport for executor teammate spawning. Route-and-Run (`.claude/skills/ROUTE_AND_RUN.md`) defines the specialist choreography. The executor follows Route-and-Run; it does NOT redefine it.**
 
 This statement is the source-of-truth for any future drift question. Any change to executor behaviour must either (a) align with Route-and-Run, or (b) accompany a corresponding Route-and-Run update reviewed by `security-reviewer` and `code-reviewer`.
+
+---
+
+# Bugfix Fast Path
+
+Use this path when the issue is a concrete bug with a user-provided reproduction or observable failure.
+
+## Principle
+
+A bug is not ready for implementation until QA has reproduced it locally or has explicitly proven it cannot be reproduced.
+
+A bug is not ready for PR until QA has verified that the original failing scenario now passes.
+
+The user is the final acceptance gate, not the primary tester.
+
+The key invariant is:
+
+```text
+same_scenario_retested = true
+```
+
+---
+
+## Phase B0 — Bug intake
+
+Main agent may only capture:
+
+- issue number,
+- user-reported observed behaviour,
+- expected behaviour,
+- reproduction URL or steps,
+- affected journey/component,
+- known related issues,
+- explicit out-of-scope items.
+
+Main agent must not diagnose root cause from code at this stage.
+
+Main agent must not start broad repository exploration.
+
+---
+
+## Phase B1 — QA reproduction gate
+
+QA must reproduce the bug before engineering starts.
+
+Required QA evidence:
+
+- exact URL / starting state,
+- exact user steps,
+- browser/session setup,
+- screenshots or trace where useful,
+- network calls where relevant,
+- visible UI failure,
+- console errors if relevant,
+- expected vs actual result,
+- PASS/FAIL reproduction verdict.
+
+If QA cannot reproduce:
+
+```text
+REPRO_NOT_CONFIRMED
+```
+
+Then stop and report:
+
+- what was tried,
+- what was observed,
+- what evidence is missing,
+- whether user input is required.
+
+Do not proceed to implementation without either:
+
+- `REPRO_CONFIRMED`, or
+- explicit user approval to proceed without reproduction.
+
+---
+
+## Phase B2 — Minimal diagnosis
+
+After QA reproduction, assign only the smallest necessary specialist set.
+
+Examples:
+
+- frontend engineer for UI/state/rendering bugs,
+- backend/API engineer for request/response/data-contract bugs,
+- performance engineer only when the proposed fix touches data volume, query paths, marker/list rendering, caching, map-fit loops, or API-call behaviour,
+- test infra only for flaky or harness-level problems.
+
+Specialist must answer:
+
+- exact root cause,
+- smallest safe fix,
+- exact files proposed,
+- why this fix targets the reproduced failure,
+- how it avoids scope expansion.
+
+Do not produce broad architecture alternatives unless required.
+
+Do not allow the main agent to invent the mechanism after OpenAI gate feedback. If OpenAI requests more concrete detail, route that request back to the relevant specialist.
+
+---
+
+## Phase B3 — Fix against the reproduction
+
+Engineer implements only the smallest fix that addresses the reproduced failure.
+
+Forbidden in Bugfix Fast Path:
+
+- broad refactors,
+- unrelated cleanup,
+- opportunistic test rewrites,
+- changing unrelated journeys,
+- fixing nearby issues,
+- adding new API endpoints unless diagnosis proves it is required,
+- performance redesign unless the bug is performance-related,
+- merging adjacent feature work,
+- changing tests to pass without proving the product bug is fixed.
+
+---
+
+## Phase B4 — Same-scenario verification gate
+
+QA must rerun the exact original reproduction steps.
+
+Required verification evidence:
+
+- same URL / same starting state,
+- same user steps,
+- before/after comparison,
+- network evidence if relevant,
+- UI evidence that the failure no longer occurs,
+- regression test name,
+- targeted test result,
+- smoke result or explicit reason smoke is not required.
+
+The WORKDONE packet must include:
+
+```toml
+[bug_reproduction]
+status = "REPRO_CONFIRMED"
+evidence = "..."
+
+[bug_fix_verification]
+status = "FIX_VERIFIED"
+same_scenario_retested = true
+evidence = "..."
+
+[regression_test]
+added_or_updated = true
+test_name = "..."
+```
+
+WORKDONE_REVIEW must not be submitted unless:
+
+```toml
+same_scenario_retested = true
+```
+
+If the same scenario cannot be retested, stop and ask for user decision.
+
+---
+
+## Phase B5 — PR and merge
+
+PR may be created only after:
+
+- reproduction confirmed,
+- fix implemented,
+- same scenario verified,
+- regression coverage added or justified,
+- code reviewer approved.
+
+PR_REVIEW must include:
+
+- original failing scenario,
+- proof it now passes,
+- tests run,
+- scope confirmation,
+- performance/scale note if relevant.
+
+Stop before merge for user manual acceptance.
+
+---
+
+## Bugfix severity shortcuts
+
+### Small UI bugs
+
+- QA reproduction can be a short Playwright/manual local proof.
+- PLAN_REVIEW can be compact.
+- Do not require multiple specialists unless the failure crosses boundaries.
+- Still require same-scenario verification before PR.
+
+### Data/API bugs
+
+- Backend/API specialist is mandatory.
+- Network evidence is mandatory.
+- Verification must include request URL, params, status code, and response behaviour where relevant.
+- Do not label a bug "data issue" if the user provides a working URL/flow showing the data exists.
+
+### Marker/map/listing bugs
+
+Frontend specialist is mandatory.
+
+QA must capture:
+
+- network calls,
+- marker visibility,
+- listing visibility,
+- map state where relevant,
+- URL before/after,
+- panel state.
+
+Performance note is mandatory.
+
+Performance engineer is required if any of the following are introduced or changed:
+
+- query keys,
+- marker filtering,
+- listing filtering,
+- cache behaviour,
+- map-fit loops,
+- new API call,
+- changed API call,
+- broader data loading.
+
+The fix must not:
+
+- fetch all properties globally,
+- scan all listings client-side,
+- introduce duplicate API calls,
+- re-fit map on every render,
+- degrade with large numbers of areas, schools, listings, or markers.
+
+### Flaky tests
+
+- QA or test infra owns diagnosis.
+- Product engineers should not patch product code unless the flake reveals a real product race.
+- If a known flake blocks push, document the related issue and ask user before any `--no-verify` bypass.
+
+---
+
+## Gate behaviour
+
+OpenAI gates should run automatically.
+
+The user should only be asked for:
+
+- merge approval,
+- scope expansion,
+- policy exception,
+- inability to reproduce,
+- product decision.
+
+Do not ask the user to approve routine PLAN_REVIEW or WORKDONE_REVIEW when OpenAI gates are available.
+
+If OpenAI returns `REVISION_REQUIRED`, the main agent must route the revision to the relevant specialist instead of inventing the mechanism itself.
+
+---
+
+## Gate packet requirements
+
+Bugfix gate packets must include role provenance.
+
+Include:
+
+```toml
+[provenance]
+main_agent_files_read = []
+specialist_files_read = []
+path_c_used = false
+scope_expansion = false
+```
+
+WORKDONE packet for bugs must also include:
+
+```toml
+[bug_reproduction]
+status = "REPRO_CONFIRMED"
+evidence = "..."
+
+[bug_fix_verification]
+status = "FIX_VERIFIED"
+same_scenario_retested = true
+evidence = "..."
+
+[regression_test]
+added_or_updated = true
+test_name = "..."
+```
