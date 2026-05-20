@@ -775,7 +775,17 @@ export default function MapDiscovery() {
         selectedArea={selectedArea}
         selectedSchool={selectedSchool}
         radiusKm={urlState.radiusKm}
-        filters={filters}
+        filters={{
+          ...filters,
+          // Issue #1132 — board/category filters are written directly to URL by
+          // onClearBoard/onClearCategory (via urlActions) without going through
+          // setFilters, so local `filters` state can lag behind. Always pass the
+          // URL-authoritative values here so ActiveContextChips renders the correct
+          // chip set without a useEffect sync (which caused an infinite re-render
+          // loop because urlState.filters.boardFilters is a new array ref each render).
+          boardFilters: urlState.filters.boardFilters,
+          categoryFilters: urlState.filters.categoryFilters,
+        }}
         onClearArea={handleAreaBack}
         onClearSchool={onClearSchool}
         onClearPropertyType={() =>
@@ -787,10 +797,22 @@ export default function MapDiscovery() {
         onClearPrice={() =>
           handleFiltersChange({ ...filters, priceMin: undefined, priceMax: undefined })
         }
+        onClearBoard={(board) => {
+          const next = (urlState.filters.boardFilters ?? []).filter(
+            (b) => b.toLowerCase() !== board.toLowerCase(),
+          );
+          urlActions.setBoardFilters(next);
+        }}
+        onClearCategory={(category) => {
+          const next = (urlState.filters.categoryFilters ?? []).filter(
+            (c) => c.toLowerCase() !== category.toLowerCase(),
+          );
+          urlActions.setCategoryFilters(next);
+        }}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, selectedSchool, urlState.radiusKm, filters, urlActions, handleAreaBack],
+    [selectedArea, selectedSchool, urlState.radiusKm, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleAreaBack],
   );
 
   // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render

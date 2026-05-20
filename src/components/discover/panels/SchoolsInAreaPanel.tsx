@@ -25,6 +25,8 @@ interface SchoolsInAreaPanelProps {
   schools?: SchoolResult[];
   /** Whether the parent-owned schools query is loading. Only used when `schools` prop is provided. */
   schoolsLoading?: boolean;
+  /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
+  activeContextChips?: React.ReactNode;
 }
 
 const BOARD_OPTIONS = ['CBSE', 'ICSE', 'State', 'International'];
@@ -34,7 +36,7 @@ const CATEGORY_OPTIONS = [
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp }: SchoolsInAreaPanelProps) {
+export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, activeContextChips }: SchoolsInAreaPanelProps) {
   const [urlState, urlActions] = useDiscoverUrlState();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
@@ -135,6 +137,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
         onStartOver={onStartOver}
         onBack={onBack}
         subtitle="Choose a school to view nearby homes"
+        activeContextChips={activeContextChips}
       />
 
       {/* Board Filter Chips */}

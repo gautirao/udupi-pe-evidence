@@ -68,6 +68,11 @@ export function useDiscoverPageState({
       priceMin: f.priceMin,
       priceMax: f.priceMax,
       sellerTypes: f.sellerTypes,
+      // Issue #1132 — boardFilters/categoryFilters must be seeded from URL on cold-load
+      // so ActiveContextChips renders board/category chips when the page opens with
+      // ?board= or ?category= params already in the URL.
+      boardFilters: f.boardFilters,
+      categoryFilters: f.categoryFilters,
       backOnMarket: f.backOnMarket,
       newToMarket: f.newToMarket,
       reraRegistered: f.reraRegistered,

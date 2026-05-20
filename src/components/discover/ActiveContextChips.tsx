@@ -26,6 +26,8 @@ interface ActiveContextChipsCallbacks {
   onClearPropertyType: () => void;
   onClearBhk: () => void;
   onClearPrice: () => void;
+  onClearBoard?: (board: string) => void;
+  onClearCategory?: (category: string) => void;
 }
 
 interface ActiveContextChipsProps extends ActiveContextChipsCallbacks {
@@ -40,9 +42,10 @@ interface ChipProps {
   label: string;
   onClear: () => void;
   testId?: string;
+  dismissTestId?: string;
 }
 
-function Chip({ icon, label, onClear, testId }: ChipProps) {
+function Chip({ icon, label, onClear, testId, dismissTestId }: ChipProps) {
   return (
     <div
       role="group"
@@ -64,6 +67,7 @@ function Chip({ icon, label, onClear, testId }: ChipProps) {
           onClear();
         }}
         aria-label={`Clear ${label}`}
+        data-testid={dismissTestId}
       >
         <X className="h-2.5 w-2.5" />
       </Button>
@@ -86,9 +90,13 @@ export function ActiveContextChips({
   onClearPropertyType,
   onClearBhk,
   onClearPrice,
+  onClearBoard,
+  onClearCategory,
 }: ActiveContextChipsProps) {
   const hasArea = selectedArea != null;
   const hasSchool = selectedSchool != null;
+  const boardFilters = filters.boardFilters ?? [];
+  const categoryFilters = filters.categoryFilters ?? [];
   const hasType =
     filters.propertyTypes != null && filters.propertyTypes.length > 0;
   const hasBhk =
@@ -96,7 +104,7 @@ export function ActiveContextChips({
   const hasPrice =
     filters.priceMin != null || filters.priceMax != null;
 
-  if (!hasArea && !hasSchool && !hasType && !hasBhk && !hasPrice) {
+  if (!hasArea && !hasSchool && !hasType && !hasBhk && !hasPrice && boardFilters.length === 0 && categoryFilters.length === 0) {
     return null;
   }
 
@@ -188,6 +196,32 @@ export function ActiveContextChips({
           testId="chip-price"
         />
       )}
+      {boardFilters.map((board) => {
+        const key = board.toLowerCase();
+        return (
+          <Chip
+            key={`board-${key}`}
+            icon={<GraduationCap className="h-3 w-3 flex-shrink-0" />}
+            label={board}
+            onClear={() => onClearBoard?.(board)}
+            testId={`active-chip-board-${key}`}
+            dismissTestId={`active-chip-board-${key}-dismiss`}
+          />
+        );
+      })}
+      {categoryFilters.map((category) => {
+        const key = category.toLowerCase();
+        return (
+          <Chip
+            key={`category-${key}`}
+            icon={<GraduationCap className="h-3 w-3 flex-shrink-0" />}
+            label={category}
+            onClear={() => onClearCategory?.(category)}
+            testId={`active-chip-category-${key}`}
+            dismissTestId={`active-chip-category-${key}-dismiss`}
+          />
+        );
+      })}
     </div>
   );
 }

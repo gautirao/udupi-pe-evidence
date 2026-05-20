@@ -266,6 +266,7 @@ export function DiscoverRightPanel({
             areaListings={areaListings}
             isLoadingAreaListings={isLoadingListings}
             isAuthenticated={isAuthenticated}
+            activeContextChips={activeContextChips}
           />
         );
 

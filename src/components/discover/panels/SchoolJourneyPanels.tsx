@@ -273,6 +273,8 @@ export interface SchoolsInAreaPanelProps {
   isLoadingAreaListings?: boolean;
   /** Forwarded to PropertyCard so unauth users get the gated card variant. */
   isAuthenticated?: boolean;
+  /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
+  activeContextChips?: React.ReactNode;
 }
 export function SchoolsInAreaPanel({
   onStartOver,
@@ -283,6 +285,7 @@ export function SchoolsInAreaPanel({
   areaListings,
   isLoadingAreaListings,
   isAuthenticated = false,
+  activeContextChips,
 }: SchoolsInAreaPanelProps) {
   const navigate = useNavigate();
 
@@ -296,6 +299,7 @@ export function SchoolsInAreaPanel({
           onBack={onBack}
           schools={schools}
           schoolsLoading={schoolsLoading}
+          activeContextChips={activeContextChips}
         />
       </div>
 
