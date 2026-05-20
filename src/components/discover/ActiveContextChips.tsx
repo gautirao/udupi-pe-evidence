@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Building2, GraduationCap, Home, IndianRupee, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,30 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
   plot: 'Plot / Land',
 };
 
+const SELLER_LABELS: Record<string, string> = {
+  owner: 'Owner',
+  broker: 'Broker',
+  builder: 'Builder',
+};
+
+/** Ordered list of boolean filter keys rendered as chips (render order = declaration order). */
+const BOOLEAN_FILTER_LABELS: ReadonlyArray<{
+  key: keyof Pick<DiscoverUrlFilters, 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove'>;
+  label: string;
+  testId: string;
+}> = [
+  { key: 'backOnMarket', label: 'Back on Market', testId: 'chip-bool-bom' },
+  { key: 'newToMarket', label: 'New to Market', testId: 'chip-bool-ntm' },
+  { key: 'reraRegistered', label: 'RERA Registered', testId: 'chip-bool-rera' },
+  { key: 'readyToMove', label: 'Ready to Move', testId: 'chip-bool-rtm' },
+];
+
+/** Mirror of MapFilters.tsx date formatter — co-located here, do NOT import from map/. */
+function formatFilterDate(isoDate: string): string {
+  const d = new Date(isoDate);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
 function humanizePropertyType(raw: string): string {
   return PROPERTY_TYPE_LABELS[raw.toLowerCase()] ?? raw;
 }
@@ -28,6 +52,12 @@ interface ActiveContextChipsCallbacks {
   onClearPrice: () => void;
   onClearBoard?: (board: string) => void;
   onClearCategory?: (category: string) => void;
+  /** Clear the seller type filter entirely (all values). */
+  onClearSeller?: () => void;
+  /** Clear both dateFrom and dateTo atomically. */
+  onClearDateRange?: () => void;
+  /** Clear a single boolean filter by its DiscoverUrlFilters key. */
+  onClearBoolean?: (key: keyof Pick<DiscoverUrlFilters, 'backOnMarket' | 'newToMarket' | 'reraRegistered' | 'readyToMove'>) => void;
 }
 
 interface ActiveContextChipsProps extends ActiveContextChipsCallbacks {
@@ -92,6 +122,9 @@ export function ActiveContextChips({
   onClearPrice,
   onClearBoard,
   onClearCategory,
+  onClearSeller,
+  onClearDateRange,
+  onClearBoolean,
 }: ActiveContextChipsProps) {
   const hasArea = selectedArea != null;
   const hasSchool = selectedSchool != null;
@@ -104,7 +137,46 @@ export function ActiveContextChips({
   const hasPrice =
     filters.priceMin != null || filters.priceMax != null;
 
-  if (!hasArea && !hasSchool && !hasType && !hasBhk && !hasPrice && boardFilters.length === 0 && categoryFilters.length === 0) {
+  // ── Seller ───────────────────────────────────────────────────────────────
+  const sellerLabel = useMemo(() => {
+    const types = (filters.sellerTypes ?? []).filter((s) => s.trim() !== '');
+    if (types.length === 0) return null;
+    const first = SELLER_LABELS[types[0].toLowerCase()] ?? types[0];
+    return types.length > 1 ? `${first} +${types.length - 1}` : first;
+  }, [filters.sellerTypes]);
+
+  // ── Date range ───────────────────────────────────────────────────────────
+  const dateLabel = useMemo(() => {
+    const { dateFrom, dateTo } = filters;
+    if (!dateFrom && !dateTo) return null;
+    if (dateFrom && dateTo) {
+      return `${formatFilterDate(dateFrom)} – ${formatFilterDate(dateTo)}`;
+    }
+    if (dateFrom) return `From ${formatFilterDate(dateFrom)}`;
+    return `Until ${formatFilterDate(dateTo!)}`;
+  }, [filters.dateFrom, filters.dateTo]);
+
+  // ── Active booleans (ordered: bom → ntm → rera → rtm) ───────────────────
+  const activeBooleans = useMemo(() => {
+    return BOOLEAN_FILTER_LABELS.filter(({ key }) => !!filters[key]);
+  }, [filters.backOnMarket, filters.newToMarket, filters.reraRegistered, filters.readyToMove]);
+
+  const hasSeller = sellerLabel != null;
+  const hasDate = dateLabel != null;
+  const hasBooleans = activeBooleans.length > 0;
+
+  if (
+    !hasArea &&
+    !hasSchool &&
+    !hasType &&
+    !hasBhk &&
+    !hasPrice &&
+    !hasSeller &&
+    !hasDate &&
+    !hasBooleans &&
+    boardFilters.length === 0 &&
+    categoryFilters.length === 0
+  ) {
     return null;
   }
 
@@ -222,6 +294,34 @@ export function ActiveContextChips({
           />
         );
       })}
+      {hasSeller && (
+        <Chip
+          icon={<span className="text-[10px] font-bold leading-none">BY</span>}
+          label={sellerLabel!}
+          onClear={() => onClearSeller?.()}
+          testId="chip-seller"
+          dismissTestId="chip-seller-dismiss"
+        />
+      )}
+      {hasDate && (
+        <Chip
+          icon={<span className="text-[10px] font-bold leading-none">📅</span>}
+          label={dateLabel!}
+          onClear={() => onClearDateRange?.()}
+          testId="chip-date"
+          dismissTestId="chip-date-dismiss"
+        />
+      )}
+      {activeBooleans.map(({ key, label, testId }) => (
+        <Chip
+          key={key}
+          icon={<span className="text-[10px] font-bold leading-none">✓</span>}
+          label={label}
+          onClear={() => onClearBoolean?.(key)}
+          testId={testId}
+          dismissTestId={`${testId}-dismiss`}
+        />
+      ))}
     </div>
   );
 }

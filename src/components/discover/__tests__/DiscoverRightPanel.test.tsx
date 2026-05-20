@@ -245,6 +245,74 @@ describe('DiscoverRightPanel', () => {
   });
 });
 
+describe('DiscoverRightPanel — chip strip mount gate (Issue #1151)', () => {
+  // AC5: seller/date/boolean chips must be visible even when no area or school is
+  // selected. The top chip strip is rendered for panel states that don't already
+  // embed chips in their own PanelHeader (guided-entry, area-groups-landing,
+  // area-selection, school-browse).
+
+  const chipNode = (
+    <div data-testid="active-context-chips">
+      <span data-testid="chip-seller">Owner</span>
+    </div>
+  );
+
+  it('renders chip strip in guided-entry state when activeContextChips is provided', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        areas={[]}
+        activeContextChips={chipNode}
+      />,
+    );
+    expect(screen.getByTestId('active-context-chips')).toBeInTheDocument();
+    expect(screen.getByTestId('chip-seller')).toBeInTheDocument();
+  });
+
+  it('renders chip strip in area-groups-landing state when activeContextChips is provided', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areas={[]}
+        activeContextChips={chipNode}
+      />,
+    );
+    expect(screen.getByTestId('active-context-chips')).toBeInTheDocument();
+  });
+
+  it('does NOT render top chip strip in area-selected state (chips are in PanelHeader)', () => {
+    const area = makeArea('k1', 'Manipal', 5);
+    // area-selected passes activeContextChips to its own PanelHeader; the top
+    // strip must not render a second instance.
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-selected"
+        areas={[area]}
+        selectedArea={area}
+        areaListings={[]}
+        isLoadingListings={false}
+        activeContextChips={chipNode}
+      />,
+    );
+    // Only one instance of active-context-chips in the DOM.
+    expect(screen.getAllByTestId('active-context-chips')).toHaveLength(1);
+  });
+
+  it('renders no chip strip when activeContextChips is not provided', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        areas={[]}
+      />,
+    );
+    expect(screen.queryByTestId('active-context-chips')).not.toBeInTheDocument();
+  });
+});
+
 describe('DiscoverRightPanel — search input (#952)', () => {
   const area = makeArea('k1', 'Manipal', 5);
 

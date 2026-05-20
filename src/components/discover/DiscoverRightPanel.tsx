@@ -313,11 +313,29 @@ export function DiscoverRightPanel({
     }
   }
 
+  // Panel states that already pass `activeContextChips` to their own PanelHeader.
+  // For every OTHER state, we render a top chip strip so seller/date/boolean chips
+  // are visible even when no area or school is selected (Issue #1151 AC5).
+  const PANELS_WITH_INLINE_CHIPS = new Set<DiscoverPanelContent>([
+    'area-selected',
+    'schools-in-area',
+    'school-selected',
+    'area-school-combined',
+  ]);
+  const showTopChipStrip =
+    activeContextChips != null &&
+    !PANELS_WITH_INLINE_CHIPS.has(panelContent);
+
   return (
     <div
       className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
+      {showTopChipStrip && (
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border shrink-0">
+          {activeContextChips}
+        </div>
+      )}
       {renderPanel()}
       {footerContent}
     </div>

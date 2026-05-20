@@ -809,6 +809,15 @@ export default function MapDiscovery() {
           );
           urlActions.setCategoryFilters(next);
         }}
+        onClearSeller={() =>
+          handleFiltersChange({ ...filters, sellerTypes: undefined })
+        }
+        onClearDateRange={() =>
+          handleFiltersChange({ ...filters, dateFrom: undefined, dateTo: undefined })
+        }
+        onClearBoolean={(key) =>
+          handleFiltersChange({ ...filters, [key]: undefined })
+        }
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps

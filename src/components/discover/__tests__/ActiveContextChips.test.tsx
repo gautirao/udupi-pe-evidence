@@ -394,4 +394,287 @@ describe('ActiveContextChips', () => {
     expect(onClearArea).toHaveBeenCalledOnce();
     expect(onClearSchool).not.toHaveBeenCalled();
   });
+
+  // ── Seller chips ───────────────────────────────────────────────────────────
+
+  it('renders seller chip for single seller type', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, sellerTypes: ['owner'] }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-seller')).toBeInTheDocument();
+    expect(screen.getByText('Owner')).toBeInTheDocument();
+  });
+
+  it('renders seller chip with +N suffix for multiple seller types', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, sellerTypes: ['owner', 'broker'] }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByText('Owner +1')).toBeInTheDocument();
+  });
+
+  it('does not render seller chip when sellerTypes is empty', () => {
+    const { container } = render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, sellerTypes: [] }}
+        {...noOps}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('does not render seller chip when sellerTypes contains only whitespace', () => {
+    const { container } = render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, sellerTypes: ['  ', ''] }}
+        {...noOps}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('calls onClearSeller when seller chip × is clicked', async () => {
+    const onClearSeller = vi.fn();
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, sellerTypes: ['owner'] }}
+        {...noOps}
+        onClearSeller={onClearSeller}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /clear owner/i }));
+    expect(onClearSeller).toHaveBeenCalledOnce();
+  });
+
+  it('does not call other handlers when seller chip × is clicked', async () => {
+    const onClearSeller = vi.fn();
+    const onClearDateRange = vi.fn();
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, sellerTypes: ['owner'], dateFrom: '2025-01-01' }}
+        {...noOps}
+        onClearSeller={onClearSeller}
+        onClearDateRange={onClearDateRange}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /clear owner/i }));
+    expect(onClearSeller).toHaveBeenCalledOnce();
+    expect(onClearDateRange).not.toHaveBeenCalled();
+  });
+
+  // ── Date range chips ───────────────────────────────────────────────────────
+
+  it('renders date chip with both from and to dates', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, dateFrom: '2025-01-15', dateTo: '2025-02-01' }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-date')).toBeInTheDocument();
+    // Label contains a dash between the two formatted dates
+    expect(screen.getByText(/–/)).toBeInTheDocument();
+  });
+
+  it('renders "From <date>" chip when only dateFrom is set', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, dateFrom: '2025-01-15' }}
+        {...noOps}
+      />,
+    );
+    const chip = screen.getByTestId('chip-date');
+    expect(chip).toBeInTheDocument();
+    expect(chip.textContent).toMatch(/From /i);
+  });
+
+  it('renders "Until <date>" chip when only dateTo is set', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, dateTo: '2025-02-01' }}
+        {...noOps}
+      />,
+    );
+    const chip = screen.getByTestId('chip-date');
+    expect(chip).toBeInTheDocument();
+    expect(chip.textContent).toMatch(/Until /i);
+  });
+
+  it('does not render date chip when neither dateFrom nor dateTo is set', () => {
+    const { container } = render(
+      <ActiveContextChips
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('calls onClearDateRange when date chip × is clicked', async () => {
+    const onClearDateRange = vi.fn();
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, dateFrom: '2025-01-15', dateTo: '2025-02-01' }}
+        {...noOps}
+        onClearDateRange={onClearDateRange}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('chip-date-dismiss'));
+    expect(onClearDateRange).toHaveBeenCalledOnce();
+  });
+
+  // ── Boolean chips ──────────────────────────────────────────────────────────
+
+  it('renders Back on Market chip when backOnMarket is true', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, backOnMarket: true }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-bool-bom')).toBeInTheDocument();
+    expect(screen.getByText('Back on Market')).toBeInTheDocument();
+  });
+
+  it('renders New to Market chip when newToMarket is true', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, newToMarket: true }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-bool-ntm')).toBeInTheDocument();
+    expect(screen.getByText('New to Market')).toBeInTheDocument();
+  });
+
+  it('renders RERA Registered chip when reraRegistered is true', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, reraRegistered: true }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-bool-rera')).toBeInTheDocument();
+    expect(screen.getByText('RERA Registered')).toBeInTheDocument();
+  });
+
+  it('renders Ready to Move chip when readyToMove is true', () => {
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, readyToMove: true }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-bool-rtm')).toBeInTheDocument();
+    expect(screen.getByText('Ready to Move')).toBeInTheDocument();
+  });
+
+  it('does not render boolean chip when value is false', () => {
+    const { container } = render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, backOnMarket: false }}
+        {...noOps}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('does not render boolean chip when value is undefined', () => {
+    const { container } = render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, newToMarket: undefined }}
+        {...noOps}
+      />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('calls onClearBoolean with the correct key when a boolean chip × is clicked', async () => {
+    const onClearBoolean = vi.fn();
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, newToMarket: true, reraRegistered: true }}
+        {...noOps}
+        onClearBoolean={onClearBoolean}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('chip-bool-ntm-dismiss'));
+    expect(onClearBoolean).toHaveBeenCalledWith('newToMarket');
+    expect(onClearBoolean).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires only the correct boolean handler when rera chip × is clicked', async () => {
+    const onClearBoolean = vi.fn();
+    render(
+      <ActiveContextChips
+        filters={{ ...emptyFilters, newToMarket: true, reraRegistered: true }}
+        {...noOps}
+        onClearBoolean={onClearBoolean}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('chip-bool-rera-dismiss'));
+    expect(onClearBoolean).toHaveBeenCalledWith('reraRegistered');
+    expect(onClearBoolean).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders boolean chips in stable order: bom → ntm → rera → rtm', () => {
+    render(
+      <ActiveContextChips
+        filters={{
+          ...emptyFilters,
+          readyToMove: true,
+          newToMarket: true,
+          backOnMarket: true,
+          reraRegistered: true,
+        }}
+        {...noOps}
+      />,
+    );
+    const chips = screen.getAllByRole('group', { name: /Active filter:/ });
+    const labels = chips.map((el) => el.getAttribute('aria-label'));
+    const boolStart = labels.findIndex((l) => l === 'Active filter: Back on Market');
+    expect(boolStart).toBeGreaterThanOrEqual(0);
+    expect(labels[boolStart]).toBe('Active filter: Back on Market');
+    expect(labels[boolStart + 1]).toBe('Active filter: New to Market');
+    expect(labels[boolStart + 2]).toBe('Active filter: RERA Registered');
+    expect(labels[boolStart + 3]).toBe('Active filter: Ready to Move');
+  });
+
+  // ── Cold-load / undefined-safe ─────────────────────────────────────────────
+
+  it('returns null when filters is empty object (cold-load from URL with no params)', () => {
+    const { container } = render(
+      <ActiveContextChips filters={{}} {...noOps} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  // ── Multi-dimension render order (seller → date → booleans) ───────────────
+
+  it('renders seller chip before date chip before boolean chips', () => {
+    render(
+      <ActiveContextChips
+        filters={{
+          ...emptyFilters,
+          sellerTypes: ['owner'],
+          dateFrom: '2025-01-15',
+          newToMarket: true,
+        }}
+        {...noOps}
+      />,
+    );
+    const chips = screen.getAllByRole('group', { name: /Active filter:/ });
+    const labels = chips.map((el) => el.getAttribute('aria-label'));
+    const sellerIdx = labels.findIndex((l) => l === 'Active filter: Owner');
+    const dateIdx = labels.findIndex((l) => l?.startsWith('Active filter: From'));
+    const ntmIdx = labels.findIndex((l) => l === 'Active filter: New to Market');
+    expect(sellerIdx).toBeGreaterThanOrEqual(0);
+    expect(dateIdx).toBeGreaterThan(sellerIdx);
+    expect(ntmIdx).toBeGreaterThan(dateIdx);
+  });
 });
