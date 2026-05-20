@@ -52,10 +52,14 @@ vi.mock('@/hooks/useDiscoverUrlState', () => ({
   ]),
 }));
 
+const mockRefetch = vi.hoisted(() => vi.fn());
+
 vi.mock('@/hooks/useSchoolsByArea', () => ({
   useSchoolsByArea: vi.fn(() => ({
     data: { pages: [] },
     isLoading: false,
+    isError: false,
+    refetch: mockRefetch,
     fetchNextPage: vi.fn(),
     hasNextPage: false,
     isFetchingNextPage: false,
@@ -87,6 +91,7 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
 // PanelHeader is a real component; no need to stub it for these tests.
 
 import { SchoolsInAreaPanel } from './SchoolsInAreaPanel';
+import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 
 function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -100,9 +105,136 @@ function renderPanel() {
   );
 }
 
+// Helper to override the hook mock for a single test
+const mockSchoolsHook = (overrides: Record<string, unknown>) => {
+  vi.mocked(useSchoolsByArea).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    refetch: mockRefetch,
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    ...overrides,
+  } as ReturnType<typeof useSchoolsByArea>);
+};
+
+describe('SchoolsInAreaPanel — error and retry states (Issue #1144)', () => {
+  beforeEach(() => {
+    mockRefetch.mockReset();
+    // Reset to default non-error state
+    vi.mocked(useSchoolsByArea).mockReturnValue({
+      data: { pages: [] },
+      isLoading: false,
+      isError: false,
+      refetch: mockRefetch,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    } as ReturnType<typeof useSchoolsByArea>);
+  });
+
+  it('AC1: renders named error state when hook isError is true', () => {
+    mockSchoolsHook({ isError: true, data: undefined });
+    renderPanel();
+    expect(screen.getByTestId('schools-error-state')).toBeInTheDocument();
+    expect(screen.getByText(/could not load schools/i)).toBeInTheDocument();
+  });
+
+  it('AC1: renders retry button when hook isError is true', () => {
+    mockSchoolsHook({ isError: true, data: undefined });
+    renderPanel();
+    expect(screen.getByTestId('schools-error-retry')).toBeInTheDocument();
+  });
+
+  it('AC1: retry button calls refetch when clicked', () => {
+    mockSchoolsHook({ isError: true, data: undefined });
+    renderPanel();
+    fireEvent.click(screen.getByTestId('schools-error-retry'));
+    expect(mockRefetch).toHaveBeenCalledOnce();
+  });
+
+  it('AC2: does not show "No schools found" when isError is true', () => {
+    mockSchoolsHook({ isError: true, data: undefined });
+    renderPanel();
+    expect(screen.queryByText(/no schools found/i)).not.toBeInTheDocument();
+  });
+
+  it('AC2: "No schools found" still renders on genuine empty success (isError false, no schools)', () => {
+    // Default mock: isError=false, data.pages=[] → schools=[]
+    renderPanel();
+    expect(screen.getByText(/no schools found/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('schools-error-state')).not.toBeInTheDocument();
+  });
+
+  it('AC1 prop-mode: schoolsError prop true → renders error state even when internal hook is disabled', () => {
+    // Simulate MapDiscovery passing schoolsError=true with schools=[] (hook disabled)
+    // schoolsProp !== undefined → isError = schoolsErrorProp ?? false = true
+    render(
+      <QueryClientProvider client={makeQC()}>
+        <SchoolsInAreaPanel
+          journey="school-first"
+          onStartOver={vi.fn()}
+          schools={[]}
+          schoolsLoading={false}
+          schoolsError={true}
+          onSchoolsRetry={mockRefetch}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByTestId('schools-error-state')).toBeInTheDocument();
+    expect(screen.getByText(/could not load schools/i)).toBeInTheDocument();
+  });
+
+  it('AC1 prop-mode: Retry in prop-mode calls onSchoolsRetry callback', () => {
+    render(
+      <QueryClientProvider client={makeQC()}>
+        <SchoolsInAreaPanel
+          journey="school-first"
+          onStartOver={vi.fn()}
+          schools={[]}
+          schoolsLoading={false}
+          schoolsError={true}
+          onSchoolsRetry={mockRefetch}
+        />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByTestId('schools-error-retry'));
+    expect(mockRefetch).toHaveBeenCalledOnce();
+  });
+
+  it('AC2 prop-mode: error state NOT shown when schoolsError=false and schools=[] (genuine empty)', () => {
+    // Internal hook erroring should be suppressed when parent passes schoolsProp
+    mockSchoolsHook({ isError: true, data: undefined });
+    render(
+      <QueryClientProvider client={makeQC()}>
+        <SchoolsInAreaPanel
+          journey="school-first"
+          onStartOver={vi.fn()}
+          schools={[]}
+          schoolsLoading={false}
+          schoolsError={false}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByTestId('schools-error-state')).not.toBeInTheDocument();
+    expect(screen.getByText(/no schools found/i)).toBeInTheDocument();
+  });
+});
+
 describe('SchoolsInAreaPanel — filter preservation (Issue #1138)', () => {
   beforeEach(() => {
     mockSetFiltersLive.mockReset();
+    // Reset hook to default (non-error, empty) state for filter tests
+    vi.mocked(useSchoolsByArea).mockReturnValue({
+      data: { pages: [] },
+      isLoading: false,
+      isError: false,
+      refetch: mockRefetch,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    } as ReturnType<typeof useSchoolsByArea>);
   });
 
   it('AC5: board chip toggle preserves dateFrom and dateTo', () => {

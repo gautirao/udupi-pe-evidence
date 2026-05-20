@@ -7,7 +7,7 @@
 import React, { useCallback, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, GraduationCap, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, GraduationCap, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -211,6 +211,22 @@ export function SchoolBrowsePanel({
                   <Skeleton key={i} className="h-20 w-full rounded-lg" />
                 ))}
               </div>
+            ) : popularSchoolsResult.isError ? (
+              <div
+                role="alert"
+                data-testid="popular-schools-error-state"
+                className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm"
+              >
+                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span className="text-red-800 flex-1">Could not load popular schools.</span>
+                <button
+                  onClick={() => popularSchoolsResult.refetch()}
+                  data-testid="popular-schools-error-retry"
+                  className="text-red-700 underline hover:no-underline font-medium flex-shrink-0"
+                >
+                  Retry
+                </button>
+              </div>
             ) : popularSchoolsResult.data && popularSchoolsResult.data.length > 0 ? (
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -232,6 +248,22 @@ export function SchoolBrowsePanel({
                 {[1, 2].map((i) => (
                   <Skeleton key={i} className="h-16 w-full rounded-lg" />
                 ))}
+              </div>
+            ) : discoverAreasResult.isError ? (
+              <div
+                role="alert"
+                data-testid="discover-areas-error-state"
+                className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm"
+              >
+                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <span className="text-red-800 flex-1">Could not load school areas.</span>
+                <button
+                  onClick={() => discoverAreasResult.refetch()}
+                  data-testid="discover-areas-error-retry"
+                  className="text-red-700 underline hover:no-underline font-medium flex-shrink-0"
+                >
+                  Retry
+                </button>
               </div>
             ) : discoverAreasResult.data?.areas && discoverAreasResult.data.areas.length > 0 ? (
               <div className="space-y-2">
@@ -265,6 +297,17 @@ export interface SchoolsInAreaPanelProps {
   /** Whether the parent-owned schools query is loading. */
   schoolsLoading?: boolean;
   /**
+   * Whether the parent-owned schools query errored (Issue #1144).
+   * When true, the panel renders a named error state with a Retry button.
+   * Should be wired from MapDiscovery's useSchoolsByArea isError result.
+   */
+  schoolsError?: boolean;
+  /**
+   * Callback to retry the parent-owned schools query (Issue #1144).
+   * Called when the Retry button is clicked in the error state.
+   */
+  onSchoolsRetry?: () => void;
+  /**
    * Issue #1074 Slice A — property listings for the selected area. When present,
    * a property-cards section renders below the schools list (mirrors AreaSelectedPanel).
    */
@@ -282,6 +325,8 @@ export function SchoolsInAreaPanel({
   journey,
   schools,
   schoolsLoading,
+  schoolsError,
+  onSchoolsRetry,
   areaListings,
   isLoadingAreaListings,
   isAuthenticated = false,
@@ -299,6 +344,8 @@ export function SchoolsInAreaPanel({
           onBack={onBack}
           schools={schools}
           schoolsLoading={schoolsLoading}
+          schoolsError={schoolsError}
+          onSchoolsRetry={onSchoolsRetry}
           activeContextChips={activeContextChips}
         />
       </div>

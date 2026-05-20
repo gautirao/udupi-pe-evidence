@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { GraduationCap, ChevronDown } from 'lucide-react';
+import { GraduationCap, ChevronDown, AlertTriangle } from 'lucide-react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -25,6 +25,18 @@ interface SchoolsInAreaPanelProps {
   schools?: SchoolResult[];
   /** Whether the parent-owned schools query is loading. Only used when `schools` prop is provided. */
   schoolsLoading?: boolean;
+  /**
+   * Whether the parent-owned schools query errored. Only used when `schools` prop is provided.
+   * When true, the panel renders a named error state with a Retry button.
+   * Mirrors the `schoolsLoading` prop channel — should be wired from MapDiscovery's
+   * useSchoolsByArea result (Issue #1144).
+   */
+  schoolsError?: boolean;
+  /**
+   * Callback to retry the parent-owned query. Called when the Retry button is clicked
+   * and `schoolsError` is true. When omitted, the Retry button is a no-op in prop mode.
+   */
+  onSchoolsRetry?: () => void;
   /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
   activeContextChips?: React.ReactNode;
 }
@@ -36,7 +48,7 @@ const CATEGORY_OPTIONS = [
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, activeContextChips }: SchoolsInAreaPanelProps) {
+export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, activeContextChips }: SchoolsInAreaPanelProps) {
   const [urlState, urlActions] = useDiscoverUrlState();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
@@ -54,6 +66,8 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
   const {
     data,
     isLoading: hookLoading,
+    isError: hookIsError,
+    refetch: hookRefetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -65,6 +79,19 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
   );
 
   const isLoading = schoolsProp !== undefined ? (schoolsLoadingProp ?? false) : hookLoading;
+  // isError: when parent owns the query, use the schoolsError prop if provided;
+  // otherwise fall back to the internal hook's error state (standalone / test mode).
+  const isError = schoolsProp !== undefined ? (schoolsErrorProp ?? false) : hookIsError;
+  // handleRetry: in prop mode delegate to the parent's retry callback (no-op if absent);
+  // in standalone mode use the internal hook's refetch.
+  const handleRetry = () => {
+    if (schoolsProp !== undefined) {
+      // Parent owns the query — call parent's retry if wired; otherwise no-op.
+      onSchoolsRetry?.();
+    } else {
+      hookRefetch();
+    }
+  };
 
   // Flatten pages into single school list — use prop when available
   const schools = useMemo(() => {
@@ -242,7 +269,28 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
           </div>
         )}
 
-        {schools.length === 0 && !isLoading && (
+        {isError && !isLoading && (
+          <div
+            role="alert"
+            data-testid="schools-error-state"
+            className="flex flex-col items-center justify-center h-full px-6 py-12 text-center"
+          >
+            <AlertTriangle className="w-12 h-12 text-red-400 mb-3" />
+            <h3 className="text-lg font-semibold text-gray-900">Could not load schools</h3>
+            <p className="text-sm text-gray-600 mt-1 mb-6">
+              Please check your connection and try again.
+            </p>
+            <button
+              onClick={handleRetry}
+              data-testid="schools-error-retry"
+              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 text-sm font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {schools.length === 0 && !isLoading && !isError && (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
             <GraduationCap className="w-12 h-12 text-gray-300 mb-3" />
             <h3 className="text-lg font-semibold text-gray-900">No schools found</h3>
