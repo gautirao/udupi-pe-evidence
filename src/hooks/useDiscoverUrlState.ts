@@ -125,13 +125,18 @@ export interface DiscoverUrlActions {
   /** Set filters as a committed Apply action — pushes a new history entry */
   setFiltersCommitted: (filters: DiscoverUrlFilters) => void;
   /**
-   * Write school params (schoolId + radiusKm) to URL — PUSH, not replace.
-   * Each school selection creates a history entry so browser Back works as
-   * a step-back within the school-first journey (AC7 / Issue #1143).
+   * Write school params (schoolId + radiusKm) to URL.
+   * Default: PUSH — each user-initiated school selection creates a history entry so
+   * browser Back works as a step-back within the school-first journey (AC7 / Issue #1143).
+   * Pass `options.replace = true` for housekeeping writes (e.g. cold-load backfill) that
+   * must not create a phantom history entry (Issue #1146 cycle-2 blocking fix).
    * Pass null to remove both params. Single path so Index.tsx needs no bare
    * useSearchParams instance for school writes.
    */
-  setSchoolParams: (params: { schoolId: string; radiusKm: number } | null) => void;
+  setSchoolParams: (
+    params: { schoolId: string; radiusKm: number } | null,
+    options?: { replace?: boolean },
+  ) => void;
   /**
    * In-page Back from Level 2 (school selected) — clears schoolId + radiusKm.
    * Preserves journey, areaKey, city, board/category filters, property filters,
@@ -525,7 +530,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   );
 
   const setSchoolParams = useCallback(
-    (params: { schoolId: string; radiusKm: number } | null) => {
+    (
+      params: { schoolId: string; radiusKm: number } | null,
+      options?: { replace?: boolean },
+    ) => {
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -538,10 +546,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           }
           return next;
         },
-        // Issue #1143 AC7 — PUSH so browser Back works as a step-back within
-        // the school-first journey. Previously replace:true silently swallowed
-        // browser Back after a school selection.
-        { replace: false },
+        // Issue #1143 AC7 — default PUSH so browser Back works as a step-back within
+        // the school-first journey. Callers may pass replace:true for housekeeping
+        // writes (e.g. cold-load backfill) that must not create a phantom history entry
+        // (Issue #1146 cycle-2 blocking fix).
+        { replace: options?.replace ?? false },
       );
     },
     [setUrlParams],

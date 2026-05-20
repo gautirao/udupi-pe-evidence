@@ -763,6 +763,17 @@ export default function MapDiscovery() {
       const radius = urlRadiusKm ?? 3;
       setSelectedSchool(schoolById);
       setFilters((prev) => ({ ...prev, schoolLat: schoolById.latitude, schoolLon: schoolById.longitude, schoolRadiusKm: radius }));
+      // Issue #1146 — AC4: When radiusKm was absent from the URL (hand-crafted link,
+      // old app version), backfill the default into the URL so it becomes honest.
+      // Guard: only when urlRadiusKm was null to avoid a redundant write.
+      // Uses replace:true — this is housekeeping on cold-load mount, not a user
+      // navigation event. A push here would create a phantom history entry that
+      // breaks browser Back (Issue #1146 cycle-2 blocking fix / BN-4 contract).
+      // Note: urlSchoolId is guaranteed non-null by the outer if-block; the
+      // redundant `&& urlSchoolId` guard that was here has been removed.
+      if (urlRadiusKm == null) {
+        urlActionsRef.current.setSchoolParams({ schoolId: urlSchoolId, radiusKm: radius }, { replace: true });
+      }
     }
     // filters.schoolLat/schoolLon are read inside the guard above to detect prior sync injection,
     // so they belong in the dep array. selectedSchool is already listed.

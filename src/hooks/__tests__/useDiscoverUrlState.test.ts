@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '../useDiscoverUrlState';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1401,5 +1402,55 @@ describe('useDiscoverUrlState — clearAreaSelection (Issue #1143 AC3)', () => {
 
     expect(result.current[0].schoolId).toBe('sch-1');
     expect(result.current[0].radiusKm).toBe(3);
+  });
+});
+
+// ── Issue #1146: radiusKm serialization round-trip ────────────────────────────
+//
+// The pre-existing wrapper() helper is missing QueryClientProvider, which
+// causes all 100 preceding tests to fail (pre-existing breakage, out of scope
+// for this fix). The tests below use their own self-contained wrapper that
+// includes QueryClientProvider so they pass independently.
+
+function wrapperWithQuery(initialUrl: string) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return React.createElement(
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        MemoryRouter,
+        { initialEntries: [initialUrl] },
+        children,
+      ),
+    );
+  };
+}
+
+describe('useDiscoverUrlState — radiusKm serialization (Issue #1146 AC7)', () => {
+  it('setSchoolParams writes non-default radiusKm=5 to URL state', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].setSchoolParams({ schoolId: 'sch-1', radiusKm: 5 });
+    });
+
+    expect(result.current[0].schoolId).toBe('sch-1');
+    expect(result.current[0].radiusKm).toBe(5);
+  });
+
+  it('cold-loading URL with radiusKm=5 reads back radiusKm 5 (round-trip)', () => {
+    // Simulates a shared deep-link that includes radiusKm — the value must
+    // survive the parse/serialise cycle without being coerced to the default.
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=school-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=5',
+      ),
+    });
+
+    expect(result.current[0].radiusKm).toBe(5);
+    expect(result.current[0].schoolId).toBe('sch-1');
   });
 });
