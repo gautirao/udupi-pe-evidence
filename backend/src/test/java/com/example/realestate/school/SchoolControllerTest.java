@@ -78,7 +78,7 @@ class SchoolControllerTest {
     void search_validQuery_returns200WithResults() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, null, null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, null, null, null);
 
         when(schoolService.search(anyString(), anyInt()))
                 .thenReturn(List.of(school));
@@ -120,7 +120,7 @@ class SchoolControllerTest {
     void nearby_validCoordinates_returns200WithResults() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Vidyodaya High School", "State",
-                null, 13.3409, 74.7421, "Ajjarkad, Udupi", 0.85, null, null, null);
+                null, 13.3409, 74.7421, "Ajjarkad, Udupi", 0.85, null, null, null, null);
 
         when(schoolService.findNearby(anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(school));
@@ -164,7 +164,7 @@ class SchoolControllerTest {
     void getById_existingSchool_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Christ King PU College", "State",
-                null, 13.3433, 74.7456, "Kunjibettu, Udupi", null, null, null, null);
+                null, 13.3433, 74.7456, "Kunjibettu, Udupi", null, null, null, null, null);
 
         when(schoolService.findById(SCHOOL_ID)).thenReturn(Optional.of(school));
 
@@ -173,7 +173,8 @@ class SchoolControllerTest {
                 .andExpect(jsonPath("$.name").value("Christ King PU College"))
                 .andExpect(jsonPath("$.boardType").value("State"))
                 .andExpect(jsonPath("$.board").value((Object) null))
-                .andExpect(jsonPath("$.prominenceTier").value((Object) null));
+                .andExpect(jsonPath("$.prominenceTier").value((Object) null))
+                .andExpect(jsonPath("$.areaKey").value((Object) null));
     }
 
     // ==================== GET /{id} — not found -> 404 ====================
@@ -223,10 +224,10 @@ class SchoolControllerTest {
     void popular_validCity_noFilters_routesToExistingMethod() throws Exception {
         SchoolResponse school1 = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 3);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 3, null);
         SchoolResponse school2 = new SchoolResponse(
                 SCHOOL_ID2.toString(), "Aloysius PU College", "ICSE",
-                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "notable", null, 0);
+                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "notable", null, 0, null);
 
         when(schoolService.findPopularByCity("udupi", 10))
                 .thenReturn(List.of(school1, school2));
@@ -274,7 +275,7 @@ class SchoolControllerTest {
     void popular_validAreaKey_noFilters_returns200WithNearbySchools() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 5);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 5, null);
 
         when(schoolService.findPopularByArea("IN|KA|Udupi|Manipal", 10))
                 .thenReturn(List.of(school));
@@ -306,7 +307,7 @@ class SchoolControllerTest {
     void popular_areaKeyEmpty_ignoresAndUsesCity() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 2);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 2, null);
 
         when(schoolService.findPopularByCity("udupi", 10))
                 .thenReturn(List.of(school));
@@ -324,7 +325,7 @@ class SchoolControllerTest {
     void popular_withBoardFilter_routesToFilteredMethod() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 1);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, 1, null);
 
         when(schoolService.getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10)))
                 .thenReturn(List.of(school));
@@ -347,7 +348,7 @@ class SchoolControllerTest {
     void popular_withCategoryFilter_routesToFilteredMethod() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Manipal Primary School", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", "Primary", 0);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", "Primary", 0, null);
 
         when(schoolService.getPopularSchoolsWithFilters(eq("udupi"), any(), any(), eq(10)))
                 .thenReturn(List.of(school));
@@ -414,7 +415,7 @@ class SchoolControllerTest {
     void byArea_validAreaKey_noFilters_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, null, null);
 
         when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
                 .thenReturn(List.of(school));
@@ -447,7 +448,7 @@ class SchoolControllerTest {
     void byArea_singleBoardFilter_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, null, null);
 
         when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
                 .thenReturn(List.of(school));
@@ -466,10 +467,10 @@ class SchoolControllerTest {
     void byArea_multipleBoardFilters_returns200() throws Exception {
         SchoolResponse s1 = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Vidyalaya", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, "notable", null, null, null);
         SchoolResponse s2 = new SchoolResponse(
                 SCHOOL_ID2.toString(), "Aloysius PU College", "ICSE",
-                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "directory", null, null);
+                "ICSE", 13.3370, 74.7950, "Sastan, Udupi", null, "directory", null, null, null);
 
         when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
                 .thenReturn(List.of(s1, s2));
@@ -488,7 +489,7 @@ class SchoolControllerTest {
     void byArea_singleCategoryFilter_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Manipal Primary", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, "Primary", null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, "Primary", null, null);
 
         when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
                 .thenReturn(List.of(school));
@@ -521,7 +522,7 @@ class SchoolControllerTest {
     void byArea_combinedBoardAndCategory_returns200() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Sharada Primary", "CBSE",
-                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, "Primary", null);
+                "CBSE", 13.3511, 74.7871, "Manipal, Udupi", null, null, "Primary", null, null);
 
         when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Manipal"), any(), any(), eq(0), eq(20)))
                 .thenReturn(List.of(school));
@@ -556,7 +557,7 @@ class SchoolControllerTest {
     void byArea_response_includesSchoolCategoryField() throws Exception {
         SchoolResponse school = new SchoolResponse(
                 SCHOOL_ID.toString(), "Udupi District School", null,
-                "STATE", 13.3400, 74.7400, "Udupi", null, "directory", "Higher Secondary", null);
+                "STATE", 13.3400, 74.7400, "Udupi", null, "directory", "Higher Secondary", null, null);
 
         when(schoolService.getSchoolsByArea(eq("IN|KA|Udupi|Udupi"), any(), any(), eq(0), eq(20)))
                 .thenReturn(List.of(school));

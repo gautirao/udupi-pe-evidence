@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -118,10 +119,40 @@ export function SchoolBrowsePanel({
   city,
 }: SchoolBrowsePanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  // Issue #1160 cycle-2: must call setSchoolJourney (not delegate via onSelectSchool(id))
+  // so that areaKey is resolved and written to the URL in the same atomic push.
+  const [urlState, urlActions] = useDiscoverUrlState();
 
   const schoolSearchResult = useSchoolSearch(searchQuery);
   const popularSchoolsResult = usePopularSchools(city, undefined, 6);
   const discoverAreasResult = useDiscoverAreas(city);
+
+  // Selects a school: writes journey + school coords + resolved areaKey atomically.
+  //
+  // Issue #1160 cycle-3: do NOT call onSelectSchool(school.id) here.
+  // onSelectSchool delegates to MapDiscovery's handleSelectSchoolById, which calls
+  // urlActions.setSchoolParams({ schoolId, radiusKm }) — a second setUrlParams call in
+  // the same synchronous event handler. React 18 automatic batching causes both
+  // setSchoolJourney and setSchoolParams to flush together. React-Router v6 processes
+  // queued setUrlParams calls sequentially; the second call's functional updater (prev =>)
+  // receives the pre-batch URL (before setSchoolJourney's changes), so its output
+  // replaces the first write and areaKey is lost.
+  //
+  // setSchoolJourney already writes journey + schoolId + radiusKm + lat + lon + zoom +
+  // areaKey in a single PUSH — it is self-contained. Local selectedSchool + filter
+  // state are restored by the existing urlSchoolId/schoolById effect in MapDiscovery
+  // (the useSchoolById async restore path) once the URL update settles.
+  const handleSchoolSelect = (school: SchoolResult) => {
+    urlActions.setSchoolJourney({
+      schoolId: school.id,
+      radiusKm: DEFAULT_SCHOOL_RADIUS_KM,
+      lat: school.latitude,
+      lon: school.longitude,
+      // Use current viewport zoom if available; 14 is a safe school-journey default.
+      zoom: urlState.viewport?.zoom ?? 14,
+      areaKey: school.areaKey,
+    });
+  };
 
   const isSearching = searchQuery.trim().length >= 2;
 
@@ -160,7 +191,7 @@ export function SchoolBrowsePanel({
                 <SchoolCard
                   key={school.id}
                   school={school}
-                  onClick={() => onSelectSchool(school.id)}
+                  onClick={() => handleSchoolSelect(school)}
                 />
               ))}
             </div>
@@ -189,7 +220,7 @@ export function SchoolBrowsePanel({
                   <SchoolCard
                     key={school.id}
                     school={school}
-                    onClick={() => onSelectSchool(school.id)}
+                    onClick={() => handleSchoolSelect(school)}
                   />
                 ))}
               </div>

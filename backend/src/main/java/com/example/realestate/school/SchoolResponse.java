@@ -18,7 +18,8 @@ public record SchoolResponse(
         Double distanceKm,
         String prominenceTier,
         String schoolCategory,
-        Integer nearbyListingCount
+        Integer nearbyListingCount,
+        String areaKey
 ) {
     /** Converts a School entity to a response DTO (without distance, without listing count). */
     public static SchoolResponse from(School s) {
@@ -33,7 +34,8 @@ public record SchoolResponse(
                 null,
                 s.getProminenceTier(),
                 s.getSchoolCategory(),
-                null
+                null,
+                s.getAreaKey()
         );
     }
 
@@ -50,7 +52,8 @@ public record SchoolResponse(
                 null,
                 s.getProminenceTier(),
                 s.getSchoolCategory(),
-                nearbyListingCount
+                nearbyListingCount,
+                s.getAreaKey()
         );
     }
 
@@ -67,7 +70,8 @@ public record SchoolResponse(
                 distanceKm,
                 s.getProminenceTier(),
                 s.getSchoolCategory(),
-                null
+                null,
+                s.getAreaKey()
         );
     }
 
@@ -87,7 +91,8 @@ public record SchoolResponse(
                 null,
                 p.getProminenceTier(),
                 p.getSchoolCategory(),
-                nearbyListingCount
+                nearbyListingCount,
+                null
         );
     }
 }

@@ -213,7 +213,14 @@ export function useDiscoverPageState({
           schoolLon: school.longitude,
           schoolRadiusKm: radiusKm,
         }));
-        urlActions.setSchoolJourney({ schoolId: school.id, radiusKm });
+        urlActions.setSchoolJourney({
+          schoolId: school.id,
+          radiusKm,
+          lat: school.latitude,
+          lon: school.longitude,
+          zoom: mapZoom,
+          areaKey: school.areaKey,
+        });
       } else {
         setFilters((prev) => {
           const { schoolLat: _a, schoolLon: _b, schoolRadiusKm: _c, ...rest } = prev;
@@ -222,7 +229,7 @@ export function useDiscoverPageState({
         urlActions.setSchoolParams(null);
       }
     },
-    [filters.schoolRadiusKm, urlActions],
+    [filters.schoolRadiusKm, mapZoom, urlActions],
   );
 
   const handleFiltersChange = useCallback(

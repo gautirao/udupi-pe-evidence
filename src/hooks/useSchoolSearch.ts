@@ -14,6 +14,12 @@ export interface SchoolResult {
   distanceKm: number;
   /** Count of property listings within 1 km. Populated for /popular responses; null for other endpoints. */
   nearbyListingCount?: number | null;
+  /**
+   * Area key assigned by backend V80 trigger (area_key column).
+   * Present after backend Option Z ships (Issue #1160). Null for schools >10 km from any area centroid.
+   * May be absent for older API responses that predate the field addition.
+   */
+  areaKey?: string | null;
 }
 
 export interface NearbySchoolsResponse {

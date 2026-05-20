@@ -94,9 +94,22 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
     });
   };
 
-  // Handler for selecting a school
-  const handleSelectSchool = (schoolId: string) => {
-    urlActions.setSchoolParams({ schoolId, radiusKm: DEFAULT_SCHOOL_RADIUS_KM });
+  // Handler for selecting a school.
+  // Issue #1160 cycle-2: must call setSchoolJourney (not setSchoolParams) so that
+  // areaKey is resolved and written to the URL in the same atomic push.
+  // setSchoolParams only writes schoolId + radiusKm; setSchoolJourney additionally
+  // writes journey='school-first', lat/lon/zoom, and resolves areaKey via
+  // (1) school.areaKey or (2) bbox containment fallback against the cached areas.
+  const handleSelectSchool = (school: SchoolResult) => {
+    urlActions.setSchoolJourney({
+      schoolId: school.id,
+      radiusKm: DEFAULT_SCHOOL_RADIUS_KM,
+      lat: school.latitude,
+      lon: school.longitude,
+      // Use the current viewport zoom if available; fall back to 14 (school-journey default).
+      zoom: urlState.viewport?.zoom ?? 14,
+      areaKey: school.areaKey,
+    });
   };
 
   // Handler to clear filters
@@ -187,7 +200,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             {schools.map((school) => (
               <div
                 key={school.id}
-                onClick={() => handleSelectSchool(school.id)}
+                onClick={() => handleSelectSchool(school)}
                 data-testid="school-card"
                 className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 border border-purple-200 rounded-lg cursor-pointer hover:shadow-lg transition-shadow"
               >

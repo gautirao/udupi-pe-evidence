@@ -109,6 +109,7 @@ public class SchoolService {
                                 : null,
                         p.getProminenceTier(),
                         p.getSchoolCategory(),
+                        null,
                         null
                 ))
                 .toList();
@@ -239,6 +240,7 @@ public class SchoolService {
                         null,
                         p.getProminenceTier(),
                         p.getSchoolCategory(),
+                        null,
                         null
                 ))
                 .toList();

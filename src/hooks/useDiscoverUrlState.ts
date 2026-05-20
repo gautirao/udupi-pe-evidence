@@ -48,6 +48,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import type { DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -179,11 +181,25 @@ export interface DiscoverUrlActions {
    */
   startOver: () => void;
   /**
-   * Atomic school-first journey start — sets journey='school-first' and school params (schoolId,
-   * radiusKm) in a single PUSH. Ensures both params reach the URL together for correct
-   * panel routing. Only used when transitioning to school-first journey with a selected school.
+   * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
+   * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
+   * together for correct panel routing. Only used when transitioning to school-first journey
+   * with a selected school.
+   *
+   * areaKey resolution order (Issue #1160 Option Y):
+   *   1. school.areaKey (truthy) — use directly (backend-provided, most precise).
+   *   2. Bbox containment fallback — walk the already-loaded discover-areas cache for the
+   *      current city. Find the first area whose bbox contains school.lat/lon. No extra fetch.
+   *   3. Neither source yields areaKey — omit the param and warn-log once.
    */
-  setSchoolJourney: (params: { schoolId: string; radiusKm: number }) => void;
+  setSchoolJourney: (params: {
+    schoolId: string;
+    radiusKm: number;
+    lat: number;
+    lon: number;
+    zoom: number;
+    areaKey?: string | null;
+  }) => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -295,6 +311,7 @@ function serializeFilters(
 
 export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const [urlParams, setUrlParams] = useSearchParams();
+  const queryClient = useQueryClient();
 
   // Debounce timers
   const viewportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -631,19 +648,79 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   );
 
   const setSchoolJourney = useCallback(
-    (params: { schoolId: string; radiusKm: number }) => {
+    (params: {
+      schoolId: string;
+      radiusKm: number;
+      lat: number;
+      lon: number;
+      zoom: number;
+      areaKey?: string | null;
+    }) => {
+      // ── areaKey resolution (Issue #1160 Option Y) ──────────────────────────
+      // Priority 1: backend-provided areaKey (truthy non-empty string).
+      // Priority 2: bbox containment fallback using already-loaded discover-areas cache.
+      //   Walk areas; use the first whose [min_lat, max_lat] × [min_lon, max_lon] bbox
+      //   contains the school's lat/lon. Skip areas with any null bbox field.
+      //   No extra API call — /api/discover/areas is loaded on initial page render.
+      // Priority 3: omit areaKey and warn once.
+      let resolvedAreaKey: string | null = null;
+
+      if (params.areaKey) {
+        resolvedAreaKey = params.areaKey;
+      } else {
+        // Try bbox fallback from cache. Key must match useDiscoverAreas query key.
+        const areasCache = queryClient.getQueryData<DiscoverAreasResponse>(['discover-areas', city]);
+        if (areasCache) {
+          const match = areasCache.areas.find((area) => {
+            if (
+              area.minLat == null ||
+              area.maxLat == null ||
+              area.minLon == null ||
+              area.maxLon == null
+            ) {
+              return false;
+            }
+            return (
+              params.lat >= area.minLat &&
+              params.lat <= area.maxLat &&
+              params.lon >= area.minLon &&
+              params.lon <= area.maxLon
+            );
+          });
+          if (match) {
+            resolvedAreaKey = match.areaKey;
+          }
+        }
+        if (!resolvedAreaKey) {
+          console.warn(
+            '[setSchoolJourney] Could not resolve areaKey for school',
+            params.schoolId,
+            '— listings fetch will not fire (school outside all known area bboxes)',
+          );
+        }
+      }
+
+      // Single atomic URL write — one history push, one React-Query evaluation cycle.
       setUrlParams(
         (prev) => {
           const next = new URLSearchParams(prev);
           next.set('journey', 'school-first');
           next.set('schoolId', params.schoolId);
           next.set('radiusKm', String(Math.round(params.radiusKm)));
+          next.set('lat', String(round(params.lat, LAT_LON_PRECISION)));
+          next.set('lon', String(round(params.lon, LAT_LON_PRECISION)));
+          next.set('zoom', String(Math.round(params.zoom)));
+          if (resolvedAreaKey) {
+            next.set('areaKey', resolvedAreaKey);
+          }
           return next;
         },
         { replace: false }, // PUSH — school-first journey is a major navigation destination
       );
     },
-    [setUrlParams],
+    // city is a plain render-time variable captured each render via the closure.
+    // queryClient is stable for the lifetime of the QueryClientProvider.
+    [setUrlParams, queryClient, city],
   );
 
   const selectGroup = useCallback(
