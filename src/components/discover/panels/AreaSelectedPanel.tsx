@@ -44,8 +44,14 @@ interface AreaSelectedPanelProps {
   filters?: PropertyFilters;
   /** Called when property filters change (from quick chips or clear action). */
   onFiltersChange?: (filters: PropertyFilters) => void;
-  /** Called when user clicks "Add a school in this area" CTA. */
+  /** Called for genuine journey switches (kept for non-CTA usage). */
   onSelectJourney?: (journey: DiscoverJourney) => void;
+  /**
+   * Called when the user clicks the "Add a school in this area" CTA (Issue #1157).
+   * Enters the area-first school-picking sub-step WITHOUT flipping the journey, so
+   * Back returns to area-selected instead of deleting the area.
+   */
+  onAddSchool?: () => void;
 }
 
 export function AreaSelectedPanel({
@@ -66,6 +72,7 @@ export function AreaSelectedPanel({
   filters = {},
   onFiltersChange,
   onSelectJourney,
+  onAddSchool,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
 
@@ -127,11 +134,12 @@ export function AreaSelectedPanel({
     });
   }, [filters, onFiltersChange]);
 
-  // Add school in this area: transition to school-first journey, preserving area
+  // Add school in this area (Issue #1157): enter the area-first school-picking
+  // sub-step via onAddSchool. This keeps journey=area-first (instead of flipping to
+  // school-first), so Back returns to area-selected rather than deleting the area.
   const handleAddSchool = useCallback(() => {
-    if (!onSelectJourney) return;
-    onSelectJourney('school-first');
-  }, [onSelectJourney]);
+    onAddSchool?.();
+  }, [onAddSchool]);
 
   return (
     <>

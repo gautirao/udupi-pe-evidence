@@ -1515,3 +1515,85 @@ describe('useDiscoverUrlState — radiusKm serialization (Issue #1146 AC7)', () 
     expect(result.current[0].schoolId).toBe('sch-1');
   });
 });
+
+// ── Issue #1157 rev-5 DEFECT B: backToSchoolPicking ───────────────────────────
+//
+// Back from area-school-combined (area-first + areaKey + schoolId) must drop the
+// selected school (schoolId + radiusKm) and re-arm schoolPicking=1 so the panel
+// returns to schools-in-area WITHOUT flipping journey. journey, areaKey, all
+// property/board/category filters and viewport must be preserved. Single REPLACE.
+//
+// REPLACE-vs-PUSH depth cannot be asserted under jsdom's MemoryRouter (see the
+// setSchoolParams PUSH note above) — the REPLACE contract is enforced by the
+// implementation (one setUrlParams call with { replace: true }) and covered at the
+// browser level by the #1157 E2E. These tests assert the resulting URL state.
+
+describe('useDiscoverUrlState — backToSchoolPicking (Issue #1157 rev-5 DEFECT B)', () => {
+  const COMBINED_URL =
+    '/discover?city=udupi&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal&schoolId=sch-1&radiusKm=3';
+
+  it('deletes schoolId and radiusKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(COMBINED_URL),
+    });
+
+    act(() => {
+      result.current[1].backToSchoolPicking();
+    });
+
+    expect(result.current[0].schoolId).toBeNull();
+    expect(result.current[0].radiusKm).toBeNull();
+  });
+
+  it('sets schoolPicking=1', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(COMBINED_URL),
+    });
+
+    act(() => {
+      result.current[1].backToSchoolPicking();
+    });
+
+    expect(result.current[0].schoolPicking).toBe(true);
+  });
+
+  it('preserves journey (area-first) and areaKey', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(COMBINED_URL),
+    });
+
+    act(() => {
+      result.current[1].backToSchoolPicking();
+    });
+
+    expect(result.current[0].journey).toBe('area-first');
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Manipal');
+  });
+
+  it('preserves property filters and viewport', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal' +
+          '&schoolId=sch-1&radiusKm=3&type=land,house&beds=2,3&priceMin=1000000' +
+          '&lat=13.34090&lon=74.74210&zoom=14',
+      ),
+    });
+
+    act(() => {
+      result.current[1].backToSchoolPicking();
+    });
+
+    const state = result.current[0];
+    // School selection dropped, sub-step re-armed.
+    expect(state.schoolId).toBeNull();
+    expect(state.radiusKm).toBeNull();
+    expect(state.schoolPicking).toBe(true);
+    // Everything else preserved.
+    expect(state.journey).toBe('area-first');
+    expect(state.areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(state.filters.propertyTypes).toEqual(['land', 'house']);
+    expect(state.filters.bedrooms).toEqual([2, 3]);
+    expect(state.filters.priceMin).toBe(1000000);
+    expect(state.viewport).toEqual({ lat: 13.3409, lon: 74.7421, zoom: 14 });
+  });
+});

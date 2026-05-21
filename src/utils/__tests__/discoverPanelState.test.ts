@@ -210,3 +210,66 @@ describe('derivePanelContent — groupId deep-link inference (issue #1154)', () 
     ).toBe('school-selected');
   });
 });
+
+// ─── Issue #1157: area-first "add a school in this area" sub-step ──────────────
+
+describe('area-first school-picking sub-step (Issue #1157)', () => {
+  // (a) The transient marker shows the schools-in-area panel without flipping journey.
+  it('(a) area-first + areaKey + schoolPicking + no schoolId → schools-in-area', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', areaKey: 'IN|KA|Udupi|Manipal', schoolPicking: true }),
+      ),
+    ).toBe('schools-in-area');
+  });
+
+  // (b) Once a school is selected, schoolId precedence wins (placement + !schoolId guard).
+  it('(b) area-first + areaKey + schoolId (+schoolPicking) → area-school-combined (precedence)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'area-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          schoolId: 'sch-1',
+          schoolPicking: true,
+        }),
+      ),
+    ).toBe('area-school-combined');
+  });
+
+  // (c) Without an areaKey there is nothing to pick schools within → landing.
+  it('(c) area-first + schoolPicking + no areaKey → area-groups-landing', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'area-first', schoolPicking: true })),
+    ).toBe('area-groups-landing');
+  });
+
+  // (d) The marker only affects the area-first branch; school-first ignores it.
+  it('(d) school-first + schoolPicking → school-browse (marker ignored)', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'school-first', schoolPicking: true })),
+    ).toBe('school-browse');
+  });
+
+  // (e) Regression: no marker → area-selected (unchanged behaviour).
+  it('(e) area-first + areaKey + no marker → area-selected (unchanged)', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'area-first', areaKey: 'IN|KA|Udupi|Manipal' })),
+    ).toBe('area-selected');
+  });
+
+  // (f) Option (i) post-select state: selecting a school in the sub-step sets schoolId
+  // and drops schoolPicking while keeping journey=area-first → area-school-combined
+  // (no journey flip). This is the AC3 contract for the area-first select path.
+  it('(f) area-first + areaKey + schoolId (schoolPicking dropped) → area-school-combined (no flip)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'area-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          schoolId: 'sch-1',
+        }),
+      ),
+    ).toBe('area-school-combined');
+  });
+});

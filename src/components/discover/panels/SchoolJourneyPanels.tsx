@@ -308,6 +308,14 @@ export interface SchoolsInAreaPanelProps {
    */
   onSchoolsRetry?: () => void;
   /**
+   * Issue #1157 Option (i) — area-first school select. When provided, selecting a
+   * school calls this (MapDiscovery.handleSelectSchoolById → setSchoolParams) which
+   * sets schoolId + drops schoolPicking WITHOUT flipping the journey, routing the panel
+   * to area-school-combined. When omitted (school-first), the inner panel keeps its
+   * existing setSchoolJourney path (journey flips to school-first).
+   */
+  onSelectSchool?: (schoolId: string) => void;
+  /**
    * Issue #1074 Slice A — property listings for the selected area. When present,
    * a property-cards section renders below the schools list (mirrors AreaSelectedPanel).
    */
@@ -327,6 +335,7 @@ export function SchoolsInAreaPanel({
   schoolsLoading,
   schoolsError,
   onSchoolsRetry,
+  onSelectSchool,
   areaListings,
   isLoadingAreaListings,
   isAuthenticated = false,
@@ -346,6 +355,7 @@ export function SchoolsInAreaPanel({
           schoolsLoading={schoolsLoading}
           schoolsError={schoolsError}
           onSchoolsRetry={onSchoolsRetry}
+          onSelectSchool={onSelectSchool}
           activeContextChips={activeContextChips}
         />
       </div>

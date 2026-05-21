@@ -8,7 +8,20 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 export interface SchoolMarkerLayerProps {
   schools: SchoolResult[];
   onSelectSchool?: (schoolId: string) => void;
-  /** Only renders when journey === 'school-first'. */
+  /**
+   * Master visibility gate for the school markers (Issue #1157 rev-5 DEFECT A).
+   * The markers render when this is true. MapDiscovery computes it as
+   * `journey === 'school-first' || schoolPicking || (journey === 'area-first' && areaKey && schoolId)`
+   * so the area-first school-picking sub-step and area-school-combined state show
+   * markers without flipping journey to school-first. When the OR's first term is
+   * true (school-first), the value is byte-for-byte identical to the previous
+   * `journey === 'school-first'` gate — school-first rendering is unchanged.
+   */
+  showSchoolMarkers?: boolean;
+  /**
+   * Active journey. Retained because the loading/error/empty diagnostic UI stays
+   * gated to school-first only (those overlays must NOT surface in area-first).
+   */
   journey?: DiscoverJourney | null;
   /** Loading state from useSchoolsByArea. When true and journey='school-first', shows loading UI. */
   isLoading?: boolean;
@@ -69,6 +82,7 @@ const schoolPinIcon = L.divIcon({
 export function SchoolMarkerLayer({
   schools,
   onSelectSchool,
+  showSchoolMarkers = false,
   journey,
   isLoading = false,
   isError = false,
@@ -77,7 +91,9 @@ export function SchoolMarkerLayer({
 }: SchoolMarkerLayerProps) {
   const map = useMap();
 
-  // Diagnostic: log empty state (successful load but no schools)
+  // Diagnostic: log empty state (successful load but no schools).
+  // Intentionally still gated to school-first — this warn must NOT surface in
+  // the area-first sub-step (Issue #1157 rev-5 WARN3 scope note).
   useEffect(() => {
     if (journey === 'school-first' && !isLoading && !isError && schools.length === 0) {
       console.warn('[SchoolMarkerLayer] No schools found for selected area in school-first journey');
@@ -85,7 +101,7 @@ export function SchoolMarkerLayer({
   }, [journey, isLoading, isError, schools.length]);
 
   useEffect(() => {
-    if (journey !== 'school-first' || schools.length === 0) return;
+    if (!showSchoolMarkers || schools.length === 0) return;
 
     const markers: L.Marker[] = [];
 
@@ -115,10 +131,13 @@ export function SchoolMarkerLayer({
     return () => {
       markers.forEach((m) => m.remove());
     };
-  }, [schools, map, onSelectSchool, journey, selectedSchoolId]);
+  }, [schools, map, onSelectSchool, showSchoolMarkers, selectedSchoolId]);
 
-  // Render diagnostics only in school-first journey
-  if (journey !== 'school-first') {
+  // Render diagnostics (loading / error / empty overlays) only in school-first
+  // journey. When markers are hidden entirely (showSchoolMarkers=false) there is
+  // nothing to render either. The area-first sub-step shows markers but no
+  // diagnostic overlays (those remain school-first-only by design).
+  if (!showSchoolMarkers || journey !== 'school-first') {
     return null;
   }
 

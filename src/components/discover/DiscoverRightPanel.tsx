@@ -59,6 +59,11 @@ export interface DiscoverRightPanelProps {
   /** Called when the user selects a school from the school-browse panel. */
   onSelectSchool?: (schoolId: string) => void;
   /**
+   * Called when the user clicks "Add a school in this area" in the area-selected panel
+   * (Issue #1157). Enters the area-first school-picking sub-step without flipping the journey.
+   */
+  onAddSchool?: () => void;
+  /**
    * Active context chips (area, school, type, BHK, price) passed to PanelHeader
    * for the area-selected state. Omitted for read-only panels.
    */
@@ -132,6 +137,7 @@ export function DiscoverRightPanel({
   discoverAreas = [],
   onSelectAreaKey,
   onSelectSchool,
+  onAddSchool,
   activeContextChips,
   filters = {},
   onFiltersChange,
@@ -233,6 +239,7 @@ export function DiscoverRightPanel({
             filters={filters}
             onFiltersChange={onFiltersChange}
             onSelectJourney={onSelectJourney}
+            onAddSchool={onAddSchool}
           />
         );
 
@@ -263,6 +270,11 @@ export function DiscoverRightPanel({
             journey={journey}
             schools={schools}
             schoolsLoading={schoolsLoading}
+            // Journey gate (Issue #1157): only the area-first journey delegates
+            // school selection to the parent (handleSelectSchoolById → area-school-combined).
+            // For school-first, `derivePanelContent` also yields 'schools-in-area', but the
+            // panel MUST keep its internal setSchoolJourney path — so pass undefined there.
+            onSelectSchool={journey === 'area-first' ? onSelectSchool : undefined}
             areaListings={areaListings}
             isLoadingAreaListings={isLoadingListings}
             isAuthenticated={isAuthenticated}

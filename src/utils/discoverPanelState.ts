@@ -43,7 +43,7 @@ export type DiscoverPanelContent =
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
-  const { journey, areaKey, schoolId, groupId } = urlState;
+  const { journey, areaKey, schoolId, groupId, schoolPicking } = urlState;
 
   if (journey === 'school-first') {
     if (areaKey && schoolId) {
@@ -61,6 +61,13 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   if (journey === 'area-first') {
     if (areaKey && schoolId) {
       return 'area-school-combined';
+    }
+    // Issue #1157 — area-first "add a school in this area" sub-step. The transient
+    // schoolPicking marker shows the schools-in-area panel WITHOUT flipping journey.
+    // Guarded by !schoolId and placed after the area-school-combined check so schoolId
+    // always wins precedence (selecting a school routes to area-school-combined).
+    if (areaKey && schoolPicking && !schoolId) {
+      return 'schools-in-area';
     }
     if (areaKey) {
       return 'area-selected';

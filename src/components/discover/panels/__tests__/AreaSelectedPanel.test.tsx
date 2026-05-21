@@ -33,6 +33,7 @@ describe('AreaSelectedPanel', () => {
       filters: {},
       onFiltersChange: vi.fn(),
       onSelectJourney: vi.fn(),
+      onAddSchool: vi.fn(),
     };
 
     render(
@@ -91,11 +92,16 @@ describe('AreaSelectedPanel', () => {
       expect(screen.getByTestId('add-school-cta')).toBeInTheDocument();
     });
 
-    it('calls onSelectJourney with school-first on CTA click', () => {
+    // Issue #1157 — the CTA enters the area-first school-picking sub-step via
+    // onAddSchool (which keeps journey=area-first), NOT onSelectJourney('school-first')
+    // (which flipped the journey and made Back delete the area).
+    it('calls onAddSchool (not onSelectJourney) on CTA click', () => {
+      const onAddSchool = vi.fn();
       const onSelectJourney = vi.fn();
-      renderPanel({ onSelectJourney });
+      renderPanel({ onAddSchool, onSelectJourney });
       fireEvent.click(screen.getByTestId('add-school-cta'));
-      expect(onSelectJourney).toHaveBeenCalledWith('school-first');
+      expect(onAddSchool).toHaveBeenCalledTimes(1);
+      expect(onSelectJourney).not.toHaveBeenCalled();
     });
   });
 

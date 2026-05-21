@@ -100,6 +100,13 @@ export interface DiscoverUrlState {
   journey: DiscoverJourney | null;
   /** Selected area-group slug for area-first journey. Null when no group is selected. */
   groupId: string | null;
+  /**
+   * Transient marker for the area-first "add a school in this area" sub-step (Issue #1157).
+   * When true (URL `schoolPicking=1`), the area-first journey shows the schools-in-area panel
+   * WITHOUT flipping journey to school-first, so browser/in-app Back returns to area-selected.
+   * Matches the bom/ntm/rera/rtm presence-flag read style (`=== '1' ? true : undefined`).
+   */
+  schoolPicking?: boolean;
 }
 
 export interface DiscoverUrlActions {
@@ -181,6 +188,26 @@ export interface DiscoverUrlActions {
   clearSchoolContext: () => void;
   /** Start over — clears ALL URL state except city. Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport, and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/rtm/from/to) are dropped. Single REPLACE navigation. */
   startOver: () => void;
+  /**
+   * Enter the area-first school-picking sub-step (Issue #1157).
+   * Sets `schoolPicking=1` while keeping journey=area-first, areaKey, filters, and viewport.
+   * Single PUSH — a deliberate destination so browser Back returns to area-selected.
+   */
+  enterSchoolPicking: () => void;
+  /**
+   * Leave the area-first school-picking sub-step (Issue #1157).
+   * Deletes `schoolPicking`, keeping areaKey/journey/filters/viewport.
+   * Single REPLACE — symmetric with clearAreaSelection/clearSchoolSelection.
+   */
+  clearSchoolPicking: () => void;
+  /**
+   * Back from area-school-combined to the schools-in-area sub-step (Issue #1157
+   * rev-5 DEFECT B). Deletes schoolId + radiusKm and sets schoolPicking=1 in a
+   * single REPLACE. Preserves journey (area-first), areaKey, property/board/category
+   * filters, and viewport. Models enterSchoolPicking/clearSchoolPicking. Local school
+   * state (selectedSchool + filters.schoolLat/Lon/RadiusKm) is cleared by the caller.
+   */
+  backToSchoolPicking: () => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
@@ -394,6 +421,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
 
   const groupId = urlParams.get('groupId');
 
+  // Issue #1157 — transient area-first school-picking marker. Same presence-flag
+  // read style as the bom/ntm/rera/rtm filter flags above.
+  const schoolPicking = urlParams.get('schoolPicking') === '1' ? true : undefined;
+
   const state: DiscoverUrlState = {
     city,
     areaKey,
@@ -404,6 +435,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     q,
     journey,
     groupId,
+    schoolPicking,
   };
 
   // ─── Actions ─────────────────────────────────────────────────────────────
@@ -536,6 +568,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           if (params) {
             next.set('schoolId', params.schoolId);
             next.set('radiusKm', String(Math.round(params.radiusKm)));
+            // Issue #1157 — selecting a school ends the area-first school-picking
+            // sub-step. Drop the transient marker so the URL stays clean (the panel
+            // now routes to area-school-combined via schoolId precedence regardless).
+            next.delete('schoolPicking');
           } else {
             next.delete('schoolId');
             next.delete('radiusKm');
@@ -718,6 +754,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           if (resolvedAreaKey) {
             next.set('areaKey', resolvedAreaKey);
           }
+          // Issue #1157 — flipping to school-first ends the area-first school-picking
+          // sub-step. Drop the transient marker so it cannot linger in the URL after
+          // the journey changes (the marker is also inert once journey != area-first).
+          next.delete('schoolPicking');
           return next;
         },
         { replace: false }, // PUSH — school-first journey is a major navigation destination
@@ -839,6 +879,52 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     );
   }, [setUrlParams]);
 
+  const enterSchoolPicking = useCallback(() => {
+    // Issue #1157 — area-first "add a school in this area" sub-step.
+    // Set schoolPicking=1 while preserving journey (area-first), areaKey, filters,
+    // and viewport. PUSH so browser Back returns to the area-selected panel.
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('schoolPicking', '1');
+        return next;
+      },
+      { replace: false }, // PUSH — deliberate destination; Back returns to area-selected
+    );
+  }, [setUrlParams]);
+
+  const clearSchoolPicking = useCallback(() => {
+    // Issue #1157 — leave the area-first school-picking sub-step.
+    // Remove schoolPicking only; preserve areaKey, journey, filters, and viewport.
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('schoolPicking');
+        return next;
+      },
+      { replace: true }, // REPLACE — symmetric with clearAreaSelection/clearSchoolSelection
+    );
+  }, [setUrlParams]);
+
+  const backToSchoolPicking = useCallback(() => {
+    // Issue #1157 rev-5 DEFECT B — Back from area-school-combined to schools-in-area.
+    // Drop the selected school (schoolId + radiusKm) and re-arm the schoolPicking
+    // sub-step marker so the panel routes back to schools-in-area without flipping
+    // journey. Single REPLACE — symmetric with enterSchoolPicking/clearSchoolPicking.
+    // journey, areaKey, and all filters/viewport are preserved (only the school
+    // selection is undone).
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('schoolId');
+        next.delete('radiusKm');
+        next.set('schoolPicking', '1');
+        return next;
+      },
+      { replace: true }, // REPLACE — not a new navigation destination
+    );
+  }, [setUrlParams]);
+
   const actions: DiscoverUrlActions = {
     changeCity,
     setCity,
@@ -859,6 +945,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     startOver,
     clearSchoolSelection,
     clearAreaSelection,
+    enterSchoolPicking,
+    clearSchoolPicking,
+    backToSchoolPicking,
   };
 
   return [state, actions];

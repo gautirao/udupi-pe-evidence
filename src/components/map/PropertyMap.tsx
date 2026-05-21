@@ -174,10 +174,19 @@ interface PropertyMapProps {
    */
   selectedSchool?: SchoolResult | null;
   /**
-   * Schools to display as markers on the map. Only rendered when
-   * journey === 'school-first'. Supplied by MapDiscovery from useSchoolsByArea.
+   * Schools to display as markers on the map. Supplied by MapDiscovery from
+   * useSchoolsByArea. Whether they actually render is gated by `showSchoolMarkers`.
    */
   schools?: SchoolResult[];
+  /**
+   * Issue #1157 rev-5 DEFECT A — master gate for mounting SchoolMarkerLayer.
+   * MapDiscovery computes it as
+   * `journey === 'school-first' || schoolPicking || (journey === 'area-first' && areaKey && schoolId)`
+   * so school markers appear in the area-first school-picking sub-step and the
+   * area-school-combined state. school-first's value is unchanged (the OR's first
+   * term), so school-first marker rendering is byte-for-byte identical.
+   */
+  showSchoolMarkers?: boolean;
   /**
    * Called when a school marker is clicked. Should update URL with schoolId + radiusKm.
    */
@@ -821,6 +830,7 @@ export function PropertyMap({
   journey,
   selectedSchool,
   schools = [],
+  showSchoolMarkers = false,
   onSelectSchool,
   schoolsIsLoading = false,
   schoolsIsError = false,
@@ -905,10 +915,11 @@ export function PropertyMap({
             selectedSchool={selectedSchool}
           />
         )}
-        {journey === 'school-first' && (
+        {showSchoolMarkers && (
           <SchoolMarkerLayer
             schools={schools}
             onSelectSchool={onSelectSchool}
+            showSchoolMarkers={showSchoolMarkers}
             journey={journey}
             isLoading={schoolsIsLoading}
             isError={schoolsIsError}

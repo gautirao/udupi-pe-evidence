@@ -467,8 +467,20 @@ export default function MapDiscovery() {
     [urlState.filters.boardFilters],
   );
 
+  // Issue #1157 Option (i) — the schools query must fire for the area-first
+  // "add a school in this area" sub-step too, not only school-first. Without this
+  // the area-first SchoolsInAreaPanel renders 0 schools even though school-first
+  // shows the area's full set for the same areaKey. The school-first branch stays
+  // FIRST and byte-identical; the area-first branch is gated on schoolPicking so the
+  // query only runs while the sub-step is active.
+  const schoolsAreaKey =
+    urlState.journey === 'school-first'
+      ? (urlState.areaKey ?? undefined)
+      : urlState.journey === 'area-first' && urlState.schoolPicking
+        ? (urlState.areaKey ?? undefined)
+        : undefined;
   const schoolsQuery = useSchoolsByArea(
-    urlState.journey === 'school-first' ? (urlState.areaKey ?? undefined) : undefined,
+    schoolsAreaKey,
     urlBoardFilters,
     urlState.filters.categoryFilters ?? [],
     20,
@@ -828,6 +840,53 @@ export default function MapDiscovery() {
     setSelectedArea(null);
   }, [urlActions, setSelectedArea]);
 
+  // Issue #1157 rev-5 DEFECT A — gate for mounting the school-marker layer.
+  // school-first keeps markers (first OR term, value unchanged → byte-for-byte
+  // identical school-first rendering). Additionally surface markers in the
+  // area-first school-picking sub-step (schoolPicking) and in area-school-combined
+  // (area-first + areaKey + schoolId), so the area-first flow shows both school
+  // CARDS and map MARKERS. Reuses the schools[] already passed to PropertyMap —
+  // no extra fetch.
+  const showSchoolMarkers =
+    urlState.journey === 'school-first' ||
+    !!urlState.schoolPicking ||
+    (urlState.journey === 'area-first' && !!urlState.areaKey && !!urlState.schoolId);
+
+  // Issue #1157 — area-first Back wrapper. Ordering is significant (DEFECT B):
+  //   1. schoolId set (area-school-combined) → backToSchoolPicking: drop schoolId +
+  //      radiusKm, set schoolPicking=1, AND clear local school state (mirrors
+  //      onClearSchool) so the radius circle + selected marker actually unmount and
+  //      the area's schools-in-area markers reappear. journey/areaKey preserved.
+  //   2. schoolPicking set (no schoolId) → clearSchoolPicking: return to area-selected.
+  //   3. otherwise → canonical handleAreaBack (area dismissal). handleAreaBack is NOT
+  //      modified.
+  // schoolId is checked FIRST so combined → Back lands on schools-in-area, not
+  // area-selected (the rev-4 ladder skipped this rung and fell through to area
+  // dismissal without clearing the school).
+  const handleAreaFirstBack = useCallback(() => {
+    if (urlState.schoolId) {
+      // URL: drop schoolId + radiusKm, set schoolPicking=1 (single REPLACE).
+      urlActions.backToSchoolPicking();
+      // Local cleanup (modelled on onClearSchool): without this the cold-load/restore
+      // effect would re-inject selectedSchool from a lingering urlSchoolId and the
+      // schoolCircle (keyed off local selectedSchool + filters.schoolLat/Lon) would
+      // stay drawn. After the REPLACE removes schoolId the restore effect is inert,
+      // but the local clear must happen in the same handler.
+      setSelectedSchool(null);
+      setFilters((prev) => {
+        const next = { ...prev };
+        delete next.schoolLat;
+        delete next.schoolLon;
+        delete next.schoolRadiusKm;
+        return next;
+      });
+    } else if (urlState.schoolPicking) {
+      urlActions.clearSchoolPicking();
+    } else {
+      handleAreaBack();
+    }
+  }, [urlState.schoolId, urlState.schoolPicking, urlActions, handleAreaBack, setSelectedSchool, setFilters]);
+
   // Delayed-show spinner: only show after 200 ms to prevent flicker on fast loads.
   useEffect(() => {
     if (!isLoading) { setShowLoader(false); return; }
@@ -1171,6 +1230,7 @@ export default function MapDiscovery() {
               journey={urlState.journey}
               selectedSchool={selectedSchool}
               schools={schools}
+              showSchoolMarkers={showSchoolMarkers}
               onSelectSchool={handleSelectSchoolById}
               schoolsIsLoading={schoolsQuery.isLoading}
               schoolsIsError={schoolsQuery.isError}
@@ -1266,7 +1326,7 @@ export default function MapDiscovery() {
           // schoolFirstOnBack is undefined when panelContent is not 'school-browse' or
           // 'school-selected' (i.e. Level 0), so Back correctly hides at Level 0.
           // 'school-selected' panelContent is only reachable in the school-first journey.
-          onBack={urlState.journey === 'school-first' ? schoolFirstOnBack : handleAreaBack}
+          onBack={urlState.journey === 'school-first' ? schoolFirstOnBack : handleAreaFirstBack}
           onStartOver={handleStartOver}
           isLoadingAreas={areasLoading}
           urlAreaKey={urlState.areaKey}
@@ -1290,6 +1350,7 @@ export default function MapDiscovery() {
             }
           }}
           onSelectSchool={handleSelectSchoolById}
+          onAddSchool={urlActions.enterSchoolPicking}
           filtersContent={filtersContent}
           trendsHref={trendsHref}
           isFetching={isFetching}

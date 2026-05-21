@@ -37,6 +37,16 @@ interface SchoolsInAreaPanelProps {
    * and `schoolsError` is true. When omitted, the Retry button is a no-op in prop mode.
    */
   onSchoolsRetry?: () => void;
+  /**
+   * Issue #1157 Option (i) — area-first select handler. When provided (area-first
+   * school-picking sub-step), clicking a school card calls this with the school id
+   * instead of the internal setSchoolJourney path. The parent
+   * (MapDiscovery.handleSelectSchoolById) calls setSchoolParams, which sets schoolId +
+   * drops schoolPicking WITHOUT flipping journey → area-school-combined.
+   * When omitted (school-first), the existing internal setSchoolJourney path runs
+   * unchanged (journey flips to school-first). Exactly one path runs per click.
+   */
+  onSelectSchool?: (schoolId: string) => void;
   /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
   activeContextChips?: React.ReactNode;
 }
@@ -48,7 +58,7 @@ const CATEGORY_OPTIONS = [
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, activeContextChips }: SchoolsInAreaPanelProps) {
+export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, onSelectSchool, activeContextChips }: SchoolsInAreaPanelProps) {
   const [urlState, urlActions] = useDiscoverUrlState();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
@@ -130,6 +140,13 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
   // writes journey='school-first', lat/lon/zoom, and resolves areaKey via
   // (1) school.areaKey or (2) bbox containment fallback against the cached areas.
   const handleSelectSchool = (school: SchoolResult) => {
+    // Issue #1157 Option (i): area-first sub-step delegates to the parent, which sets
+    // schoolId + drops schoolPicking WITHOUT flipping journey → area-school-combined.
+    // Branch cleanly — never run both this and the internal setSchoolJourney path.
+    if (onSelectSchool) {
+      onSelectSchool(school.id);
+      return;
+    }
     urlActions.setSchoolJourney({
       schoolId: school.id,
       radiusKm: DEFAULT_SCHOOL_RADIUS_KM,
