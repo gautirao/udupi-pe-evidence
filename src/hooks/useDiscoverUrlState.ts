@@ -179,11 +179,7 @@ export interface DiscoverUrlActions {
    * Returns user to filtered schools-in-area context after dismissing a school selection.
    */
   clearSchoolContext: () => void;
-  /**
-   * Start over — clears journey, groupId, areaKey, schoolId, radiusKm, board, category, q,
-   * and viewport. Preserves city and property filters (type, beds, price, seller, booleans,
-   * dates). Single REPLACE — does not push a history entry.
-   */
+  /** Start over — clears ALL URL state except city. Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport, and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/rtm/from/to) are dropped. Single REPLACE navigation. */
   startOver: () => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
@@ -827,18 +823,16 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     }
     setUrlParams(
       (prev) => {
-        // Preserve city and all property filter params; clear everything else.
+        // Preserve city only — all property filters, journey context, area/school
+        // selection, and viewport are cleared. Preserving filters while the chip
+        // strip is invisible (guided-entry has no ActiveContextChips) would silently
+        // pre-filter results for the next area the user selects (Issue #1153).
         const next = new URLSearchParams();
         const cityVal = prev.get('city');
         if (cityVal) next.set('city', cityVal);
-        // Preserve property filters
-        const filterParams = ['type', 'beds', 'priceMin', 'priceMax', 'seller', 'bom', 'ntm', 'rera', 'rtm', 'from', 'to'] as const;
-        for (const key of filterParams) {
-          const val = prev.get(key);
-          if (val) next.set(key, val);
-        }
-        // Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport are
-        // intentionally omitted — they do not survive Start Over.
+        // Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport,
+        // and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/
+        // rtm/from/to) are intentionally omitted — nothing survives Start Over except city.
         return next;
       },
       { replace: true }, // REPLACE — start over is not a navigation destination

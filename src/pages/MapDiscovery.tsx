@@ -325,13 +325,10 @@ export default function MapDiscovery() {
     setSelectedSchool(null);
     setSelectedArea(null);
     setPanToArea(null);
-    setFilters((prev) => {
-      const next = { ...prev };
-      delete next.schoolLat;
-      delete next.schoolLon;
-      delete next.schoolRadiusKm;
-      return next;
-    });
+    // Issue #1153 — clear ALL local filter state, not just school params.
+    // The previous partial-delete left bedrooms/propertyTypes/etc in local state,
+    // causing ActiveContextChips to keep rendering stale chips after Start Over.
+    setFilters({});
     setSchoolBoardFilter([]);
   }, [urlActions, setSelectedSchool, setSelectedArea, setPanToArea, setFilters, setSchoolBoardFilter]);
 

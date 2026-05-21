@@ -28,11 +28,16 @@ import { useDiscoverUrlState } from '../useDiscoverUrlState';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function wrapper(initialUrl: string) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(
-      MemoryRouter,
-      { initialEntries: [initialUrl] },
-      children,
+      QueryClientProvider,
+      { client: queryClient },
+      React.createElement(
+        MemoryRouter,
+        { initialEntries: [initialUrl] },
+        children,
+      ),
     );
   };
 }
@@ -995,7 +1000,8 @@ describe('useDiscoverUrlState — startOver', () => {
     expect(result.current[0].city).toBe('bangalore');
   });
 
-  it('preserves property filters (type, beds, price, seller, booleans, dates) after startOver', () => {
+  // AC1 + AC3: all property filters are cleared; URL contains only city
+  it('clears all property filters (type, beds, price, seller, booleans, dates) after startOver', () => {
     const { result } = renderHook(() => useDiscoverUrlState(), {
       wrapper: wrapper(
         '/discover?city=bangalore&journey=area-first&type=house&beds=2,3&priceMin=1000000&priceMax=5000000&seller=owner,broker&bom=1&ntm=1&rera=1&rtm=1&from=2025-01-01&to=2025-12-31',
@@ -1007,17 +1013,72 @@ describe('useDiscoverUrlState — startOver', () => {
     });
 
     const { filters } = result.current[0];
-    expect(filters.propertyTypes).toEqual(['house']);
-    expect(filters.bedrooms).toEqual([2, 3]);
-    expect(filters.priceMin).toBe(1000000);
-    expect(filters.priceMax).toBe(5000000);
-    expect(filters.sellerTypes).toEqual(['owner', 'broker']);
-    expect(filters.backOnMarket).toBe(true);
-    expect(filters.newToMarket).toBe(true);
-    expect(filters.reraRegistered).toBe(true);
-    expect(filters.readyToMove).toBe(true);
-    expect(filters.dateFrom).toBe('2025-01-01');
-    expect(filters.dateTo).toBe('2025-12-31');
+    expect(filters.propertyTypes).toBeUndefined();
+    expect(filters.bedrooms).toBeUndefined();
+    expect(filters.priceMin).toBeUndefined();
+    expect(filters.priceMax).toBeUndefined();
+    expect(filters.sellerTypes).toBeUndefined();
+    expect(filters.backOnMarket).toBeUndefined();
+    expect(filters.newToMarket).toBeUndefined();
+    expect(filters.reraRegistered).toBeUndefined();
+    expect(filters.readyToMove).toBeUndefined();
+    expect(filters.dateFrom).toBeUndefined();
+    expect(filters.dateTo).toBeUndefined();
+  });
+
+  // AC3: after startOver URL state contains only city — no stale params
+  it('produces URL state with only city after startOver (AC3)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=bangalore&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal&type=house&beds=2&priceMin=500000&bom=1&lat=13.34&lon=74.74&zoom=12',
+      ),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    const state = result.current[0];
+    // Only city survives
+    expect(state.city).toBe('bangalore');
+    expect(state.journey).toBeNull();
+    expect(state.areaKey).toBeNull();
+    expect(state.viewport).toBeNull();
+    expect(state.filters.propertyTypes).toBeUndefined();
+    expect(state.filters.bedrooms).toBeUndefined();
+    expect(state.filters.priceMin).toBeUndefined();
+    expect(state.filters.backOnMarket).toBeUndefined();
+  });
+
+  // AC2: consistent behaviour from school-first starting state
+  it('clears all property filters and school context from school-first journey (AC2)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=school-first&schoolId=school-xyz&radiusKm=3&areaKey=IN%7CKA%7CUdupi%7CManipal&type=apartment&beds=3&priceMax=8000000&seller=broker&bom=1&ntm=1&rera=1&rtm=1&from=2025-06-01&to=2025-12-31',
+      ),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    const state = result.current[0];
+    expect(state.city).toBe('udupi');
+    expect(state.journey).toBeNull();
+    expect(state.schoolId).toBeNull();
+    expect(state.radiusKm).toBeNull();
+    expect(state.areaKey).toBeNull();
+    const { filters } = state;
+    expect(filters.propertyTypes).toBeUndefined();
+    expect(filters.bedrooms).toBeUndefined();
+    expect(filters.priceMax).toBeUndefined();
+    expect(filters.sellerTypes).toBeUndefined();
+    expect(filters.reraRegistered).toBeUndefined();
+    expect(filters.readyToMove).toBeUndefined();
+    expect(filters.backOnMarket).toBeUndefined();
+    expect(filters.newToMarket).toBeUndefined();
+    expect(filters.dateFrom).toBeUndefined();
+    expect(filters.dateTo).toBeUndefined();
   });
 
   it('clears viewport (lat, lon, zoom) after startOver', () => {
