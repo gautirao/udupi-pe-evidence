@@ -21,6 +21,15 @@ export function MapEmptyGuidance({
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
+  // When a school radius filter is active the right panel (SchoolSelectedPanel)
+  // owns the empty state entirely. Suppress any map-level guidance to avoid
+  // contradicting or duplicating the school-scoped message. AC1 + AC2.
+  const hasSchoolContext =
+    filters.schoolRadiusKm != null &&
+    filters.schoolLat != null &&
+    filters.schoolLon != null;
+  if (hasSchoolContext) return null;
+
   const cityLabel = CITY_CONFIG[city]?.label ?? city;
   const hasLocalities = (filters.localities?.length ?? 0) > 0;
 
