@@ -72,6 +72,28 @@ export interface DiscoverBadgeInput {
   isLoadingAreaListings: boolean;
   cityTotal: number;
   areaListings?: ReadonlyArray<unknown> | null;
+  /**
+   * Issue #1175 v2 — the already-computed count of listings that fall within
+   * the active school-radius proximity filter.
+   *
+   * - `number`  → school-radius is active and resolved: badge shows this count
+   *               (may be 0, meaning "0 properties within N km").
+   * - `null`    → school-radius is active but listings are still loading:
+   *               badge is hidden temporarily to avoid a flash of stale counts.
+   * - `undefined` → no school-radius context: fall through to existing
+   *                 area/city/filter paths (#1152 behaviour unchanged).
+   */
+  schoolListingsCount?: number | null;
+  /**
+   * Issue #1175 v3 — the sum of listingCount across all member areas of the
+   * active group, when groupId is set but no area or school is selected.
+   * Precedence: school > area > group > city.
+   *
+   * - `number`    → group metadata loaded: badge shows group aggregate (may be 0).
+   * - `null`      → group metadata still loading: badge hidden temporarily.
+   * - `undefined` → no group context active: fall through to city total.
+   */
+  groupListingsCount?: number | null;
 }
 
 export interface DiscoverBadgeResult {
@@ -86,7 +108,26 @@ export function deriveDiscoverBadge({
   isLoadingAreaListings,
   cityTotal,
   areaListings,
+  schoolListingsCount,
+  groupListingsCount,
 }: DiscoverBadgeInput): DiscoverBadgeResult {
+  // Issue #1175 v2 — school-radius context: badge follows the active count.
+  //
+  // schoolListingsCount is set (not undefined) when a school-radius filter is active:
+  //   • null    → listings are still loading → hide badge temporarily (avoids stale flash)
+  //   • number  → resolved count (0 or N) → show it directly so badge stays truthful
+  //
+  // Showing 0 is intentional: it matches "No properties found within N km" in the right
+  // panel rather than contradicting it with an unrelated area/city total.
+  if (schoolListingsCount !== undefined) {
+    if (schoolListingsCount === null) {
+      // Still loading — hide temporarily rather than flash a stale number.
+      return { visible: false, count: null, loading: true };
+    }
+    // Resolved (0 or N): show the scoped count.
+    return { visible: true, count: schoolListingsCount, loading: false };
+  }
+
   // Compute hasPropertyFilters once — used by both the area branch and the no-area branch.
   const hasPropertyFilters =
     (filters.propertyTypes?.length ?? 0) > 0 ||
@@ -130,6 +171,16 @@ export function deriveDiscoverBadge({
   if (hasPropertyFilters) {
     // Filtered count is auth-gated and unreliable — hide to avoid AC4 contradiction.
     return { visible: false, count: null, loading: false };
+  }
+
+  // Issue #1175 v3 — group context (precedence: below school/area, above city).
+  // groupListingsCount is set (not undefined) when a groupId is active and no area/school
+  // is selected. null = group metadata still loading; number = resolved aggregate (0 or N).
+  if (groupListingsCount !== undefined) {
+    if (groupListingsCount === null) {
+      return { visible: false, count: null, loading: true };
+    }
+    return { visible: true, count: groupListingsCount, loading: false };
   }
 
   // Baseline city total (AC3)
@@ -538,17 +589,6 @@ export default function MapDiscovery() {
     [discoverAreas],
   );
 
-  // Issue #1152 — derive the correct badge count given area/filter/loading context.
-  // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
-  // Cycle 7: areaListings re-added (Option B). areaListings comes from useDiscoverCityListings
-  // which already applies bedrooms/propertyType/price at the backend, so its .length matches
-  // the right panel exactly — satisfying AC4. The Cycle 3 failure was a test-side bug
-  // (?bedrooms= vs ?beds= URL param); that URL contract is fixed in Cycle 5/6.
-  const discoverBadge = useMemo(
-    () => deriveDiscoverBadge({ selectedArea, filters, isLoadingAreaListings, cityTotal, areaListings }),
-    [selectedArea, filters, isLoadingAreaListings, cityTotal, areaListings],
-  );
-
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
   // set when schoolLat/Lon/RadiusKm filters are active.
@@ -558,6 +598,9 @@ export default function MapDiscovery() {
   // Fall back to areaListings (from the public /api/discover/cities/{city}/listings
   // endpoint) so SchoolSelectedPanel cards are populated with full listing data.
   // areaListings is already typed as DiscoverCityListingItem[] — no mapping needed.
+  //
+  // Issue #1175 v2 — schoolListings is declared BEFORE discoverBadge so its .length
+  // can be passed as schoolListingsCount into deriveDiscoverBadge without a second scan.
   const schoolListings = useMemo(
     (): DiscoverCityListingItem[] => {
       if (!isAuthenticated) {
@@ -604,6 +647,71 @@ export default function MapDiscovery() {
       }));
     },
     [isAuthenticated, areaListings, filteredListings, filters],
+  );
+
+  // Issue #1175 v3 — focusedGroup is needed by the badge before the group-map behaviour
+  // block (line ~920) so it is declared here. It depends only on urlState.groupId and
+  // areaGroupsData, both available at this point. The group-map block below re-reads the
+  // same expression via focusedGroupAreas (derived from focusedGroup).
+  const focusedGroup = urlState.groupId
+    ? (areaGroupsData?.groups ?? []).find((g) => g.id === urlState.groupId) ?? null
+    : null;
+
+  // Issue #1175 v3 — group aggregate count for the badge.
+  // Only active when groupId is set and no area/school is selected (those take precedence).
+  // null  = group metadata still loading (isLoadingAreaGroups=true).
+  // O(k) where k = member area count (bounded, typically 2–6).
+  const groupListingsCount = useMemo((): number | null | undefined => {
+    if (!urlState.groupId) return undefined;          // no group active
+    if (!focusedGroup) return null;                   // null when areaGroupsData still loading OR when groupId no longer exists — both intentionally hide the badge
+    // Use a Set for O(1) membership checks → overall O(N + k) not O(N·k)
+    const memberKeySet = new Set(focusedGroup.area_keys);
+    return discoverAreas
+      .filter((a) => memberKeySet.has(a.areaKey))
+      .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
+  }, [urlState.groupId, focusedGroup, discoverAreas]);
+
+  // Issue #1152 — derive the correct badge count given area/filter/loading context.
+  // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
+  // Cycle 7: areaListings re-added (Option B). areaListings comes from useDiscoverCityListings
+  // which already applies bedrooms/propertyType/price at the backend, so its .length matches
+  // the right panel exactly — satisfying AC4. The Cycle 3 failure was a test-side bug
+  // (?bedrooms= vs ?beds= URL param); that URL contract is fixed in Cycle 5/6.
+  // Issue #1175 v2 — schoolListingsCount carries the already-computed schoolListings.length
+  // so badge follows the active school-radius count instead of being suppressed.
+  // When school-radius is active but area listings are still loading, null is passed to
+  // hide the badge temporarily (avoids flashing a stale area/city total).
+  const schoolRadiusActive =
+    filters.schoolLat != null && filters.schoolLon != null && filters.schoolRadiusKm != null;
+  const discoverBadge = useMemo(
+    () =>
+      deriveDiscoverBadge({
+        selectedArea,
+        filters,
+        isLoadingAreaListings,
+        cityTotal,
+        areaListings,
+        schoolListingsCount: schoolRadiusActive
+          // Issue #1175 v2 corrective: on the auth path, filteredListings comes from
+          // useDiscoverListings (backend proximity query), not from useDiscoverCityListings.
+          // isLoadingAreaListings only tracks the public city-listings query and can be false
+          // while the backend proximity query is still in-flight (listingDataLoading=true),
+          // which would cause schoolListings.length to return 0 from an empty filteredListings
+          // and the badge would briefly show "0 properties" instead of hiding.
+          // Fix: also hide when the auth-path listing query is in-flight.
+          ? (isLoadingAreaListings || (isAuthenticated && listingDataLoading))
+            ? null
+            : schoolListings.length
+          : undefined,
+        groupListingsCount,
+      }),
+    // schoolListings.length is a number primitive — safe dep (no spurious identity changes).
+    // schoolRadiusActive is derived from filters (already a dep), but listed explicitly for clarity.
+    // listingDataLoading added for auth-path loading guard (Issue #1175 v2 corrective).
+    // groupListingsCount: derived from focusedGroup + discoverAreas — listed as a primitive
+    // (number | null | undefined) so it is safe to use directly as a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount],
   );
 
   // Issue #1160 GAP 1 — listingsReadyKey: a stable primitive string that changes only when
@@ -838,10 +946,9 @@ export default function MapDiscovery() {
   // fitBounds is triggered by calling setPanToArea with a synthetic AreaPoint whose
   // bbox is the union of all member areas' bboxes. This reuses PropertyMap's existing
   // AreaPanner effect (the F7 debounce) with zero new fitBounds machinery.
-
-  const focusedGroup = urlState.groupId
-    ? (areaGroupsData?.groups ?? []).find((g) => g.id === urlState.groupId) ?? null
-    : null;
+  //
+  // NOTE: focusedGroup is declared earlier (before discoverBadge) so it can be used
+  // for the groupListingsCount badge computation. Do not redeclare it here.
 
   const focusedGroupAreas = useMemo(
     () => focusedGroup?.area_keys,
