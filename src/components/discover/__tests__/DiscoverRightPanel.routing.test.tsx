@@ -9,6 +9,7 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
+import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
@@ -348,6 +349,47 @@ describe('DiscoverRightPanel — state machine routing', () => {
       <DiscoverRightPanel {...baseProps} panelContent="guided-entry" />,
     );
     expect(screen.getByTestId('discover-right-panel')).toBeInTheDocument();
+  });
+});
+
+describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)', () => {
+  it('derivePanelContent routes groupId-only deep-link to area-groups-landing', () => {
+    // Validates the derivation path: groupId present, journey absent → area-groups-landing
+    const panelContent = derivePanelContent({
+      city: 'udupi',
+      areaKey: null,
+      schoolId: null,
+      groupId: 'coastal-homes',
+      journey: null,
+      q: '',
+      radiusKm: null,
+      viewport: null,
+      filters: {},
+    });
+    expect(panelContent).toBe('area-groups-landing');
+  });
+
+  it('renders AreaGroupsLandingPanel when panelContent=area-groups-landing (groupId deep-link result)', () => {
+    // When derivePanelContent returns area-groups-landing for a groupId deep-link,
+    // the panel must render the landing panel (not guided-entry).
+    render(
+      <MemoryRouter>
+        <DiscoverRightPanel
+          areas={[]}
+          onStartOver={vi.fn()}
+          onSelectJourney={vi.fn()}
+          panelContent="area-groups-landing"
+          areaGroups={[]}
+          isLoadingAreaGroups={false}
+          onSelectGroup={vi.fn()}
+          discoverAreas={[]}
+          onSelectAreaKey={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('Select area')).toBeInTheDocument();
+    // Guided-entry headline must NOT appear — wrong panel
+    expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
   });
 });
 

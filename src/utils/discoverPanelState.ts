@@ -43,7 +43,7 @@ export type DiscoverPanelContent =
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
-  const { journey, areaKey, schoolId } = urlState;
+  const { journey, areaKey, schoolId, groupId } = urlState;
 
   if (journey === 'school-first') {
     if (areaKey && schoolId) {
@@ -83,6 +83,14 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   // This handles area-only cold-load URLs like /discover?city=udupi&areaKey=udupi-west
   if (areaKey) {
     return 'area-selected';
+  }
+
+  // Infer area-first journey when groupId is present without an explicit journey,
+  // areaKey, or schoolId. Handles deep-links like /discover?city=udupi&groupId=coastal-homes
+  // where the journey param was omitted. The panel renders group cards; groupId validity
+  // is not checked here (pure function — panel handles unknown groups gracefully).
+  if (groupId) {
+    return 'area-groups-landing';
   }
 
   return 'guided-entry';

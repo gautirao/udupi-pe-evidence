@@ -162,3 +162,51 @@ describe('derivePanelContent — precedence rules (regression + new inference)',
     ).toBe('area-school-combined');
   });
 });
+
+// ─── Issue #1154: groupId deep-link without journey ───────────────────────────
+
+describe('derivePanelContent — groupId deep-link inference (issue #1154)', () => {
+  // AC1: groupId present, journey absent, areaKey null, schoolId null → area-groups-landing
+  it('AC1: groupId set, journey null, areaKey null, schoolId null → area-groups-landing', () => {
+    expect(
+      derivePanelContent(makeState({ groupId: 'coastal-homes' })),
+    ).toBe('area-groups-landing');
+  });
+
+  // AC2 (regression guard): journey=area-first + groupId still → area-groups-landing
+  it('AC2: journey=area-first + groupId set, no areaKey → area-groups-landing', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'area-first', groupId: 'coastal-homes' })),
+    ).toBe('area-groups-landing');
+  });
+
+  // AC3: unknown/non-existent groupId, journey absent → area-groups-landing (no crash)
+  it('AC3: unknown groupId, journey null → area-groups-landing (no crash)', () => {
+    expect(
+      derivePanelContent(makeState({ groupId: 'non-existent-group' })),
+    ).toBe('area-groups-landing');
+  });
+
+  // R7 regression: groupId + areaKey + schoolId all set → area-school-combined (combined fires first)
+  it('R7: groupId + areaKey + schoolId set → area-school-combined (combined takes priority)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ groupId: 'coastal-homes', areaKey: 'udupi-west', schoolId: 'sch-1' }),
+      ),
+    ).toBe('area-school-combined');
+  });
+
+  // R4 regression: groupId + areaKey set, no schoolId → area-selected (areaKey takes priority)
+  it('R4: groupId + areaKey set, no schoolId → area-selected (areaKey takes priority)', () => {
+    expect(
+      derivePanelContent(makeState({ groupId: 'coastal-homes', areaKey: 'udupi-west' })),
+    ).toBe('area-selected');
+  });
+
+  // R3 regression: schoolId set, no journey, no groupId, no areaKey → school-selected
+  it('R3: schoolId set, no journey, no groupId, no areaKey → school-selected', () => {
+    expect(
+      derivePanelContent(makeState({ schoolId: 'sch-1' })),
+    ).toBe('school-selected');
+  });
+});
