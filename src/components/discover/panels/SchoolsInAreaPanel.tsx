@@ -5,6 +5,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 
@@ -173,7 +174,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
   };
 
   return (
-    <div className="flex flex-col h-full bg-white overflow-hidden">
+    <div className="flex flex-col h-full bg-background overflow-hidden">
       {/* Header */}
       <PanelHeader
         title={`Schools in ${areaLabel}`}
@@ -196,8 +197,8 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
               aria-pressed={isSelected}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 isSelected
-                  ? 'bg-primary text-white'
-                  : 'border border-gray-300 text-gray-700 hover:border-gray-400'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border text-foreground hover:bg-muted/50'
               }`}
             >
               {board}
@@ -218,8 +219,8 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
               aria-pressed={isSelected}
               className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                 isSelected
-                  ? 'bg-primary text-white'
-                  : 'border border-gray-300 text-gray-700 hover:border-gray-400'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-border text-foreground hover:bg-muted/50'
               }`}
             >
               {label}
@@ -249,14 +250,14 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                 key={school.id}
                 onClick={() => handleSelectSchool(school)}
                 data-testid="school-card"
-                className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 border border-purple-200 rounded-lg cursor-pointer hover:shadow-lg transition-shadow"
+                className="p-3 bg-card border border-border rounded-lg cursor-pointer hover:bg-muted/50 hover:shadow-md transition-all"
               >
                 <div className="flex gap-3">
-                  <GraduationCap className="w-6 h-6 text-white flex-shrink-0 mt-0.5" />
+                  <GraduationCap className="w-6 h-6 text-muted-foreground flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white truncate">{school.name}</h3>
-                    <p className="text-sm text-purple-100 truncate">{school.address}</p>
-                    <div className="text-xs text-purple-100 mt-1 flex gap-2 flex-wrap">
+                    <h3 className="font-semibold text-foreground truncate">{school.name}</h3>
+                    <p className="text-sm text-muted-foreground truncate">{school.address}</p>
+                    <div className="text-xs text-muted-foreground mt-1 flex gap-2 flex-wrap">
                       {(school.board || school.boardType) && (
                         <span>{school.board || school.boardType}</span>
                       )}
@@ -275,13 +276,15 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             ))}
 
             {hasNextPage && (
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="w-full mt-4 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm font-medium"
+                className="w-full mt-4"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load more schools'}
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -292,15 +295,15 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             data-testid="schools-error-state"
             className="flex flex-col items-center justify-center h-full px-6 py-12 text-center"
           >
-            <AlertTriangle className="w-12 h-12 text-red-400 mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900">Could not load schools</h3>
-            <p className="text-sm text-gray-600 mt-1 mb-6">
+            <AlertTriangle className="w-12 h-12 text-destructive mb-3" />
+            <h3 className="text-lg font-semibold text-foreground">Could not load schools</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-6">
               Please check your connection and try again.
             </p>
             <button
               onClick={handleRetry}
               data-testid="schools-error-retry"
-              className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 text-sm font-medium"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
             >
               Retry
             </button>
@@ -309,23 +312,23 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
 
         {schools.length === 0 && !isLoading && !isError && (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
-            <GraduationCap className="w-12 h-12 text-gray-300 mb-3" />
-            <h3 className="text-lg font-semibold text-gray-900">No schools found</h3>
-            <p className="text-sm text-gray-600 mt-1 mb-6">
+            <GraduationCap className="w-12 h-12 text-muted-foreground mb-3" />
+            <h3 className="text-lg font-semibold text-foreground">No schools found</h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-6">
               Try adjusting your filters or pick a different area
             </p>
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <button
                 onClick={handleClearFilters}
                 data-testid="empty-state-no-schools-clear-filters"
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                className="px-4 py-2 border border-border text-foreground rounded-lg hover:bg-muted/50 text-sm font-medium"
               >
                 Clear filters
               </button>
               <button
                 onClick={handlePickDifferentArea}
                 data-testid="empty-state-no-schools-pick-area"
-                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-opacity-90 text-sm font-medium"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
               >
                 Pick a different area
               </button>
