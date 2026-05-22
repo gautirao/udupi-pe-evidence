@@ -106,8 +106,11 @@ test('SEG-1: school context active with zero nearby listings → city-wide map b
   const url = `/discover?city=${CITY}&journey=school-first&schoolId=${SCHOOL_ID}&radiusKm=2`;
   await page.goto(url);
 
-  // Wait for the school panel to settle (active-radius-chip rendered by SchoolSelectedPanel).
-  await expect(page.getByTestId('active-radius-chip')).toBeVisible({ timeout: 10000 });
+  // Wait for the school panel to settle (the school-name heading is the stable signal
+  // that schoolById resolved and SchoolSelectedPanel mounted).
+  await expect(
+    page.getByRole('heading', { name: 'Empty Guidance Test School' }),
+  ).toBeVisible({ timeout: 10000 });
 
   // The city-wide banner must NOT be present.
   await expect(page.getByText(/No properties listed in/i)).not.toBeVisible();
@@ -120,8 +123,10 @@ test('SEG-2: school context active with zero nearby listings → right panel sho
   const url = `/discover?city=${CITY}&journey=school-first&schoolId=${SCHOOL_ID}&radiusKm=2`;
   await page.goto(url);
 
-  // Wait for school panel to mount.
-  await expect(page.getByTestId('active-radius-chip')).toBeVisible({ timeout: 10000 });
+  // Wait for school panel to mount (school-name heading is the stable signal).
+  await expect(
+    page.getByRole('heading', { name: 'Empty Guidance Test School' }),
+  ).toBeVisible({ timeout: 10000 });
 
   // Right panel must show the school-scoped empty state message.
   await expect(page.getByTestId('empty-state-message')).toBeVisible({ timeout: 5000 });
@@ -154,6 +159,8 @@ test('SEG-3: no school context + zero city listings → city-wide banner IS show
   // so we assert absence of school-scoped suppression indirectly: the right panel should NOT
   // show school empty-state.
   await expect(page.getByTestId('empty-state-message')).not.toBeVisible({ timeout: 5000 });
-  // And no school panel active-radius-chip should be present.
-  await expect(page.getByTestId('active-radius-chip')).not.toBeVisible();
+  // And no school-selected panel should be present (its school-name heading is absent).
+  await expect(
+    page.getByRole('heading', { name: 'Empty Guidance Test School' }),
+  ).not.toBeVisible();
 });

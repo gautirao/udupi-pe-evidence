@@ -120,11 +120,13 @@ test('DL-RAD-2: cold-load without radiusKm backfills radiusKm=3 into URL', async
   await page.waitForLoadState('networkidle');
 
   // Wait for the school panel to fully render (schoolById resolved + panel mounted).
-  // The active-radius-chip is rendered by SchoolSelectedPanel only after schoolById
-  // resolves and the restore effect fires — it is the earliest reliable signal that
-  // the backfill useEffect has run. This avoids a race where networkidle settles
-  // before the useEffect that writes radiusKm to the URL.
-  await expect(page.getByTestId('active-radius-chip')).toBeVisible({ timeout: 10000 });
+  // The school-name heading is rendered by SchoolSelectedPanel only after schoolById
+  // resolves — the same gate the restore effect depends on. It is the earliest reliable
+  // signal that the backfill useEffect has run. This avoids a race where networkidle
+  // settles before the useEffect that writes radiusKm to the URL.
+  await expect(
+    page.getByRole('heading', { name: 'Radius Test School' }),
+  ).toBeVisible({ timeout: 10000 });
 
   // The restore effect must backfill the default radius into the URL.
   await expect(page).toHaveURL(/radiusKm=3/, { timeout: 5000 });

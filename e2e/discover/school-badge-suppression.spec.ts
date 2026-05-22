@@ -158,8 +158,10 @@ test('SBS-1: school-radius active with zero nearby listings → badge IS visible
   const url = `/discover?city=${CITY}&journey=school-first&schoolId=${SCHOOL_ID}&radiusKm=2&lat=${SCHOOL_LAT}&lon=${SCHOOL_LON}&zoom=14`;
   await page.goto(url);
 
-  // Wait for the school panel to mount (active-radius-chip is the earliest stable signal)
-  await expect(page.getByTestId('active-radius-chip')).toBeVisible({ timeout: 10_000 });
+  // Wait for the school panel to mount (school-name heading is the stable signal)
+  await expect(
+    page.getByRole('heading', { name: 'Badge Context Test School' }),
+  ).toBeVisible({ timeout: 10_000 });
 
   // Badge MUST be visible — v2 shows scoped count rather than suppressing (Issue #1175)
   const badge = page.getByTestId('discover-badge');
@@ -184,8 +186,8 @@ test('SBS-2: school-radius active with 2 nearby listings → badge IS visible sh
   await page.goto(url);
 
   // Wait for the right panel and network to settle.
-  // With areaKey+schoolId, the panel is 'area-school-combined' (not 'school-selected'),
-  // so active-radius-chip is not present. Use networkidle + right-panel as the stable signal.
+  // With areaKey+schoolId, the panel is 'area-school-combined' (not 'school-selected').
+  // Use the right-panel mount + networkidle as the stable signal.
   await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 10_000 });
   await page.waitForLoadState('networkidle');
 
@@ -222,5 +224,8 @@ test('SBS-3: no school context + area with listings → badge IS shown with area
   expect(displayedCount).toBe(AREA_LISTING_COUNT);
 
   // No school panel elements should be present in the non-school path
-  await expect(page.getByTestId('active-radius-chip')).not.toBeVisible();
+  // (the school-selected panel's school-name heading is absent).
+  await expect(
+    page.getByRole('heading', { name: 'Badge Context Test School' }),
+  ).not.toBeVisible();
 });
