@@ -1309,6 +1309,10 @@ export default function MapDiscovery() {
           <MapEmptyGuidance
             cityTotal={cityTotal}
             filters={filters} city={city} isLoading={isLoading}
+            isAuthenticated={isAuthenticated}
+            mapZoom={mapZoom}
+            hasAreaSelected={!!selectedArea}
+            areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
           />
         </div>
 

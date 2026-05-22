@@ -1,11 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import React from 'react';
 import { MapEmptyGuidance } from '../MapEmptyGuidance';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 
 const emptyFilters: PropertyFilters = {};
 const filtersWithLocality: PropertyFilters = { localities: ['Manipal'] };
+
+// The new branch renders a react-router <Link>, so those cases must mount
+// inside a router. Legacy cases below render plain (no Link path) and stay green.
+const renderWithRouter = (ui: React.ReactElement) =>
+  render(<MemoryRouter>{ui}</MemoryRouter>);
 
 describe('MapEmptyGuidance', () => {
   it('renders nothing while loading', () => {
@@ -110,5 +116,119 @@ describe('MapEmptyGuidance', () => {
       <MapEmptyGuidance cityTotal={0} filters={filtersWithLocality} city="udupi" isLoading={false} />,
     );
     expect(screen.getByText(/No properties found in the selected areas/i)).toBeInTheDocument();
+  });
+
+  // --- Anonymous zoom-past-area prompt (#1156) ---
+
+  // Threshold passed via prop (areaLayerMaxZoom) — never hard-coded into the
+  // assertion logic, mirroring the production const AREA_LAYER_MAX_ZOOM.
+  const AREA_LAYER_MAX_ZOOM = 12;
+
+  it('#1156: anon + zoomed past threshold + no area + cityTotal > 0 → shows prompt with sign-in link and area-select affordance', () => {
+    renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    // Area-select affordance (instructional copy).
+    expect(screen.getByText(/Select an area to see properties/i)).toBeInTheDocument();
+    // Sign-in link points at the app's /auth?returnTo contract.
+    const signIn = screen.getByRole('link', { name: /sign in/i });
+    expect(signIn).toBeInTheDocument();
+    expect(signIn).toHaveAttribute('href', '/auth?returnTo=/discover');
+  });
+
+  it('#1156: authenticated user (else identical) → prompt NOT shown', () => {
+    const { container } = renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('#1156: area selected (else identical) → prompt NOT shown', () => {
+    const { container } = renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('#1156: zoom at threshold boundary (not strictly greater) → prompt NOT shown', () => {
+    const { container } = renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('#1156: school context active (else identical) → still suppressed (early-return wins)', () => {
+    const schoolFilters: PropertyFilters = {
+      schoolRadiusKm: 2,
+      schoolLat: 13.3409,
+      schoolLon: 74.7421,
+    };
+    const { container } = renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={5}
+        filters={schoolFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByText(/Select an area to see properties/i)).not.toBeInTheDocument();
+  });
+
+  it('#1156: cityTotal === 0 + anon zoom-past → shows existing empty-city message, NOT the new prompt', () => {
+    renderWithRouter(
+      <MapEmptyGuidance
+        cityTotal={0}
+        filters={emptyFilters}
+        city="udupi"
+        isLoading={false}
+        isAuthenticated={false}
+        hasAreaSelected={false}
+        mapZoom={AREA_LAYER_MAX_ZOOM + 2}
+        areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
+      />,
+    );
+    expect(screen.getByText(/No properties listed in/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Select an area to see properties/i)).not.toBeInTheDocument();
   });
 });

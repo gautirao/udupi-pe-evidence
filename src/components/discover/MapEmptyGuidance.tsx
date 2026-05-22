@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { PropertyFilters } from '@/hooks/usePropertyListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 
@@ -6,6 +7,18 @@ interface MapEmptyGuidanceProps {
   filters: PropertyFilters;
   city: string;
   isLoading: boolean;
+  /**
+   * Anonymous-zoom-past-area guidance (#1156). All optional so legacy callers
+   * that omit them leave the new branch dormant. The branch fires ONLY for
+   * anonymous users who have zoomed past the area-overview band without an
+   * area selected — the state where area rings hide and anon pins are gated,
+   * leaving the map otherwise blank.
+   */
+  isAuthenticated?: boolean;
+  mapZoom?: number;
+  hasAreaSelected?: boolean;
+  /** Area-layer zoom threshold; passed in to keep this component pure. */
+  areaLayerMaxZoom?: number;
 }
 
 /**
@@ -18,6 +31,10 @@ export function MapEmptyGuidance({
   filters,
   city,
   isLoading,
+  isAuthenticated,
+  mapZoom,
+  hasAreaSelected,
+  areaLayerMaxZoom,
 }: MapEmptyGuidanceProps) {
   if (isLoading) return null;
 
@@ -42,12 +59,34 @@ export function MapEmptyGuidance({
     message = `No properties listed in ${cityLabel} yet. Try switching to a different city.`;
   }
 
-  if (!message) return null;
+  // Anonymous zoom-past-area prompt (#1156). Mutually exclusive with the
+  // cityTotal === 0 messages above (gated cityTotal > 0). Explicit `=== false`
+  // comparisons keep this dormant when callers omit the props (undefined).
+  // The null-guards on the zoom values prevent undefined ever tripping `>`.
+  const showAnonZoomPrompt =
+    isAuthenticated === false &&
+    hasAreaSelected === false &&
+    mapZoom != null &&
+    areaLayerMaxZoom != null &&
+    mapZoom > areaLayerMaxZoom &&
+    cityTotal > 0;
+
+  if (!message && !showAnonZoomPrompt) return null;
 
   return (
     <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[1000] max-w-sm">
       <div className="bg-card/95 backdrop-blur rounded-lg border shadow-lg px-4 py-3 text-center">
-        <p className="text-sm text-muted-foreground">{message}</p>
+        {message ? (
+          <p className="text-sm text-muted-foreground">{message}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Select an area to see properties &mdash; or{' '}
+            <Link to="/auth?returnTo=/discover" className="font-medium text-primary underline">
+              sign in
+            </Link>{' '}
+            to explore the full map.
+          </p>
+        )}
       </div>
     </div>
   );
