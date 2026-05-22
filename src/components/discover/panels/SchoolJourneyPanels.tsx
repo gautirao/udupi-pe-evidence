@@ -180,7 +180,17 @@ export function SchoolBrowsePanel({
         {isSearching ? (
           /* Search results */
           schoolSearchResult.isLoading ? (
-            <div className="space-y-2">
+            /* Issue #1150: while a school search is in flight the Popular schools /
+               Browse by area sections are replaced by skeletons. Label the loading
+               view so buyers understand WHY those sections disappeared. Derived from
+               existing state only — no new query/effect. */
+            <div className="space-y-2" aria-live="polite">
+              <p
+                data-testid="school-search-loading-label"
+                className="text-sm text-muted-foreground"
+              >
+                Searching for &ldquo;{searchQuery.trim()}&rdquo;&hellip;
+              </p>
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-20 w-full rounded-lg" />
               ))}
