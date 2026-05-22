@@ -167,6 +167,8 @@ Every gate packet (PLAN_REVIEW, WORKDONE_REVIEW, PR_REVIEW) must state:
 | 7 | scope-lock violation outside `allowed_file_globs` | stop; require explicit scope-change approval |
 | 7 | QA/E2E evidence missing or FAIL | stop; do not invoke WORKDONE_REVIEW |
 | 8 | WORKDONE_REVIEW REVISION_REQUIRED | halt to user; this is an outer-gate failure and does NOT consume the inner specialist 2-cycle budget. The user decides whether to re-engage the executor with a corrective handoff (which restarts a fresh cycle counter) or to abandon. |
+| 7A | Product verification FAIL | do NOT create PR; route observed bug back to specialist (2-cycle reroute limit); halt to user if unresolved |
+| 7A | Product verification BLOCKED (app won't start / no test data / URL unreachable) | report blocker; user decision only if team cannot resolve |
 | 9 | PR_REVIEW REVISION_REQUIRED | halt to user; same separation as Phase 8 — outer gate, no shared counter with inner specialist loop. |
 | 10 | User declines merge | halt with PR open; do not merge |
 
@@ -177,6 +179,7 @@ Every gate packet (PLAN_REVIEW, WORKDONE_REVIEW, PR_REVIEW) must state:
 3. `workdone-candidate.toml` — written by executor on success; QA/E2E gate satisfied.
 4. `blocked.toml` — written by executor on failure or unsafe condition.
 5. `preflight-probe.txt` — written by executor during Phase 4 behavioural sentinel probe.
+6. `product-verification.toml` — written by the product-check specialist during Phase 7A (final browser product verification). Authoritative; the lead reads it from disk to decide the gate outcome.
 
 File artefacts are authoritative. SendMessage is for notifications only. Lead determines completion state by reading from disk.
 
@@ -405,7 +408,128 @@ If BOTH files exist → `CONFLICTING_EVIDENCE`; stop.
 4. Independently verify QA/E2E evidence files exist and contain PASS or justified NOT_REQUIRED. Re-run tests locally if the approved plan requires it.
 5. Assemble `.claude/handoffs/issue-<N>/workdone-review-request.toml` per the standard schema (approved plan ref, scope-lock table, AC mapping, reviewer verdicts, test evidence, deviations, runtime-probe block, **routing_decision_log_summary**).
 6. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate WORKDONE_REVIEW --input .claude/handoffs/issue-<N>/workdone-review-request.toml`.
-7. On APPROVED_FOR_PR → Phase 8. On NEEDS_FIXES → reroute per Route-and-Run reroute loop (2-cycle limit per inner specialist; this is an OUTER gate, halt to user; the inner counter does not consume).
+7. On APPROVED_FOR_PR → **Phase 7A (Final Product Verification Gate)**. On NEEDS_FIXES → reroute per Route-and-Run reroute loop (2-cycle limit per inner specialist; this is an OUTER gate, halt to user; the inner counter does not consume).
+
+---
+
+## Phase 7A — Final Product Verification Gate (browser)
+
+**Mandatory after WORKDONE_REVIEW APPROVED_FOR_PR and before PR creation (Phase 8) for any user-visible frontend/product change.** A lightweight product-check agent opens the local app in a browser and confirms the changed behaviour actually works against the issue acceptance criteria, so the user is never the first person to discover an obvious product failure during manual spot-check.
+
+This is **not** a broad exploratory QA pass and **not** a replacement for automated tests. It is a focused browser sanity check of the exact journey this PR changed.
+
+### Purpose
+
+After implementation and WORKDONE_REVIEW approval, but before PR creation / PR_REVIEW, verify in the real running app:
+
+- Does the changed user journey actually work?
+- Do the visible UI states match the acceptance criteria?
+- Are there obvious regressions in the directly affected flow?
+- Are map / list / panel / badge / chip / URL states consistent where relevant?
+- Is there any bug a user would immediately notice?
+
+### Who runs it
+
+The Agent Team is still alive (cleanup is Phase 10). The Main Agent requests the Orchestrator to invoke **one** product-verification specialist via `Task` — `qa` in a focused browser product-verification mode (the project `verify` skill / Playwright-driven browser), **not** a full E2E suite run. The specialist writes `.claude/handoffs/issue-<N>/product-verification.toml`. The Main Agent reads that file from disk (authoritative) and decides the gate outcome. Under Path C, the Main Agent invokes the single product-verification specialist directly via `Task` in the same way.
+
+This gate does not consume the inner specialist 2-cycle budget; it is an outer gate like WORKDONE_REVIEW / PR_REVIEW.
+
+### Token-efficiency rules (this gate must be deliberately small)
+
+The product-check agent **MUST NOT**:
+
+- read broad source code,
+- inspect unrelated files,
+- produce long architecture analysis,
+- audit unrelated journeys,
+- exercise the app beyond the changed flow,
+- create speculative follow-up lists,
+- debug deeply unless the product check fails.
+
+The product-check agent **MAY**:
+
+- read the issue acceptance criteria,
+- read the WORKDONE summary,
+- open the local app,
+- run one or two direct URLs,
+- click through the exact changed flow,
+- inspect visible UI,
+- inspect network only when relevant,
+- capture concise evidence.
+
+**Default budget:** 1 focused product journey; plus 1 regression journey only if the issue affects navigation/state; plus 1 negative/empty-state check only if it is part of the ACs. Any expansion beyond this must be justified back to the Orchestrator before proceeding.
+
+### Required inputs to the product-check agent
+
+The handoff includes only:
+
+1. issue number and title,
+2. PR/branch under test,
+3. local app URL/port,
+4. exact reproduction / verification URL(s),
+5. acceptance criteria,
+6. WORKDONE summary,
+7. files-changed summary,
+8. known out-of-scope items,
+9. what NOT to test.
+
+Do not dump long logs or full diffs unless necessary.
+
+### Required output (`product-verification.toml`)
+
+```toml
+[product_verification]
+verdict = "PASS"            # PASS | FAIL | BLOCKED | NEEDS_USER_DECISION
+browser_checked = true
+same_scenario_checked = true
+urls_checked = ["..."]
+journeys_checked = ["..."]
+
+[checks]
+ac_passed = ["..."]
+ac_failed = ["..."]
+regressions_observed = ["..."]
+out_of_scope_observations = ["..."]
+
+[evidence]
+summary = "Concise visible-browser evidence."
+screenshots_or_trace = "path or N/A"
+network_checked = "yes/no; reason"
+
+[recommendation]
+next = "proceed_to_pr"      # proceed_to_pr | fix_before_pr | user_decision
+```
+
+### Verdict rules
+
+- **PASS** — only when the main user-visible ACs were checked in browser, the changed journey works, no obvious directly-related bug was seen, and any skipped checks are explicitly justified. On PASS → Phase 8 (PR creation).
+- **FAIL** — the product does not work in browser, the UI contradicts the ACs, URL/map/list/panel/badge/chip states disagree, or a clear regression is observed in the directly-affected flow. On FAIL → **do not create the PR**; route the observed bug back through the Orchestrator to the appropriate specialist (engineer fix → re-verify), bounded by the existing 2-cycle reroute limit, then halt to user if unresolved.
+- **BLOCKED** — app cannot start, login/test data unavailable, local environment unavailable, or the reproduction URL cannot be reached. Report the blocker; ask for a user decision only if the team cannot resolve it.
+- **NEEDS_USER_DECISION** — only for true product ambiguity, not implementation uncertainty.
+
+### When this gate may be skipped
+
+Skip **only** for: docs-only workflow PRs, backend-only changes with no local UI route to test, test-only PRs, or pure refactors with no user-visible change. If skipped, the WORKDONE / PR packet must include:
+
+```toml
+[product_verification]
+skipped = true
+reason = "docs-only/backend-only/test-only/refactor-only"
+```
+
+### Where this gate fits
+
+1. PLAN_REVIEW gate
+2. implementation
+3. QA verification
+4. code-reviewer
+5. WORKDONE_REVIEW gate
+6. **Final Product Verification Gate (Phase 7A)**
+7. PR creation (Phase 8)
+8. PR_REVIEW gate
+9. user manual spot-check / merge approval (Phase 9)
+
+The user remains the final merge gate, but the team must do this browser sanity check first.
 
 ---
 
@@ -753,11 +877,20 @@ If the same scenario cannot be retested, stop and ask for user decision.
 
 ## Phase B5 — PR and merge
 
+The **Final Product Verification Gate (Phase 7A)** applies to bug fixes and **must include the original failing scenario in the browser**. For a bug fix, the product-verification report cannot PASS unless:
+
+```toml
+same_scenario_checked = true
+```
+
+If the original failing scenario was not re-driven in the browser, Phase 7A cannot PASS and the PR must not be created.
+
 PR may be created only after:
 
 - reproduction confirmed,
 - fix implemented,
 - same scenario verified,
+- Phase 7A product verification PASS (original failing scenario re-driven in browser, `same_scenario_checked = true`),
 - regression coverage added or justified,
 - code reviewer approved.
 
