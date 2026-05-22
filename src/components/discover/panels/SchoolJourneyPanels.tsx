@@ -208,7 +208,7 @@ export function SchoolBrowsePanel({
           ) : (
             <EmptyState
               icon={<Search size={32} />}
-              title="No schools found"
+              heading="No schools found"
               description="Try a different search term."
             />
           )
