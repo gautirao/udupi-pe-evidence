@@ -277,6 +277,7 @@ export function DiscoverRightPanel({
             onSelectSchool={journey === 'area-first' ? onSelectSchool : undefined}
             areaListings={areaListings}
             isLoadingAreaListings={isLoadingListings}
+            isFetching={isFetching}
             isAuthenticated={isAuthenticated}
             activeContextChips={activeContextChips}
           />
@@ -288,6 +289,7 @@ export function DiscoverRightPanel({
             school={selectedSchool ?? null}
             listings={schoolListings ?? []}
             isLoadingListings={schoolListingsLoading ?? false}
+            isFetching={isFetching}
             radiusKm={radiusKm ?? null}
             onRadiusChange={onRadiusChange ?? (() => undefined)}
             filters={filters}
@@ -308,6 +310,7 @@ export function DiscoverRightPanel({
             selectedSchool={selectedSchool ?? null}
             listings={schoolListings ?? []}
             isLoadingListings={schoolListingsLoading ?? false}
+            isFetching={isFetching}
             radiusKm={radiusKm ?? null}
             onRadiusChange={onRadiusChange ?? (() => undefined)}
             onClearSchool={onClearSchool ?? (() => undefined)}

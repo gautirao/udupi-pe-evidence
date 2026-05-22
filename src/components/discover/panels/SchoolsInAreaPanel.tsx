@@ -39,6 +39,15 @@ interface SchoolsInAreaPanelProps {
    */
   onSchoolsRetry?: () => void;
   /**
+   * Issue #1170 — forward-looking prop intended to give the Retry button loading
+   * feedback (AC3) while a parent-owned schools refetch is in flight (prop mode).
+   * Currently UNWIRED in production: no parent forwards it yet, mirroring the dormant
+   * #1144 schoolsError/onSchoolsRetry channel. When #1144 wires schoolsError/onSchoolsRetry
+   * (e.g. from MapDiscovery's useSchoolsByArea result), it should also thread schoolsFetching
+   * so the Retry loading feedback is live in prop mode.
+   */
+  schoolsFetching?: boolean;
+  /**
    * Issue #1157 Option (i) — area-first select handler. When provided (area-first
    * school-picking sub-step), clicking a school card calls this with the school id
    * instead of the internal setSchoolJourney path. The parent
@@ -59,7 +68,7 @@ const CATEGORY_OPTIONS = [
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, onSelectSchool, activeContextChips }: SchoolsInAreaPanelProps) {
+export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, schoolsFetching: schoolsFetchingProp, onSelectSchool, activeContextChips }: SchoolsInAreaPanelProps) {
   const [urlState, urlActions] = useDiscoverUrlState();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
@@ -79,6 +88,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
     isLoading: hookLoading,
     isError: hookIsError,
     refetch: hookRefetch,
+    isFetching: hookFetching,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -103,6 +113,17 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
       hookRefetch();
     }
   };
+
+  // Issue #1170 (AC3) — retry-action loading feedback, derived from existing query
+  // state only (no timer, no new query). Valid in BOTH modes:
+  //   • prop mode: the parent-owned schools refetch is in flight (schoolsFetchingProp).
+  //   • standalone: the internal hook is fetching but NOT paginating, so a retry-refetch
+  //     is distinguished from a "Load more" fetch (isFetchingNextPage), per the qa-fast edge.
+  // Disabling the button while in flight also prevents a double-fire on rapid clicks.
+  const isRetrying =
+    schoolsProp !== undefined
+      ? (schoolsFetchingProp ?? false)
+      : hookFetching && !isFetchingNextPage;
 
   // Flatten pages into single school list — use prop when available
   const schools = useMemo(() => {
@@ -302,10 +323,12 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             </p>
             <button
               onClick={handleRetry}
+              disabled={isRetrying}
+              aria-busy={isRetrying}
               data-testid="schools-error-retry"
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium disabled:opacity-60 disabled:pointer-events-none"
             >
-              Retry
+              {isRetrying ? 'Retrying…' : 'Retry'}
             </button>
           </div>
         )}

@@ -53,7 +53,7 @@ const baseProps = () => ({
 });
 
 function renderPanel(props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {}) {
-  render(
+  return render(
     <BrowserRouter>
       <AreaSchoolCombinedPanel {...baseProps()} {...props} />
     </BrowserRouter>,
@@ -300,5 +300,40 @@ describe('AreaSchoolCombinedPanel — AC4 area+school intersection', () => {
     renderPanel({ selectedArea: null, listings: [makeListing('unscoped')] });
     expect(screen.getByTestId('combined-loading-skeleton')).toBeInTheDocument();
     expect(screen.queryByTestId('combined-empty-state-message')).not.toBeInTheDocument();
+  });
+});
+
+// ── Issue #1170: in-flight refetch dim (AC2/AC4) ──────────────────────────────
+describe('AreaSchoolCombinedPanel — in-flight refetch dim (Issue #1170)', () => {
+  it('dims the listing body while a refetch is in flight (isFetching && not initial load)', () => {
+    const { container } = renderPanel({
+      listings: [makeListing('l-1')],
+      isLoadingListings: false,
+      isFetching: true,
+    });
+    const body = container.querySelector('.flex-1.overflow-y-auto');
+    expect(body).toHaveClass('opacity-50');
+    expect(body).toHaveClass('pointer-events-none');
+  });
+
+  it('does NOT dim during the initial skeleton load', () => {
+    const { container } = renderPanel({
+      listings: [],
+      isLoadingListings: true,
+      isFetching: true,
+    });
+    const body = container.querySelector('.flex-1.overflow-y-auto');
+    expect(body).toHaveClass('opacity-100');
+    expect(body).not.toHaveClass('opacity-50');
+  });
+
+  it('does NOT dim a settled result (no refetch in flight)', () => {
+    const { container } = renderPanel({
+      listings: [makeListing('l-1')],
+      isLoadingListings: false,
+      isFetching: false,
+    });
+    const body = container.querySelector('.flex-1.overflow-y-auto');
+    expect(body).toHaveClass('opacity-100');
   });
 });

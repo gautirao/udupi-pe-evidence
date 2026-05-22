@@ -40,12 +40,16 @@ describe('SchoolSelectedPanel', () => {
       isAuthenticated: false,
     };
 
-    render(
+    return render(
       <BrowserRouter>
         <SchoolSelectedPanel {...defaultProps} {...props} />
       </BrowserRouter>,
     );
   };
+
+  // Alias used by the Issue #1170 dim tests — returns the render result for
+  // container-level class assertions (the opacity dim has no semantic role/testid).
+  const renderWithReturn = renderPanel;
 
   // ── AC1: school header ────────────────────────────────────────────────────
 
@@ -106,6 +110,47 @@ describe('SchoolSelectedPanel', () => {
   it('renders loading skeletons while loading', () => {
     renderPanel({ listings: [], isLoadingListings: true });
     expect(screen.getAllByTestId('listing-skeleton')).toHaveLength(3);
+  });
+
+  // ── Issue #1170: in-flight refetch dim (AC2/AC4) ──────────────────────────
+  // The listing body is dimmed while a refetch (isFetching) is in flight, distinct
+  // from the initial skeleton load, and never on a settled/cached result.
+
+  it('dims the listing body while a refetch is in flight (isFetching && not initial load)', () => {
+    const { container } = renderWithReturn({
+      listings: [makeListing('l-1')],
+      isLoadingListings: false,
+      isFetching: true,
+    });
+    const body = container.querySelector('.flex-1.overflow-y-auto');
+    expect(body).toHaveClass('opacity-50');
+    expect(body).toHaveClass('pointer-events-none');
+  });
+
+  it('does NOT dim during the initial skeleton load (isFetching suppressed by isLoadingListings)', () => {
+    const { container } = renderWithReturn({
+      listings: [],
+      isLoadingListings: true,
+      isFetching: true,
+    });
+    const body = container.querySelector('.flex-1.overflow-y-auto');
+    expect(body).toHaveClass('opacity-100');
+    expect(body).not.toHaveClass('opacity-50');
+  });
+
+  it('does NOT dim a settled result (no refetch in flight)', () => {
+    const { container } = renderWithReturn({
+      listings: [makeListing('l-1')],
+      isLoadingListings: false,
+      isFetching: false,
+    });
+    const body = container.querySelector('.flex-1.overflow-y-auto');
+    expect(body).toHaveClass('opacity-100');
+  });
+
+  it('keeps the empty-state CTA interactive while a refetch is NOT in flight', () => {
+    renderPanel({ listings: [], isLoadingListings: false, isFetching: false });
+    expect(screen.getByTestId('increase-radius-btn')).not.toBeDisabled();
   });
 
   // ── AC4: empty state ──────────────────────────────────────────────────────

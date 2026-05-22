@@ -332,6 +332,12 @@ export interface SchoolsInAreaPanelProps {
   areaListings?: DiscoverCityListingItem[];
   /** Whether the area-listings query is loading. */
   isLoadingAreaListings?: boolean;
+  /**
+   * Issue #1170 — true while an area-listings refetch is in flight (filter change /
+   * radius change), distinct from the initial skeleton load. Drives the
+   * AreaSelectedPanel-style opacity dim on the "Homes in this area" body.
+   */
+  isFetching?: boolean;
   /** Forwarded to PropertyCard so unauth users get the gated card variant. */
   isAuthenticated?: boolean;
   /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
@@ -348,6 +354,7 @@ export function SchoolsInAreaPanel({
   onSelectSchool,
   areaListings,
   isLoadingAreaListings,
+  isFetching = false,
   isAuthenticated = false,
   activeContextChips,
 }: SchoolsInAreaPanelProps) {
@@ -381,7 +388,15 @@ export function SchoolsInAreaPanel({
           <div className="px-4 py-2 border-b border-border">
             <h3 className="text-sm font-semibold text-foreground">Homes in this area</h3>
           </div>
-          <div className="flex-1 overflow-y-auto">
+          {/* Issue #1170 — mirror AreaSelectedPanel: dim during an in-flight refetch
+              (isFetching) but NOT during the initial skeleton load, so cached responses
+              never flash and the settled empty state stays readable. */}
+          <div
+            className={cn(
+              'flex-1 overflow-y-auto transition-opacity duration-150',
+              isFetching && !isLoadingAreaListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
+            )}
+          >
             {isLoadingAreaListings ? (
               <div className="space-y-3 p-4">
                 {[0, 1, 2].map((i) => (
@@ -423,6 +438,12 @@ export interface SchoolSelectedPanelProps {
   /** Proximity-filtered listings from MapDiscovery (already server-filtered). */
   listings: DiscoverCityListingItem[];
   isLoadingListings: boolean;
+  /**
+   * Issue #1170 — true while a school-radius/filter refetch is in flight (distinct from
+   * the initial skeleton load). Drives the AreaSelectedPanel-style opacity dim so active
+   * loads of the selected-school property set are visible without a cached-response flash.
+   */
+  isFetching?: boolean;
   /** Current radius in km — null before URL param resolves (uses default). */
   radiusKm: number | null;
   /** Called when the user picks a new radius button. Parent writes URL + filter. */
@@ -443,6 +464,7 @@ export function SchoolSelectedPanel({
   school,
   listings,
   isLoadingListings,
+  isFetching = false,
   radiusKm,
   onRadiusChange,
   filters = {},
@@ -564,8 +586,15 @@ export function SchoolSelectedPanel({
         </div>
       </div>
 
-      {/* Listing body */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Listing body — Issue #1170: AreaSelectedPanel-style dim on an in-flight
+          refetch (isFetching) but NOT during the initial skeleton load, so cached
+          responses never flash and the settled empty state stays readable/clickable. */}
+      <div
+        className={cn(
+          'flex-1 overflow-y-auto transition-opacity duration-150',
+          isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
+        )}
+      >
         {isLoadingListings ? (
           <div className="space-y-3 p-4">
             {[0, 1, 2].map((i) => (
@@ -632,6 +661,11 @@ export interface AreaSchoolCombinedPanelProps {
   /** Proximity + area-scoped listings from MapDiscovery (server-filtered). */
   listings: DiscoverCityListingItem[];
   isLoadingListings: boolean;
+  /**
+   * Issue #1170 — true while a school-radius/filter refetch is in flight (distinct from
+   * the initial skeleton load). Drives the AreaSelectedPanel-style opacity dim.
+   */
+  isFetching?: boolean;
   /** Current radius in km — null before URL param resolves. */
   radiusKm: number | null;
   /** Called when the user picks a new radius. */
@@ -657,6 +691,7 @@ export function AreaSchoolCombinedPanel({
   selectedSchool,
   listings,
   isLoadingListings,
+  isFetching = false,
   radiusKm,
   onRadiusChange,
   onClearSchool,
@@ -831,8 +866,13 @@ export function AreaSchoolCombinedPanel({
         </div>
       </div>
 
-      {/* Listing body */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Listing body — Issue #1170: dim on in-flight refetch, not initial skeleton load. */}
+      <div
+        className={cn(
+          'flex-1 overflow-y-auto transition-opacity duration-150',
+          isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
+        )}
+      >
         {isLoadingListings ? (
           <div className="space-y-3 p-4">
             {[0, 1, 2].map((i) => (

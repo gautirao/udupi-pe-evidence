@@ -86,6 +86,25 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
 }));
 
 import { SchoolsInAreaPanel } from '../SchoolsInAreaPanel';
+import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
+
+const mockedUseSchoolsByArea = vi.mocked(useSchoolsByArea);
+
+// Default standalone-hook return; per-test we override specific flags below.
+function hookReturn(overrides: Record<string, unknown> = {}) {
+  return {
+    data: { pages: [] },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    ...overrides,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any;
+}
 
 function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -130,7 +149,18 @@ beforeEach(() => {
   mockSetSchoolJourney.mockReset();
   mockSetSchoolParams.mockReset();
   mockSetFiltersLive.mockReset();
+  mockedUseSchoolsByArea.mockReturnValue(hookReturn());
 });
+
+// Standalone mode = no `schools` prop → the panel uses its internal useSchoolsByArea
+// hook, which is where the `schools-error-state` + Retry button render in production.
+function renderStandalone(props: Partial<React.ComponentProps<typeof SchoolsInAreaPanel>> = {}) {
+  return render(
+    <QueryClientProvider client={makeQC()}>
+      <SchoolsInAreaPanel journey="area-first" onStartOver={vi.fn()} {...props} />
+    </QueryClientProvider>,
+  );
+}
 
 describe('SchoolsInAreaPanel — prop-mode school rendering (Issue #1157 AC5)', () => {
   it('renders all schools passed via the schools prop (count parity with school-first)', () => {
@@ -150,6 +180,46 @@ describe('SchoolsInAreaPanel — area-first select branch (Issue #1157 AC3)', ()
     expect(onSelectSchool).toHaveBeenCalledWith('school-1');
     // Branch is exclusive: the internal journey-flip path must not run.
     expect(mockSetSchoolJourney).not.toHaveBeenCalled();
+  });
+});
+
+describe('SchoolsInAreaPanel — retry loading feedback (Issue #1170 AC3)', () => {
+  it('error state retry button is idle (enabled, "Retry") when no refetch is in flight', () => {
+    mockedUseSchoolsByArea.mockReturnValue(hookReturn({ isError: true, isFetching: false }));
+    renderStandalone();
+
+    const retry = screen.getByTestId('schools-error-retry');
+    expect(retry).toHaveTextContent('Retry');
+    expect(retry).not.toBeDisabled();
+    expect(retry).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('shows loading feedback (disabled + "Retrying…") while a retry refetch is in flight', () => {
+    // isError keeps the error-state mounted while isFetching marks the refetch in flight.
+    // isFetchingNextPage=false distinguishes a retry from a "Load more" pagination fetch.
+    mockedUseSchoolsByArea.mockReturnValue(
+      hookReturn({ isError: true, isFetching: true, isFetchingNextPage: false }),
+    );
+    renderStandalone();
+
+    const retry = screen.getByTestId('schools-error-retry');
+    expect(retry).toHaveTextContent('Retrying…');
+    expect(retry).toBeDisabled();
+    expect(retry).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('does NOT show retry loading feedback for a pagination ("Load more") fetch', () => {
+    // A "Load more" fetch sets isFetching AND isFetchingNextPage. The error state is not
+    // mounted in that case (it requires isError), but the derivation must not treat a
+    // pagination fetch as a retry. Assert the error-state retry is not in a busy state.
+    mockedUseSchoolsByArea.mockReturnValue(
+      hookReturn({ isError: true, isFetching: true, isFetchingNextPage: true }),
+    );
+    renderStandalone();
+
+    const retry = screen.getByTestId('schools-error-retry');
+    expect(retry).toHaveTextContent('Retry');
+    expect(retry).not.toBeDisabled();
   });
 });
 
