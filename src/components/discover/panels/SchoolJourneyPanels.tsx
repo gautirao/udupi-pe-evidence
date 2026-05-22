@@ -318,6 +318,12 @@ export interface SchoolsInAreaPanelProps {
    */
   onSchoolsRetry?: () => void;
   /**
+   * Issue #1198 — whether the parent-owned schools query is refetching. Forwarded to the
+   * inner panel to drive its #1170 Retry loading feedback (disabled + "Retrying…" + aria-busy).
+   * NOTE: distinct from `isFetching` below, which is the AREA-LISTINGS refetch flag.
+   */
+  schoolsFetching?: boolean;
+  /**
    * Issue #1157 Option (i) — area-first school select. When provided, selecting a
    * school calls this (MapDiscovery.handleSelectSchoolById → setSchoolParams) which
    * sets schoolId + drops schoolPicking WITHOUT flipping the journey, routing the panel
@@ -351,6 +357,7 @@ export function SchoolsInAreaPanel({
   schoolsLoading,
   schoolsError,
   onSchoolsRetry,
+  schoolsFetching,
   onSelectSchool,
   areaListings,
   isLoadingAreaListings,
@@ -372,6 +379,7 @@ export function SchoolsInAreaPanel({
           schoolsLoading={schoolsLoading}
           schoolsError={schoolsError}
           onSchoolsRetry={onSchoolsRetry}
+          schoolsFetching={schoolsFetching}
           onSelectSchool={onSelectSchool}
           activeContextChips={activeContextChips}
         />

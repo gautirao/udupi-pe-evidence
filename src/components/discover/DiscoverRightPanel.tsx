@@ -77,6 +77,19 @@ export interface DiscoverRightPanelProps {
   schools?: SchoolResult[];
   /** Whether the parent-owned schools query is loading. */
   schoolsLoading?: boolean;
+  /**
+   * Issue #1198 — whether the parent-owned schools-in-area query errored.
+   * Forwarded to SchoolsInAreaPanel so its #1144 error/retry state renders in prop-owned mode.
+   */
+  schoolsError?: boolean;
+  /** Issue #1198 — retry callback (the schools query's refetch) for the schools-in-area error state. */
+  onSchoolsRetry?: () => void;
+  /**
+   * Issue #1198 — whether the schools-in-area query is refetching. Drives the #1170 Retry
+   * loading feedback (disabled + "Retrying…" + aria-busy) on the schools-in-area error state.
+   * Distinct from `isFetching`, which is the area-listings refetch flag.
+   */
+  schoolsFetching?: boolean;
   // ── School-selected panel ────────────────────────────────────────────────
   /** The school currently selected — drives SchoolSelectedPanel header. */
   selectedSchool?: SchoolResult | null;
@@ -143,6 +156,9 @@ export function DiscoverRightPanel({
   onFiltersChange,
   schools,
   schoolsLoading,
+  schoolsError,
+  onSchoolsRetry,
+  schoolsFetching,
   selectedSchool,
   schoolListings,
   schoolListingsLoading,
@@ -270,6 +286,12 @@ export function DiscoverRightPanel({
             journey={journey}
             schools={schools}
             schoolsLoading={schoolsLoading}
+            // Issue #1198 — thread the schools-in-area query's error/retry/fetching
+            // signals so the (already-built) #1144 error state + #1170 retry feedback
+            // are live in prop-owned mode, not only standalone.
+            schoolsError={schoolsError}
+            onSchoolsRetry={onSchoolsRetry}
+            schoolsFetching={schoolsFetching}
             // Journey gate (Issue #1157): only the area-first journey delegates
             // school selection to the parent (handleSelectSchoolById → area-school-combined).
             // For school-first, `derivePanelContent` also yields 'schools-in-area', but the

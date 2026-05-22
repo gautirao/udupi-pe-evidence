@@ -1366,6 +1366,12 @@ export default function MapDiscovery() {
           selectedSchool={selectedSchool}
           schools={schools}
           schoolsLoading={schoolsQuery.isLoading}
+          // Issue #1198 — wire the dormant #1144/#1170 schools-in-area error/retry channel.
+          // These are the EXISTING useSchoolsByArea signals (same query that already feeds
+          // PropertyMap's schoolsIsError/schoolsError); no new query/effect/config is added.
+          schoolsError={schoolsQuery.isError}
+          onSchoolsRetry={schoolsQuery.refetch}
+          schoolsFetching={schoolsQuery.isFetching}
           schoolListings={schoolListings}
           schoolListingsLoading={listingDataLoading}
           radiusKm={urlState.radiusKm}
