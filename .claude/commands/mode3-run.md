@@ -169,6 +169,8 @@ Every gate packet (PLAN_REVIEW, WORKDONE_REVIEW, PR_REVIEW) must state:
 | 8 | WORKDONE_REVIEW REVISION_REQUIRED | halt to user; this is an outer-gate failure and does NOT consume the inner specialist 2-cycle budget. The user decides whether to re-engage the executor with a corrective handoff (which restarts a fresh cycle counter) or to abandon. |
 | 7A | Product verification FAIL | do NOT create PR; route observed bug back to specialist (2-cycle reroute limit); halt to user if unresolved |
 | 7A | Product verification BLOCKED (app won't start / no test data / URL unreachable) | report blocker; user decision only if team cannot resolve |
+| 7B | Exploratory sweep BLOCKING_REGRESSION (direct regression caused by this PR) | do NOT create PR; route back to specialist (2-cycle reroute limit); halt to user if unresolved |
+| 7B | Exploratory sweep BLOCKED (environment/data prevented sweep) | report blocker; user decision only if team cannot resolve |
 | 9 | PR_REVIEW REVISION_REQUIRED | halt to user; same separation as Phase 8 — outer gate, no shared counter with inner specialist loop. |
 | 10 | User declines merge | halt with PR open; do not merge |
 
@@ -180,6 +182,7 @@ Every gate packet (PLAN_REVIEW, WORKDONE_REVIEW, PR_REVIEW) must state:
 4. `blocked.toml` — written by executor on failure or unsafe condition.
 5. `preflight-probe.txt` — written by executor during Phase 4 behavioural sentinel probe.
 6. `product-verification.toml` — written by the product-check specialist during Phase 7A (final browser product verification). Authoritative; the lead reads it from disk to decide the gate outcome.
+7. `product-sweep.toml` — written by the exploratory specialist during Phase 7B (conditional exploratory product sweep) when its triggers fire. Authoritative; the lead reads it from disk to decide the gate outcome. Absent when Phase 7B is skipped.
 
 File artefacts are authoritative. SendMessage is for notifications only. Lead determines completion state by reading from disk.
 
@@ -502,7 +505,7 @@ next = "proceed_to_pr"      # proceed_to_pr | fix_before_pr | user_decision
 
 ### Verdict rules
 
-- **PASS** — only when the main user-visible ACs were checked in browser, the changed journey works, no obvious directly-related bug was seen, and any skipped checks are explicitly justified. On PASS → Phase 8 (PR creation).
+- **PASS** — only when the main user-visible ACs were checked in browser, the changed journey works, no obvious directly-related bug was seen, and any skipped checks are explicitly justified. On PASS → **Phase 7B (Conditional Exploratory Product Sweep) if its triggers fire, otherwise Phase 8 (PR creation)**.
 - **FAIL** — the product does not work in browser, the UI contradicts the ACs, URL/map/list/panel/badge/chip states disagree, or a clear regression is observed in the directly-affected flow. On FAIL → **do not create the PR**; route the observed bug back through the Orchestrator to the appropriate specialist (engineer fix → re-verify), bounded by the existing 2-cycle reroute limit, then halt to user if unresolved.
 - **BLOCKED** — app cannot start, login/test data unavailable, local environment unavailable, or the reproduction URL cannot be reached. Report the blocker; ask for a user decision only if the team cannot resolve it.
 - **NEEDS_USER_DECISION** — only for true product ambiguity, not implementation uncertainty.
@@ -524,12 +527,100 @@ reason = "docs-only/backend-only/test-only/refactor-only"
 3. QA verification
 4. code-reviewer
 5. WORKDONE_REVIEW gate
-6. **Final Product Verification Gate (Phase 7A)**
-7. PR creation (Phase 8)
-8. PR_REVIEW gate
-9. user manual spot-check / merge approval (Phase 9)
+6. **Final Product Verification Gate (Phase 7A)** — mandatory for user-visible changes
+7. **Conditional Exploratory Product Sweep (Phase 7B)** — only when its triggers fire (larger/high-impact changes)
+8. PR creation (Phase 8)
+9. PR_REVIEW gate
+10. user manual spot-check / merge approval (Phase 9)
 
 The user remains the final merge gate, but the team must do this browser sanity check first.
+
+---
+
+## Phase 7B — Conditional Exploratory Product Sweep
+
+**Conditional, NOT automatic.** Phase 7B runs only for larger / high-impact product changes (triggers below), after Phase 7A PASS and before PR creation. Where Phase 7A verifies the *exact issue acceptance criteria*, Phase 7B explores the *nearby user journey* with a lay buyer/broker lens to surface obvious UX bugs, inconsistencies, or improvement opportunities a real user would notice.
+
+Phase 7A stays focused and mandatory for user-visible changes; Phase 7B never replaces or weakens it. If Phase 7A FAILs/BLOCKs, Phase 7B does not run.
+
+### Who runs it
+
+Same pattern as Phase 7A: the Main Agent requests the Orchestrator to invoke **one** exploratory specialist via `Task` — `qa` (or the project `verify`/`run` browser approach) — which drives the nearby journeys in a real browser and writes `.claude/handoffs/issue-<N>/product-sweep.toml`. The Main Agent reads it from disk and decides. Under Path C, the Main Agent invokes the single specialist directly. Outer gate — does not consume the inner specialist 2-cycle budget.
+
+### When Phase 7B SHOULD run (any one is sufficient)
+
+- the issue is a `feature` or a larger UX change;
+- the issue touches a full user journey rather than a single component;
+- the issue affects map / list / panel / badge / chip / URL consistency;
+- the issue affects Back, Start Over, journey switching, filters, search, school radius, or area grouping;
+- the PR changes **3+ user-facing files**;
+- the issue had **2+ reroutes** or repeated manual-test findings;
+- QA, code-reviewer, OpenAI, or the user flagged high product risk;
+- the user explicitly asks for exploratory testing.
+
+### When Phase 7B should be SKIPPED
+
+Skip for: docs-only changes; test-only changes; backend-only changes with no browser route; trivial copy/prop fixes; isolated one-component fixes with narrow ACs; refactors with no user-visible behaviour. If skipped, record in the WORKDONE / PR packet:
+
+```toml
+[exploratory_sweep]
+skipped = true
+reason = "trivial/narrow/docs-only/test-only/backend-only/refactor-only"
+```
+
+### Token-efficiency constraints (must be bounded)
+
+- **max 3 user journeys**;
+- **max 5 findings**;
+- no broad source-code reading;
+- no implementation;
+- no unrelated product audit;
+- no speculative architecture analysis;
+- network inspection only if relevant;
+- **stop if the budget is exceeded and ask for approval** before continuing.
+
+### Explorer lens (lay buyer / broker)
+
+1. Do I understand where I am?
+2. Do map, panel, URL, chips, badge, listings, and markers agree?
+3. Are loading, empty, and error states clear?
+4. Do Back, Clear, Start Over, and browser Back behave predictably?
+5. Are counts and filters trustworthy?
+6. Are CTAs clear and non-destructive?
+7. Does anon/auth behaviour differ unexpectedly?
+8. Is there any obvious mobile/responsive issue if relevant?
+
+### Output schema (`product-sweep.toml`)
+
+```toml
+[exploratory_sweep]
+verdict = "NO_MAJOR_FINDINGS"   # NO_MAJOR_FINDINGS | FINDINGS_REPORTED | BLOCKING_REGRESSION | BLOCKED
+triggered = true
+reason = "..."
+journeys_checked = ["..."]
+budget = "max 3 journeys / max 5 findings"
+
+[[findings]]
+severity = "P0|P1|P2|P3"
+type = "bug|ux|copy|performance|accessibility|test-gap"
+title = "..."
+repro = "..."
+expected = "..."
+actual = "..."
+caused_by_current_pr = true
+suggested_action = "block_pr|file_followup|report_only|needs_product_decision"
+```
+
+### Verdict rules
+
+- **BLOCKING_REGRESSION** — a direct regression caused by the current PR. **Do NOT create the PR / do NOT proceed**; route back to the specialist (engineer fix → re-verify) bounded by the 2-cycle reroute limit, then halt to user if unresolved.
+- **FINDINGS_REPORTED** — non-blocking or unrelated findings. Continue to Phase 8, but report them clearly (and file follow-ups per Scope control).
+- **NO_MAJOR_FINDINGS** — proceed to Phase 8.
+- **BLOCKED** — environment/data issue prevented the sweep. Report the blocker; ask for a user decision only if the team cannot resolve it.
+
+### Scope control (findings must not auto-expand the PR)
+
+A finding may be fixed **in the current PR only** if (a) it is a direct regression caused by this PR, or (b) the user explicitly approves scope expansion. Otherwise report it or file a separate follow-up issue — do not silently widen scope.
 
 ---
 
