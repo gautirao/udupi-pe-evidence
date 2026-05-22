@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GraduationCap, ChevronDown, AlertTriangle } from 'lucide-react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
@@ -103,9 +103,35 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
   // isError: when parent owns the query, use the schoolsError prop if provided;
   // otherwise fall back to the internal hook's error state (standalone / test mode).
   const isError = schoolsProp !== undefined ? (schoolsErrorProp ?? false) : hookIsError;
-  // handleRetry: in prop mode delegate to the parent's retry callback (no-op if absent);
-  // in standalone mode use the internal hook's refetch.
+  // Issue #1204 — a user-initiated retry must keep the error block + Retry button mounted
+  // (in its loading state) while the retry is in flight. In prop mode the parent-owned
+  // useSchoolsByArea reverts status error→pending on a no-data refetch, so isError flips
+  // FALSE and isLoading flips TRUE; without this latch the error block unmounts and the
+  // bare skeleton wins, making the #1170 'Retrying…' affordance unreachable in production.
+  //
+  // The latch is a pure UI flag derived from existing state + the Retry click. It does NOT
+  // initiate any fetch — handleRetry fires exactly one refetch per click; the settle effect
+  // below only RESETS the flag. No timer, no polling, no auto-retry, no loop.
+  const [retryInFlight, setRetryInFlight] = useState(false);
+  // Tracks whether the latched retry has actually been observed in flight yet. The query
+  // status flip (error→pending) is asynchronous relative to the click, so we must not clear
+  // the latch before the fetch has even started — otherwise the latch evaporates in the
+  // render between the click and the in-flight signal, and the skeleton wins.
+  const retrySeenInFlightRef = useRef(false);
+
+  // inFlightSignal — true while the (non-paginating) schools query is fetching. Same
+  // exclusion as before: a "Load more" pagination fetch (isFetchingNextPage) is NOT a retry.
+  const inFlightSignal =
+    schoolsProp !== undefined
+      ? (schoolsFetchingProp ?? false)
+      : hookFetching && !isFetchingNextPage;
+
+  // handleRetry: latch first (so the error block + loading affordance stay mounted across
+  // the error→pending status flip), then fire exactly one refetch. In prop mode delegate to
+  // the parent's retry callback (no-op if absent); standalone uses the internal hook refetch.
   const handleRetry = () => {
+    retrySeenInFlightRef.current = false;
+    setRetryInFlight(true);
     if (schoolsProp !== undefined) {
       // Parent owns the query — call parent's retry if wired; otherwise no-op.
       onSchoolsRetry?.();
@@ -114,16 +140,31 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
     }
   };
 
-  // Issue #1170 (AC3) — retry-action loading feedback, derived from existing query
-  // state only (no timer, no new query). Valid in BOTH modes:
-  //   • prop mode: the parent-owned schools refetch is in flight (schoolsFetchingProp).
-  //   • standalone: the internal hook is fetching but NOT paginating, so a retry-refetch
-  //     is distinguished from a "Load more" fetch (isFetchingNextPage), per the qa-fast edge.
-  // Disabling the button while in flight also prevents a double-fire on rapid clicks.
-  const isRetrying =
-    schoolsProp !== undefined
-      ? (schoolsFetchingProp ?? false)
-      : hookFetching && !isFetchingNextPage;
+  // Latch lifecycle (UI-flag only — never triggers a fetch, so no auto-retry, no loop):
+  //   1. Once the fetch is observed in flight, mark it seen.
+  //   2. Clear the latch only after it has been seen in flight AND fetching has settled
+  //      (success OR fresh error). This survives the click→in-flight async gap.
+  useEffect(() => {
+    if (!retryInFlight) return;
+    if (inFlightSignal) {
+      retrySeenInFlightRef.current = true;
+    } else if (retrySeenInFlightRef.current) {
+      setRetryInFlight(false);
+    }
+  }, [retryInFlight, inFlightSignal]);
+
+  // Issue #1170 (AC3) — retry-action loading feedback. True only while a user-initiated
+  // retry is genuinely in flight (latched + the query is still fetching). Disabling the
+  // button while in flight also prevents a double-fire on rapid clicks.
+  const isRetrying = retryInFlight && inFlightSignal;
+
+  // Issue #1204 — render-precedence: while a user-initiated retry is in flight, keep showing
+  // the error block (so its loading affordance stays mounted) instead of dropping to the
+  // skeleton, even though the underlying query has transiently reverted to error=false /
+  // loading=true. Genuine initial load (latch false) is unaffected.
+  const showErrorBlock = isRetrying || (isError && !isLoading);
+  // Suppress the skeleton while the retry-loading error block is mounted.
+  const showSkeleton = isLoading && !isRetrying;
 
   // Flatten pages into single school list — use prop when available
   const schools = useMemo(() => {
@@ -252,7 +293,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
 
       {/* School List or Empty State */}
       <div className="flex-1 overflow-y-auto">
-        {isLoading && (
+        {showSkeleton && (
           <div className="p-4 space-y-3">
             {Array(5).fill(0).map((_, i) => (
               <div key={i} className="p-3 rounded-lg space-y-2">
@@ -310,7 +351,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
           </div>
         )}
 
-        {isError && !isLoading && (
+        {showErrorBlock && (
           <div
             role="alert"
             data-testid="schools-error-state"
@@ -333,7 +374,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
           </div>
         )}
 
-        {schools.length === 0 && !isLoading && !isError && (
+        {schools.length === 0 && !showSkeleton && !showErrorBlock && (
           <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
             <GraduationCap className="w-12 h-12 text-muted-foreground mb-3" />
             <h3 className="text-lg font-semibold text-foreground">No schools found</h3>

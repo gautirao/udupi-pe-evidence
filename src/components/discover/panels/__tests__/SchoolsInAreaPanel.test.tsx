@@ -183,35 +183,153 @@ describe('SchoolsInAreaPanel — area-first select branch (Issue #1157 AC3)', ()
   });
 });
 
-describe('SchoolsInAreaPanel — retry loading feedback (Issue #1170 AC3)', () => {
-  it('error state retry button is idle (enabled, "Retry") when no refetch is in flight', () => {
-    mockedUseSchoolsByArea.mockReturnValue(hookReturn({ isError: true, isFetching: false }));
-    renderStandalone();
+describe('SchoolsInAreaPanel — retry loading feedback (Issue #1204 / #1170 AC6)', () => {
+  // Prop mode = production. MapDiscovery passes schools/schoolsError/onSchoolsRetry/
+  // schoolsFetching from ONE useSchoolsByArea infinite query. On a no-data refetch React
+  // Query reverts status error→pending: schoolsError flips false, schoolsLoading flips true.
+  // The panel must keep the error block + Retry-loading affordance mounted across that flip,
+  // driven by a LOCAL latch (set on Retry click, cleared when fetching settles) — NOT by a
+  // synthetic "isError && isFetching simultaneously" state the real query never produces.
 
+  // Mirrors MapDiscovery's prop wiring across an errored → in-flight refetch transition.
+  function renderPropMode(props: Partial<React.ComponentProps<typeof SchoolsInAreaPanel>> = {}) {
+    const onSchoolsRetry = vi.fn();
+    const utils = render(
+      <QueryClientProvider client={makeQC()}>
+        <SchoolsInAreaPanel
+          journey="area-first"
+          onStartOver={vi.fn()}
+          schools={[]}
+          schoolsLoading={false}
+          schoolsError
+          schoolsFetching={false}
+          onSchoolsRetry={onSchoolsRetry}
+          {...props}
+        />
+      </QueryClientProvider>,
+    );
+    const rerenderWith = (next: Partial<React.ComponentProps<typeof SchoolsInAreaPanel>>) =>
+      utils.rerender(
+        <QueryClientProvider client={makeQC()}>
+          <SchoolsInAreaPanel
+            journey="area-first"
+            onStartOver={vi.fn()}
+            schools={[]}
+            schoolsLoading={false}
+            schoolsError={false}
+            schoolsFetching={false}
+            onSchoolsRetry={onSchoolsRetry}
+            {...next}
+          />
+        </QueryClientProvider>,
+      );
+    return { ...utils, onSchoolsRetry, rerenderWith };
+  }
+
+  it('error retry button is idle (enabled, "Retry") before any retry is clicked', () => {
+    renderPropMode();
     const retry = screen.getByTestId('schools-error-retry');
     expect(retry).toHaveTextContent('Retry');
     expect(retry).not.toBeDisabled();
     expect(retry).toHaveAttribute('aria-busy', 'false');
   });
 
-  it('shows loading feedback (disabled + "Retrying…") while a retry refetch is in flight', () => {
-    // isError keeps the error-state mounted while isFetching marks the refetch in flight.
-    // isFetchingNextPage=false distinguishes a retry from a "Load more" pagination fetch.
-    mockedUseSchoolsByArea.mockReturnValue(
-      hookReturn({ isError: true, isFetching: true, isFetchingNextPage: false }),
-    );
-    renderStandalone();
+  it('keeps the error block + Retry-loading state mounted across the real error→pending flip', () => {
+    const { rerenderWith } = renderPropMode();
 
+    // Click Retry while errored (the only place schools-error-retry exists).
+    fireEvent.click(screen.getByTestId('schools-error-retry'));
+
+    // Production transition: the parent-owned no-data query reverts error→pending, so
+    // schoolsError flips false and schoolsLoading flips true while the refetch is in flight.
+    rerenderWith({ schoolsError: false, schoolsLoading: true, schoolsFetching: true });
+
+    // The error block must STAY mounted (not unmount to a bare skeleton), with the Retry
+    // button in its loading state. This FAILS on origin/main (skeleton wins).
     const retry = screen.getByTestId('schools-error-retry');
+    expect(screen.getByTestId('schools-error-state')).toBeInTheDocument();
     expect(retry).toHaveTextContent('Retrying…');
     expect(retry).toBeDisabled();
     expect(retry).toHaveAttribute('aria-busy', 'true');
   });
 
-  it('does NOT show retry loading feedback for a pagination ("Load more") fetch', () => {
-    // A "Load more" fetch sets isFetching AND isFetchingNextPage. The error state is not
-    // mounted in that case (it requires isError), but the derivation must not treat a
-    // pagination fetch as a retry. Assert the error-state retry is not in a busy state.
+  it('fires exactly one refetch (onSchoolsRetry) per Retry click', () => {
+    const { onSchoolsRetry } = renderPropMode();
+    fireEvent.click(screen.getByTestId('schools-error-retry'));
+    expect(onSchoolsRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovery: pending → success clears the error block and renders the school list', () => {
+    const { rerenderWith } = renderPropMode();
+    fireEvent.click(screen.getByTestId('schools-error-retry'));
+    rerenderWith({ schoolsError: false, schoolsLoading: true, schoolsFetching: true });
+
+    // Refetch settles successfully with data.
+    rerenderWith({
+      schools: TWELVE_SCHOOLS,
+      schoolsError: false,
+      schoolsLoading: false,
+      schoolsFetching: false,
+    });
+
+    expect(screen.queryByTestId('schools-error-state')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('school-card')).toHaveLength(12);
+  });
+
+  it('re-error: pending → fresh error re-shows the error block with Retry enabled again', () => {
+    const { rerenderWith } = renderPropMode();
+    fireEvent.click(screen.getByTestId('schools-error-retry'));
+    rerenderWith({ schoolsError: false, schoolsLoading: true, schoolsFetching: true });
+
+    // Refetch settles into a fresh error (no data).
+    rerenderWith({ schoolsError: true, schoolsLoading: false, schoolsFetching: false });
+
+    const retry = screen.getByTestId('schools-error-retry');
+    expect(screen.getByTestId('schools-error-state')).toBeInTheDocument();
+    expect(retry).toHaveTextContent('Retry');
+    expect(retry).not.toBeDisabled();
+    expect(retry).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('genuine initial load shows the skeleton, not the error block (latch starts false)', () => {
+    render(
+      <QueryClientProvider client={makeQC()}>
+        <SchoolsInAreaPanel
+          journey="area-first"
+          onStartOver={vi.fn()}
+          schools={[]}
+          schoolsLoading
+          schoolsError={false}
+          schoolsFetching
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByTestId('schools-error-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-card')).not.toBeInTheDocument();
+    // Skeletons are the only content; no error/empty affordance.
+    expect(screen.queryByText(/no schools found/i)).not.toBeInTheDocument();
+  });
+
+  it('genuine successful-empty shows the empty state with no retry spinner', () => {
+    render(
+      <QueryClientProvider client={makeQC()}>
+        <SchoolsInAreaPanel
+          journey="area-first"
+          onStartOver={vi.fn()}
+          schools={[]}
+          schoolsLoading={false}
+          schoolsError={false}
+          schoolsFetching={false}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByText(/no schools found/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('schools-error-state')).not.toBeInTheDocument();
+  });
+
+  it('does NOT enter the Retrying state for a "Load more" pagination fetch (standalone)', () => {
+    // Standalone hook mode: a pagination fetch sets isFetching AND isFetchingNextPage.
+    // No retry was clicked, so the latch is false and the (errored) Retry button stays idle.
     mockedUseSchoolsByArea.mockReturnValue(
       hookReturn({ isError: true, isFetching: true, isFetchingNextPage: true }),
     );
