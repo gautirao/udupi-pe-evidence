@@ -516,6 +516,27 @@ Before any cleanup, the agent MUST report:
 
 **Destructive cleanup (branch/worktree deletion or prune) requires explicit user approval.**
 
+#### Canonical safe command for deleting tip-merged local branches
+
+When the user explicitly approves deleting tip-merged local branches, use this canonical command. It deletes ONLY truly-merged branches (`-d`, never `-D`) and explicitly excludes the current branch, the worktree marker, `main`, `master`, and ALL `worktree-agent-*` branches:
+
+```bash
+git branch --format='%(refname:short)' --merged main \
+  | grep -vE '^(main|master)$' \
+  | grep -vE '^worktree-agent-' \
+  | xargs -r -n1 git branch -d
+```
+
+Notes:
+- `git branch --format='%(refname:short)'` MUST be used. The default decorated `git branch` output prefixes branches checked out in linked worktrees with `+` (and the current branch with `*`); parsing that decorated output leaks a stray `+`/`*` token into the pipeline and is unsafe. Cleanup commands MUST NOT parse the default decorated output.
+- `xargs -r` avoids running `git branch -d` with no input.
+- `git branch -d` (not `-D`) is mandatory: it refuses any branch not fully merged to its upstream, so unmerged/remote-divergent branches are left alone automatically.
+- Branches attached to a linked worktree will still be refused by `git branch -d` ("used by worktree"); the `worktree-agent-` exclusion is a second, defence-in-depth guard so they are never even attempted.
+
+#### `worktree-agent-*` branches are NEVER part of generic cleanup
+
+Even if a `worktree-agent-*` branch is tip-merged into `main` and has no attached worktree, it MUST NOT be deleted by the generic merged-branch cleanup above. Worktree/agent branches and their worktrees are cleaned up only by a **separate, dedicated worktree/agent cleanup pass with explicit user approval** (report-first per the rules above, then `git worktree remove` + `git branch -D` per item only after approval). Generic merged-branch deletion must always exclude them (hence the `grep -vE '^worktree-agent-'` guard).
+
 ### Actions that ALWAYS require explicit user approval
 
 - merging stale PRs,
