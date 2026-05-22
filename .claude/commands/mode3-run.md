@@ -455,6 +455,79 @@ Print a one-screen summary:
 - Token telemetry (planner Opus tokens, executor Sonnet tokens, reviewer Opus tokens) if available.
 - "Ready for next issue."
 
+The closeout MUST additionally report current-run artefacts and stale artefacts **separately** (see the Stale PR and branch safety policy below):
+- **Current-run, this session:** PRs merged this session; local branches deleted this session.
+- **Stale PRs detected but NOT touched:** number/title/age each (see triage report fields).
+- **Stale branches/worktrees detected but NOT touched:** counts by category (merged / unmerged / worktree-agent / unknown).
+- **Dirty/untracked files left untouched** (pre-existing, not produced by this run).
+- **Audit artefacts preserved** (`.claude/handoffs/issue-<N>/*`, `.claude/openai-gates/issue-<N>/*`).
+- An **explicit statement** that no stale PR/branch cleanup, merge, close, rebase, or prune was performed unless the user explicitly approved it (cite the approval if one was given).
+
+---
+
+## Stale PR and branch safety policy
+
+This policy governs how the Main Agent and Orchestrator treat PRs, branches, and worktrees that are NOT part of the current approved handoff. After several Mode 3 runs, old PRs and local/worktree branches accumulate; some PRs may be weeks old and overlap with newer merged work. **These are stale artefacts requiring triage, never active merge candidates.** The agent must not blindly merge, rebase, force-push, close, retarget, mark-ready, delete, or prune any of them without explicit user approval.
+
+### Stale PRs
+
+A PR is **stale** if ANY of these are true:
+- it is older than the current active run,
+- it was created in a previous session,
+- it targets files that have changed significantly since it was created,
+- it overlaps with closed/merged issues,
+- it overlaps with newer active issues,
+- it is not referenced by the current approved handoff.
+
+For a stale PR, the agent MUST NOT:
+- merge,
+- rebase,
+- force-push,
+- close,
+- retarget,
+- mark ready,
+- assume it is still valid.
+
+Instead, the agent MUST report (read-only triage):
+- PR number / title / age,
+- branch,
+- likely overlap (which issue/PR/area it touches),
+- whether it conflicts with current `main`,
+- a recommended action, one of:
+  - keep open,
+  - close as stale,
+  - rebase and re-review,
+  - superseded by newer issue/PR,
+  - needs user decision.
+
+**Any action on a stale PR requires explicit user approval.**
+
+### Stale branches / worktrees
+
+This covers stale local branches, remote branches, and `worktree-agent-*` branches.
+
+The agent MUST NOT delete or prune any of them unless the user explicitly asks.
+
+Before any cleanup, the agent MUST report:
+- the count of stale branches,
+- categories: **merged**, **unmerged**, **worktree/agent**, **unknown**,
+- whether each deletion is safe,
+- the exact commands that would be run.
+
+**Destructive cleanup (branch/worktree deletion or prune) requires explicit user approval.**
+
+### Actions that ALWAYS require explicit user approval
+
+- merging stale PRs,
+- closing stale PRs,
+- rebasing old branches,
+- deleting local or remote branches,
+- pruning worktrees,
+- deleting audit artefacts,
+- deleting untracked files NOT created by the current run.
+
+The only branch cleanup the agent may perform without a fresh prompt is deleting the local feature branch(es) it created and merged **during the current run** — and even that is reported in the Phase 12 closeout.
+
 ---
 
 ## Fallback: Path C (Main Agent direct orchestration)
