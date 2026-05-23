@@ -387,6 +387,19 @@ function AreaPanner({ panToArea }: { panToArea?: AreaPoint | null }) {
  *
  * Reuse note: adapted from AreaPanner (same file, ~line 301) and the
  * handledTickRef guard from MapController.resetMapTick (~line 442).
+ *
+ * Issue #1173 — radius-change zoom stability:
+ * The same schoolFocusTick fires for both an initial school-focus (school-id
+ * change) AND a radius change for the already-focused school. On a *radius
+ * change only* (same school centre), we no longer unconditionally refit: if the
+ * new radius circle still fits inside the current viewport we PRESERVE the
+ * user's zoom/center (zero map mutation — which structurally breaks any fit
+ * loop), and we REFIT (the original fitBounds) only when the new circle would be
+ * clipped / mostly outside the current viewport. The initial focus and the
+ * radius=0 flyTo path are UNCHANGED. The fits/clipped decision is keyed on the
+ * radius-value change and reads the viewport imperatively via map.getBounds()
+ * at decision time — viewport state is intentionally NOT in the dep array and no
+ * moveend/zoomend listener is attached, so a fit-triggered move cannot re-trigger.
  */
 function SchoolFocusPanner({
   schoolFocusTick,
@@ -401,8 +414,28 @@ function SchoolFocusPanner({
 }) {
   const map = useMap();
   const handledTickRef = useRef(0);
+  // Centre we last performed a fit/flyTo for. Lets us tell an initial focus
+  // (centre changed / first fit) apart from a radius change for the same school.
+  const focusedCenterRef = useRef<{ lat: number; lon: number } | null>(null);
 
   useEffect(() => {
+    // Issue #1173 (clear → re-select-same-school regression): when the selected
+    // school is cleared, lat/lon become null but schoolFocusTick does NOT
+    // increment (MapDiscovery's tick effect early-returns before incrementing
+    // when lat/lon are null), so the tick guard below would short-circuit before
+    // we ever observe the clear. We therefore reset the persisted focus centre
+    // HERE — before the tick guard — keyed only on the lat/lon-null prop change.
+    // This makes a subsequent re-selection of the SAME school read as an INITIAL
+    // focus (prevCentre == null → isRadiusChange false → refit), instead of being
+    // mis-classified as a radius change that PRESERVES the zoomed-out city view.
+    // Pure ref write: zero map mutation, no listener, no new viewport dep — the
+    // fit-loop safeguard is unaffected. The AreaRestorePanner/CityRestorePanner
+    // restore on clear is untouched (this only resets SchoolFocusPanner's own ref).
+    if (lat == null || lon == null) {
+      focusedCenterRef.current = null;
+      return;
+    }
+
     const tick = schoolFocusTick ?? 0;
     // Fire only when tick strictly exceeds the last handled value.
     // This prevents re-firing on every render and eliminates any feedback loop
@@ -411,22 +444,54 @@ function SchoolFocusPanner({
     if (tick === 0 || tick <= handledTickRef.current) return;
     handledTickRef.current = tick;
 
-    if (lat == null || lon == null) return;
-
     const radius = radiusKm ?? 0;
     if (radius > 0) {
       // Derive a bounding box from centre ± radiusKm in degrees.
       // 1 degree lat ≈ 111.32 km; 1 degree lon ≈ 111.32 * cos(lat) km.
       const deltaLat = radius / 111.32;
       const deltaLon = radius / (111.32 * Math.cos((lat * Math.PI) / 180));
+      const south = lat - deltaLat;
+      const west = lon - deltaLon;
+      const north = lat + deltaLat;
+      const east = lon + deltaLon;
       const bounds: [[number, number], [number, number]] = [
-        [lat - deltaLat, lon - deltaLon],
-        [lat + deltaLat, lon + deltaLon],
+        [south, west],
+        [north, east],
       ];
+
+      // A radius CHANGE = same school centre as the last fit. A centre change
+      // (new school selected) is an initial focus and must always fit (AC5).
+      const prevCentre = focusedCenterRef.current;
+      const isRadiusChange =
+        prevCentre != null && prevCentre.lat === lat && prevCentre.lon === lon;
+
+      if (isRadiusChange) {
+        // Read the current viewport imperatively at decision time. Viewport
+        // state is deliberately NOT in the dep array and no map event listener
+        // is attached, so this decision cannot feed back into itself
+        // (Issue #1173 fit-loop safeguard).
+        const viewport = map.getBounds?.();
+        const fitsInViewport =
+          viewport != null &&
+          viewport.getSouth() <= south &&
+          viewport.getWest() <= west &&
+          viewport.getNorth() >= north &&
+          viewport.getEast() >= east;
+        if (fitsInViewport) {
+          // PRESERVE branch (AC1): the new radius circle still fits — keep the
+          // user's current zoom/center. ZERO map mutation by design.
+          return;
+        }
+        // else fall through to REFIT (AC2): the circle would be clipped.
+      }
+
+      // Initial focus, or a radius change whose circle would be clipped: refit.
+      focusedCenterRef.current = { lat, lon };
       map.fitBounds(bounds, { padding: [40, 40] });
     } else {
       // Zero or absent radius: fly to school centre at a fixed zoom suitable for
       // a neighbourhood view so the school marker is clearly visible.
+      focusedCenterRef.current = { lat, lon };
       map.flyTo([lat, lon], 14, { duration: 1 });
     }
   }, [schoolFocusTick, lat, lon, radiusKm, map]);
