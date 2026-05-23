@@ -22,6 +22,7 @@ import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { haversineKm } from '@/lib/geo';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
@@ -189,19 +190,6 @@ export function deriveDiscoverBadge({
   }
   return { visible: true, count: cityTotal, loading: false };
 }
-
-/** Haversine great-circle distance in kilometres between two lat/lon points. */
-const haversineKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
 
 export default function MapDiscovery() {
   const { user, isLoading: authLoading } = useAuth();
