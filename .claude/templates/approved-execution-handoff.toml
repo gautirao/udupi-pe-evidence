@@ -45,6 +45,31 @@ approved_plan_path = ".claude/handoffs/issue-<N>/approved-plan.toml"
 approved_plan_sha256 = "<hex digest of approved_plan_path at materialisation>"
 plan_review_verdict = "APPROVED"
 plan_review_evidence = ".claude/openai-gates/issue-<N>/<timestamp>-PLAN_REVIEW/verdict.toml"
+# The implementation plan was AUTHORED by the Team Lead (mode3-orchestrator),
+# not the Main Agent. team-lead-plan.toml was the PLAN_REVIEW input packet.
+team_lead_plan_path = ".claude/handoffs/issue-<N>/team-lead-plan.toml"
+
+# --- OPENAI PLAN_REVIEW ACCEPTANCE CONTRACT ---------------------------------
+# Transcribed VERBATIM from the OpenAI PLAN_REVIEW verdict (eval_checklist /
+# required_evidence / scope). Under the current gate-schema limitation
+# (openai_gate.py VERDICT_SCHEMA is additionalProperties:false), the Main Agent
+# transcribes the verdict's required_changes + approved_scope + blocking_issues
+# into these fields. These are NOT Main-Agent-invented criteria. The Team Lead
+# executes against [eval_checklist] and self-checks against it before writing
+# workdone-candidate.toml (which must carry the matching [eval_checklist_result]).
+[eval_checklist]
+items = [
+  # "Acceptance item the Team Lead must satisfy, with evidence, before workdone."
+]
+
+[required_evidence]
+must_provide = [
+  # "Evidence the WORKDONE_CANDIDATE must include (build / unit / e2e / browser / review)."
+]
+
+[plan_scope]
+allowed_changes = []    # from OpenAI [scope].allowed_changes
+forbidden_changes = []  # from OpenAI [scope].forbidden_changes
 
 [executor]
 # MVP default model = "sonnet" for the first 3 dry-runs.

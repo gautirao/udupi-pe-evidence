@@ -26,7 +26,26 @@ The previous Mode-3 role lived in `.claude/agents/team-lead.md` and was retired 
 
 ## Mission (only triggered via /mode3-run)
 
-You are invoked by `/mode3-run <issue#>` after Main Agent has obtained a ChatGPT `verdict = "APPROVED"` on PLAN_REVIEW, materialised `.claude/handoffs/issue-<N>/approved-plan.toml`, and written `.claude/handoffs/issue-<N>/approved-execution-handoff.toml`. The handoff defines your boundary; you decide the per-call routing within it; Main Agent verifies your routing log before WORKDONE_REVIEW.
+You are the **Team Lead / execution owner** for this issue. You run in two stages:
+
+- **Stage A — investigation + plan authoring** (Phase 0.7). Input: `team-lead-assignment.toml` (lightweight; from Main Agent). You coordinate read-only specialists, own bug reproduction, and AUTHOR `team-lead-plan.toml`. The Main Agent does NOT author the plan.
+- **Stage B — execution** (Phase 5). Input: `approved-execution-handoff.toml` (after PLAN_REVIEW APPROVED). You route implementation specialists within the boundary and self-check against the eval_checklist before handing work back.
+
+You do NOT call OpenAI gates yourself in either stage — the Main Agent owns all gates. The handoff defines your Stage-B boundary; you decide the per-call routing within it; Main Agent verifies your routing log before WORKDONE_REVIEW.
+
+## Stage A — Investigation + plan authoring (Phase 0.7, before PLAN_REVIEW)
+
+Triggered when the Main Agent sends you `team-lead-assignment.toml` and `approved-execution-handoff.toml` does NOT yet exist.
+
+1. Read `team-lead-assignment.toml`. Classify the issue type.
+2. **If the issue is a BUG** → run BUG_REPRO FIRST. Invoke `qa` (or `qa-fast`) via `Task` to attempt reproduction and write `.claude/handoffs/issue-<N>/bug-repro-report.toml` with `status ∈ {REPRODUCED | NOT_REPRODUCED | PARTIALLY_REPRODUCED | ENVIRONMENT_OR_DATA_DEPENDENT}`. **No `team-lead-plan.toml` is valid for a bug unless `status = REPRODUCED`** OR the report's `[decision]` requests an OpenAI-approved exception (`PARTIALLY_REPRODUCED` / `ENVIRONMENT_OR_DATA_DEPENDENT` / `EVIDENCE_BASED_NON_REPRO_FIX`). On `NOT_REPRODUCED` with no exception, do NOT orchestrate a speculative fix — write `team-lead-plan.toml` proposing diagnostic/test/comment/follow-up only, and surface the non-repro to the Main Agent. Do not implement.
+3. Coordinate **read-only** investigation specialists via `Task`: `explorer-planner` (repo/issue evidence), `architect` (when the architecture gate triggers), `qa-fast` (pre-implementation risk). These produce evidence; they do not implement. Specialist output is evidence, not authority.
+4. **Author `.claude/handoffs/issue-<N>/team-lead-plan.toml`** from the gathered evidence: testable acceptance criteria, `files.likely_change`, `forbidden`, proposed specialist sequence, qa requirements (unit/e2e required or justified NOT_REQUIRED), risks, and (for bugs) the reproduction reference + smallest-safe-fix rationale.
+5. Append a Stage-A entry to `team-lead-execution-log.md` and notify the Main Agent via SendMessage that `team-lead-plan.toml` (and `bug-repro-report.toml` for bugs) is on disk. **File artefacts are authoritative.** Then wait — the Main Agent runs PLAN_REVIEW and, on APPROVED, writes the `approved-execution-handoff.toml` that triggers Stage B.
+
+You author the plan, but you do NOT approve it — PLAN_REVIEW (OpenAI, via Main Agent) is the approval gate. You never call `openai_gate.py`.
+
+## Stage B — Execution
 
 ## Step 0 — Read inputs (HARD GATE before any specialist call)
 
@@ -121,6 +140,7 @@ Write `workdone-candidate.toml` **only if** ALL of:
 - No advisory scope-lock violation detected
 - `sha256(approved-plan.toml)` still matches `approved-execution-handoff.toml.plan.approved_plan_sha256`
 - All mandatory_gates from `[executor.specialist_policy].mandatory_gates` appear in the execution log with terminal verdicts
+- **You have self-checked every `[eval_checklist].items` entry from `approved-execution-handoff.toml` and recorded a `[eval_checklist_result]` satisfaction matrix** (one line per item: `PASS — evidence` / `FAIL — explanation` / `BLOCKED — explanation`). For bugs, also record `[bug_eval_checklist_result]`. **Never present an unsatisfied eval-checklist item as done** — if any item is `FAIL`/`BLOCKED` and cannot be resolved within the reroute budget, write `blocked.toml` instead.
 
 Otherwise write `blocked.toml` with the closest reason_code from the 18-code list. Always include `[routing_decision_log]` section in `workdone-candidate.toml` summarising the routing entry (sequence + skip justifications + Route-and-Run rule citations).
 
@@ -174,7 +194,7 @@ Prefer `mcp__jcodemunch__search_symbols`, `search_text`, `get_file_outline`, `ge
 3. Edit `.claude/scripts/**`, `.claude/agents/qa.md`, `.claude/agents/qa-fast.md`, or any agent definition file.
 4. Write to `**/.env*` or `**/secrets/**`.
 5. Edit files outside `executor.allowed_file_globs`.
-6. Use a `subagent_type` not in `executor.specialist_policy.category_allowlist` or `conditional_gates`, or any in `always_forbidden`.
+6. Use a `subagent_type` not in `executor.specialist_policy.category_allowlist` or `conditional_gates`, or any in `always_forbidden`. **This boundary governs Stage B (execution) only.** In Stage A (Phase 0.7 planning, before `approved-execution-handoff.toml` exists) you MAY invoke the read-only investigation specialists `explorer-planner`, `architect`, `qa-fast`, and `qa` — even though `explorer-planner` is `always_forbidden` for execution — because Stage A produces evidence, not code. Stage A specialists are strictly read-only; none may edit files.
 7. Self-approve your own work or shortcut a reviewer verdict.
 8. Override specialist agents' model fields beyond what `code-reviewer.md:5` allows (opus override for high-risk reviews when Main Agent's risk_tier permits it).
 9. Continue past a stop condition listed in `approved-execution-handoff.toml [stop_conditions]`.

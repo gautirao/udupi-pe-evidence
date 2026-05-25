@@ -120,6 +120,39 @@ expected_evidence = []         # e.g. ["qa-fast: risk register", "code-reviewer:
 routing_log_entry_ref = ".claude/handoffs/issue-<N>/team-lead-execution-log.md ROUTING DECISION at <ISO-8601>"
 notes = ""
 
+# --- EVAL-CHECKLIST SATISFACTION MATRIX (Team Lead self-check) ---------------
+# One entry per [eval_checklist].items entry in approved-execution-handoff.toml.
+# Every item MUST be "PASS - <evidence>". Any "FAIL - ..." or "BLOCKED - ..."
+# means the work is NOT done — the Team Lead writes blocked.toml instead of
+# presenting it as complete. Main Agent WORKDONE_REVIEW intake verifies this
+# matrix covers every handoff eval_checklist item and that all are PASS.
+[eval_checklist_result]
+# "Original eval-checklist item 1" = "PASS - evidence..."
+# "Original eval-checklist item 2" = "FAIL - explanation..."  ← halts; not done
+
+# --- BUG-ONLY: reproduction + fix-verification + bug eval matrix -------------
+# Present ONLY when issue_type = bugfix. Omit entirely for non-bug issues.
+[bug_reproduction]
+status = ""   # REPRODUCED | NOT_REPRODUCED | PARTIALLY_REPRODUCED | ENVIRONMENT_OR_DATA_DEPENDENT
+evidence = ""
+
+[bug_fix_verification]
+status = ""   # FIX_VERIFIED
+same_scenario_retested = false   # MUST be true before WORKDONE_REVIEW for a bug
+evidence = ""
+
+[regression_test]
+added_or_updated = false
+test_name = ""
+
+[bug_eval_checklist_result]
+# "Original bug was reproduced or valid exception approved" = "PASS - evidence..."
+# "Root cause is explained using evidence" = "PASS - evidence..."
+# "Fix addresses the reproduced/supported behaviour" = "PASS - evidence..."
+# "Regression test fails before fix or directly covers the bug condition" = "PASS - evidence..."
+# "No unrelated behaviour changed" = "PASS - evidence..."
+# "Post-fix evidence shows the bug no longer occurs" = "PASS - evidence..."
+
 [deviations]
 items = []
 
