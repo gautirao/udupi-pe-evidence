@@ -98,6 +98,29 @@ describe('SchoolSelectedPanel', () => {
     expect(screen.getByTestId('radius-btn-3')).toHaveAttribute('aria-pressed', 'true');
   });
 
+  // ── Issue #1210: radiusKm=0 clamps to the minimum (1 km) in the control + label ──
+
+  it('clamps radiusKm=0 to the 1 km button being active (chip/control reflects effective radius)', () => {
+    renderPanel({ radiusKm: 0 });
+    // Before the fix `effectiveRadius` was 0, so NO radius button was active.
+    expect(screen.getByTestId('radius-btn-1')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('radius-btn-2')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('radius-btn-3')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('radius-btn-5')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('renders the empty-state distance as "within 1 km" (not "within 0 km") when radiusKm=0', () => {
+    renderPanel({ radiusKm: 0, listings: [], isLoadingListings: false });
+    expect(screen.getByTestId('empty-state-message')).toHaveTextContent(
+      'No properties found within 1 km of Manipal Public School',
+    );
+  });
+
+  it.each([1, 2, 3, 5])('leaves valid radius %i km unchanged in the control', (km) => {
+    renderPanel({ radiusKm: km });
+    expect(screen.getByTestId(`radius-btn-${km}`)).toHaveAttribute('aria-pressed', 'true');
+  });
+
   // ── AC3: listing cards ────────────────────────────────────────────────────
 
   it('renders listing cards when listings are present', () => {

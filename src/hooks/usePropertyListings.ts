@@ -5,6 +5,27 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { haversineKm } from '@/lib/geo';
 
+/**
+ * Minimum supported school-proximity radius (km). Matches the smallest value in
+ * the RADIUS_OPTIONS control. A 0 km radius is not meaningful — haversine returns
+ * > 0 for any listing not exactly collocated with the school — so it would filter
+ * out essentially everything and present an unexplained empty state (issue #1210).
+ */
+export const MIN_SCHOOL_RADIUS_KM = 1;
+
+/**
+ * Normalise a school-radius value to a usable radius. Non-finite (NaN), zero, and
+ * sub-minimum values are clamped up to MIN_SCHOOL_RADIUS_KM; valid radii (>= 1 km,
+ * including 1/2/3/5) pass through unchanged. Used by every radius consumption point
+ * (data filter, radius control, map circle) so they all reflect the same effective
+ * radius. Does not impose an upper bound — larger radii remain valid.
+ */
+export function clampSchoolRadiusKm(radiusKm: number): number {
+  return Number.isFinite(radiusKm) && radiusKm >= MIN_SCHOOL_RADIUS_KM
+    ? radiusKm
+    : MIN_SCHOOL_RADIUS_KM;
+}
+
 export type PropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'commercial_building' | 'warehouse' | 'commercial_land' | 'other';
 
 export interface PropertyImage {
@@ -345,11 +366,14 @@ export function usePropertyListings(filters?: PropertyFilters) {
         results = results.filter((l) => l.possessionStatus === 'ready_to_move');
       }
 
-      // School proximity filter: haversine distance from school center
-      if (filters?.schoolLat != null && filters?.schoolLon != null && filters?.schoolRadiusKm) {
+      // School proximity filter: haversine distance from school center.
+      // Issue #1210: use `!= null` (not truthiness) so radiusKm=0 is not silently
+      // skipped, and clamp sub-minimum/non-finite radii to MIN_SCHOOL_RADIUS_KM so a
+      // 0 km value yields normal min-radius results instead of an unexplained empty set.
+      if (filters?.schoolLat != null && filters?.schoolLon != null && filters?.schoolRadiusKm != null) {
         const schoolLat = filters.schoolLat;
         const schoolLon = filters.schoolLon;
-        const radiusKm = filters.schoolRadiusKm;
+        const radiusKm = clampSchoolRadiusKm(filters.schoolRadiusKm);
         results = results.filter((l) => {
           if (l.latitude == null || l.longitude == null) return false;
           return haversineKm(schoolLat, schoolLon, l.latitude, l.longitude) <= radiusKm;

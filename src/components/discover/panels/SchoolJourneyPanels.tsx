@@ -26,6 +26,7 @@ import { usePopularSchools } from '@/hooks/usePopularSchools';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
+import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
 
 const RADIUS_OPTIONS = [1, 2, 3, 5] as const;
@@ -486,7 +487,10 @@ export function SchoolSelectedPanel({
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
 
-  const effectiveRadius = radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM;
+  // Issue #1210: clamp sub-minimum/non-finite radii (e.g. ?radiusKm=0) up to the
+  // minimum so the radius control shows a selected button and the empty-state text
+  // never reads "within 0 km". `??` alone misses 0 (not null/undefined).
+  const effectiveRadius = clampSchoolRadiusKm(radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
 
   // Intentionally scoped to the four filters surfaced in the "Clear filters" chip
   // (price range, bedrooms, property types). Toggle filters (sellerTypes, backOnMarket,
@@ -715,7 +719,10 @@ export function AreaSchoolCombinedPanel({
 }: AreaSchoolCombinedPanelProps) {
   const navigate = useNavigate();
 
-  const effectiveRadius = radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM;
+  // Issue #1210: clamp sub-minimum/non-finite radii (e.g. ?radiusKm=0) up to the
+  // minimum so the radius control shows a selected button and the empty-state text
+  // never reads "within 0 km". `??` alone misses 0 (not null/undefined).
+  const effectiveRadius = clampSchoolRadiusKm(radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
 
   const hasPropertyFilters = Boolean(
     filters.propertyTypes?.length ||

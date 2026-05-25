@@ -23,6 +23,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { haversineKm } from '@/lib/geo';
+import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
@@ -608,7 +609,9 @@ export default function MapDiscovery() {
         // When no school is selected, return all areaListings (area-scoped browse).
         const sLat = filters.schoolLat;
         const sLon = filters.schoolLon;
-        const radius = filters.schoolRadiusKm;
+        // Issue #1210: clamp so a 0 km radius does not silently filter out every
+        // listing; the anon path mirrors the auth haversine filter's clamp.
+        const radius = filters.schoolRadiusKm != null ? clampSchoolRadiusKm(filters.schoolRadiusKm) : null;
         if (sLat != null && sLon != null && radius != null) {
           return areaListings.filter((l) => {
             const lat = l.lat ?? l.latitude;
@@ -738,8 +741,10 @@ export default function MapDiscovery() {
   const handleRadiusChange = useCallback(
     (newRadiusKm: number) => {
       if (!urlState.schoolId) return;
-      urlActions.setSchoolParams({ schoolId: urlState.schoolId, radiusKm: newRadiusKm });
-      setFilters((prev) => ({ ...prev, schoolRadiusKm: newRadiusKm }));
+      // Issue #1210: clamp so a 0 km (or sub-minimum) request never reaches URL/state.
+      const radiusKm = clampSchoolRadiusKm(newRadiusKm);
+      urlActions.setSchoolParams({ schoolId: urlState.schoolId, radiusKm });
+      setFilters((prev) => ({ ...prev, schoolRadiusKm: radiusKm }));
     },
     [urlState.schoolId, urlActions, setFilters],
   );
@@ -912,18 +917,21 @@ export default function MapDiscovery() {
         if (!selectedSchool) setSelectedSchool(schoolById);
         return;
       }
-      const radius = urlRadiusKm ?? 3;
+      // Issue #1210: clamp on cold-load/restore so a `?radiusKm=0` deep-link (or a 0
+      // reintroduced by browser Back) never lands in runtime state as 0.
+      const radius = urlRadiusKm != null ? clampSchoolRadiusKm(urlRadiusKm) : DEFAULT_SCHOOL_RADIUS_KM;
       setSelectedSchool(schoolById);
       setFilters((prev) => ({ ...prev, schoolLat: schoolById.latitude, schoolLon: schoolById.longitude, schoolRadiusKm: radius }));
       // Issue #1146 — AC4: When radiusKm was absent from the URL (hand-crafted link,
       // old app version), backfill the default into the URL so it becomes honest.
-      // Guard: only when urlRadiusKm was null to avoid a redundant write.
+      // Issue #1210: also rewrite when the URL carried a sub-minimum value (e.g. 0) so
+      // the address bar reflects the clamped effective radius after restore.
       // Uses replace:true — this is housekeeping on cold-load mount, not a user
       // navigation event. A push here would create a phantom history entry that
       // breaks browser Back (Issue #1146 cycle-2 blocking fix / BN-4 contract).
       // Note: urlSchoolId is guaranteed non-null by the outer if-block; the
       // redundant `&& urlSchoolId` guard that was here has been removed.
-      if (urlRadiusKm == null) {
+      if (urlRadiusKm == null || urlRadiusKm !== radius) {
         urlActionsRef.current.setSchoolParams({ schoolId: urlSchoolId, radiusKm: radius }, { replace: true });
       }
     }
@@ -1200,7 +1208,8 @@ export default function MapDiscovery() {
               onPolygonCleared={handlePolygonCleared}
               schoolCircle={selectedSchool ? {
                 lat: selectedSchool.latitude, lon: selectedSchool.longitude,
-                radiusKm: filters.schoolRadiusKm ?? 3, name: selectedSchool.name,
+                // Issue #1210: clamp so the drawn circle reflects the effective (>=1 km) radius.
+                radiusKm: clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM), name: selectedSchool.name,
               } : undefined}
               initialCenter={memoizedInitialCenter}
               initialZoom={urlState.viewport?.zoom}
@@ -1226,7 +1235,11 @@ export default function MapDiscovery() {
               schoolFocusTick={schoolFocusTick}
               schoolFocusLat={selectedSchoolLat}
               schoolFocusLon={selectedSchoolLon}
-              schoolFocusRadiusKm={urlState.radiusKm ?? filters.schoolRadiusKm}
+              schoolFocusRadiusKm={(() => {
+                // Issue #1210: clamp so the auto-zoom fits the effective (>=1 km) circle.
+                const r = urlState.radiusKm ?? filters.schoolRadiusKm;
+                return r != null ? clampSchoolRadiusKm(r) : r;
+              })()}
               schoolMarkerFocusTick={schoolMarkerFocusTick}
               schoolMarkerPositions={schoolListings
                 .filter((l) => l.lat != null && l.lon != null)
