@@ -132,6 +132,21 @@ Note: Sprint-specific checkpoint format (with PR tracking, project item IDs, enr
 
 ---
 
+## 9) jCodemunch & Code Navigation (for /mode3-run)
+
+For /mode3-run execution, specialists use jCodemunch for code discovery on the main repo index (`local/udupi-property-explorer-*`):
+
+**Policy:**
+- Use jCodemunch (via search_symbols, get_context_bundle, find_references, etc.) for code discovery/navigation.
+- Post-edit `index_file` is optional if the main repo index is fresh (indexed after branch creation).
+- If `index_file` fails with "sub-repo index stale" error, fallback to direct Read tool (the main repo index covers all files). Do not re-index stale sub-repos during the task run.
+- Implementation specialists may use direct Read/Edit for files already identified in the approved plan.
+- After main is synced/merged, Main Agent refreshes the main repo index incrementally: `index_folder { "path": ".", "incremental": true }`.
+
+**Why:** jCodemunch sub-repo indexes can become stale after main-repo reindex (e.g., `local/discover-*`, `local/backend-*` from prior work). The main repo index covers all files and is current. Stale sub-repo path resolution blocks `index_file` but doesn't affect Read. See [[jcodemunch_specialist_tooling]] memory for details.
+
+---
+
 ## Execution Philosophy
 
 - Small PRs > large refactors
