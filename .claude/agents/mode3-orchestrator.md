@@ -41,7 +41,7 @@ Triggered when the Main Agent sends you `team-lead-assignment.toml` and `approve
 2. **If the issue is a BUG** → run BUG_REPRO FIRST. Invoke `qa` (or `qa-fast`) via `Task` to attempt reproduction and write `.claude/handoffs/issue-<N>/bug-repro-report.toml` with `status ∈ {REPRODUCED | NOT_REPRODUCED | PARTIALLY_REPRODUCED | ENVIRONMENT_OR_DATA_DEPENDENT}`. **No `team-lead-plan.toml` is valid for a bug unless `status = REPRODUCED`** OR the report's `[decision]` requests an OpenAI-approved exception (`PARTIALLY_REPRODUCED` / `ENVIRONMENT_OR_DATA_DEPENDENT` / `EVIDENCE_BASED_NON_REPRO_FIX`). On `NOT_REPRODUCED` with no exception, do NOT orchestrate a speculative fix — write `team-lead-plan.toml` proposing diagnostic/test/comment/follow-up only, and surface the non-repro to the Main Agent. Do not implement.
 3. Coordinate **read-only** investigation specialists via `Task`: `explorer-planner` (repo/issue evidence), `architect` (when the architecture gate triggers), `qa-fast` (pre-implementation risk). These produce evidence; they do not implement. Specialist output is evidence, not authority.
 4. **Author `.claude/handoffs/issue-<N>/team-lead-plan.toml`** from the gathered evidence: testable acceptance criteria, `files.likely_change`, `forbidden`, proposed specialist sequence, qa requirements (unit/e2e required or justified NOT_REQUIRED), risks, and (for bugs) the reproduction reference + smallest-safe-fix rationale.
-5. Append a Stage-A entry to `team-lead-execution-log.md` and notify the Main Agent via SendMessage that `team-lead-plan.toml` (and `bug-repro-report.toml` for bugs) is on disk. **File artefacts are authoritative.** Then wait — the Main Agent runs PLAN_REVIEW and, on APPROVED, writes the `approved-execution-handoff.toml` that triggers Stage B.
+5. Append a Stage-A entry to `team-lead-execution-log.md` recording that `team-lead-plan.toml` (and `bug-repro-report.toml` for bugs) is on disk. You do NOT have a `SendMessage` tool (it is not in your frontmatter `tools:`), so you do not actively message the Main Agent — the on-disk artefacts plus the execution-log entry ARE the completion signal, and the Main Agent detects them by reading from disk when your turn ends (Agent Teams idle notification). **File artefacts are authoritative.** Then wait — the Main Agent runs PLAN_REVIEW and, on APPROVED, writes the `approved-execution-handoff.toml` that triggers Stage B.
 
 You author the plan, but you do NOT approve it — PLAN_REVIEW (OpenAI, via Main Agent) is the approval gate. You never call `openai_gate.py`.
 
@@ -175,7 +175,7 @@ Your plain pane output is **not visible** to Main Agent. The only authoritative 
 
 Exactly ONE of `workdone-candidate.toml` or `blocked.toml` MUST exist at the end of your run. Both present → `CONFLICTING_EVIDENCE` (Main Agent halts).
 
-`SendMessage` may be used for notifications, but completion state is determined from files.
+You do NOT have a `SendMessage` tool (it is not in your frontmatter `tools:`), so you cannot actively notify the Main Agent. Record completion only in the on-disk artefacts and the execution log; the Main Agent reads them from disk and detects your turn end via the Agent Teams idle notification. Completion state is determined from files, never from pane output or messages.
 
 ## Rate-limit and timebox
 

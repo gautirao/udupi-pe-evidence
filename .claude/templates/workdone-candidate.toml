@@ -21,6 +21,13 @@ schema_version = "2"
 gate = "WORKDONE_CANDIDATE"
 issue = 0
 branch = "feat/<N>-short-name"
+# MANDATORY — populate with the actual sha256 of approved-execution-handoff.toml
+# at completion time (e.g. `shasum -a 256 .claude/handoffs/issue-<N>/approved-execution-handoff.toml`).
+# This is the integrity anchor the Main Agent checks in WORKDONE_REVIEW step 1(a)
+# (`sha256(handoff on disk) == workdone-candidate.handoff_sha256`). Do NOT leave it as
+# a placeholder and do NOT substitute a custom `[plan_chain]`/`approved_plan_sha256`-only
+# block in its place — the top-level `handoff_sha256` field must be present and correct so
+# the handoff→candidate integrity chain is verifiable directly from this field.
 handoff_sha256 = "<hex digest of approved-execution-handoff.toml at completion time>"
 executor_model = "sonnet"
 started_at = "YYYY-MM-DDTHH:MM:SSZ"
