@@ -2,13 +2,25 @@
 
 > Loaded at Phase 1 (PLAN_REVIEW) and Phase 2 (handoff build). The plan under review is authored by the Team Lead (`team-lead.md` Phase 0.7), not the Main Agent. Semantics unchanged from the original `mode3-run.md`.
 
-## OpenAI eval-checklist mechanism (current vs intended)
+## OpenAI eval-checklist mechanism (native, with transcription fallback)
 
-The `eval_checklist` is the acceptance contract the Team Lead must later satisfy item-by-item. Today `openai_gate.py` returns a fixed 9-field verdict (`additionalProperties: False`), so OpenAI cannot emit a native `[eval_checklist]`/`[self_critic]` block. Until the gate schema is extended (tracked follow-up #1221 — see `### OpenAI gate output dependency`), the Main Agent **derives the eval_checklist by verbatim transcription** of OpenAI's `required_changes` + `approved_scope` + `blocking_issues` into the `[eval_checklist]` and `[required_evidence]` sections of `approved-execution-handoff.toml`. This is mechanical transcription, NOT Main-Agent authorship of new criteria. The `self_critic` summary, when the gate cannot emit it, is recorded as `derived = false` and left empty rather than fabricated.
+The `eval_checklist` is the acceptance contract the Team Lead must later satisfy item-by-item.
 
-### OpenAI gate output dependency (follow-up, out of scope here)
+**Native emission (preferred, #1221 shipped).** `openai_gate.py` now sends a per-gate STRICT schema (`_build_gate_schema(gate)`) that requires OpenAI to emit native structured objects: PLAN_REVIEW returns `eval_checklist`, `required_evidence`, `self_critic`, and `bug_repro_check` (nullable — `null` for non-bugs). The capped objects are persisted to `.claude/openai-gates/issue-<N>/<ts>-PLAN_REVIEW/verdict-structured.json` (full untruncated copy in `raw-response.txt`). When `verdict-structured.json` is present, the Main Agent **copies the native `eval_checklist.items` and `required_evidence.must_provide` verbatim** into the `[eval_checklist]` and `[required_evidence]` sections of `approved-execution-handoff.toml`, and records the native `self_critic`.
 
-To make `eval_checklist`, `self_critic` (PLAN_REVIEW) and `contract_check`, `self_critic` (WORKDONE_REVIEW) native gate outputs, `openai_gate.py`'s `VERDICT_SCHEMA` must gain optional structured objects and the gate prompt must request them (without requesting hidden chain-of-thought — only structured findings, decision, risks, and a short self-critique). This is a separate, tested code change (tracked in #1221) and is **not** performed by the docs-only workflow update. Until then, use the transcription mechanism above.
+**Transcription fallback (only when reading OLDER artifacts).** Because PLAN_REVIEW is an extended gate, a current gate run always emits the native objects — strict validation rejects a base-9-only response. The transcription fallback therefore applies only when the Main Agent reads an **older, pre-#1221 stored verdict** that has no `verdict-structured.json`: it then **derives the eval_checklist by verbatim transcription** of OpenAI's `required_changes` + `approved_scope` + `blocking_issues`. This is mechanical transcription, NOT Main-Agent authorship of new criteria. When `self_critic` is unavailable in such an older artifact, it is recorded as `derived = false` and left empty rather than fabricated.
+
+Either path is verbatim copying of OpenAI's own output — never Main-Agent-invented criteria.
+
+### Schema mechanics + backward compatibility (#1221)
+
+`_build_gate_schema(gate)` (strict) requires every structured object for the gate; nullable objects (`bug_repro_check`) carry a `null` type so a non-applicable object is emitted as `null`, not omitted. **The strict schema is used both for the OpenAI call AND for local re-validation (`_validate_verdict`)** — so once #1221 is active, **extended gates (PLAN_REVIEW / WORKDONE_REVIEW / PR_REVIEW) require their structured fields and a base-9-only response fails closed.** The 9 base fields are unchanged and always required. `self_critic` carries only structured findings (a `PASS/WARN/FAIL consistency_check`, short string lists, a `LOW/MED/HIGH decision_risk`) — never hidden chain-of-thought. List sizes are capped on persistence.
+
+**Backward compatibility lives at the artifact/consumer level, not by relaxing the live gate contract:**
+- Existing stored verdicts and older gate artifacts remain readable.
+- Unextended gates (SCOPE_CHANGE_REVIEW) continue to accept base-9-only responses.
+- Extended gates require the new (nullable-where-appropriate) structured fields once #1221 is active.
+- Consumers prefer native structured fields when present and fall back to transcription only when reading older artifacts that lack them. (`_build_gate_schema(..., require_structured=False)` exists solely to re-validate those older base-9 artifacts.)
 
 ---
 

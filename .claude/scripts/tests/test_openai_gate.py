@@ -57,6 +57,17 @@ MAX_LIST_ITEMS = openai_gate.MAX_LIST_ITEMS
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
+# PLAN_REVIEW is an extended gate (#1221): once active, valid verdicts carry the
+# native structured objects. These fixtures include them so they validate under
+# the STRICT per-gate schema used by main()/_validate_verdict.
+_PLAN_SELF_CRITIC = {
+    "consistency_check": "PASS",
+    "possible_blind_spots": [],
+    "assumptions_made": [],
+    "evidence_that_would_change_decision": [],
+    "decision_risk": "LOW",
+}
+
 APPROVED_VERDICT = {
     "gate": "PLAN_REVIEW",
     "issue": 1078,
@@ -67,6 +78,10 @@ APPROVED_VERDICT = {
     "approved_scope": None,
     "approved_files": None,
     "next_action": "Proceed with implementation.",
+    "eval_checklist": {"items": ["AC1 — implement the plan"]},
+    "required_evidence": {"must_provide": []},
+    "self_critic": dict(_PLAN_SELF_CRITIC),
+    "bug_repro_check": None,
 }
 
 REVISION_REQUIRED_VERDICT = {
@@ -79,6 +94,10 @@ REVISION_REQUIRED_VERDICT = {
     "approved_scope": None,
     "approved_files": None,
     "next_action": "Revise and resubmit.",
+    "eval_checklist": {"items": ["AC1 — add error handling"]},
+    "required_evidence": {"must_provide": ["unit test covering the error path"]},
+    "self_critic": dict(_PLAN_SELF_CRITIC),
+    "bug_repro_check": None,
 }
 
 
@@ -1153,3 +1172,245 @@ def test_materialize_full_tomllib_roundtrip(tmp_path, monkeypatch):
     assert data["verdict"] == "APPROVED"
     assert data["issue"] == 1081
     assert data["next_action"] == next_action
+
+
+# ── issue #1221: native structured-verdict fields ─────────────────────────────
+
+_build_gate_schema = openai_gate._build_gate_schema
+GATE_STRUCTURED_FIELDS = openai_gate.GATE_STRUCTURED_FIELDS
+_structured_verdict_record = openai_gate._structured_verdict_record
+
+_BASE_9 = {
+    "gate": "PLAN_REVIEW",
+    "issue": 1221,
+    "verdict": "APPROVED",
+    "summary": "ok",
+    "blocking_issues": [],
+    "required_changes": [],
+    "approved_scope": None,
+    "approved_files": None,
+    "next_action": "go",
+}
+
+_VALID_SELF_CRITIC = {
+    "consistency_check": "PASS",
+    "possible_blind_spots": [],
+    "assumptions_made": [],
+    "evidence_that_would_change_decision": [],
+    "decision_risk": "LOW",
+}
+
+
+def _full_plan_verdict(**overrides) -> dict:
+    v = {
+        **_BASE_9,
+        "eval_checklist": {"items": ["AC1 — does X"]},
+        "required_evidence": {"must_provide": ["e2e output"]},
+        "self_critic": dict(_VALID_SELF_CRITIC),
+        "bug_repro_check": None,  # non-bug PLAN_REVIEW emits null
+    }
+    v.update(overrides)
+    return v
+
+
+def _assert_strict_invariant(schema: dict) -> None:
+    """OpenAI strict mode: every object lists all properties in `required` and
+    sets additionalProperties False, recursively (nullable objects included)."""
+    types = schema.get("type")
+    type_list = types if isinstance(types, list) else [types]
+    if "object" in type_list:
+        props = schema.get("properties", {})
+        assert schema.get("additionalProperties") is False, schema
+        assert set(schema.get("required", [])) == set(props.keys()), schema
+        for sub in props.values():
+            _assert_strict_invariant(sub)
+    if "array" in type_list:
+        items = schema.get("items")
+        if isinstance(items, dict):
+            _assert_strict_invariant(items)
+
+
+def test_build_gate_schema_strict_invariant_all_gates():
+    """Strict per-gate schema satisfies OpenAI's required==properties invariant
+    at every nesting level (regression guard, cf. #1087 HTTP 400)."""
+    for gate in PER_GATE_ENUMS:
+        _assert_strict_invariant(_build_gate_schema(gate))
+
+
+def test_build_gate_schema_keeps_base_nine_required():
+    """The 9 base fields are never removed and stay required for every gate."""
+    base = set(VERDICT_SCHEMA["properties"].keys())
+    for gate in PER_GATE_ENUMS:
+        for mode in (True, False):
+            schema = _build_gate_schema(gate, require_structured=mode)
+            assert base.issubset(set(schema["properties"].keys()))
+            assert base.issubset(set(schema["required"]))
+
+
+def test_build_gate_schema_per_gate_structured_fields():
+    plan = _build_gate_schema("PLAN_REVIEW")
+    for f in ("eval_checklist", "required_evidence", "self_critic", "bug_repro_check"):
+        assert f in plan["properties"] and f in plan["required"]
+    workdone = _build_gate_schema("WORKDONE_REVIEW")
+    for f in ("contract_check", "evidence_check", "self_critic"):
+        assert f in workdone["properties"] and f in workdone["required"]
+    assert "eval_checklist" not in workdone["properties"]
+    pr = _build_gate_schema("PR_REVIEW")
+    assert "self_critic" in pr["required"]
+    assert "contract_check" not in pr["properties"]
+    scope = _build_gate_schema("SCOPE_CHANGE_REVIEW")
+    assert set(scope["properties"].keys()) == set(VERDICT_SCHEMA["properties"].keys())
+
+
+def test_build_gate_schema_lenient_makes_structured_optional():
+    """Lenient mode (local re-validation): structured fields are shape-checked if
+    present but NOT required; additionalProperties stays False."""
+    lenient = _build_gate_schema("PLAN_REVIEW", require_structured=False)
+    assert "eval_checklist" in lenient["properties"]
+    assert "eval_checklist" not in lenient["required"]
+    assert "self_critic" not in lenient["required"]
+    assert lenient["additionalProperties"] is False
+
+
+def test_self_critic_shape_consistent_across_gates():
+    """self_critic is byte-identical wherever it appears."""
+    plan = _build_gate_schema("PLAN_REVIEW")["properties"]["self_critic"]
+    workdone = _build_gate_schema("WORKDONE_REVIEW")["properties"]["self_critic"]
+    pr = _build_gate_schema("PR_REVIEW")["properties"]["self_critic"]
+    assert plan == workdone == pr
+    assert plan["properties"]["consistency_check"]["enum"] == ["PASS", "WARN", "FAIL"]
+    assert plan["properties"]["decision_risk"]["enum"] == ["LOW", "MED", "HIGH"]
+    assert set(plan["required"]) == {
+        "consistency_check",
+        "possible_blind_spots",
+        "assumptions_made",
+        "evidence_that_would_change_decision",
+        "decision_risk",
+    }
+
+
+def test_no_chain_of_thought_fields_anywhere():
+    """No schema field invites free-form reasoning / chain-of-thought."""
+    banned = {"reasoning", "chain_of_thought", "thoughts", "rationale", "scratchpad", "thinking"}
+
+    def walk(schema):
+        for name, sub in schema.get("properties", {}).items():
+            assert name.lower() not in banned, name
+            if isinstance(sub, dict):
+                walk(sub)
+        items = schema.get("items")
+        if isinstance(items, dict):
+            walk(items)
+
+    for gate in PER_GATE_ENUMS:
+        walk(_build_gate_schema(gate))
+
+
+def test_strict_schema_accepts_full_plan_verdict():
+    import jsonschema
+    jsonschema.validate(instance=_full_plan_verdict(), schema=_build_gate_schema("PLAN_REVIEW"))
+
+
+def test_strict_schema_accepts_bug_repro_object():
+    import jsonschema
+    v = _full_plan_verdict(bug_repro_check={
+        "reproduction_status": "REPRODUCED",
+        "repro_evidence_sufficient": True,
+        "speculative_fix_detected": False,
+        "root_cause_supported_by_evidence": True,
+    })
+    jsonschema.validate(instance=v, schema=_build_gate_schema("PLAN_REVIEW"))
+
+
+def test_strict_schema_rejects_null_self_critic():
+    """self_critic is required AND non-null on the strict schema."""
+    import jsonschema
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(
+            instance=_full_plan_verdict(self_critic=None),
+            schema=_build_gate_schema("PLAN_REVIEW"),
+        )
+
+
+def test_validate_verdict_accepts_full_plan_review():
+    _validate_verdict(_full_plan_verdict(), expected_gate="PLAN_REVIEW")
+
+
+def test_validate_verdict_rejects_malformed_self_critic():
+    """Lenient local validation still shape-checks a structured field when present."""
+    bad = _full_plan_verdict(self_critic={**_VALID_SELF_CRITIC, "decision_risk": "EXTREME"})
+    with pytest.raises(MalformedResponseError):
+        _validate_verdict(bad, expected_gate="PLAN_REVIEW")
+
+
+def test_validate_verdict_strict_rejects_base9_for_extended_gate():
+    """Once #1221 is active, an extended gate (PLAN_REVIEW) REQUIRES its structured
+    objects: a base-9-only response fails closed at local validation."""
+    with pytest.raises(MalformedResponseError):
+        _validate_verdict(dict(_BASE_9), expected_gate="PLAN_REVIEW")
+
+
+def test_validate_verdict_base9_ok_for_unextended_gate():
+    """Unextended gates (SCOPE_CHANGE_REVIEW) keep pure base-9 behavior — no new
+    structured fields required."""
+    base = {**_BASE_9, "gate": "SCOPE_CHANGE_REVIEW", "verdict": "APPROVED"}
+    _validate_verdict(base, expected_gate="SCOPE_CHANGE_REVIEW")
+
+
+def test_validate_verdict_lenient_builder_reads_old_base9_artifact():
+    """The lenient builder (require_structured=False) still validates an older
+    stored base-9 PLAN_REVIEW artifact — backward compatibility at the artifact
+    level, separate from the live (strict) gate contract."""
+    import jsonschema
+    jsonschema.validate(
+        instance=dict(_BASE_9),
+        schema=_build_gate_schema("PLAN_REVIEW", require_structured=False),
+    )
+
+
+def test_structured_verdict_record_empty_for_base9():
+    assert _structured_verdict_record(dict(_BASE_9)) == {}
+
+
+def test_structured_verdict_record_caps_and_counts():
+    big_items = [f"item-{i} " + ("x" * 400) for i in range(20)]
+    v = _full_plan_verdict(eval_checklist={"items": big_items})
+    rec = _structured_verdict_record(v)
+    assert rec["eval_checklist"]["item_count"] == 20
+    assert len(rec["eval_checklist"]["items"]) == openai_gate.EVAL_CHECKLIST_MAX_ITEMS
+    assert all(len(x) <= ITEM_SUMMARY_MAX for x in rec["eval_checklist"]["items"])
+
+
+def test_structured_verdict_record_omits_null_bug_repro():
+    v = _full_plan_verdict(bug_repro_check=None)
+    rec = _structured_verdict_record(v)
+    assert "bug_repro_check" not in rec
+    assert rec["self_critic"]["consistency_check"] == "PASS"
+
+
+def test_structured_verdict_record_required_evidence_caps_and_count():
+    big = [f"ev-{i} " + ("y" * 400) for i in range(15)]
+    v = _full_plan_verdict(required_evidence={"must_provide": big})
+    rec = _structured_verdict_record(v)
+    assert rec["required_evidence"]["must_provide_count"] == 15
+    assert len(rec["required_evidence"]["must_provide"]) == openai_gate.REQUIRED_EVIDENCE_MAX_ITEMS
+    assert all(len(x) <= ITEM_SUMMARY_MAX for x in rec["required_evidence"]["must_provide"])
+
+
+def test_structured_verdict_record_does_not_mutate_input():
+    v = _full_plan_verdict(bug_repro_check={
+        "reproduction_status": "REPRODUCED",
+        "repro_evidence_sufficient": True,
+        "speculative_fix_detected": False,
+        "root_cause_supported_by_evidence": True,
+    })
+    rec = _structured_verdict_record(v)
+    rec["bug_repro_check"]["speculative_fix_detected"] = True  # mutate the returned copy
+    assert v["bug_repro_check"]["speculative_fix_detected"] is False  # input untouched
+
+
+def test_build_gate_schema_returns_independent_copies():
+    pr = _build_gate_schema("PR_REVIEW")
+    pr["properties"]["self_critic"]["properties"]["decision_risk"]["enum"].append("CRITICAL")
+    fresh = _build_gate_schema("PLAN_REVIEW")
+    assert fresh["properties"]["self_critic"]["properties"]["decision_risk"]["enum"] == ["LOW", "MED", "HIGH"]

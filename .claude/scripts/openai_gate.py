@@ -179,6 +179,160 @@ PER_GATE_ENUMS: dict[str, list[str]] = {
     "SCOPE_CHANGE_REVIEW": ["APPROVED", "REJECTED", "REVISION_REQUIRED", "NEEDS_MORE_EVIDENCE", "NEEDS_USER_DECISION"],
 }
 
+# ── Native structured-verdict objects (issue #1221) ───────────────────────────
+# Additive structured fields OpenAI gates emit natively, replacing the previous
+# manual transcription of required_changes/approved_scope/blocking_issues into
+# the Mode-3 handoff. Each object is strict-mode-safe: every nested property is
+# listed in its own `required` and `additionalProperties` is False at every
+# level. Lists are NOT capped at the schema level (OpenAI strict mode rejects
+# maxItems); size control happens in code on persistence
+# (_structured_verdict_record) and is reinforced via prompt guidance. self_critic
+# carries ONLY structured findings (enums + short string lists) — never
+# free-form chain-of-thought.
+
+# Consistent self_critic shape across every gate that carries it.
+_SELF_CRITIC_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "consistency_check": {"type": "string", "enum": ["PASS", "WARN", "FAIL"]},
+        "possible_blind_spots": {"type": "array", "items": {"type": "string"}},
+        "assumptions_made": {"type": "array", "items": {"type": "string"}},
+        "evidence_that_would_change_decision": {"type": "array", "items": {"type": "string"}},
+        "decision_risk": {"type": "string", "enum": ["LOW", "MED", "HIGH"]},
+    },
+    "required": [
+        "consistency_check",
+        "possible_blind_spots",
+        "assumptions_made",
+        "evidence_that_would_change_decision",
+        "decision_risk",
+    ],
+    "additionalProperties": False,
+}
+
+_EVAL_CHECKLIST_SCHEMA: dict = {
+    "type": "object",
+    "properties": {"items": {"type": "array", "items": {"type": "string"}}},
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+_REQUIRED_EVIDENCE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {"must_provide": {"type": "array", "items": {"type": "string"}}},
+    "required": ["must_provide"],
+    "additionalProperties": False,
+}
+
+# Nullable by design: a PLAN_REVIEW for a non-bug issue MUST emit null here.
+_BUG_REPRO_CHECK_SCHEMA: dict = {
+    "type": ["object", "null"],
+    "properties": {
+        "reproduction_status": {
+            "type": "string",
+            "enum": [
+                "REPRODUCED",
+                "NOT_REPRODUCED",
+                "PARTIALLY_REPRODUCED",
+                "ENVIRONMENT_OR_DATA_DEPENDENT",
+            ],
+        },
+        "repro_evidence_sufficient": {"type": "boolean"},
+        "speculative_fix_detected": {"type": "boolean"},
+        "root_cause_supported_by_evidence": {"type": "boolean"},
+    },
+    "required": [
+        "reproduction_status",
+        "repro_evidence_sufficient",
+        "speculative_fix_detected",
+        "root_cause_supported_by_evidence",
+    ],
+    "additionalProperties": False,
+}
+
+_CONTRACT_CHECK_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "approved_plan_followed": {"type": "boolean"},
+        "eval_checklist_satisfied": {"type": "boolean"},
+        "scope_creep_detected": {"type": "boolean"},
+    },
+    "required": ["approved_plan_followed", "eval_checklist_satisfied", "scope_creep_detected"],
+    "additionalProperties": False,
+}
+
+_EVIDENCE_CHECK_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "build_evidence_ok": {"type": "boolean"},
+        "test_evidence_ok": {"type": "boolean"},
+        "browser_evidence_ok": {"type": "boolean"},
+    },
+    "required": ["build_evidence_ok", "test_evidence_ok", "browser_evidence_ok"],
+    "additionalProperties": False,
+}
+
+# Field-name → sub-schema registry (single source of truth for shape).
+_STRUCTURED_FIELD_SCHEMAS: dict[str, dict] = {
+    "eval_checklist": _EVAL_CHECKLIST_SCHEMA,
+    "required_evidence": _REQUIRED_EVIDENCE_SCHEMA,
+    "self_critic": _SELF_CRITIC_SCHEMA,
+    "bug_repro_check": _BUG_REPRO_CHECK_SCHEMA,
+    "contract_check": _CONTRACT_CHECK_SCHEMA,
+    "evidence_check": _EVIDENCE_CHECK_SCHEMA,
+}
+
+# Per-gate native structured fields (issue #1221), in emission order. A field
+# whose sub-schema type includes "null" (bug_repro_check) is nullable-by-design;
+# all others are required AND non-null on the strict (API) schema.
+# SCOPE_CHANGE_REVIEW intentionally gains no new fields in this first cut.
+GATE_STRUCTURED_FIELDS: dict[str, list[str]] = {
+    "PLAN_REVIEW": ["eval_checklist", "required_evidence", "self_critic", "bug_repro_check"],
+    "WORKDONE_REVIEW": ["contract_check", "evidence_check", "self_critic"],
+    "PR_REVIEW": ["self_critic"],
+    "SCOPE_CHANGE_REVIEW": [],
+}
+
+
+# ── Gate-schema builder ───────────────────────────────────────────────────────
+
+def _build_gate_schema(gate: str, *, require_structured: bool = True) -> dict:
+    """
+    Return a deepcopy of VERDICT_SCHEMA tailored to *gate*:
+
+    - `verdict` enum constrained to PER_GATE_ENUMS[gate] (when the gate is known).
+    - The gate's native structured objects (GATE_STRUCTURED_FIELDS) added to
+      `properties` (always) and to `required` (only when *require_structured*).
+
+    require_structured=True  → the STRICT schema sent to OpenAI AND used for live
+        local re-validation (_validate_verdict). Strict mode requires every
+        property to also be in `required`; nullable objects carry a "null" type so
+        a non-applicable object (e.g. bug_repro_check on a non-bug PLAN_REVIEW) is
+        emitted as null rather than omitted. Extended gates therefore REQUIRE their
+        structured objects once #1221 is active.
+    require_structured=False → the LENIENT schema: structured fields are
+        shape-checked IF present but NOT required. This is NOT used for the live
+        gate contract; it exists only to re-validate OLDER STORED base-9 artifacts
+        (pre-#1221 verdicts) without failing. `additionalProperties` stays False so
+        genuinely unknown keys are still rejected.
+
+    The 9 base fields are never removed and stay required in both modes.
+    """
+    import copy  # noqa: PLC0415
+
+    schema = copy.deepcopy(VERDICT_SCHEMA)
+    allowed = PER_GATE_ENUMS.get(gate, [])
+    if allowed:
+        schema["properties"]["verdict"] = {"type": "string", "enum": allowed}
+
+    for field in GATE_STRUCTURED_FIELDS.get(gate, []):
+        schema["properties"][field] = copy.deepcopy(_STRUCTURED_FIELD_SCHEMAS[field])
+        if require_structured:
+            schema["required"].append(field)
+
+    return schema
+
+
 # ── Adapter ───────────────────────────────────────────────────────────────────
 
 
@@ -224,10 +378,29 @@ def call_openai_structured_verdict(
 
     client = openai.OpenAI(api_key=api_key)
 
+    allowed_verdicts = PER_GATE_ENUMS.get(gate, [])
+    verdict_enum_guidance = (
+        f" The `verdict` field MUST be one of: {allowed_verdicts}. "
+        "Do NOT use any other verdict value."
+    ) if allowed_verdicts else ""
+
+    structured_fields = GATE_STRUCTURED_FIELDS.get(gate, [])
+    structured_guidance = (
+        f" This gate's schema includes these structured objects: {', '.join(structured_fields)}. "
+        "Populate each from the packet evidence. For `self_critic`, return ONLY "
+        "structured findings — a PASS/WARN/FAIL `consistency_check`, brief one-line "
+        "bullet strings, and a LOW/MED/HIGH `decision_risk`; do NOT include private "
+        "chain-of-thought or step-by-step reasoning. Set a nullable object (e.g. "
+        "`bug_repro_check` when the issue is not a bug) to null. Keep every list to a "
+        "few concise items."
+    ) if structured_fields else ""
+
     prompt = (
         "You are a strict code-review gatekeeper. "
         "Return a JSON verdict matching the provided schema EXACTLY. "
-        "Do not add commentary outside the JSON object.\n\n"
+        "Do not add commentary outside the JSON object."
+        f"{verdict_enum_guidance}"
+        f"{structured_guidance}\n\n"
         f"Gate: {gate}\n\n"
         f"Packet:\n{packet}"
     )
@@ -313,6 +486,13 @@ MINIMAL_VERDICT_FIELDS: frozenset[str] = frozenset({
 REASONS_SUMMARY_MAX: int = 500
 ITEM_SUMMARY_MAX: int = 200
 MAX_LIST_ITEMS: int = 5
+
+# Issue #1221: persistence caps for native structured-verdict lists. OpenAI
+# strict mode rejects schema maxItems, so list-size control happens here (and via
+# prompt guidance), reusing ITEM_SUMMARY_MAX for per-item character clipping.
+EVAL_CHECKLIST_MAX_ITEMS: int = 8
+REQUIRED_EVIDENCE_MAX_ITEMS: int = 6
+SELF_CRITIC_LIST_MAX: int = 3
 
 _TRUNCATION_MARKER: str = "... [truncated]"
 
@@ -426,6 +606,63 @@ def _minimal_verdict_record(
     }
 
 
+def _structured_verdict_record(verdict_dict: dict) -> dict:
+    """
+    Extract the issue-#1221 native structured objects present in *verdict_dict*,
+    applying code-side size caps (OpenAI strict mode rejects schema maxItems).
+
+    Returns {} when no structured objects are present (an older base-9 verdict)
+    so the caller can skip writing the sidecar file. Never mutates verdict_dict.
+    List fields record a true ``*_count`` alongside the capped list so truncation
+    is observable. Boolean/enum-only objects are already compact and persisted
+    verbatim; a null nullable object (e.g. bug_repro_check on a non-bug) is omitted.
+    """
+    out: dict = {}
+
+    eval_checklist = verdict_dict.get("eval_checklist")
+    if isinstance(eval_checklist, dict):
+        items = eval_checklist.get("items") or []
+        out["eval_checklist"] = {
+            "items": _compact_list(items, ITEM_SUMMARY_MAX, EVAL_CHECKLIST_MAX_ITEMS),
+            "item_count": len(items),
+        }
+
+    required_evidence = verdict_dict.get("required_evidence")
+    if isinstance(required_evidence, dict):
+        must_provide = required_evidence.get("must_provide") or []
+        out["required_evidence"] = {
+            "must_provide": _compact_list(must_provide, ITEM_SUMMARY_MAX, REQUIRED_EVIDENCE_MAX_ITEMS),
+            "must_provide_count": len(must_provide),
+        }
+
+    self_critic = verdict_dict.get("self_critic")
+    if isinstance(self_critic, dict):
+        out["self_critic"] = {
+            "consistency_check": self_critic.get("consistency_check"),
+            "decision_risk": self_critic.get("decision_risk"),
+            "possible_blind_spots": _compact_list(
+                self_critic.get("possible_blind_spots") or [], ITEM_SUMMARY_MAX, SELF_CRITIC_LIST_MAX
+            ),
+            "assumptions_made": _compact_list(
+                self_critic.get("assumptions_made") or [], ITEM_SUMMARY_MAX, SELF_CRITIC_LIST_MAX
+            ),
+            "evidence_that_would_change_decision": _compact_list(
+                self_critic.get("evidence_that_would_change_decision") or [], ITEM_SUMMARY_MAX, SELF_CRITIC_LIST_MAX
+            ),
+        }
+
+    # Boolean/enum-only objects: already compact. Persist a shallow COPY when
+    # present and non-null (a null nullable object carries no information). A copy
+    # — not the live reference — keeps the "never mutates verdict_dict" guarantee
+    # even if a caller later post-processes the returned record.
+    for key in ("bug_repro_check", "contract_check", "evidence_check"):
+        value = verdict_dict.get(key)
+        if value is not None:
+            out[key] = dict(value)
+
+    return out
+
+
 def _write_artifacts(
     artifact_dir: Path,
     *,
@@ -486,6 +723,20 @@ def _write_artifacts(
         (artifact_dir / "verdict.toml").write_text(
             "\n".join(toml_lines) + "\n", encoding="utf-8"
         )
+
+        # verdict-structured.json — issue #1221 native structured fields (capped).
+        # Additive sidecar; absent when the verdict carries no structured objects
+        # (older base-9 verdicts). verdict.json / verdict.toml / last-chatgpt-verdict.toml
+        # are intentionally UNCHANGED for backward compatibility.
+        structured = _structured_verdict_record(verdict_dict)
+        if structured:
+            # Whole-file secret redaction (defense-in-depth), matching raw-response.txt
+            # and transcript.md. List fields are already redacted via _compact_list;
+            # this also covers the verbatim boolean/enum objects against future schema
+            # changes that might add string fields.
+            (artifact_dir / "verdict-structured.json").write_text(
+                redact_secrets(json.dumps(structured, indent=2)), encoding="utf-8"
+            )
 
         # transcript.md — NEVER include key/Bearer/Authorization
         transcript = textwrap.dedent(f"""\
@@ -620,8 +871,22 @@ def _validate_verdict(data: dict, *, expected_gate: str | None = None) -> None:
     """
     import jsonschema  # noqa: PLC0415
 
+    # Validate against the STRICT per-gate schema — the same schema sent to OpenAI.
+    # Extended gates (PLAN_REVIEW / WORKDONE_REVIEW / PR_REVIEW) therefore REQUIRE
+    # their native structured objects once #1221 is active; a base-9-only response
+    # for an extended gate fails closed here (the correct gate behaviour). Unextended
+    # gates (SCOPE_CHANGE_REVIEW) and unknown gates keep pure base-9 validation.
+    # `additionalProperties` is False, so unknown keys are still rejected.
+    # Backward compatibility lives at the artifact/consumer level (older stored
+    # verdicts remain readable, and the LENIENT builder — require_structured=False —
+    # exists for re-validating those older base-9 artifacts), NOT by relaxing the
+    # live gate contract.
+    gate_for_schema = expected_gate if expected_gate is not None else data.get("gate", "")
     try:
-        jsonschema.validate(instance=data, schema=VERDICT_SCHEMA)
+        jsonschema.validate(
+            instance=data,
+            schema=_build_gate_schema(gate_for_schema),
+        )
     except jsonschema.ValidationError as exc:
         raise MalformedResponseError(
             f"Verdict fails schema validation: {exc.message}", raw_text=json.dumps(data)
@@ -774,7 +1039,7 @@ def main(argv: list[str] | None = None) -> int:
             verdict_dict, request_id = call_openai_structured_verdict(
                 packet=packet_text,
                 gate=args.gate,
-                schema=VERDICT_SCHEMA,
+                schema=_build_gate_schema(args.gate),
                 model=args.model,
                 max_output_tokens=args.max_output_tokens,
                 timeout_seconds=args.timeout_seconds,
