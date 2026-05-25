@@ -45,6 +45,8 @@ public class CityAreaListingsController {
      *   <li>{@code maxPrice} — maximum price in paise (inclusive)</li>
      *   <li>{@code bedrooms} — exact bedroom count (values &ge; 4 treated as "4 or more")</li>
      *   <li>{@code propertyType} — property type string (case-insensitive)</li>
+     *   <li>{@code q} — full-text keyword search (max 500 chars); matched against
+     *       {@code search_vector} via {@code websearch_to_tsquery}</li>
      * </ul>
      *
      * @param city         city slug (e.g. {@code udupi})
@@ -54,6 +56,7 @@ public class CityAreaListingsController {
      * @param maxPrice     optional maximum price in paise
      * @param bedrooms     optional bedroom count filter
      * @param propertyType optional property type filter
+     * @param q            optional keyword search query (blank treated as absent; max 500 chars)
      */
     @GetMapping("/cities/{city}/listings")
     public ResponseEntity<CityAreaListingsResponse> getCityAreaListings(
@@ -63,17 +66,23 @@ public class CityAreaListingsController {
             @RequestParam(required = false) Long minPrice,
             @RequestParam(required = false) Long maxPrice,
             @RequestParam(required = false) Integer bedrooms,
-            @RequestParam(required = false) String propertyType) {
+            @RequestParam(required = false) String propertyType,
+            @RequestParam(required = false) String q) {
 
         if (areaKeys == null || areaKeys.isEmpty() || areaKeys.stream().allMatch(String::isBlank)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "areaKeys_required");
         }
 
-        log.debug("GET /api/discover/cities/{}/listings areaKeys={} limitPerArea={} minPrice={} maxPrice={} bedrooms={} propertyType={}",
-                city, areaKeys.size(), limitPerArea, minPrice, maxPrice, bedrooms, propertyType);
+        if (q != null && q.length() > 500) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query_too_long");
+        }
+
+        log.debug("GET /api/discover/cities/{}/listings areaKeys={} limitPerArea={} minPrice={} maxPrice={} bedrooms={} propertyType={} q={}",
+                city, areaKeys.size(), limitPerArea, minPrice, maxPrice, bedrooms, propertyType,
+                q != null ? "[present]" : null);
 
         CityAreaListingsResponse response = service.getAreaListings(
-                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType);
+                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q);
         return ResponseEntity.ok(response);
     }
 }
