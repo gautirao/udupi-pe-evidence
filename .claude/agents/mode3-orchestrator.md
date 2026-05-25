@@ -125,7 +125,7 @@ notes: <free text>
 
 ## Step 3 — Reroute loop (2-cycle limit)
 
-Per `ROUTE_AND_RUN.md:473–474` and `SKILL.md:57`:
+Per `ROUTE_AND_RUN.md:473–474` and the 2-cycle reroute rule in `.claude/skills/ROUTE_AND_RUN.md` (Failure Routing Protocol):
 - `code-reviewer REQUEST_CHANGES` → re-invoke engineer once → re-invoke `code-reviewer` once. Maximum 2 fix-verify cycles per specialist per PR.
 - On cycle-2 failure → `blocked.toml(reason_code=REROUTE_LIMIT_EXCEEDED)`.
 - On terminal `code-reviewer REQUEST_CHANGES` after cycle 2 → `blocked.toml(reason_code=REVIEW_FAILED)`.

@@ -82,7 +82,7 @@ If the approved plan classifies the issue as High-risk per `ROUTE_AND_RUN.md:64`
 
 ### Reroute loop (bound to existing policy)
 
-`code-reviewer` REQUEST_CHANGES → engineer fixes → `code-reviewer` re-runs once (`ROUTE_AND_RUN.md:473–474`). Max **2** fix-verify cycles per specialist per PR (`SKILL.md:57`). On limit exceeded → `blocked.toml(reason_code=REROUTE_LIMIT_EXCEEDED)`. On terminal `code-reviewer` REQUEST_CHANGES → `blocked.toml(reason_code=REVIEW_FAILED)`. On `qa` verification FAIL → `blocked.toml(reason_code=QA_FAILED)` immediately (no fix attempt; qa is read-only per `qa.md:26`). On `security-reviewer` blocking findings → `blocked.toml(reason_code=SECURITY_FAILED)`.
+`code-reviewer` REQUEST_CHANGES → engineer fixes → `code-reviewer` re-runs once (`ROUTE_AND_RUN.md:473–474`). Max **2** fix-verify cycles per specialist per PR (2-cycle reroute rule in `.claude/skills/ROUTE_AND_RUN.md`, Failure Routing Protocol). On limit exceeded → `blocked.toml(reason_code=REROUTE_LIMIT_EXCEEDED)`. On terminal `code-reviewer` REQUEST_CHANGES → `blocked.toml(reason_code=REVIEW_FAILED)`. On `qa` verification FAIL → `blocked.toml(reason_code=QA_FAILED)` immediately (no fix attempt; qa is read-only per `qa.md:26`). On `security-reviewer` blocking findings → `blocked.toml(reason_code=SECURITY_FAILED)`.
 
 ### Specialist context sharing (canonical artefacts only)
 

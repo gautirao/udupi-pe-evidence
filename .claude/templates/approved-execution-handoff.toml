@@ -196,7 +196,7 @@ high_risk_minimum_set = [
   "security-reviewer",
   "qa (verification)",
 ]
-reroute_cycle_limit = 2  # per ROUTE_AND_RUN.md:473-474 and SKILL.md:57
+reroute_cycle_limit = 2  # per ROUTE_AND_RUN.md:473-474 (2-cycle reroute rule, Failure Routing Protocol in .claude/skills/ROUTE_AND_RUN.md)
 
 [escalation_rules]
 # What the Orchestrator does on common runtime escalations.

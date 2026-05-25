@@ -185,7 +185,7 @@ Every gate packet (PLAN_REVIEW, WORKDONE_REVIEW, PR_REVIEW) must state:
 
 ## Phase 0.6 — TEAM_LEAD_ASSIGNMENT (Main Agent, lightweight only)
 
-The Main Agent fetches the issue (`gh issue view <N>`: body, labels, comments) and runs **intake classification only** (issue type, risk tier, scope) per `.claude/skills/route-and-run/SKILL.md`. It then writes a lightweight assignment to `.claude/handoffs/issue-<N>/team-lead-assignment.toml`:
+The Main Agent fetches the issue (`gh issue view <N>`: body, labels, comments) and runs **intake classification only** (issue type, risk tier, scope) per `.claude/skills/ROUTE_AND_RUN.md` (entrypoint: `.claude/skills/route-and-run/SKILL.md`). It then writes a lightweight assignment to `.claude/handoffs/issue-<N>/team-lead-assignment.toml`:
 
 ```toml
 gate = "TEAM_LEAD_ASSIGNMENT"

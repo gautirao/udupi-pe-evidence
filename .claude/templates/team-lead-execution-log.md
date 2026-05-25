@@ -121,7 +121,7 @@ canonical_artefacts_cited: [
 ]
 result: APPROVE  # APPROVE | REQUEST_CHANGES
 evidence_ref: `<inline summary>`
-cycle: 1  # increments on re-invoke; limit = 2 per ROUTE_AND_RUN.md:473-474 / SKILL.md:57
+cycle: 1  # increments on re-invoke; limit = 2 per ROUTE_AND_RUN.md:473-474 (2-cycle reroute rule, Failure Routing Protocol)
 notes: `<free-text>`
 
 ---
