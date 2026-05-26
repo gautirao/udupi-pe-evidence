@@ -184,6 +184,59 @@ No agent running on any model may execute a release command without an explicit 
 
 ---
 
+## 11) Test Evidence Quality (CRITICAL)
+
+**A test/check may only be reported as PASS if the command executed successfully AND the assertions actually ran.**
+
+Rules for evidence reporting:
+
+**Automated test PASS:**
+- Command ran with exit code 0
+- All assertions executed
+- Example: `npm run test spec.tsx --run` exits 0 → report PASS
+- Example: `npx playwright test spec.ts --headed` exits 0 → report PASS
+
+**Automated test FAILURE or NOT_RUN:**
+- Command failed, timed out, or did not execute
+- Example: `ERR_CONNECTION_REFUSED` (server unavailable) → report TEST_ENV_FAILURE or INCONCLUSIVE, NOT PASS
+- Example: command exited with non-zero code → report FAIL or TEST_ENV_FAILURE (as appropriate)
+- Example: assertions never ran because a prerequisite failed → report NOT_RUN with reason
+- **Always include:** command + actual exit code in evidence
+
+**Manual browser verification:**
+- User visually confirmed behaviour in a running browser
+- Example: user navigated to `http://localhost:5174/discover?...` and confirmed highlighting works
+- **Label separately** as MANUAL_PASS, not AUTOMATED_PASS
+- Include: URLs tested + what user visually observed
+
+**Unit/integration tests:**
+- Prove logic in isolation (JSDOM, not real browser)
+- Example: `npm run test` exits 0 → logic assertions passed
+- DO NOT claim "browser verification PASS" based on unit tests alone
+- Unit tests PASS + browser test failed to run = NOT "browser verification PASS"
+
+**Correct evidence reporting:**
+```
+❌ "E2E PASS" — if E2E test failed to run
+❌ "Phase 7A PASS" — if Playwright test had ERR_CONNECTION_REFUSED
+✅ "Automated tests: PASS; Playwright: TEST_ENV_FAILURE; Manual verification: PASS"
+✅ "Unit/integration tests 33/33 PASS; Browser verification (manual): PASS"
+```
+
+**Evidence template for test results:**
+```toml
+[test_evidence]
+test_type = "unit" | "integration" | "e2e" | "manual_browser"
+command = "npm run test spec.tsx --run"
+exit_code = 0
+assertions_executed = true
+status = "PASS" | "FAIL" | "NOT_RUN" | "TEST_ENV_FAILURE"
+evidence_path = "test-results/ or screenshot path or N/A"
+notes = "If NOT_RUN or FAILURE, explain why"
+```
+
+---
+
 ## Execution Philosophy
 
 - Small PRs > large refactors

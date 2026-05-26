@@ -60,12 +60,23 @@ The product-check agent **MAY**:
 
 - read the issue acceptance criteria,
 - read the WORKDONE summary,
+- **preflight check:** verify the local frontend/backend servers are running before starting the main verification
 - open the local app,
 - run one or two direct URLs,
 - click through the exact changed flow,
 - inspect visible UI,
 - inspect network only when relevant,
 - capture concise evidence.
+
+**Server preflight requirement:**
+
+Before opening the browser, the agent MUST verify:
+```bash
+curl -s http://localhost:5174 | head -1  # Frontend reachable
+curl -s http://localhost:8085/health      # Backend ready (or skip if not needed)
+```
+
+If servers are unavailable, report `BLOCKED` with the preflight failure reason. Do NOT attempt the browser checks if the server is unreachable.
 
 **Default budget:** 1 focused product journey; plus 1 regression journey only if the issue affects navigation/state; plus 1 negative/empty-state check only if it is part of the ACs. Any expansion beyond this must be justified back to the Orchestrator before proceeding.
 
@@ -116,6 +127,31 @@ next = "proceed_to_pr"      # proceed_to_pr | fix_before_pr | user_decision
 - **FAIL** — the product does not work in browser, the UI contradicts the ACs, URL/map/list/panel/badge/chip states disagree, or a clear regression is observed in the directly-affected flow. On FAIL → **do not proceed to WORKDONE_REVIEW or create the PR**; route the observed bug back through the Orchestrator to the appropriate specialist (engineer fix → re-verify), bounded by the existing 2-cycle reroute limit, then halt to user if unresolved.
 - **BLOCKED** — app cannot start, login/test data unavailable, local environment unavailable, or the reproduction URL cannot be reached. Report the blocker; ask for a user decision only if the team cannot resolve it.
 - **NEEDS_USER_DECISION** — only for true product ambiguity, not implementation uncertainty.
+
+### Evidence quality rules (CRITICAL)
+
+**A test/check may only be reported as PASS if evidence shows the intended check actually executed.**
+
+- Automated test PASS — e.g., `npx playwright test spec.ts --headed` exits with code 0 and all assertions executed. If the command fails (ERR_CONNECTION_REFUSED, timeout, server unavailable), report `TEST_ENV_FAILURE` or `INCONCLUSIVE`, not PASS. Include the command + exit code in evidence.
+- Manual browser verification PASS — e.g., user manually opened URLs and visually confirmed UI matches ACs. Label this separately as `MANUAL_PASS`, not `AUTOMATED_PASS`.
+- Unit/integration tests PASS — e.g., `npm run test` exits 0 and all assertions passed in JSDOM. This proves *logic* in isolation, not end-to-end *browser* behaviour.
+
+**DO NOT conflate these:**
+- Unit tests PASS + browser test failed to run = NOT "browser verification PASS"
+- Manual visual check worked + automated test couldn't run = report as MANUAL_PASS with clear distinction
+
+**Evidence must include:**
+```toml
+[evidence_chain]
+automated_test_command = "npx playwright test spec.ts --headed"
+automated_test_exit_code = 0 | "ERR_CONNECTION_REFUSED" | "timeout" | ...
+automated_test_executed = true | false
+manual_verification = true | false
+manual_verification_notes = "user verified at URL X"
+server_preflight_check = "PASS" | "FAIL" | "NOT_RUN"
+```
+
+If automated test did not execute (exit != 0), report verdict based on what DID run (manual verification, unit tests, or INCONCLUSIVE).
 
 ### When this gate may be skipped
 
