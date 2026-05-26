@@ -13,6 +13,10 @@ import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
+const { mockSetSchoolJourney } = vi.hoisted(() => ({
+  mockSetSchoolJourney: vi.fn(),
+}));
+
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -74,7 +78,7 @@ vi.mock('@/hooks/useDiscoverUrlState', () => ({
       startOver: vi.fn(),
       setJourney: vi.fn(),
       selectGroup: vi.fn(),
-      setSchoolJourney: vi.fn(),
+      setSchoolJourney: mockSetSchoolJourney,
       setSearchQuery: vi.fn(),
       reportViewport: vi.fn(),
       setCity: vi.fn(),
@@ -254,8 +258,9 @@ describe('DiscoverRightPanel — state machine routing', () => {
     expect(screen.getByText('Manipal Public School')).toBeInTheDocument();
   });
 
-  it('panelContent="school-browse" school card click calls onSelectSchool with schoolId', async () => {
+  it('panelContent="school-browse" school card click calls setSchoolJourney with schoolId', async () => {
     const onSelectSchool = vi.fn();
+    mockSetSchoolJourney.mockClear();
     const { getByText } = renderPanel(
       <DiscoverRightPanel
         {...baseProps}
@@ -266,7 +271,15 @@ describe('DiscoverRightPanel — state machine routing', () => {
       />,
     );
     getByText('Manipal Public School').click();
-    expect(onSelectSchool).toHaveBeenCalledWith('sch-1');
+    // Assert setSchoolJourney was called with the correct school and coordinates from the mock fixture.
+    // Since #1160 cycle-3, SchoolBrowsePanel calls setSchoolJourney directly (not onSelectSchool)
+    // to write journey + schoolId + radiusKm + areaKey atomically in a single URL push.
+    expect(mockSetSchoolJourney).toHaveBeenCalledWith(
+      expect.objectContaining({ schoolId: 'sch-1', radiusKm: expect.any(Number), lat: 13.3525, lon: 74.7864 }),
+    );
+    // Regression guard: onSelectSchool must NOT be called (it is accepted by the prop interface
+    // but intentionally unused in SchoolBrowsePanel since #1160 cycle-3).
+    expect(onSelectSchool).not.toHaveBeenCalled();
   });
 
   it('panelContent="school-browse" area card click calls onSelectAreaKey with areaKey', () => {
