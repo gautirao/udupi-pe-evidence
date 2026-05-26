@@ -52,6 +52,12 @@ export interface DiscoverRightPanelProps {
   isLoadingAreaGroups?: boolean;
   /** Called when the user selects a group from the landing panel. */
   onSelectGroup?: (groupId: string) => void;
+  /**
+   * Issue #1178 — the active groupId from the URL. Forwarded to
+   * AreaGroupsLandingPanel so the matching group card is highlighted on deep-link,
+   * and an unmatched groupId shows a non-alarming notice.
+   */
+  groupId?: string | null;
   /** All areas in the city — used as Browse-all fallback when groups is empty. */
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
@@ -147,6 +153,7 @@ export function DiscoverRightPanel({
   areaGroups = [],
   isLoadingAreaGroups = false,
   onSelectGroup,
+  groupId = null,
   discoverAreas = [],
   onSelectAreaKey,
   onSelectSchool,
@@ -214,6 +221,7 @@ export function DiscoverRightPanel({
             isLoading={isLoadingAreaGroups}
             onSelectGroup={onSelectGroup ?? (() => undefined)}
             onStartOver={onStartOver}
+            groupId={groupId}
             // Satisfy the discriminated union: only spread fallbackAreas + onSelectArea
             // when onSelectAreaKey is defined, so Browse-all buttons are never silent no-ops.
             {...(onSelectAreaKey

@@ -1345,6 +1345,10 @@ export default function MapDiscovery() {
           onSelectJourney={(j) => urlActions.setJourney(j)}
           areaGroups={areaGroupsData?.groups ?? []}
           isLoadingAreaGroups={isLoadingAreaGroups}
+          // Issue #1178 — forward the active groupId so AreaGroupsLandingPanel can
+          // highlight the deep-linked group card / show a non-alarming notice when
+          // the groupId matches no loaded group. Prop wiring only — no routing change.
+          groupId={urlState.groupId ?? null}
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
           discoverAreas={discoverAreas}
           onSelectAreaKey={(areaKey) => {

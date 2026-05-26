@@ -236,6 +236,172 @@ describe('AreaGroupsLandingPanel — empty state (no groups, no fallback areas)'
   });
 });
 
+describe('AreaGroupsLandingPanel — group card highlight (Issue #1178)', () => {
+  const groups = [
+    makeGroup({ id: 'group-A', name: 'Group A' }),
+    makeGroup({ id: 'group-B', name: 'Group B' }),
+  ];
+
+  it('highlights the card whose id matches groupId (bg-muted + border-primary)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="group-A"
+      />,
+    );
+    const selected = screen.getByTestId('area-group-card-group-A');
+    expect(selected.className).toContain('bg-muted');
+    expect(selected.className).toContain('border-primary');
+    expect(selected).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('uses baseline styling for non-matching cards (bg-card + border-border)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="group-A"
+      />,
+    );
+    const other = screen.getByTestId('area-group-card-group-B');
+    expect(other.className).toContain('bg-card');
+    expect(other.className).toContain('border-border');
+    expect(other).not.toHaveAttribute('aria-current');
+  });
+
+  it('highlights the matching card when groupId is padded but valid', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="  group-A  "
+      />,
+    );
+    const selected = screen.getByTestId('area-group-card-group-A');
+    expect(selected).toHaveAttribute('aria-current', 'true');
+    expect(selected.className).toContain('bg-muted');
+    expect(selected.className).toContain('border-primary');
+    // No invalid-group notice should appear for a padded-but-valid id.
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+  });
+
+  it('applies baseline styling to all cards when no groupId is set', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel {...baseProps} groups={groups} isLoading={false} />,
+    );
+    const cardA = screen.getByTestId('area-group-card-group-A');
+    expect(cardA.className).toContain('bg-card');
+    expect(cardA).not.toHaveAttribute('aria-current');
+  });
+
+  it('moves the highlight when groupId prop changes', () => {
+    const { rerender } = renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="group-A"
+      />,
+    );
+    expect(screen.getByTestId('area-group-card-group-A')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTestId('area-group-card-group-B')).not.toHaveAttribute('aria-current');
+
+    rerender(
+      <MemoryRouter>
+        <AreaGroupsLandingPanel
+          {...baseProps}
+          groups={groups}
+          isLoading={false}
+          groupId="group-B"
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
+    expect(screen.getByTestId('area-group-card-group-B')).toHaveAttribute('aria-current', 'true');
+  });
+});
+
+describe('AreaGroupsLandingPanel — invalid groupId message (Issue #1178)', () => {
+  const groups = [
+    makeGroup({ id: 'group-A', name: 'Group A' }),
+    makeGroup({ id: 'group-B', name: 'Group B' }),
+  ];
+
+  it('shows a non-alarming notice when groupId matches no loaded group', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="nonexistent-slug"
+      />,
+    );
+    const msg = screen.getByTestId('area-group-invalid-message');
+    expect(msg).toBeInTheDocument();
+    expect(msg).toHaveTextContent('This group is not available. Please select a group below.');
+    expect(msg).toHaveAttribute('role', 'status');
+    expect(msg).toHaveAttribute('aria-live', 'polite');
+    // No card should be highlighted.
+    expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
+    expect(screen.getByTestId('area-group-card-group-B')).not.toHaveAttribute('aria-current');
+  });
+
+  it('does NOT show the notice while loading (prevents flash on cold load)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[]}
+        isLoading={true}
+        groupId="nonexistent-slug"
+      />,
+    );
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+  });
+
+  it('does NOT show the notice when there are no groups (fallback mode)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[]}
+        isLoading={false}
+        groupId="nonexistent-slug"
+        fallbackAreas={[makeArea()]}
+        onSelectArea={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+  });
+
+  it('does NOT show the notice when groupId matches a loaded group', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="group-A"
+      />,
+    );
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+  });
+
+  it('treats a whitespace-only groupId as no selection (no notice, no highlight)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="   "
+      />,
+    );
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+    expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
+  });
+});
+
 describe('AreaGroupsLandingPanel — header', () => {
   it('renders "Select area" as panel header title', () => {
     renderPanel(

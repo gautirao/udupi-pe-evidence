@@ -17,6 +17,12 @@ export type AreaGroupsLandingPanelProps = {
   isLoading: boolean;
   onSelectGroup: (groupId: string) => void;
   onStartOver: () => void;
+  /**
+   * Issue #1178 — the active groupId from the URL (deep-link). When it matches a
+   * loaded group, that group's card is highlighted. When it is a non-empty value
+   * that matches no loaded group, a non-alarming "not available" message is shown.
+   */
+  groupId?: string | null;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -90,16 +96,23 @@ function BrowseAllFallback({ areas, onSelectArea }: BrowseAllFallbackProps) {
 interface GroupCardProps {
   group: AreaGroup;
   onSelect: (groupId: string) => void;
+  /** Issue #1178 — highlight this card as the active (deep-linked) group. */
+  isSelected: boolean;
 }
 
-function GroupCard({ group, onSelect }: GroupCardProps) {
+function GroupCard({ group, onSelect, isSelected }: GroupCardProps) {
   const areaCount = group.area_keys.length;
 
   return (
     <button
       type="button"
-      className="w-full text-left rounded-lg border border-border bg-card hover:bg-muted/50 transition-colors p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={`w-full text-left rounded-lg transition-colors p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        isSelected
+          ? 'border-2 border-primary bg-muted'
+          : 'border border-border bg-card hover:bg-muted/50'
+      }`}
       onClick={() => onSelect(group.id)}
+      aria-current={isSelected ? 'true' : undefined}
       aria-label={`Select group ${group.name}${group.region_label ? `, ${group.region_label}` : ''}, ${areaCount} area${areaCount === 1 ? '' : 's'}`}
       data-testid={`area-group-card-${group.id}`}
     >
@@ -128,9 +141,27 @@ export function AreaGroupsLandingPanel({
   isLoading,
   onSelectGroup,
   onStartOver,
+  groupId = null,
   fallbackAreas = [],
   onSelectArea,
 }: AreaGroupsLandingPanelProps) {
+  // Issue #1178 — a groupId is "active" only when it is a non-blank string.
+  // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
+  // must behave like normal browse (no highlight, no message). Store the trimmed
+  // value so padded-but-valid deep links (e.g. `?groupId=%20group-A%20`) still
+  // match `g.id` and highlight instead of showing the invalid-group notice.
+  const activeGroupId = groupId?.trim() || null;
+  const focusedGroup = activeGroupId
+    ? groups.find((g) => g.id === activeGroupId) ?? null
+    : null;
+
+  // Show the non-alarming "not available" notice only once groups have loaded and
+  // the active groupId matched nothing. The `!isLoading` gate prevents the message
+  // flashing during the cold-load window, and `groups.length > 0` keeps the
+  // Browse-all fallback (no-groups) path untouched.
+  const showInvalidGroupMessage =
+    !isLoading && !!activeGroupId && !focusedGroup && groups.length > 0;
+
   return (
     <>
       <PanelHeader
@@ -152,6 +183,16 @@ export function AreaGroupsLandingPanel({
           </div>
         ) : groups.length > 0 ? (
           <div className="space-y-3 p-4" data-testid="area-groups-list">
+            {showInvalidGroupMessage && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="rounded-md bg-muted p-3 text-sm text-foreground"
+                data-testid="area-group-invalid-message"
+              >
+                This group is not available. Please select a group below.
+              </div>
+            )}
             <div className="flex items-center gap-2 mb-1">
               <LayoutGrid className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
@@ -159,7 +200,12 @@ export function AreaGroupsLandingPanel({
               </p>
             </div>
             {groups.map((group) => (
-              <GroupCard key={group.id} group={group} onSelect={onSelectGroup} />
+              <GroupCard
+                key={group.id}
+                group={group}
+                onSelect={onSelectGroup}
+                isSelected={group.id === focusedGroup?.id}
+              />
             ))}
           </div>
         ) : (
