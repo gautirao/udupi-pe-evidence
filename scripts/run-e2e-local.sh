@@ -100,4 +100,9 @@ done
 echo "[e2e] Frontend ready."
 echo ""
 
-npx playwright test "$@" --project=smoke
+# Use smoke as the default project only when caller has not already specified --project.
+if printf '%s\n' "$@" | grep -q '^--project'; then
+  npx playwright test "$@"
+else
+  npx playwright test "$@" --project=smoke
+fi

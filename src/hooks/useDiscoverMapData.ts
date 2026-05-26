@@ -5,7 +5,6 @@ import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas, DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
-import { useListingSearch } from '@/hooks/useListingSearch';
 import { useSchoolById, SchoolResult } from '@/hooks/useSchoolSearch';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
@@ -92,22 +91,6 @@ export function useDiscoverMapData({
   const cityCenter = useMemo(() => CITY_CONFIG[city]?.center, [city]);
   const cityZoom = useMemo(() => CITY_CONFIG[city]?.zoom, [city]);
 
-  // ── Listing search (text) — unchanged path ────────────────────────────────
-  const singleLocality = filters.localities?.length === 1 ? filters.localities[0] : undefined;
-  const singlePropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
-  const singleBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
-
-  const {
-    data: searchResults,
-    isLoading: searchLoading,
-    error: searchError,
-  } = useListingSearch({
-    q: debouncedSearch,
-    locality: singleLocality,
-    propertyType: singlePropertyType,
-    bedrooms: singleBedrooms,
-  });
-
   // ── Paginated discover listings (auth-only) ────────────────────────────────
   const {
     data: discoverListingsPage,
@@ -120,8 +103,9 @@ export function useDiscoverMapData({
     size: 50,
     filters,
     includeAggregates: true,
-    enabled: isAuthenticated && !debouncedSearch,
+    enabled: isAuthenticated,
     bbox,
+    q: debouncedSearch || undefined,
   });
 
   // ── Filtered markers (auth-only, same predicate as listings) ──────────────
@@ -159,21 +143,20 @@ export function useDiscoverMapData({
   } = useSchoolById(urlSchoolId);
 
   // ── Derived: loading / error ──────────────────────────────────────────────
-  const listingDataLoading = isAuthenticated && (debouncedSearch ? searchLoading : discoverListingsLoading);
+  const listingDataLoading = isAuthenticated && discoverListingsLoading;
   const markersLoading = filteredMarkersLoading;
   /** True while a filter-change refetch is in-flight (isFetching && !isLoading). */
   const isFetching = isAuthenticated && (discoverListingsFetching || filteredMarkersFetching);
-  const error = isAuthenticated ? (debouncedSearch ? (searchError as Error | null) : (discoverListingsError as Error | null)) : null;
+  const error = isAuthenticated ? (discoverListingsError as Error | null) : null;
 
   // ── Derived: listing sets ─────────────────────────────────────────────────
   const filteredListings = useMemo(() => {
     if (!isAuthenticated) return [];
-    if (debouncedSearch) return searchResults ?? [];
     const now = new Date().toISOString();
     return (discoverListingsPage?.content ?? []).map((l) =>
       discoverListingToPropertyListing(l, now),
     );
-  }, [isAuthenticated, debouncedSearch, searchResults, discoverListingsPage]);
+  }, [isAuthenticated, discoverListingsPage]);
 
   const listingsWithCoords = useMemo(
     () => filteredListings.filter((l) => l.latitude && l.longitude),

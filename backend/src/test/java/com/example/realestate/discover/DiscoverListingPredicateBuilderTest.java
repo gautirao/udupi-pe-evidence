@@ -16,7 +16,7 @@ class DiscoverListingPredicateBuilderTest {
         return new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     // ── 1. Empty/default filters → base predicate + city only ───────────────
@@ -40,7 +40,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", List.of("house"), null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -56,7 +56,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 List.of(4), null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -72,7 +72,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 List.of(2, 4), null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -88,7 +88,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, 10_000L, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -103,7 +103,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, Boolean.TRUE, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -118,7 +118,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, Boolean.TRUE, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -143,7 +143,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null);
+                polygon, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -191,7 +191,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                twoPoints, null, null, null, null);
+                twoPoints, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -215,7 +215,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null);
+                polygon, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -242,7 +242,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null);
+                polygon, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -261,7 +261,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, 3.0, null);
+                null, 13.0, 74.0, 3.0, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -288,7 +288,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, null, null); // schoolRadiusKm = null
+                null, 13.0, 74.0, null, null, null); // schoolRadiusKm = null
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -307,7 +307,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, null, 2.0, null); // schoolLon = null
+                null, 13.0, null, 2.0, null, null); // schoolLon = null
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -324,7 +324,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, bbox);
+                null, null, null, null, bbox, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -359,7 +359,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, Boolean.TRUE, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -369,5 +369,97 @@ class DiscoverListingPredicateBuilderTest {
         // must NOT reference a non-existent rera_valid column
         assertFalse(sql.whereFragment().contains("rera_valid"),
                 "Predicate must not reference rera_valid (not a DB column)");
+    }
+
+    // ── T1. q=null → no search_vector clause ─────────────────────────────
+
+    @Test
+    void build_nullQ_noFtsClause() {
+        // q=null (last field) — Filters record has null for q
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(minimal("udupi"));
+
+        assertFalse(sql.whereFragment().contains("search_vector"),
+                "No FTS clause should be generated when q is null");
+    }
+
+    // ── T2. q="apartment" → FTS clause + param ───────────────────────────
+
+    @Test
+    void build_nonNullQ_generatesFtsClause() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, "apartment");
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains(
+                "pl.search_vector @@ websearch_to_tsquery('english', ?)"),
+                "Expected FTS clause for non-null q");
+        assertTrue(sql.params().contains("apartment"),
+                "Expected q value 'apartment' in params");
+    }
+
+    // ── T3. q="" (blank) → treated as null, no FTS clause ────────────────
+    //
+    // Normalisation occurs in DiscoverListingPredicateBuilder.build() itself:
+    // blank/whitespace-only q is converted to null before the FTS clause is
+    // conditionally appended. The controller only enforces the 500-char limit;
+    // it does NOT normalise blank to null — that is the predicate builder's job.
+
+    @Test
+    void build_blankQ_noFtsClause() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, "   ");
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertFalse(sql.whereFragment().contains("search_vector"),
+                "Blank q must be treated as absent — no FTS clause");
+        assertFalse(sql.params().contains("   "),
+                "Blank q must not appear in params");
+    }
+
+    // ── T4. q + school proximity both non-null → both clauses present, correct param order ──
+
+    @Test
+    void build_qAndSchoolProximity_bothClausesCorrectParamOrder() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, 13.0, 74.0, 2.0, null, "flat");
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        // Both clauses present
+        assertTrue(sql.whereFragment().contains("ST_DWithin("),
+                "Expected school proximity ST_DWithin clause");
+        assertTrue(sql.whereFragment().contains(
+                "pl.search_vector @@ websearch_to_tsquery('english', ?)"),
+                "Expected FTS clause when q is non-null");
+
+        // School proximity must appear before FTS in the WHERE fragment
+        int stDWithinPos = sql.whereFragment().indexOf("ST_DWithin(");
+        int ftsPos = sql.whereFragment().indexOf("pl.search_vector");
+        assertTrue(stDWithinPos < ftsPos,
+                "ST_DWithin (school proximity) must appear before search_vector (FTS) in WHERE fragment");
+
+        // Param ordering: city(1) then school lon(2), lat(3), radius_m(4) then q(5)
+        // school coords: lon=74.0, lat=13.0, radius=2000.0
+        int lonIdx    = sql.params().indexOf(74.0);
+        int latIdx    = sql.params().indexOf(13.0);
+        int radiusIdx = sql.params().indexOf(2000.0);
+        int qIdx      = sql.params().indexOf("flat");
+        assertTrue(lonIdx >= 0 && latIdx >= 0 && radiusIdx >= 0 && qIdx >= 0,
+                "All expected params must be present");
+        assertTrue(radiusIdx < qIdx,
+                "School radius param must appear before q param (ST_DWithin before FTS in SQL)");
+        assertTrue(lonIdx < latIdx,
+                "lon param must appear before lat param per ST_MakePoint(lon, lat)");
+        // Exact count guard: city(1) + lon(2) + lat(3) + radius_m(4) + q(5)
+        assertEquals(5, sql.params().size(),
+                "Expected exactly 5 params: city + lon + lat + radius_m + q");
     }
 }

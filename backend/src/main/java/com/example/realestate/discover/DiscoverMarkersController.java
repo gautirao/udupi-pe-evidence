@@ -94,7 +94,8 @@ public class DiscoverMarkersController {
                 schoolLat,
                 schoolLon,
                 schoolRadiusKm,
-                bbox
+                bbox,
+                null  // q not yet wired for markers endpoint
         );
 
         return ResponseEntity.ok(service.getMarkers(filters));

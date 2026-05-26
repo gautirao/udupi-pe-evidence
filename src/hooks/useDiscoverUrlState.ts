@@ -621,6 +621,12 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const setSearchQuery = useCallback(
     (newQ: string) => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
+      searchTimer.current = null;
+      // Clearing (empty string) is applied immediately — no debounce — so that a
+      // concurrent reportViewport timer (also 300 ms) cannot fire between the clear
+      // intent and the actual URL write and thereby restore the stale `q=` value via
+      // its `(prev) => new URLSearchParams(prev)` functional updater.
+      const delay = newQ ? DEBOUNCE_MS : 0;
       searchTimer.current = setTimeout(() => {
         setUrlParams(
           (prev) => {
@@ -634,7 +640,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           },
           { replace: true }, // REPLACE — search query is not a history destination
         );
-      }, DEBOUNCE_MS);
+      }, delay);
     },
     [setUrlParams],
   );

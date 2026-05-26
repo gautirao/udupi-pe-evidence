@@ -58,6 +58,11 @@ export interface UseDiscoverListingsParams {
    * When omitted, the backend falls back to the full city query.
    */
   bbox?: [number, number, number, number] | null;
+  /**
+   * Optional keyword search term. Blank/whitespace-only values are ignored.
+   * Server-side FTS (V18 search_vector). 500-char limit enforced server-side.
+   */
+  q?: string;
 }
 
 export function useDiscoverListings({
@@ -68,13 +73,16 @@ export function useDiscoverListings({
   includeAggregates = false,
   enabled = true,
   bbox,
+  q,
 }: UseDiscoverListingsParams) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
     bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
 
+  const trimmedQ = q?.trim() || null;
+
   return useQuery<DiscoverListingsPage>({
-    queryKey: ['discover-listings', city, page, size, filters, includeAggregates, snapped],
+    queryKey: ['discover-listings', city, page, size, filters, includeAggregates, snapped, trimmedQ],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
@@ -105,6 +113,7 @@ export function useDiscoverListings({
       if (filters.schoolLat != null) params.set('schoolLat', String(filters.schoolLat));
       if (filters.schoolLon != null) params.set('schoolLon', String(filters.schoolLon));
       if (filters.schoolRadiusKm != null) params.set('schoolRadiusKm', String(filters.schoolRadiusKm));
+      if (trimmedQ) params.set('q', trimmedQ);
 
       return api.get<DiscoverListingsPage>(`/api/discover/listings?${params.toString()}`, { signal });
     },

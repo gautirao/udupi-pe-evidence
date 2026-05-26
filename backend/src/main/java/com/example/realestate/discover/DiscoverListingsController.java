@@ -60,6 +60,7 @@ public class DiscoverListingsController {
             @RequestParam(name = "schoolLat", required = false) Double schoolLat,
             @RequestParam(name = "schoolLon", required = false) Double schoolLon,
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
+            @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "bbox", required = false) String bboxParam,
             @RequestParam(name = "page", required = false, defaultValue = "0") int page,
             @RequestParam(name = "size", required = false, defaultValue = "20") int size,
@@ -74,6 +75,11 @@ public class DiscoverListingsController {
 
         // Clamp size
         int effectiveSize = Math.max(1, Math.min(size, MAX_SIZE));
+
+        // Validate q length
+        if (q != null && q.length() > 500) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "q_exceeds_max_length");
+        }
 
         // Validate partial school params
         if ((schoolLat == null) != (schoolLon == null)) {
@@ -107,6 +113,7 @@ public class DiscoverListingsController {
                 schoolLat,
                 schoolLon,
                 schoolRadiusKm,
+                q,
                 bbox,
                 page,
                 effectiveSize,

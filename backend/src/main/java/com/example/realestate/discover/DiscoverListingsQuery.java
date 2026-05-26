@@ -20,6 +20,7 @@ public record DiscoverListingsQuery(
         Double schoolLat,
         Double schoolLon,
         Double schoolRadiusKm,
+        String q,
         DiscoverListingPredicateBuilder.Bbox bbox,
         int page,
         int size,

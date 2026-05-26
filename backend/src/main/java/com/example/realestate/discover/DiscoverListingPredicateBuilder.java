@@ -38,7 +38,8 @@ public class DiscoverListingPredicateBuilder {
             Double schoolLat,
             Double schoolLon,
             Double schoolRadiusKm,         // default 2.0 when schoolLat+schoolLon provided
-            Bbox bbox                      // viewport rectangle filter, nullable
+            Bbox bbox,                     // viewport rectangle filter, nullable
+            String q                       // keyword search query; null/blank = no FTS filter
     ) {}
 
     public record Sql(String whereFragment, List<Object> params) {}
@@ -203,6 +204,17 @@ public class DiscoverListingPredicateBuilder {
             params.add(b.south());
             params.add(b.east());
             params.add(b.north());
+        }
+
+        // keyword search — FTS via the search_vector generated column added by V18.
+        // websearch_to_tsquery accepts natural-language input (quoted phrases, negation, OR).
+        // Normalise: blank/whitespace-only q is treated as absent so no FTS clause is added.
+        // Malformed input may cause DataAccessException — falls through to the global
+        // Exception handler (500 INTERNAL_ERROR); no dedicated handler is needed here.
+        String normQ = (f.q() != null && !f.q().isBlank()) ? f.q().trim() : null;
+        if (normQ != null) {
+            sb.append(" AND pl.search_vector @@ websearch_to_tsquery('english', ?)");
+            params.add(normQ);
         }
 
         return new Sql(sb.toString(), params);

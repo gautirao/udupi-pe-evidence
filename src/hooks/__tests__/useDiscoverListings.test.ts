@@ -455,4 +455,118 @@ describe('useDiscoverListings', () => {
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.has('bbox')).toBe(false);
   });
+
+  // ─── T12–T15: keyword q param (#1187) ─────────────────────────
+
+  // T12: non-blank q is appended to URLSearchParams
+  it('T12_q_non_blank_appended_to_url_params', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          q: 'garden view',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('q')).toBe('garden view');
+  });
+
+  // T13: blank or null q is NOT appended to URLSearchParams
+  it('T13_q_blank_not_appended', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          q: '   ',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  it('T13_q_undefined_not_appended', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          q: undefined,
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  // T14: different q values produce different queryKey entries
+  it('T14_different_q_produces_different_queryKey', () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    const { rerender } = renderHook(
+      ({ q }: { q?: string }) =>
+        useDiscoverListings({ city: 'udupi', page: 0, filters: {}, enabled: true, q }),
+      { wrapper, initialProps: { q: 'sea view' } },
+    );
+
+    rerender({ q: 'garden view' });
+
+    const keys = qc.getQueryCache().getAll().map((entry) => entry.queryKey);
+    const withSeaView = keys.find((k) => k.includes('sea view'));
+    const withGardenView = keys.find((k) => k.includes('garden view'));
+    expect(withSeaView).toBeDefined();
+    expect(withGardenView).toBeDefined();
+  });
+
+  // T15: same trimmed q produces same queryKey (leading/trailing whitespace is normalised)
+  it('T15_same_trimmed_q_produces_same_queryKey', () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    const { rerender } = renderHook(
+      ({ q }: { q?: string }) =>
+        useDiscoverListings({ city: 'udupi', page: 0, filters: {}, enabled: true, q }),
+      { wrapper, initialProps: { q: 'abc' } },
+    );
+
+    rerender({ q: ' abc ' });
+
+    const keys = qc.getQueryCache().getAll().map((entry) => entry.queryKey);
+    // Both renders should resolve to the same cache key ('abc' after trim)
+    const allKeys = keys.filter((k) => k.includes('abc'));
+    // Only one distinct cache entry should exist (same trimmed value)
+    expect(allKeys.length).toBe(1);
+  });
 });
