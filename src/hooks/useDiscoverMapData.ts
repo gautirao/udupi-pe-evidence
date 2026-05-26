@@ -149,6 +149,7 @@ export function useDiscoverMapData({
     maxPrice: discoverMaxPrice,
     bedrooms: discoverBedrooms,
     propertyType: discoverPropertyType,
+    q: debouncedSearch?.trim() || undefined,
   });
 
   const {

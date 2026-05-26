@@ -50,6 +50,8 @@ export interface DiscoverCityListingsParams {
   bedrooms?: number;
   /** Property type string (case-insensitive on backend). Only sent when a single value is selected. */
   propertyType?: string;
+  /** Free-text keyword search forwarded to the backend FTS endpoint. */
+  q?: string;
 }
 
 /**
@@ -67,6 +69,7 @@ export function useDiscoverCityListings({
   maxPrice,
   bedrooms,
   propertyType,
+  q,
 }: DiscoverCityListingsParams) {
   const sortedKeys = [...areaKeys].sort();
 
@@ -80,6 +83,7 @@ export function useDiscoverCityListings({
       maxPrice ?? null,
       bedrooms ?? null,
       propertyType ?? null,
+      q?.trim() || null,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -89,6 +93,7 @@ export function useDiscoverCityListings({
       if (maxPrice != null) params.append('maxPrice', String(maxPrice));
       if (bedrooms != null) params.append('bedrooms', String(bedrooms));
       if (propertyType) params.append('propertyType', propertyType);
+      if (q?.trim()) params.append('q', q.trim());
       return api.get<DiscoverCityListingsResponse>(
         `/api/discover/cities/${encodeURIComponent(city)}/listings?${params.toString()}`,
         { skipAuth: true },

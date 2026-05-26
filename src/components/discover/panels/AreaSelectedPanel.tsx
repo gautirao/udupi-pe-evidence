@@ -290,7 +290,21 @@ export function AreaSelectedPanel({
         ) : !areaListings || areaListings.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full p-4">
             <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
-            {hasPropertyFilters ? (
+            {hasPropertyFilters && searchQuery ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">No listings match this search and filters</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearPropertyFilters}
+                  data-testid="clear-filters-button"
+                >
+                  Clear filters
+                </Button>
+              </>
+            ) : searchQuery ? (
+              <p className="text-sm text-muted-foreground">No listings match this search</p>
+            ) : hasPropertyFilters ? (
               <>
                 <p className="text-sm text-muted-foreground mb-4">No listings match these filters</p>
                 <Button

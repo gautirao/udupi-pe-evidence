@@ -212,4 +212,108 @@ describe('useDiscoverCityListings', () => {
     expect(params.has('bedrooms')).toBe(false);
     expect(params.has('propertyType')).toBe(false);
   });
+
+  // ─── q (keyword search) ───────────────────────────────────────
+
+  it('appends q to URL params when provided', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          q: 'garden view',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('q')).toBe('garden view');
+  });
+
+  it('does NOT append q to URL params when q is undefined', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  it('does NOT append q to URL params when q is empty string', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          q: '',
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  it('includes trimmed q value in the queryKey', () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          q: 'pool',
+        }),
+      { wrapper },
+    );
+
+    const keys = qc.getQueryCache().getAll().map((query) => query.queryKey);
+    const withQ = keys.find((k) => k.includes('pool'));
+    expect(withQ).toBeDefined();
+  });
+
+  it('includes both q and propertyType in the queryKey when both are provided', () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    renderHook(
+      () =>
+        useDiscoverCityListings({
+          city: 'udupi',
+          areaKeys: ['udupi|manipal'],
+          q: 'pool',
+          propertyType: 'apartment',
+        }),
+      { wrapper },
+    );
+
+    const keys = qc.getQueryCache().getAll().map((query) => query.queryKey);
+    const composedKey = keys.find((k) => k.includes('pool') && k.includes('apartment'));
+    expect(composedKey).toBeDefined();
+  });
 });

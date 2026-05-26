@@ -96,6 +96,8 @@ export interface DiscoverBadgeInput {
    * - `undefined` → no group context active: fall through to city total.
    */
   groupListingsCount?: number | null;
+  /** Free-text keyword query active in the search box. When set, badge uses filtered count. */
+  searchQuery?: string;
 }
 
 export interface DiscoverBadgeResult {
@@ -112,6 +114,7 @@ export function deriveDiscoverBadge({
   areaListings,
   schoolListingsCount,
   groupListingsCount,
+  searchQuery,
 }: DiscoverBadgeInput): DiscoverBadgeResult {
   // Issue #1175 v2 — school-radius context: badge follows the active count.
   //
@@ -149,8 +152,8 @@ export function deriveDiscoverBadge({
     if (isLoadingAreaListings) {
       return { visible: false, count: null, loading: true };
     }
-    if (hasPropertyFilters) {
-      // Area + property filters combined: show the filtered count from areaListings
+    if (hasPropertyFilters || !!searchQuery) {
+      // Area + property filters or keyword search: show the filtered count from areaListings
       // (filter-aware, matches right panel and map markers — AC4).
       // areaListings is undefined while the first fetch is in flight but
       // isLoadingAreaListings already caught that above; here it should be an array.
@@ -704,14 +707,16 @@ export default function MapDiscovery() {
             : schoolListings.length
           : undefined,
         groupListingsCount,
+        searchQuery: debouncedSearch,
       }),
     // schoolListings.length is a number primitive — safe dep (no spurious identity changes).
     // schoolRadiusActive is derived from filters (already a dep), but listed explicitly for clarity.
     // listingDataLoading added for auth-path loading guard (Issue #1175 v2 corrective).
     // groupListingsCount: derived from focusedGroup + discoverAreas — listed as a primitive
     // (number | null | undefined) so it is safe to use directly as a dep.
+    // debouncedSearch: keyword search — badge shows filtered count when active (Issue #1185).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount],
+    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch],
   );
 
   // Issue #1160 GAP 1 — listingsReadyKey: a stable primitive string that changes only when
