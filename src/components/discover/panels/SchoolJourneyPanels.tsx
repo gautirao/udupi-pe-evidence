@@ -575,6 +575,21 @@ export function SchoolSelectedPanel({
         </div>
       )}
 
+      {/* Issue #1193 — anonymous users get an area-scoped listing set (single areaKey +
+          client haversine), not the auth-only cross-area ST_DWithin proximity query. The
+          radius circle would otherwise imply a cross-area search the anon path can't deliver,
+          so honestly communicate the area-scope constraint. Derived from existing props only.
+          Gate excludes radiusKm null/0 (#1210) so the note never reads "within 0 km". */}
+      {!isAuthenticated && radiusKm != null && radiusKm > 0 && (
+        <p
+          data-testid="anon-school-radius-limit-note"
+          aria-live="polite"
+          className="px-4 py-2 text-xs text-muted-foreground border-b border-border"
+        >
+          Showing homes in this area only. Sign in to see all homes within {radiusKm} km of this school.
+        </p>
+      )}
+
       {/* Radius selector */}
       <div className="px-4 py-3 border-b border-border">
         <p className="text-xs font-medium text-muted-foreground mb-2">Radius</p>
@@ -857,6 +872,21 @@ export function AreaSchoolCombinedPanel({
       <div className="px-4 py-2 border-b border-border">
         {combinedChips}
       </div>
+
+      {/* Issue #1193 — anonymous users get an area-scoped listing set (single areaKey +
+          client haversine), not the auth-only cross-area ST_DWithin proximity query. The
+          radius circle would otherwise imply a cross-area search the anon path can't deliver,
+          so honestly communicate the area-scope constraint. Derived from existing props only.
+          Gate excludes radiusKm null/0 (#1210) so the note never reads "within 0 km". */}
+      {!isAuthenticated && radiusKm != null && radiusKm > 0 && (
+        <p
+          data-testid="anon-school-radius-limit-note"
+          aria-live="polite"
+          className="px-4 py-2 text-xs text-muted-foreground border-b border-border"
+        >
+          Showing homes in this area only. Sign in to see all homes within {radiusKm} km of this school.
+        </p>
+      )}
 
       {/* Radius selector */}
       <div className="px-4 py-3 border-b border-border">
