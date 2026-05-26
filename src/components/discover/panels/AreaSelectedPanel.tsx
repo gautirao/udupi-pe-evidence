@@ -253,6 +253,7 @@ export function AreaSelectedPanel({
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               className="pl-8 h-9 text-sm pr-8"
+              data-testid="area-search-input"
             />
             {searchQuery && (
               <Button
@@ -261,6 +262,7 @@ export function AreaSelectedPanel({
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
                 onClick={() => onSearchChange('')}
                 aria-label="Clear search"
+                data-testid="area-search-clear"
               >
                 <X className="h-3.5 w-3.5" />
               </Button>
