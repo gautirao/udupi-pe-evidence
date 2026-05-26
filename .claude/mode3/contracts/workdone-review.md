@@ -21,6 +21,26 @@ If BOTH files exist → `CONFLICTING_EVIDENCE`; stop.
 
 Runs **after** Phase 7A (and 7B if triggered) have PASSed. WORKDONE_REVIEW is the final gate before PR creation, and it reviews the browser-validated result — not a pre-validation candidate.
 
+### Preflight validation (automated)
+
+Before submitting WORKDONE_REVIEW, run the automated preflight script to verify 4 deterministic checks:
+
+```bash
+python .claude/scripts/verify-mode3-workdone.py --issue <N> --base origin/main
+```
+
+Output is compact JSON summarizing:
+- SHA256 integrity chain (handoff + plan)
+- Routing-decision-log consistency
+- Scope-lock / forbidden-file violations
+- Eval-checklist satisfaction
+
+**If the script exits non-zero, halt.** Do NOT proceed to WORKDONE_REVIEW. The script output is evidence of pre-flight status; OpenAI WORKDONE_REVIEW is the gate decision. Include the script JSON in the workdone-review-request.toml `[preflight_validation]` section.
+
+---
+
+### Manual verification steps
+
 1. **Two sha256 checks for the integrity chain:**
    - (a) `sha256(approved-execution-handoff.toml on disk) == workdone-candidate.toml.handoff_sha256` — confirms the Orchestrator wrote the candidate against the same handoff the lead authored. On mismatch → stop.
    - (b) `sha256(approved-plan.toml on disk) == approved-execution-handoff.toml.plan.approved_plan_sha256` — confirms the handoff itself was authored against the approved plan. On mismatch → stop.
