@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Building2, GraduationCap, Home, IndianRupee, X } from 'lucide-react';
+import { Building2, GraduationCap, Home, IndianRupee, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatPrice } from '@/lib/formatters';
@@ -65,6 +65,14 @@ interface ActiveContextChipsProps extends ActiveContextChipsCallbacks {
   selectedSchool?: SchoolResult | null;
   radiusKm?: number | null;
   filters: DiscoverUrlFilters;
+  /**
+   * Free-text search query (the `q` URL-state field; NOT part of DiscoverUrlFilters).
+   * Optional so existing callers/tests need no change. The Search chip renders ONLY
+   * when this is non-empty (after trim) AND a valid result context exists (area or school).
+   */
+  searchQuery?: string;
+  /** Clear the free-text search query (clears only `q`, never sibling filters). */
+  onClearSearch?: () => void;
 }
 
 interface ChipProps {
@@ -115,6 +123,8 @@ export function ActiveContextChips({
   selectedSchool,
   radiusKm,
   filters,
+  searchQuery,
+  onClearSearch,
   onClearArea,
   onClearSchool,
   onClearPropertyType,
@@ -128,6 +138,11 @@ export function ActiveContextChips({
 }: ActiveContextChipsProps) {
   const hasArea = selectedArea != null;
   const hasSchool = selectedSchool != null;
+  // Context-gated search: trim BEFORE the gate so whitespace-only q never renders a
+  // chip. The (hasArea || hasSchool) gate is the lynchpin — `q` at top-level/city/group
+  // (no valid result context) must NOT show a chip even when present in the URL.
+  const searchTerm = searchQuery?.trim() ?? '';
+  const hasSearch = searchTerm !== '' && (hasArea || hasSchool);
   const boardFilters = filters.boardFilters ?? [];
   const categoryFilters = filters.categoryFilters ?? [];
   const hasType =
@@ -166,6 +181,7 @@ export function ActiveContextChips({
   const hasBooleans = activeBooleans.length > 0;
 
   if (
+    !hasSearch &&
     !hasArea &&
     !hasSchool &&
     !hasType &&
@@ -228,6 +244,15 @@ export function ActiveContextChips({
       className="flex flex-wrap items-center gap-1.5"
       data-testid="active-context-chips"
     >
+      {hasSearch && (
+        <Chip
+          icon={<Search className="h-3 w-3 flex-shrink-0" />}
+          label={searchTerm}
+          onClear={() => onClearSearch?.()}
+          testId="chip-search"
+          dismissTestId="chip-search-dismiss"
+        />
+      )}
       {hasArea && (
         <Chip
           icon={<Building2 className="h-3 w-3 flex-shrink-0" />}

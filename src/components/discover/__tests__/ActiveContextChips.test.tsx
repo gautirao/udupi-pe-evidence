@@ -677,4 +677,183 @@ describe('ActiveContextChips', () => {
     expect(dateIdx).toBeGreaterThan(sellerIdx);
     expect(ntmIdx).toBeGreaterThan(dateIdx);
   });
+
+  // ── Search chip (Issue #1186) ──────────────────────────────────────────────
+  // The Search chip renders ONLY when searchQuery is non-empty (after trim) AND a
+  // valid result context exists (area OR school). This pins every edge of the
+  // predicate `searchTerm !== '' && (hasArea || hasSchool)`.
+  //
+  // NOTE: the held-branch ac1/ac3 (search-only renders a chip) are intentionally
+  // NOT ported — they assert the OPPOSITE of the gated behaviour. (c)/(d) below
+  // are the replacement AC3 guards.
+
+  it('(a) renders search chip when search + area context is active', () => {
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="villa"
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-search')).toBeInTheDocument();
+    expect(screen.getByText('villa')).toBeInTheDocument();
+  });
+
+  it('(b) renders search chip when search + school context is active (no area)', () => {
+    render(
+      <ActiveContextChips
+        selectedSchool={mockSchool}
+        radiusKm={2}
+        searchQuery="2bhk"
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-search')).toBeInTheDocument();
+    expect(screen.getByText('2bhk')).toBeInTheDocument();
+    expect(screen.queryByTestId('chip-area')).not.toBeInTheDocument();
+  });
+
+  it('(c) does NOT render search chip when search is present but no area and no school (strip is null)', () => {
+    const { container } = render(
+      <ActiveContextChips
+        searchQuery="villa"
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
+    // No valid context AND no other dimension active → the whole strip is null.
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('(d) does NOT render search chip when a property filter is set but no area/school (filters do not widen context)', () => {
+    render(
+      <ActiveContextChips
+        searchQuery="villa"
+        filters={{ ...emptyFilters, propertyTypes: ['apartment'] }}
+        {...noOps}
+      />,
+    );
+    // The property-type chip renders (filter is active) but the search chip must NOT —
+    // a property filter is not a valid result context for search.
+    expect(screen.getByTestId('chip-type')).toBeInTheDocument();
+    expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
+  });
+
+  it('(e) renders all chips and places the search chip FIRST when search + area + filter coexist', () => {
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="villa"
+        filters={{ ...emptyFilters, propertyTypes: ['apartment'] }}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-search')).toBeInTheDocument();
+    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
+    expect(screen.getByTestId('chip-type')).toBeInTheDocument();
+    // Search chip is rendered before the area chip in DOM order.
+    const chips = screen.getAllByRole('group', { name: /Active filter:/ });
+    const labels = chips.map((el) => el.getAttribute('aria-label'));
+    expect(labels[0]).toBe('Active filter: villa');
+    expect(labels.indexOf('Active filter: villa')).toBeLessThan(
+      labels.indexOf('Active filter: Manipal'),
+    );
+  });
+
+  it('does not render search chip when searchQuery is undefined (valid context present)', () => {
+    render(
+      <ActiveContextChips selectedArea={mockArea} filters={emptyFilters} {...noOps} />,
+    );
+    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
+    expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
+  });
+
+  it('does not render search chip when searchQuery is empty string (valid context present)', () => {
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery=""
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
+    expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
+  });
+
+  it('does not render search chip for whitespace-only searchQuery (valid context present)', () => {
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="   "
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByTestId('chip-area')).toBeInTheDocument();
+    expect(screen.queryByTestId('chip-search')).not.toBeInTheDocument();
+  });
+
+  it('trims the search label (leading/trailing whitespace removed)', () => {
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="  sea view  "
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByText('sea view')).toBeInTheDocument();
+  });
+
+  it('renders special characters in the search label verbatim', () => {
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="3+1 BHK & garden"
+        filters={emptyFilters}
+        {...noOps}
+      />,
+    );
+    expect(screen.getByText('3+1 BHK & garden')).toBeInTheDocument();
+  });
+
+  it('calls onClearSearch exactly once when the search chip × is clicked (valid context present)', async () => {
+    const onClearSearch = vi.fn();
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="villa"
+        filters={emptyFilters}
+        {...noOps}
+        onClearSearch={onClearSearch}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('chip-search-dismiss'));
+    expect(onClearSearch).toHaveBeenCalledOnce();
+  });
+
+  it('clearing the search chip does not fire area/type clear handlers (sibling chips untouched)', async () => {
+    const onClearSearch = vi.fn();
+    const onClearArea = vi.fn();
+    const onClearPropertyType = vi.fn();
+    render(
+      <ActiveContextChips
+        selectedArea={mockArea}
+        searchQuery="villa"
+        filters={{ ...emptyFilters, propertyTypes: ['apartment'] }}
+        {...noOps}
+        onClearSearch={onClearSearch}
+        onClearArea={onClearArea}
+        onClearPropertyType={onClearPropertyType}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('chip-search-dismiss'));
+    expect(onClearSearch).toHaveBeenCalledOnce();
+    expect(onClearArea).not.toHaveBeenCalled();
+    expect(onClearPropertyType).not.toHaveBeenCalled();
+  });
 });

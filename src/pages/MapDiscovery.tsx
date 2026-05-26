@@ -1078,6 +1078,8 @@ export default function MapDiscovery() {
         selectedArea={selectedArea}
         selectedSchool={selectedSchool}
         radiusKm={urlState.radiusKm}
+        searchQuery={urlState.q}
+        onClearSearch={() => urlActions.setSearchQuery('')}
         filters={{
           ...filters,
           // Issue #1132 — board/category filters are written directly to URL by
@@ -1124,7 +1126,7 @@ export default function MapDiscovery() {
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, selectedSchool, urlState.radiusKm, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleAreaBack],
+    [selectedArea, selectedSchool, urlState.radiusKm, urlState.q, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleAreaBack],
   );
 
   // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render
