@@ -12,11 +12,37 @@
 
 ---
 
-## Phase 9 — Merge gate (mandatory user approval)
+## Phase 9 — PR_REVIEW gate → Phase 9.1 — Merge gate (MANDATORY USER APPROVAL)
 
-**STOP and request explicit user approval to merge.** Do NOT auto-merge. Print the PR URL, the WORKDONE_REVIEW and PR_REVIEW verdict summaries, and the final scope-lock table. Wait for user.
+After PR_REVIEW returns APPROVED_TO_MERGE:
 
-On user approval: `gh pr merge <PR#> --squash --admin`. On user decline: leave the PR open; halt the run; record the state in `team-lead-execution-log.md`.
+**CRITICAL INVARIANT:**  
+```
+PR_REVIEW APPROVED_TO_MERGE is NOT user approval.
+It only means the PR is eligible to be presented to the user.
+The workflow MUST stop and wait for explicit user approval before executing any merge command.
+```
+
+Main Agent **MUST**:
+1. Report the PR_REVIEW verdict to the user
+2. Print the PR URL, scope-lock table, and test results
+3. **Explicitly ask for user approval** (e.g., "Ready to merge?")
+4. **STOP and wait for explicit user response**
+
+User must send a message approving merge (e.g., "approve", "merge", "yes") or declining ("hold", "no", "don't merge").
+
+**Only after receiving explicit user approval**, Main Agent executes:
+```bash
+gh pr merge <PR#> --squash --admin
+```
+
+On user decline: leave the PR open; halt the run; record the approval decision and user message in `team-lead-execution-log.md`.
+
+**HARD RULE: No agent running on any model may execute `gh pr merge` or equivalent without an explicit user approval message in the current session.**
+
+### Recording approval for audit trail
+
+Main Agent **MUST record** the user's approval message — the exact text, for example "yes, approve" or "merge" — in the execution log. This creates an audit trail that the approval was explicit and informed.
 
 ---
 

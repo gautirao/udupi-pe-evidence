@@ -147,6 +147,43 @@ For /mode3-run execution, specialists use jCodemunch for code discovery on the m
 
 ---
 
+## 10) Release Command Safeguard (CRITICAL)
+
+**MANDATORY RULE:** Release commands require explicit user approval.
+
+Release commands include:
+- `gh pr merge` / `git merge`
+- `git push --force` / `git push -f`
+- `git reset --hard`
+- `git branch -D` (force-delete)
+- Any equivalent destructive operation
+
+**Hard invariant:**  
+No agent running on any model may execute a release command without an explicit user message in the current session approving that specific action.
+
+**Confusion between gate verdicts and user approval:**
+- Gate verdict (e.g., `PR_REVIEW: APPROVED_TO_MERGE`) means the gate evaluated the PR and found it eligible.
+- User approval means the user has given permission to proceed with the action.
+- **These are two different things.**
+- Gate verdicts are NOT authorization to execute release commands.
+- When a gate returns an "APPROVED" verdict, the workflow must STOP and explicitly ask the user for approval before executing the corresponding release action.
+
+**Example (from incident #1186):**
+- PR_REVIEW returned `APPROVED_TO_MERGE` ✓ (PR is eligible)
+- Main Agent interpreted this as authorization to merge ✗ (confused gate verdict with user approval)
+- Main Agent executed `gh pr merge` without waiting for user approval ✗ (violated mandatory gate)
+
+**Correct workflow:**
+- PR_REVIEW returns `APPROVED_TO_MERGE` ✓
+- Main Agent reports the verdict to the user and asks: "Ready to merge?" ✓
+- Main Agent STOPS and waits for explicit user message ✓
+- User sends explicit approval message from `.claude/mode3/contracts/closeout.md` Phase 9 (e.g., "approve", "merge", "yes") ✓
+- Only then, Main Agent executes `gh pr merge` ✓
+
+**If in doubt, ask the user explicitly.** Do not assume silence means approval.
+
+---
+
 ## Execution Philosophy
 
 - Small PRs > large refactors
