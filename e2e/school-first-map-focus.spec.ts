@@ -603,8 +603,8 @@ const DISCOVER_MARKERS_FIXTURE = {
   markers: [
     {
       id: 'mk-1',
-      latitude: SCHOOL_LAT + 0.003,
-      longitude: SCHOOL_LON + 0.003,
+      lat: SCHOOL_LAT + 0.003,
+      lon: SCHOOL_LON + 0.003,
       pricePaise: 500000000,
       locality: 'Manipal',
     },
