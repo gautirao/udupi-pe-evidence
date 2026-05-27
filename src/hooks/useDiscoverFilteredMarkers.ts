@@ -27,13 +27,17 @@ export function useDiscoverFilteredMarkers(
    * When omitted, the backend falls back to the full city query.
    */
   bbox?: [number, number, number, number] | null,
+  /** Optional keyword search — forwarded as ?q= to the markers API. */
+  q?: string,
 ) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
     bbox != null && bbox.every(Number.isFinite) ? snapBbox(bbox) : null;
 
+  const trimmedQ = q?.trim() || undefined;
+
   return useQuery<DiscoverFilteredMarkersResponse>({
-    queryKey: ['discover-filtered-markers', city, filters, snapped],
+    queryKey: ['discover-filtered-markers', city, filters, snapped, trimmedQ],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
@@ -60,6 +64,7 @@ export function useDiscoverFilteredMarkers(
       if (filters.schoolLat != null) params.set('schoolLat', String(filters.schoolLat));
       if (filters.schoolLon != null) params.set('schoolLon', String(filters.schoolLon));
       if (filters.schoolRadiusKm != null) params.set('schoolRadiusKm', String(filters.schoolRadiusKm));
+      if (trimmedQ) params.set('q', trimmedQ);
 
       return api.get<DiscoverFilteredMarkersResponse>(`/api/discover/markers?${params.toString()}`, { signal });
     },

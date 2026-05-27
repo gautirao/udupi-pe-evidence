@@ -183,4 +183,79 @@ class DiscoverMarkersControllerTest {
 
         verifyNoInteractions(service);
     }
+
+    // ── 9. q param wiring ────────────────────────────────────────────────────
+
+    @Test
+    void qParam_nonEmpty_passedToFilters() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("q", "villa")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f ->
+                f.q() != null && f.q().equals("villa")
+        ));
+    }
+
+    @Test
+    void qParam_empty_passesNullToFilters() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("q", "")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f -> f.q() == null));
+    }
+
+    @Test
+    void qParam_absent_passesNullToFilters() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        // no q param at all
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f -> f.q() == null));
+    }
+
+    @Test
+    void qParam_withSurroundingWhitespace_isTrimmed() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("q", "  villa  ")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f ->
+                f.q() != null && f.q().equals("villa")
+        ));
+    }
+
+    @Test
+    void qParam_exceeds500Chars_returns400() throws Exception {
+        String longQ = "a".repeat(501);
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("q", longQ)
+                        .with(jwt()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(service);
+    }
 }

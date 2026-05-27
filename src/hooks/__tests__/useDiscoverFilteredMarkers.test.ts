@@ -420,4 +420,128 @@ describe('useDiscoverFilteredMarkers', () => {
     expect(typeof listing.longitude).toBe('number');
   });
   // ─── End regression #1240 ────────────────────────────────────────────────
+
+  // ─── AC5: keyword q param (#1245) ─────────────────────────────────────────
+
+  // AC5a: non-blank q is appended to the markers API URL
+  it('AC5a_q_non_blank_appended_to_url_params', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, 'villa'),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('q')).toBe('villa');
+  });
+
+  it('AC5a_q_with_surrounding_whitespace_is_trimmed', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, '  villa  '),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('q')).toBe('villa');
+  });
+
+  // AC5b: empty/undefined q → NO q= in URL
+  it('AC5b_q_undefined_not_appended', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, undefined),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  it('AC5b_q_blank_string_not_appended', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, '   '),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  it('AC5b_q_omitted_baseline_unchanged', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    // Baseline: call without the q argument — existing callers are unaffected
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('q')).toBe(false);
+  });
+
+  // AC5c: queryKey includes trimmedQ — cache invalidates when keyword changes
+  it('AC5c_different_q_produces_different_queryKey', () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    const { rerender } = renderHook(
+      ({ q }: { q?: string }) =>
+        useDiscoverFilteredMarkers('udupi', {}, true, null, q),
+      { wrapper, initialProps: { q: 'sea view' } },
+    );
+
+    rerender({ q: 'garden view' });
+
+    const keys = qc.getQueryCache().getAll().map((entry) => entry.queryKey);
+    const withSeaView = keys.find((k) => JSON.stringify(k).includes('sea view'));
+    const withGardenView = keys.find((k) => JSON.stringify(k).includes('garden view'));
+    expect(withSeaView).toBeDefined();
+    expect(withGardenView).toBeDefined();
+  });
+
+  it('AC5c_same_trimmed_q_produces_same_queryKey', () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    const { rerender } = renderHook(
+      ({ q }: { q?: string }) =>
+        useDiscoverFilteredMarkers('udupi', {}, true, null, q),
+      { wrapper, initialProps: { q: 'abc' } },
+    );
+
+    rerender({ q: ' abc ' });
+
+    const keys = qc.getQueryCache().getAll().map((entry) => entry.queryKey);
+    // Both renders resolve to the same trimmed value → only one cache entry
+    const abcKeys = keys.filter((k) => JSON.stringify(k).includes('"abc"'));
+    expect(abcKeys.length).toBe(1);
+  });
+
+  // ─── End AC5 (#1245) ─────────────────────────────────────────────────────
 });

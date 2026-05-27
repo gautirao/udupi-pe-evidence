@@ -58,9 +58,15 @@ public class DiscoverMarkersController {
             @RequestParam(name = "schoolLat", required = false) Double schoolLat,
             @RequestParam(name = "schoolLon", required = false) Double schoolLon,
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
-            @RequestParam(name = "bbox", required = false) String bboxParam
+            @RequestParam(name = "bbox", required = false) String bboxParam,
+            @RequestParam(name = "q", required = false) String q
     ) {
         log.debug("GET /api/discover/markers city={}", city);
+
+        // Validate q length
+        if (q != null && q.length() > 500) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "q_exceeds_max_length");
+        }
 
         // Validate partial school params
         if ((schoolLat == null) != (schoolLon == null)) {
@@ -95,7 +101,7 @@ public class DiscoverMarkersController {
                 schoolLon,
                 schoolRadiusKm,
                 bbox,
-                null  // q not yet wired for markers endpoint
+                (q != null && !q.isBlank()) ? q.trim() : null
         );
 
         return ResponseEntity.ok(service.getMarkers(filters));

@@ -113,7 +113,7 @@ export function useDiscoverMapData({
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
     isFetching: filteredMarkersFetching,
-  } = useDiscoverFilteredMarkers(city, filters, markersEnabled, bbox);
+  } = useDiscoverFilteredMarkers(city, filters, markersEnabled, bbox, debouncedSearch?.trim() || undefined);
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
