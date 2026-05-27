@@ -31,6 +31,22 @@ import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
  */
 export const AREA_PANNER_GROUP_MAX_ZOOM = 12;
 
+/**
+ * Max zoom for SchoolMarkerFocusPanner fitBounds (issue #1240).
+ *
+ * Why 13: a 5 km radius circle (10 km diameter) only fits the viewport at
+ * zoom ≤ 13. When markers cluster tightly near the school, the
+ * markerBounds ∩ radiusBounds intersection collapses to markerBounds and an
+ * uncapped fitBounds zooms to ~15-17, pushing the radius circle off-screen.
+ * 13 matches the anonymous URL zoom so the signed-in and anonymous
+ * experiences stay consistent. 13 > AREA_LAYER_MAX_ZOOM (12) so capping here
+ * does NOT retrigger the area-ring layer.
+ *
+ * Only SchoolMarkerFocusPanner is capped here — SchoolFocusPanner (Phase 1)
+ * is intentionally left uncapped (qa-fast latent-debt note, issue #1240).
+ */
+export const SCHOOL_MARKER_FOCUS_MAX_ZOOM = 13;
+
 // Extended listing with images for map display
 export interface PropertyListingWithImages extends PropertyListing {
   images?: PropertyImage[];
@@ -562,16 +578,22 @@ function SchoolMarkerFocusPanner({
       const north = Math.min(markerBounds.getNorth(), radiusBounds.getNorth());
       const east = Math.min(markerBounds.getEast(), radiusBounds.getEast());
       if (south < north && west < east) {
-        map.fitBounds([[south, west], [north, east]], { padding: [40, 40] });
+        map.fitBounds([[south, west], [north, east]], {
+          padding: [40, 40],
+          maxZoom: SCHOOL_MARKER_FOCUS_MAX_ZOOM,
+        });
         return;
       }
     }
 
     // Fallback: fit to raw marker bounds if radius clamp produces degenerate result
     if (markerBounds.isValid()) {
-      map.fitBounds(markerBounds, { padding: [40, 40] });
+      map.fitBounds(markerBounds, {
+        padding: [40, 40],
+        maxZoom: SCHOOL_MARKER_FOCUS_MAX_ZOOM,
+      });
     } else {
-      map.flyTo([lat, lon], 14, { duration: 1 });
+      map.flyTo([lat, lon], SCHOOL_MARKER_FOCUS_MAX_ZOOM, { duration: 1 });
     }
   }, [schoolMarkerFocusTick, lat, lon, radiusKm, markerPositions, map]);
 

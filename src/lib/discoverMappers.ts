@@ -67,8 +67,8 @@ export function filteredMarkerToPropertyListing(
 ): PropertyListing & { images?: PropertyImage[] } {
   return {
     id: m.id,
-    latitude: m.latitude,
-    longitude: m.longitude,
+    latitude: m.lat,
+    longitude: m.lon,
     property_type: 'other' as PropertyType,
     price: m.pricePaise != null ? Math.round(m.pricePaise / 100) : null,
     price_unit: null,

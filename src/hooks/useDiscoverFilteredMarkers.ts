@@ -5,8 +5,8 @@ import { snapBbox } from '@/lib/bboxUtils';
 
 export interface DiscoverFilteredMarker {
   id: string;
-  latitude: number;
-  longitude: number;
+  lat: number;
+  lon: number;
   pricePaise: number | null;
   locality: string | null;
 }

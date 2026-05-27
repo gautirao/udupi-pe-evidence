@@ -354,4 +354,70 @@ describe('useDiscoverFilteredMarkers', () => {
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.has('bbox')).toBe(false);
   });
+
+  // ─── Integration: Issue #1240 — lat/lon field contract with backend ────────
+  // Backend /api/discover/markers returns { id, lat, lon, pricePaise, locality }.
+  // The DiscoverFilteredMarker interface must use lat/lon (not latitude/longitude)
+  // so filteredMarkerToPropertyListing receives defined coordinates and property
+  // pins render on the map.
+
+  it('marker_response_lat_lon_fields_flow_through_hook_data', async () => {
+    const MARKERS_WITH_COORDS = {
+      city: 'udupi',
+      markers: [
+        { id: 'a1', lat: 13.3498, lon: 74.7852, pricePaise: 5000000, locality: 'Katapadi' },
+        { id: 'a2', lat: 13.36, lon: 74.77, pricePaise: null, locality: null },
+      ],
+      truncated: false,
+    };
+    mockGet.mockResolvedValue(MARKERS_WITH_COORDS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          { schoolLat: 13.35, schoolLon: 74.78, schoolRadiusKm: 5 },
+          true,
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const markers = result.current.data?.markers ?? [];
+    expect(markers).toHaveLength(2);
+    // Hook returns raw API shape — lat/lon must be present (not undefined)
+    expect(markers[0].lat).toBe(13.3498);
+    expect(markers[0].lon).toBe(74.7852);
+    expect(markers[1].lat).toBe(13.36);
+    expect(markers[1].lon).toBe(74.77);
+  });
+
+  it('filteredMarkerToPropertyListing_produces_defined_latitude_longitude_from_api_response', async () => {
+    const { filteredMarkerToPropertyListing } = await import('@/lib/discoverMappers');
+    const MARKERS_WITH_COORDS = {
+      city: 'udupi',
+      markers: [
+        { id: 'b1', lat: 13.3498, lon: 74.7852, pricePaise: 3000000, locality: 'Katapadi' },
+      ],
+      truncated: false,
+    };
+    mockGet.mockResolvedValue(MARKERS_WITH_COORDS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', { schoolLat: 13.35, schoolLon: 74.78, schoolRadiusKm: 5 }, true),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const markers = result.current.data?.markers ?? [];
+    const listing = filteredMarkerToPropertyListing(markers[0], new Date().toISOString());
+    // End-to-end chain: API lat/lon → hook → mapper → PropertyListing.latitude/longitude
+    expect(listing.latitude).toBe(13.3498);
+    expect(listing.longitude).toBe(74.7852);
+    expect(typeof listing.latitude).toBe('number');
+    expect(typeof listing.longitude).toBe('number');
+  });
+  // ─── End regression #1240 ────────────────────────────────────────────────
 });
