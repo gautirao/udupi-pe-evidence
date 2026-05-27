@@ -467,6 +467,18 @@ export interface SchoolSelectedPanelProps {
   journey?: DiscoverJourney | null;
   filtersContent?: React.ReactNode;
   activeContextChips?: React.ReactNode;
+  /**
+   * Issue #1115 — when provided (auth users only), renders a CTA that the user must
+   * click before the backend /api/discover/markers fetch is allowed. Undefined = CTA
+   * hidden (anon users, or panel not wired yet). Called once; parent sets
+   * boundedSearchTriggered=true which gates markersEnabled.
+   */
+  onBoundedSearch?: () => void;
+  /**
+   * Issue #1115 — true once the user has clicked the CTA; switches panel from
+   * "Search" call-to-action to a results count helper line.
+   */
+  boundedSearchTriggered?: boolean;
 }
 
 export function SchoolSelectedPanel({
@@ -484,6 +496,8 @@ export function SchoolSelectedPanel({
   journey,
   filtersContent,
   activeContextChips,
+  onBoundedSearch,
+  boundedSearchTriggered = false,
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
 
@@ -612,6 +626,39 @@ export function SchoolSelectedPanel({
           ))}
         </div>
       </div>
+
+      {/* Issue #1115 — bounded-search CTA.
+          Auth users see a "Search within N km" button before markers are fetched.
+          Hidden for anon (marker fetch is auth-gated; a no-op CTA is confusing).
+          Switches to a results count helper line once the user has triggered the search. */}
+      {isAuthenticated && onBoundedSearch && !boundedSearchTriggered && (
+        <div className="px-4 py-3 border-b border-border">
+          <Button
+            variant="default"
+            size="sm"
+            className="w-full"
+            onClick={onBoundedSearch}
+            data-testid="school-bounded-search-cta"
+          >
+            Search within {effectiveRadius} km
+          </Button>
+        </div>
+      )}
+      {/* Issue #1115 DEFECT 3 — suppress the count during an in-flight refetch: the
+          listing body is already dimmed (#1170 pattern) but the count would otherwise
+          stay fully visible with a stale number, undermining the "honest count" (AC5).
+          Mirrors the isLoadingListings guard: both hide the label during unsettled state.
+          The condition uses isFetching (available as a prop) consistently with the dim. */}
+      {isAuthenticated && boundedSearchTriggered && !isLoadingListings && !isFetching && (
+        <p
+          className="px-4 py-2 text-xs text-muted-foreground border-b border-border"
+          data-testid="school-bounded-search-count"
+          aria-live="polite"
+        >
+          {listings.length} {listings.length === 1 ? 'property' : 'properties'} found
+          {school ? ` near ${school.name}` : ''}
+        </p>
+      )}
 
       {/* Listing body — Issue #1170: AreaSelectedPanel-style dim on an in-flight
           refetch (isFetching) but NOT during the initial skeleton load, so cached

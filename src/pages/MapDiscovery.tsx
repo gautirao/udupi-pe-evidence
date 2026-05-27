@@ -219,6 +219,12 @@ export default function MapDiscovery() {
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
 
+  // Issue #1115 — gate the school-first /api/discover/markers fetch behind an explicit
+  // user action (bounded-search CTA). Default false so the query does not auto-fire on
+  // school select. Reset to false on every path that changes or clears the selected school
+  // or radius (see reset calls below) to ensure the CTA re-appears on each new selection.
+  const [boundedSearchTriggered, setBoundedSearchTriggered] = useState(false);
+
   // Issue #1064 AC2 — Start Over must reset the map viewport to city center/zoom.
   // useDiscoverPageState owns `resetMapTick` (incremented by handleAreaBack); we need a
   // second source of truth that increments on Start Over without modifying that hook
@@ -322,6 +328,8 @@ export default function MapDiscovery() {
     // causing ActiveContextChips to keep rendering stale chips after Start Over.
     setFilters({});
     setSchoolBoardFilter([]);
+    // Issue #1115 — reset bounded-search gate so the CTA reappears on next school select.
+    setBoundedSearchTriggered(false);
   }, [urlActions, setSelectedSchool, setSelectedArea, setPanToArea, setFilters, setSchoolBoardFilter]);
 
   // Reset bbox when city changes — the previous city's viewport is out-of-bounds for the new city.
@@ -400,13 +408,17 @@ export default function MapDiscovery() {
     //     since useDiscoverFilteredMarkers needs schoolLat/schoolLon to be meaningful).
     //   Anon school-first remains disabled (Issue #1118 regression guard — /api/discover/markers
     //     returns 401 for anon, which causes a delayed marker disappearance).
+    // Issue #1115 — school-first branch additionally requires boundedSearchTriggered so
+    // the /api/discover/markers fetch does NOT auto-fire on school select. The CTA in
+    // SchoolSelectedPanel sets this flag. Area-first branch is untouched.
     markersEnabled:
       isAuthenticated &&
       (urlState.journey === 'area-first' ||
         (urlState.journey === 'school-first' &&
           !!urlState.schoolId &&
           filters.schoolLat != null &&
-          filters.schoolLon != null)) &&
+          filters.schoolLon != null &&
+          boundedSearchTriggered)) &&
       mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
     bbox: mapBbox,
@@ -547,6 +559,9 @@ export default function MapDiscovery() {
           schoolLon: school.longitude,
           schoolRadiusKm: radiusKm,
         }));
+        // Issue #1115 — new school selected; reset so the CTA reappears.
+        // Must come AFTER the coord-sync batch above (#1109 regression guard).
+        setBoundedSearchTriggered(false);
         return;
       }
 
@@ -567,11 +582,15 @@ export default function MapDiscovery() {
           schoolLon: cachedSchool.longitude,
           schoolRadiusKm: radiusKm,
         }));
+        // Issue #1115 — reset after coord-sync (#1109 guard preserved).
+        setBoundedSearchTriggered(false);
         return;
       }
       // If neither path resolves, fall through to the existing useSchoolById async
       // restore effect which will set state once the fetch resolves. The placeholderData
       // in useDiscoverFilteredMarkers bridges the visual gap.
+      // Issue #1115 — reset on fall-through too (coords will be set by the async effect).
+      setBoundedSearchTriggered(false);
     },
     [urlActions, schools, setSelectedSchool, setFilters, queryClient],
   );
@@ -750,6 +769,9 @@ export default function MapDiscovery() {
       const radiusKm = clampSchoolRadiusKm(newRadiusKm);
       urlActions.setSchoolParams({ schoolId: urlState.schoolId, radiusKm });
       setFilters((prev) => ({ ...prev, schoolRadiusKm: radiusKm }));
+      // Issue #1115 — radius change re-gates the search; CTA must reappear so the user
+      // explicitly triggers a new bounded search for the updated radius.
+      setBoundedSearchTriggered(false);
     },
     [urlState.schoolId, urlActions, setFilters],
   );
@@ -788,6 +810,8 @@ export default function MapDiscovery() {
       delete next.schoolRadiusKm;
       return next;
     });
+    // Issue #1115 — school cleared; reset so CTA reappears on next school select.
+    setBoundedSearchTriggered(false);
   }, [urlState.areaKey, urlActions, setSelectedSchool, setFilters]);
 
   const handleSchoolFirstBackLevel1 = useCallback(() => {
@@ -829,6 +853,8 @@ export default function MapDiscovery() {
       delete next.schoolRadiusKm;
       return next;
     });
+    // Issue #1115 — school cleared; reset so CTA reappears on next school select.
+    setBoundedSearchTriggered(false);
   }, [urlActions, setSelectedSchool, setFilters]);
 
   const onClearArea = useCallback(() => {
@@ -878,6 +904,8 @@ export default function MapDiscovery() {
         delete next.schoolRadiusKm;
         return next;
       });
+      // Issue #1115 — school cleared; reset so CTA reappears on next school select.
+      setBoundedSearchTriggered(false);
     } else if (urlState.schoolPicking) {
       urlActions.clearSchoolPicking();
     } else {
@@ -951,6 +979,8 @@ export default function MapDiscovery() {
   // user knows what happened and can search again.
   useEffect(() => {
     if (!urlSchoolId || !schoolByIdError) return;
+    // Issue #1115 — school lookup failed; reset so CTA reappears on next school select.
+    setBoundedSearchTriggered(false);
     if (schoolByIdError instanceof ApiError && schoolByIdError.status === 404) {
       urlActionsRef.current.setSchoolParams(null);
     } else {
@@ -1053,6 +1083,25 @@ export default function MapDiscovery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.groupId, urlState.areaKey, areasLoading, discoverAreas, areaGroupsData]);
 
+  // Issue #1115 — wrap handleSchoolSelect (from useDiscoverPageState, forbidden to edit)
+  // so that selecting a school via MapFilters or NearSchoolSheet also resets the
+  // bounded-search gate. useDiscoverPageState.ts is not modified; reset is composed here
+  // at the call-site where the handler is passed down.
+  // useCallback is declared before the isCityValid early return (React hooks must always
+  // be called on every render path). It closes over stable references only:
+  // handleSchoolSelect never changes identity; setBoundedSearchTriggered is a stable setter.
+  const wrappedHandleSchoolSelect = useCallback<typeof handleSchoolSelect>((school) => {
+    setBoundedSearchTriggered(false);
+    handleSchoolSelect(school);
+  }, [handleSchoolSelect, setBoundedSearchTriggered]);
+
+  // Issue #1115 — stable callback for the bounded-search CTA. Declared before the early
+  // return so useCallback is called unconditionally (Rules of Hooks). The undefined branch
+  // for anon users is applied at the JSX call-site, not here.
+  const handleBoundedSearch = useCallback(() => {
+    setBoundedSearchTriggered(true);
+  }, [setBoundedSearchTriggered]);
+
   if (!isCityValid) return <CityNotSupported city={city} />;
 
   const trendsHref = selectedArea
@@ -1062,7 +1111,7 @@ export default function MapDiscovery() {
   const filtersContent = (
     <MapFilters
       filters={filters} onFiltersChange={handleFiltersChange}
-      selectedSchool={selectedSchool} onSchoolSelect={handleSchoolSelect}
+      selectedSchool={selectedSchool} onSchoolSelect={wrappedHandleSchoolSelect}
       schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
       city={city}
       trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
@@ -1390,6 +1439,9 @@ export default function MapDiscovery() {
           onRadiusChange={handleRadiusChange}
           onClearSchool={onClearSchool}
           onClearArea={onClearArea}
+          // Issue #1115 — bounded-search CTA wiring.
+          onBoundedSearch={isAuthenticated ? handleBoundedSearch : undefined}
+          boundedSearchTriggered={boundedSearchTriggered}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button
@@ -1417,7 +1469,7 @@ export default function MapDiscovery() {
         open={nearSchoolOpen}
         onOpenChange={setNearSchoolOpen}
         selectedSchool={selectedSchool}
-        onSchoolSelect={handleSchoolSelect}
+        onSchoolSelect={wrappedHandleSchoolSelect}
         radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
         onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
         boardFilter={schoolBoardFilter}

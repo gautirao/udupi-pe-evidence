@@ -226,6 +226,123 @@ describe('SchoolSelectedPanel', () => {
     expect(screen.queryByTestId('clear-filters-btn')).not.toBeInTheDocument();
   });
 
+  // ── Issue #1115: bounded-search CTA ──────────────────────────────────────
+
+  it('renders the bounded-search CTA when auth, onBoundedSearch provided, and not yet triggered', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: false,
+    });
+    expect(screen.getByTestId('school-bounded-search-cta')).toBeInTheDocument();
+    expect(screen.getByTestId('school-bounded-search-cta')).toHaveTextContent(/search within/i);
+  });
+
+  it('hides the CTA for anon users even when onBoundedSearch is provided', () => {
+    renderPanel({
+      isAuthenticated: false,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: false,
+    });
+    expect(screen.queryByTestId('school-bounded-search-cta')).not.toBeInTheDocument();
+  });
+
+  it('hides the CTA when onBoundedSearch is not provided', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: undefined,
+      boundedSearchTriggered: false,
+    });
+    expect(screen.queryByTestId('school-bounded-search-cta')).not.toBeInTheDocument();
+  });
+
+  it('calls onBoundedSearch when the CTA is clicked', () => {
+    const onBoundedSearch = vi.fn();
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch,
+      boundedSearchTriggered: false,
+    });
+    fireEvent.click(screen.getByTestId('school-bounded-search-cta'));
+    expect(onBoundedSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the CTA and shows results count once boundedSearchTriggered is true', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: true,
+      listings: [makeListing('l-1'), makeListing('l-2')],
+      isLoadingListings: false,
+    });
+    expect(screen.queryByTestId('school-bounded-search-cta')).not.toBeInTheDocument();
+    expect(screen.getByTestId('school-bounded-search-count')).toBeInTheDocument();
+  });
+
+  it('helper copy shows correct count and school name after search triggered', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: true,
+      listings: [makeListing('l-1'), makeListing('l-2'), makeListing('l-3')],
+      isLoadingListings: false,
+    });
+    expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent(
+      '3 properties found near Manipal Public School',
+    );
+  });
+
+  it('helper copy uses singular "property" when count is 1', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: true,
+      listings: [makeListing('l-1')],
+      isLoadingListings: false,
+    });
+    expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent(
+      '1 property found near Manipal Public School',
+    );
+  });
+
+  it('does not show helper count while listings are still loading', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: true,
+      listings: [],
+      isLoadingListings: true,
+    });
+    expect(screen.queryByTestId('school-bounded-search-count')).not.toBeInTheDocument();
+  });
+
+  // Issue #1115 DEFECT 3 — count label must not show a stale number during a refetch.
+  // The listing body is already dimmed (#1170 pattern); the count is suppressed too so the
+  // user does not see a confident stale count while fresh data is in flight.
+  it('hides the count label during an active refetch (isFetching=true) even with non-empty listings', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: true,
+      listings: [makeListing('l-1'), makeListing('l-2')],
+      isLoadingListings: false,
+      isFetching: true,
+    });
+    expect(screen.queryByTestId('school-bounded-search-count')).not.toBeInTheDocument();
+  });
+
+  it('shows the count label when a refetch is NOT in flight (isFetching=false)', () => {
+    renderPanel({
+      isAuthenticated: true,
+      onBoundedSearch: vi.fn(),
+      boundedSearchTriggered: true,
+      listings: [makeListing('l-1'), makeListing('l-2')],
+      isLoadingListings: false,
+      isFetching: false,
+    });
+    expect(screen.getByTestId('school-bounded-search-count')).toBeInTheDocument();
+  });
+
   it('"Clear property filters" calls onFiltersChange preserving school proximity fields', () => {
     const onFiltersChange = vi.fn();
     renderPanel({

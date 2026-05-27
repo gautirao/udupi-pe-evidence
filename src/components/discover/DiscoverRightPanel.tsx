@@ -119,6 +119,17 @@ export interface DiscoverRightPanelProps {
    */
   onClearArea?: () => void;
   /**
+   * Issue #1115 — bounded-search CTA callback for SchoolSelectedPanel.
+   * When provided, the panel renders an explicit CTA before the /api/discover/markers
+   * fetch is allowed. Undefined for anon users (no-op CTA is confusing there).
+   */
+  onBoundedSearch?: () => void;
+  /**
+   * Issue #1115 — true once the user has clicked the bounded-search CTA.
+   * Switches SchoolSelectedPanel from "Search" CTA to results-count helper copy.
+   */
+  boundedSearchTriggered?: boolean;
+  /**
    * Issue #1064 AC3 — true while `useDiscoverAreas` is still hydrating.
    * When `urlAreaKey` is present but `selectedArea` is null we use this to
    * distinguish "still loading → show skeleton" from "loaded → areaKey not found".
@@ -173,6 +184,8 @@ export function DiscoverRightPanel({
   onRadiusChange,
   onClearSchool,
   onClearArea,
+  onBoundedSearch,
+  boundedSearchTriggered = false,
   isLoadingAreas = false,
   urlAreaKey = null,
 }: DiscoverRightPanelProps) {
@@ -330,6 +343,8 @@ export function DiscoverRightPanel({
             journey={journey}
             filtersContent={filtersContent}
             activeContextChips={activeContextChips}
+            onBoundedSearch={onBoundedSearch}
+            boundedSearchTriggered={boundedSearchTriggered}
           />
         );
 
