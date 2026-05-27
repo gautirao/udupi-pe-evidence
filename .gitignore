@@ -71,3 +71,10 @@ coverage/*
 .claude/scripts/**/__pycache__/
 .claude/scripts/**/*.pyc
 
+# Generated/throwaway artefacts — verification screenshots, scratch dirs, runtime locks
+# (already-tracked screenshots remain tracked; this only stops new ones being added)
+screenshots/
+.claude/tmp/
+.claude/scheduled_tasks.lock
+.claude/reports/
+

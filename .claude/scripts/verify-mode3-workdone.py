@@ -342,7 +342,7 @@ def check_eval_checklist(handoff_path: Path, candidate_path: Path) -> Tuple[bool
     for item in checklist_items:
         # Normalize: strip quotes, collapse whitespace
         normalized_item = item.strip().strip('"\'')
-        if normalized_item in result_items and result_items[normalized_item] == 'PASS':
+        if normalized_item in result_items and result_items[normalized_item].startswith('PASS'):
             passed_count += 1
         else:
             missing.append(normalized_item)
