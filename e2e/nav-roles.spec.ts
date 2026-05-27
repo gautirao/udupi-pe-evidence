@@ -71,15 +71,35 @@ test.describe('N2 — admin-authenticated', () => {
     // Open the dropdown to reveal admin nav links
     await adminTrigger.click();
 
+    // Radix DropdownMenuContent renders items into a Portal (document.body) via asChild+<Link>,
+    // merging role="menuitem" onto <a>. Playwright's getByRole('menuitem') does not find these
+    // elements within 5s because its accessibility-tree snapshot lags the portal+open-animation
+    // injection (confirmed: screenshot after click shows dropdown visually open, getByRole returns 0).
+    //
+    // Fix (Option A from bug-repro-report.toml §decision): CSS attribute selector '[role="menuitem"]'
+    // bypasses Playwright's aria-tree and queries the DOM directly — reliable for Radix portal
+    // elements. A generous timeout (15s) covers Radix open-animation + portal injection + DOM settle
+    // under dev-server load (HMR, map tiles, Supabase realtime competing for the browser thread).
+    //
+    // Word-boundary regexes (/\bterm\b/i) match each item's visible text from adminNavigation
+    // (AppLayout.tsx) and are robust to leading/trailing whitespace from SVG sibling nodes (RISK-2).
+    // The user-avatar dropdown's "Sign out" menuitem (forceMount, always in DOM) does not collide
+    // with any of the three target strings. Summed timeouts: 15+15+15 = 45s worst-case, but items
+    // resolve fast once the portal is injected — real-world cost is <1s per assertion (RISK-3).
+    // test.setTimeout(60_000) raises this test's cap above the 30s per-test default so the 45s
+    // worst-case cannot be silently truncated by the global ceiling; each 15s assertion still
+    // fails fast on a genuinely missing item rather than hanging to the cap (RISK-3).
+    test.setTimeout(60_000);
+
     await expect(
-      page.getByRole('menuitem', { name: /pending approval/i }).first(),
-    ).toBeVisible({ timeout: 5_000 });
+      page.locator('[role="menuitem"]').filter({ hasText: /\bpending approval\b/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByRole('menuitem', { name: /locality normalizer/i }).first(),
-    ).toBeVisible({ timeout: 5_000 });
+      page.locator('[role="menuitem"]').filter({ hasText: /\blocality normalizer\b/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByRole('menuitem', { name: /feed runs/i }).first(),
-    ).toBeVisible({ timeout: 5_000 });
+      page.locator('[role="menuitem"]').filter({ hasText: /\bfeed runs\b/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
 
     // Close dropdown by pressing Escape
     await page.keyboard.press('Escape');
