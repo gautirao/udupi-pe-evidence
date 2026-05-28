@@ -68,8 +68,27 @@ test.describe('N2 — admin-authenticated', () => {
     const adminTrigger = page.getByRole('button', { name: /^admin$/i }).first();
     await expect(adminTrigger).toBeVisible({ timeout: 8_000 });
 
-    // Open the dropdown to reveal admin nav links
+    // Open the dropdown to reveal admin nav links.
+    // Option C (rev 5): guards against the Radix portal-injection race where a Supabase realtime
+    // flush mid-click causes the portal to never inject → zero [role="menuitem"] nodes → 15s timeout.
+    // Mechanism: click, wait up to 8_000ms for the first admin menuitem; if it misses, settle for
+    // 300ms (ROUTE_AND_RUN.md:447 approved exception — lets any in-flight portal injection complete
+    // so the re-click decision is on a stable DOM state), then re-click only if the item is still
+    // absent. This closes the toggle-close race that broke rev 4 (3_000ms + immediate re-click
+    // fired during the injection window and closed the opening menu).
+    const adminMenuItems = page.locator('[role="menuitem"]').filter({ hasText: /\bpending approval\b/i });
     await adminTrigger.click();
+    try {
+      await expect(adminMenuItems.first()).toBeVisible({ timeout: 8_000 });
+    } catch {
+      console.warn('[N2] Admin dropdown portal injection miss — attempting re-click');
+      // bounded settle: lets any in-flight portal injection complete before we decide to re-click
+      // (ROUTE_AND_RUN.md:447 documented exception — the ONLY permitted hard wait in this file)
+      await page.waitForTimeout(300);
+      if (!(await adminMenuItems.first().isVisible())) {
+        await adminTrigger.click();
+      }
+    }
 
     // Radix DropdownMenuContent renders items into a Portal (document.body) via asChild+<Link>,
     // merging role="menuitem" onto <a>. Playwright's getByRole('menuitem') does not find these
@@ -89,6 +108,8 @@ test.describe('N2 — admin-authenticated', () => {
     // test.setTimeout(60_000) raises this test's cap above the 30s per-test default so the 45s
     // worst-case cannot be silently truncated by the global ceiling; each 15s assertion still
     // fails fast on a genuinely missing item rather than hanging to the cap (RISK-3).
+    // Budget with Option C: 8_000 (first-wait) + 300 (settle) + 45_000 (3x assertions) = 53_300ms,
+    // comfortably within the 60_000ms cap.
     test.setTimeout(60_000);
 
     await expect(
