@@ -98,13 +98,86 @@ The verdict object mirrors the existing OpenAI strict-schema gate verdicts in
 - The verdict object carries **no** `merge_action` field. There is intentionally no field
   by which the gate could instruct a merge.
 
+### Governance-path pre-filter (evaluated FIRST, before any criterion)
+
+**This pre-filter is the first thing the gate evaluates — before the all-or-nothing roll-up
+below, and before any `[[criterion]]` is scored.** It is deliberately **not** a DoD
+`[[criterion]]`: if it were, it would be swept into the all-or-nothing roll-up and surface as
+`DOD_NOT_MET`, which is the wrong verdict. It is a phase-entry short-circuit.
+
+**Rule.** If the PR diff touches **any** governance-sensitive path, the gate emits
+`NEEDS_USER_DECISION` **immediately** and does not evaluate the DoD criteria. This holds
+**regardless of file type** — a docs-only or test-only diff that touches a governance path
+still yields `NEEDS_USER_DECISION`, **even if every applicable DoD criterion would otherwise
+PASS**. **File-type (docs-only / test-only) classification alone cannot override the governance
+check.** A change to the rules that govern what *future* changes may merge must never be
+auto-merge-eligible; it requires explicit human judgment.
+
+**Ordering invariant.** Governance pre-filter → (only if it does **not** fire) all-or-nothing
+criterion roll-up. `WOULD_AUTOMERGE` is **unreachable** for any diff that touches a
+governance-sensitive path. If a PR both touches a governance path *and* fails a DoD criterion,
+the governance pre-filter wins and `NEEDS_USER_DECISION` is emitted first — the governance signal
+is never silently swallowed by a `DOD_NOT_MET`.
+
+**Whole-PR scope.** The unit of evaluation is the whole PR diff. If **any** file in the diff
+matches a governance-sensitive path, the **entire** PR routes to `NEEDS_USER_DECISION` — even if
+the same PR also touches non-governance files. (Simpler and safer: the human reviews the full
+change in context.)
+
+**Governance-sensitive path list.** A path is governance-sensitive if it matches any of:
+
+- `.claude/autopilot/**` — the DoD autopilot gate, its templates, and product-truth wiring
+- `.claude/scripts/openai_gate.py` — the OpenAI gate runner / verdict schema
+- `.claude/scripts/verify-mode3-workdone.py` — the deterministic workdone preflight validator
+- `.claude/scripts/**` — any other gate / validator / release-control script
+- `.claude/commands/**` — Mode-3 / quick-lane command definitions: the phase index and
+  task-lane routing/eligibility (e.g. `mode3-run.md`, `quick.md`)
+- `.claude/skills/**` — Route-and-Run + sprint-executor choreography: per-PR change
+  classification, routing logic, reviewer/gate retry loops, and E2E validation policy
+  (e.g. `ROUTE_AND_RUN.md`, `ROUTE_AND_RUN_TABLES.md`, `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`)
+- `.claude/mode3/**` — Mode-3 contracts (gate dispatch, routing, closeout, merge approval)
+- `.claude/templates/**` — handoff / workdone / blocked schemas that gates consume
+- `.claude/product-truth/**` — the authoritative "done" definitions the DoD evaluates against
+- `.claude/agents/**` — agent definitions, including reviewer / gate agents
+- `CLAUDE.md`, `AGENTS.md` — top-level workflow / agent governance (`AGENTS.md` is named as a
+  **forward-looking guard**: it is protected if/when it is added to the repo)
+- **Catch-all:** any file that controls **merge approval, gate verdicts, DoD validation,
+  workflow routing, release commands, the OpenAI gate schema, or validator scripts** — even if
+  not explicitly listed above.
+
+**Not, by itself, governance-sensitive:** ordinary product / application code and its tests
+(`src/**`, `backend/**`, `e2e/**`, `**/*.spec.*`, `**/*.test.*`). Those follow the normal DoD
+roll-up below and **remain eligible for `WOULD_AUTOMERGE`** when no governance path is touched.
+(Security-sensitive *product* changes — auth / public endpoints / RLS / migrations / secrets —
+are escalated by a **separate** mechanism tracked under issue #1277; they are **not** in scope
+for this self-governance / merge-policy pre-filter. Do not conflate the two.)
+
+**Signal source + audit trail.** The gate derives the changed-path set from the PR diff (the
+same `git diff --name-only origin/main...HEAD` / approved-scope changed-files list the run
+already produces). When the pre-filter fires, the matched governance path(s) are recorded in the
+verdict `summary` (and may be carried in `dod_check`) so there is an audit trail of *why* the PR
+was escalated.
+
+**Still DRY-RUN ONLY.** The pre-filter adds **no** new verdict (it reuses the existing
+`NEEDS_USER_DECISION`), **no** new merge authority, and **no** side effect.
+`dod_check.dry_run_mode` stays `true`. `NEEDS_USER_DECISION` is a **halt-for-user-decision** (the
+run surfaces the governance diff and waits), exactly consistent with the CLAUDE.md §10
+user-approval gate — it is **not** a merge-block and **not** a prohibition. After human review the
+change may still be approved and merged by the user; the gate simply refuses to *auto*-treat a
+self-governance change as done.
+
 ### Partial satisfaction rule (all-or-nothing)
 
-- `WOULD_AUTOMERGE` requires **every applicable criterion = PASS**.
+> Evaluated **only after** the governance-path pre-filter above does **not** fire. The
+> pre-filter short-circuits to `NEEDS_USER_DECISION` before this roll-up runs.
+
+- `WOULD_AUTOMERGE` requires **every applicable criterion = PASS** *and* the governance-path
+  pre-filter did not fire.
 - Any criterion = FAIL → `DOD_NOT_MET`.
 - Any criterion = INDETERMINATE (missing/absent evidence) → `NEEDS_MORE_EVIDENCE`.
-- Any criterion flagged `requires_human_judgment` that cannot be resolved from evidence →
-  `NEEDS_USER_DECISION`.
+- Any criterion flagged `requires_human_judgment` that cannot be resolved from evidence, **or**
+  the governance-path pre-filter fired → `NEEDS_USER_DECISION` *(when the pre-filter fires this
+  roll-up is not reached at all; this bullet names the emitted verdict for completeness)*.
 
 A partial pass **never** yields `WOULD_AUTOMERGE`.
 
@@ -117,11 +190,38 @@ A partial pass **never** yields `WOULD_AUTOMERGE`.
 | `WOULD_AUTOMERGE` | Every applicable DoD criterion is PASS against captured evidence. | **Dry-run signal only.** Logged + surfaced to the user. **No merge, no PR update, no side effect.** Run still halts for explicit user merge approval. |
 | `DOD_NOT_MET` | One or more criteria failed (evidence shows the buyer-facing contract is not satisfied). | Surfaced; route back per Mode-3 failure handling. No merge. |
 | `NEEDS_MORE_EVIDENCE` | One or more criteria are indeterminate — a referenced artefact/flow is missing. | Surfaced; capture the missing evidence and re-evaluate. No merge. |
-| `NEEDS_USER_DECISION` | A criterion needs human judgment (e.g. an ambiguous visual outcome). | Surfaced to the user for a decision. No merge. |
+| `NEEDS_USER_DECISION` | Either the **governance-path pre-filter fired** (the diff touches a governance-sensitive path — see [Governance-path pre-filter](#governance-path-pre-filter-evaluated-first-before-any-criterion)), **or** a criterion needs human judgment (e.g. an ambiguous visual outcome). | Surfaced to the user for a decision. No merge. |
 
 `WOULD_AUTOMERGE` names a **future** capability. The word "automerge" describes what an
 autonomous system *would* do once real wiring exists and is separately approved; it is
 **not** an instruction to merge now.
+
+---
+
+## Dry-run classification examples
+
+These illustrate the verdict the gate *would* emit (dry-run signal only — no merge happens in
+any case). They show how the governance-path pre-filter interacts with the all-or-nothing
+roll-up:
+
+1. **#1275-style self-governance docs change → `NEEDS_USER_DECISION`.** A docs-only PR that edits
+   `.claude/autopilot/**` (e.g. this gate doc or the DoD templates) — or a file under the separate
+   `.claude/product-truth/**` entry. The governance-path pre-filter fires on the first governance
+   path matched, so the gate emits
+   `NEEDS_USER_DECISION` **even though the diff is docs-only and every DoD criterion would
+   pass**. `WOULD_AUTOMERGE` is unreachable for this PR.
+
+2. **#1267-style test-only NON-governance PR → `WOULD_AUTOMERGE`.** A PR that only adds / updates
+   `e2e/**` or `**/*.spec.*` for product behaviour and touches **no** governance path. The
+   pre-filter does not fire; the all-or-nothing roll-up runs; if every applicable DoD criterion is
+   PASS, the gate emits the `WOULD_AUTOMERGE` dry-run signal (and the run still halts for explicit
+   user approval per CLAUDE.md §10).
+
+3. **#1272-style buyer-facing product code change without required buyer-journey evidence →
+   `NEEDS_MORE_EVIDENCE`.** A PR that changes `src/**` product code but whose evidence packet is
+   missing a required buyer-journey artefact. The pre-filter does not fire (no governance path); the
+   roll-up finds an INDETERMINATE criterion, so the gate emits `NEEDS_MORE_EVIDENCE` — not
+   `WOULD_AUTOMERGE`.
 
 ---
 
