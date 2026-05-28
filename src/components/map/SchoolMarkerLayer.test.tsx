@@ -60,6 +60,7 @@ describe('SchoolMarkerLayer', () => {
           journey="school-first"
           isLoading={true}
           isError={false}
+          showSchoolMarkers={true}
           onSelectSchool={vi.fn()}
         />
       );
@@ -108,6 +109,7 @@ describe('SchoolMarkerLayer', () => {
           isLoading={false}
           isError={true}
           error={error}
+          showSchoolMarkers={true}
           onSelectSchool={vi.fn()}
         />
       );
@@ -125,6 +127,7 @@ describe('SchoolMarkerLayer', () => {
           isLoading={false}
           isError={true}
           error={null}
+          showSchoolMarkers={true}
           onSelectSchool={vi.fn()}
         />
       );
@@ -159,6 +162,7 @@ describe('SchoolMarkerLayer', () => {
           journey="school-first"
           isLoading={false}
           isError={false}
+          showSchoolMarkers={true}
           onSelectSchool={vi.fn()}
         />
       );
@@ -323,6 +327,7 @@ describe('SchoolMarkerLayer', () => {
           journey="school-first"
           isLoading={true}
           isError={false}
+          showSchoolMarkers={true}
           onSelectSchool={vi.fn()}
         />
       );
@@ -339,6 +344,7 @@ describe('SchoolMarkerLayer', () => {
           isLoading={false}
           isError={true}
           error={new Error('API error')}
+          showSchoolMarkers={true}
           onSelectSchool={vi.fn()}
         />
       );

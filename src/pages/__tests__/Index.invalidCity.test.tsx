@@ -36,6 +36,11 @@ const mockUseAuth = vi.hoisted(() =>
 );
 
 // ─── Mocks ────────────────────────────────────────────────────
+vi.mock('@/hooks/useSchoolRadiusListings', () => ({
+  useSchoolRadiusListings: vi.fn(() => ({ data: undefined, isLoading: false, isError: false })),
+  mapSchoolRadiusCard: vi.fn((item) => item),
+}));
+
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: (...args: unknown[]) => mockUseAuth(...args),
 }));
@@ -220,8 +225,12 @@ describe('Index page — city validity guard', () => {
 
     expect(screen.queryByRole('heading', { name: /city not supported/i })).not.toBeInTheDocument();
 
-    // Stats bar is rendered for authenticated users
-    expect(screen.getByText(/on map/i)).toBeInTheDocument();
+    // No-occlusion proof: the CitySelect (the element the stats bar used to cover)
+    // must be interactive, not merely present. An occluded/hidden trigger would be
+    // disabled or absent. MapStatsBar no longer renders listing-count copy
+    // (see MapStatsBar.test.tsx — "on map"/"total listings" text was removed), so the
+    // chip+select coexistence above is the canonical no-occlusion assertion.
+    expect(screen.getByRole('combobox')).toBeEnabled();
   });
 });
 

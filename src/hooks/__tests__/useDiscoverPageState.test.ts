@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { useDiscoverUrlState } from '../useDiscoverUrlState';
 import type { DiscoverUrlState, DiscoverUrlActions } from '../useDiscoverUrlState';
@@ -526,8 +527,13 @@ describe('useDiscoverPageState — handleFiltersChange passes all new fields to 
 describe('useDiscoverUrlState — board filters (issue #1131)', () => {
   function makeWrapper(initialUrl: string) {
     // Use React.createElement so this file can remain .ts (no JSX).
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return ({ children }: { children: React.ReactNode }) =>
-      React.createElement(MemoryRouter, { initialEntries: [initialUrl] }, children);
+      React.createElement(
+        QueryClientProvider,
+        { client: qc },
+        React.createElement(MemoryRouter, { initialEntries: [initialUrl] }, children),
+      );
   }
 
   function useHookAndLocation() {

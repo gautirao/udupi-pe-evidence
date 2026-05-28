@@ -3,16 +3,23 @@
  *
  * Fills coverage gap AC1: anonymous vs authenticated behaviour divergence.
  *
- * Key architectural fact (Issue #1118):
- *   Anonymous users do NOT trigger /api/discover/markers (auth-gated).
- *   Property markers for anonymous users come from city-listings
- *   (/api/discover/cities/{city}/listings) and are filtered client-side
- *   via haversineKm when a school is selected.
+ * Key architectural fact (post-#1261):
+ *   Anonymous users do NOT trigger /api/discover/markers (still auth-gated).
+ *   When a school radius is active, anonymous property markers are sourced from
+ *   the PUBLIC server-side endpoint
+ *     GET /api/discover/cities/{city}/school-radius-listings (server-side
+ *     ST_DWithin, cross-area) — introduced by PR #1261. Markers are derived
+ *     CLIENT-SIDE from that endpoint's listings (deriveAnonSchoolRadiusMarkers),
+ *     NOT from the old single-area /api/discover/cities/{city}/listings +
+ *     client-side haversine path (the pre-#1261 / Issue #1118 architecture).
+ *   PAR-1/PAR-2/PAR-4 remain valid as written: they exercise the board filter
+ *   and school+board deeplink param hydration, which are independent of the
+ *   marker DATA SOURCE. Only PAR-3 (marker source) was rewritten for #1261.
  *
  * Tests IDs:
- *   E2E-ANON-PAR-1  anonymous: school-first journey loads with school markers (city-listings fallback)
+ *   E2E-ANON-PAR-1  anonymous: school-first journey loads with school markers
  *   E2E-ANON-PAR-2  anonymous: board filter applied to schools-in-area list
- *   E2E-ANON-PAR-3  anonymous: property markers scoped to school radius (client-side haversine)
+ *   E2E-ANON-PAR-3  anonymous: property markers scoped to school radius (server-side ST_DWithin via /school-radius-listings)
  *   E2E-ANON-PAR-4  anonymous: cold-load school+board deeplink renders correctly
  *
  * Anonymous flow throughout — omit storageState entirely (no auth token).
@@ -125,6 +132,40 @@ const EMPTY_LISTINGS_PAGE = {
   aggregates: { topLocalities: [] },
 };
 
+// Post-#1261 anon marker source: the public school-radius endpoint response.
+// Shape = PublicSchoolRadiusListingsPage { content: PublicSchoolRadiusListingCard[], page, size, hasMore }.
+// Card coords use latitude/longitude field names; one card sits ~0.08 km from the
+// CBSE school (13.353, 74.787) so it falls inside radiusKm=3.
+const SCHOOL_RADIUS_PAGE = {
+  content: [
+    {
+      id: 'sr-anon-1',
+      listingNumber: 8001,
+      propertyType: 'house',
+      title: 'Anon Parity Radius House',
+      locality: 'Manipal',
+      areaKey: MANIPAL_AREA_KEY,
+      pricePaise: 4_500_000,
+      landArea: null,
+      landAreaUnit: null,
+      builtArea: 1100,
+      builtAreaUnit: 'sqft',
+      bedrooms: 3,
+      latitude: 13.353,
+      longitude: 74.787,
+      heroImageUrl: null,
+      listingPurpose: 'sale',
+      possessionStatus: 'ready_to_move',
+      daysOnMarket: 5,
+      backOnMarket: false,
+      createdAt: '2026-05-01T00:00:00Z',
+    },
+  ],
+  page: 0,
+  size: 50,
+  hasMore: false,
+};
+
 // ---------------------------------------------------------------------------
 // Stub helpers
 // ---------------------------------------------------------------------------
@@ -194,6 +235,27 @@ async function stubCityListings(page: Page): Promise<void> {
   await page.route('**/api/discover/cities/*/listings**', (route) =>
     fulfillJson(route, 200, CITY_LISTINGS_WITH_PROPERTY),
   );
+}
+
+interface RadiusCapture {
+  requests: import('@playwright/test').Request[];
+  statuses: number[];
+}
+
+/**
+ * Stub the post-#1261 public school-radius endpoint and capture its requests.
+ * Register AFTER stubCityListings so this more-specific path wins over the broader
+ * /listings glob (Playwright matches the most-recently-added route first).
+ */
+async function stubSchoolRadiusListings(page: Page): Promise<RadiusCapture> {
+  const capture: RadiusCapture = { requests: [], statuses: [] };
+  // INTEGRATION-UI: stub justified — exercises the server-side ST_DWithin endpoint contract
+  await page.route('**/api/discover/cities/*/school-radius-listings**', (route) => {
+    capture.requests.push(route.request());
+    capture.statuses.push(200);
+    return fulfillJson(route, 200, SCHOOL_RADIUS_PAGE);
+  });
+  return capture;
 }
 
 function getUrlParam(page: Page, key: string): string | null {
@@ -289,23 +351,40 @@ test.describe('@integration-ui school-first anonymous parity (#1132)', () => {
   });
 
   /**
-   * E2E-ANON-PAR-3: anonymous: property markers scoped to school radius (client-side haversine).
+   * E2E-ANON-PAR-3: anonymous: property markers scoped to school radius (server-side ST_DWithin).
    *
-   * Verifies that when an anonymous user selects a school, property markers are
-   * filtered client-side by haversineKm to the school radius. The city-listings
-   * fixture has one property within 1 km of the CBSE school (13.353, 74.787).
-   * With radiusKm=3, this property must appear as a property marker on the map.
+   * Post-#1261: when an anonymous user selects a school, property markers are
+   * sourced from the PUBLIC server-side endpoint
+   * /api/discover/cities/{city}/school-radius-listings (server-side ST_DWithin,
+   * cross-area) and derived CLIENT-SIDE into pins — NOT from
+   * /api/discover/cities/{city}/listings + client-side haversine (the old path).
    *
-   * Also verifies /api/discover/markers is never called (auth-gated for anon).
+   * Guards:
+   *   - school-radius-listings IS called (the active anon marker source).
+   *   - cities/{city}/listings is NOT called when the radius endpoint returns
+   *     data (no fall back to the old single-area path).
+   *   - /api/discover/markers is NOT called (still auth-gated for anon).
+   *   - At least one property-marker DOM node renders (fails on 0 — no silent pass).
    */
-  test('E2E-ANON-PAR-3: anonymous: property markers scoped to school radius (client-side haversine)', async ({ page }) => {
+  test('E2E-ANON-PAR-3: anonymous: property markers scoped to school radius (server-side ST_DWithin)', async ({ page }) => {
     await stubTrendsOptions(page);
     await stubDiscoverAreas(page);
     await stubPopularSchools(page);
     await stubSchoolsByArea(page);
     await stubSchoolById(page, CBSE_SCHOOL);
     await stubDiscoverListings(page);
-    await stubCityListings(page);
+
+    // Track that the OLD single-area path is NOT used as the anon marker source
+    // when /school-radius-listings returns data.
+    let cityListingsRequestFired = false;
+    await page.route('**/api/discover/cities/*/listings**', async (route) => {
+      cityListingsRequestFired = true;
+      // Return empty so any accidental fallback cannot silently supply markers.
+      await fulfillJson(route, 200, { areas: [{ areaKey: MANIPAL_AREA_KEY, listings: [] }] });
+    });
+
+    // Register the more-specific radius route AFTER /listings so it wins.
+    const radiusCapture = await stubSchoolRadiusListings(page);
 
     let markersRequestFired = false;
     await page.route('**/api/discover/markers**', async (route) => {
@@ -320,15 +399,30 @@ test.describe('@integration-ui school-first anonymous parity (#1132)', () => {
     );
     await page.waitForLoadState('domcontentloaded');
 
-    // Property markers must be visible (from city-listings, filtered by haversine)
-    const propertyMarkers = page.locator('[data-testid="property-marker"]');
+    // combined-chips confirms the school-selected panel is active
+    await expect(page.getByTestId('combined-chips')).toBeVisible({ timeout: 15_000 });
+
+    // The server-side school-radius endpoint must have been called with school coords.
+    await expect
+      .poll(() => radiusCapture.requests.length, { timeout: 10_000 })
+      .toBeGreaterThan(0);
+    const lastUrl = radiusCapture.requests[radiusCapture.requests.length - 1].url();
+    expect(lastUrl).toContain('schoolLat=');
+    expect(lastUrl).toContain('schoolLon=');
+    expect(lastUrl).toContain('schoolRadiusKm=3');
+
+    // Property markers must be visible — derived client-side from the radius listings.
+    // Two nearby pins may collapse into a cluster at zoom 14, so accept either.
+    const propertyMarkers = page.locator(
+      '[data-testid="property-marker"], .custom-marker-cluster',
+    );
     await expect(propertyMarkers.first()).toBeVisible({ timeout: 15_000 });
     expect(await propertyMarkers.count()).toBeGreaterThan(0);
 
-    // combined-chips confirms the school-selected panel is active
-    await expect(page.getByTestId('combined-chips')).toBeVisible({ timeout: 10_000 });
+    // The old single-area /listings path must NOT be the marker source.
+    expect(cityListingsRequestFired).toBe(false);
 
-    // Auth-gated markers endpoint must NOT have been called
+    // Auth-gated markers endpoint must NOT have been called.
     expect(markersRequestFired).toBe(false);
   });
 

@@ -8,11 +8,20 @@
  *   E2E-FOCUS-4  URL with school+radius yielding 0 properties → empty-state in right panel
  *   E2E-BACK-1   Select school (URL gains schoolId), browser back, URL loses schoolId
  *
- * NOTE: Issue #1118 limitation — anonymous users do not trigger /api/discover/markers
- * (the endpoint is auth-gated). Property markers for anonymous users come from
- * areaMarkerListings (/api/discover/cities/{city}/listings). E2E-FOCUS-2 stubs
- * the city-listings endpoint so property markers are visible without authentication.
- * The school-proximity filter is applied client-side via haversineKm for anon users.
+ * NOTE — anon property-marker source (architecture changed at #1261):
+ *   Legacy (pre-#1261, Issue #1118): anonymous users do not trigger
+ *     /api/discover/markers (auth-gated); anon property markers came from
+ *     areaMarkerListings (/api/discover/cities/{city}/listings), and the
+ *     school-proximity filter was applied CLIENT-SIDE via haversineKm.
+ *   Current (post-#1261): anon school-radius markers are sourced from the PUBLIC
+ *     /api/discover/cities/{city}/school-radius-listings endpoint (server-side
+ *     ST_DWithin, cross-area), then derived client-side into pins. The canonical
+ *     coverage for the post-#1261 anon marker source lives in
+ *     discover-anon-school-radius.spec.ts and discover-real-data-smoke.spec.ts J2.
+ *   The tests below are source-agnostic about the marker DATA path — they assert
+ *   panel/marker presence and URL/clear-chip behaviour, which hold under either
+ *   architecture; E2E-FOCUS-2 stubs city-listings only to guarantee at least one
+ *   marker without authentication.
  *
  * Run locally:
  *   bash scripts/run-e2e-local.sh --project=full e2e/discover-school-first-markers.spec.ts

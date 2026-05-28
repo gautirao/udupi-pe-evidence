@@ -26,7 +26,10 @@ const AREA_KEY = 'IN|KA|Udupi|Manipal';
 // the badge when school-radius is active (it would contradict the scoped panel).
 const AREA_LISTING_COUNT = 12;
 
-// School coords — used for haversine filtering client-side.
+// School coords — used to scope the school-radius listing set. (Post-#1261 the
+// anon source is the server-side /school-radius-listings ST_DWithin endpoint;
+// this badge test is source-agnostic — it asserts badge count == scoped listing
+// count regardless of which path supplies the listings.)
 const SCHOOL_LAT = 13.18911;
 const SCHOOL_LON = 75.00151;
 
