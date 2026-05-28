@@ -183,3 +183,41 @@ For the most complete journey, try the broker listing creation wizard:
 ```bash
 bash scripts/e2e-watch.sh --slow e2e/journey/broker-listing-creation.spec.ts
 ```
+
+---
+
+## 6. Discover E2E seed
+
+The Discover real-data smoke gate (issue #1264) requires 12 seeded LIVE listings
+(4 × Manipal, 4 × Malpe, 4 × Kaup) to be present in the database.
+
+### Running the seed
+
+1. Copy `.env.seed.example` to `.env.seed` (already gitignored) and fill in real values.
+2. Source the env file and run the seed:
+
+```bash
+source .env.seed && node scripts/seed-discover-listings.mjs
+```
+
+The seed is **idempotent** — safe to rerun. It will update existing E2E listings
+(identified by `[E2E]` title prefix) and create missing ones. It never deletes or
+modifies non-E2E rows.
+
+### Required env vars
+
+| Variable | Description |
+|---|---|
+| `SEED_SUPABASE_URL` | Supabase project URL |
+| `SEED_SUPABASE_KEY` | Supabase publishable key |
+| `SEED_BROKER_EMAIL` | Broker account email |
+| `SEED_BROKER_PASSWORD` | Broker account password |
+| `SEED_ADMIN_EMAIL` | Admin account email |
+| `SEED_ADMIN_PASSWORD` | Admin account password |
+| `SEED_DB_HOST` | Database host (e.g. `aws-1-eu-west-1.pooler.supabase.com`) |
+| `SEED_DB_PORT` | Database port (default: `6543`) |
+| `SEED_DB_USER` | Database user (e.g. `postgres.your-project-ref`) |
+| `SEED_DB_NAME` | Database name (default: `postgres`) |
+| `SEED_DB_PASSWORD` | Database password |
+| `SEED_BACKEND_URL` | Backend API base URL (default: `http://localhost:8085`) |
+| `SEED_IMAGE_PATH` | *(Optional)* Absolute path to a jpg for listing images |
