@@ -1,19 +1,18 @@
 /**
- * School journey panels — anonymous radius-scope limitation note (Issue #1193).
+ * School journey panels — anonymous radius-scope limitation note REMOVED (Issue #1261).
  *
- * Bug: anonymous users in school-first Discover see a radius circle implying a
- * cross-area search, but the anon listing set is area-scoped (single areaKey +
- * client haversine) because anon cannot hit the auth-only ST_DWithin
- * /api/discover/markers query. The additive note honestly communicates the
- * area-scope constraint.
+ * History: Issue #1193 added an additive note ("Showing homes in this area only…")
+ * because the anonymous school-radius listing set was area-scoped (single areaKey +
+ * client haversine) and could not deliver the cross-area proximity result the
+ * authenticated path got.
  *
- * Gate (verbatim): !isAuthenticated && radiusKm != null && radiusKm > 0
- *  - anon + radiusKm > 0 → note renders ("within {radiusKm} km")
- *  - radiusKm null       → absent (default not yet resolved)
- *  - radiusKm 0          → absent (#1210 edge — must not read "within 0 km")
- *  - authenticated       → absent (auth path performs the real cross-area query)
+ * Issue #1261 wires the anonymous path to the PUBLIC /school-radius-listings endpoint,
+ * which performs the same cross-area ST_DWithin query. The radius circle and the
+ * listing set are now consistent for anonymous users, so the limitation note is no
+ * longer truthful and has been REMOVED.
  *
- * The note is derived from existing props only — no new query/effect/network.
+ * This spec is the AC2 guard: the note must NOT render in any state — anonymous or
+ * authenticated, radius > 0, null, or 0 — for either school-first panel.
  */
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
@@ -98,59 +97,47 @@ function renderCombined(
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('SchoolJourneyPanels — anon radius-scope note (Issue #1193)', () => {
+describe('SchoolJourneyPanels — anon radius-scope note removed (Issue #1261)', () => {
   describe('SchoolSelectedPanel', () => {
-    it('renders the note for anon users with radiusKm > 0', () => {
+    it('does NOT render the note for anon users with radiusKm > 0 (cross-area now supported)', () => {
       renderSchoolSelected({ radiusKm: 3, isAuthenticated: false });
-
-      const note = screen.getByTestId(NOTE_TESTID);
-      expect(note).toBeInTheDocument();
-      expect(note).toHaveTextContent('3 km');
+      expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
 
-    it('omits the note when radiusKm is null (default not yet resolved)', () => {
+    it('does NOT render the note when radiusKm is null', () => {
       renderSchoolSelected({ radiusKm: null, isAuthenticated: false });
-
       expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
 
-    it('omits the note when radiusKm is 0 (#1210 edge — never "within 0 km")', () => {
+    it('does NOT render the note when radiusKm is 0', () => {
       renderSchoolSelected({ radiusKm: 0, isAuthenticated: false });
-
       expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
 
-    it('omits the note for authenticated users (auth path does the real query)', () => {
+    it('does NOT render the note for authenticated users', () => {
       renderSchoolSelected({ radiusKm: 3, isAuthenticated: true });
-
       expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
   });
 
   describe('AreaSchoolCombinedPanel', () => {
-    it('renders the note for anon users with radiusKm > 0', () => {
+    it('does NOT render the note for anon users with radiusKm > 0', () => {
       renderCombined({ radiusKm: 3, isAuthenticated: false });
-
-      const note = screen.getByTestId(NOTE_TESTID);
-      expect(note).toBeInTheDocument();
-      expect(note).toHaveTextContent('3 km');
+      expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
 
-    it('omits the note when radiusKm is null (default not yet resolved)', () => {
+    it('does NOT render the note when radiusKm is null', () => {
       renderCombined({ radiusKm: null, isAuthenticated: false });
-
       expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
 
-    it('omits the note when radiusKm is 0 (#1210 edge — never "within 0 km")', () => {
+    it('does NOT render the note when radiusKm is 0', () => {
       renderCombined({ radiusKm: 0, isAuthenticated: false });
-
       expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
 
-    it('omits the note for authenticated users', () => {
+    it('does NOT render the note for authenticated users', () => {
       renderCombined({ radiusKm: 3, isAuthenticated: true });
-
       expect(screen.queryByTestId(NOTE_TESTID)).not.toBeInTheDocument();
     });
   });

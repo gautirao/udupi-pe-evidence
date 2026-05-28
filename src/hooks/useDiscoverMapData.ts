@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
-import { PropertyFilters, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { PropertyFilters, PropertyListing, PropertyImage, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useDiscoverAreas, DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { useSchoolRadiusListings, mapSchoolRadiusCard, SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { useSchoolById, SchoolResult } from '@/hooks/useSchoolSearch';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
@@ -54,6 +55,18 @@ export interface UseDiscoverMapDataResult {
   filteredListings: (PropertyListing & { images?: PropertyImage[] })[];
   markerListings: (PropertyListing & { images?: PropertyImage[] })[];
   areaListings: DiscoverCityListingItem[];
+  /**
+   * Issue #1261 — cross-area listings within the selected school radius, sourced from
+   * the PUBLIC /school-radius-listings endpoint. Populated for anon users (their only
+   * listing source in radius mode) and for authenticated users when markersEnabled is
+   * false (CTA not yet triggered) so the data can serve as radius-filtered marker pins.
+   * PropertyFilters are applied client-side by the caller.
+   */
+  schoolRadiusListings: SchoolRadiusListingItem[];
+  /** True while the anon school-radius query is in-flight. */
+  schoolRadiusListingsLoading: boolean;
+  /** True when the school-radius endpoint reports more listings beyond this page. */
+  schoolRadiusHasMore: boolean;
   areaMarkerListings: (PropertyListing & { images?: PropertyImage[] })[];
   topLocalities: { locality: string; count: number }[];
   activeFocusBounds: [[number, number], [number, number]] | null;
@@ -136,6 +149,29 @@ export function useDiscoverMapData({
     q: debouncedSearch?.trim() || undefined,
   });
 
+  // Issue #1261 — cross-area school-radius listings (PUBLIC endpoint).
+  // Enabled for anon users always (their only listing source in radius mode), and for
+  // authenticated users when markersEnabled is false (CTA not yet triggered) so the
+  // public-endpoint data serves as radius-filtered marker fallback pins. Automatically
+  // idle when no school coordinates are set. Radius is clamped with the shared #1210
+  // helper so a 0 km value does not collapse the result set.
+  const schoolRadiusEnabled =
+    filters.schoolLat != null && filters.schoolLon != null &&
+    (!isAuthenticated || !markersEnabled);
+  const schoolRadiusKmClamped =
+    filters.schoolRadiusKm != null ? clampSchoolRadiusKm(filters.schoolRadiusKm) : undefined;
+  const {
+    data: schoolRadiusData,
+    isLoading: schoolRadiusQueryLoading,
+  } = useSchoolRadiusListings({
+    city,
+    schoolLat: filters.schoolLat,
+    schoolLon: filters.schoolLon,
+    schoolRadiusKm: schoolRadiusKmClamped,
+    size: 50, // DECISION-2: request the full single page; surface hasMore as a hint.
+    enabled: schoolRadiusEnabled,
+  });
+
   const {
     data: schoolById,
     isLoading: schoolByIdLoading,
@@ -186,6 +222,17 @@ export function useDiscoverMapData({
     () => cityListingsData?.areas.find((a) => a.areaKey === selectedArea?.areaKey)?.listings ?? [],
     [cityListingsData, selectedArea],
   );
+
+  // ── Derived: anon school-radius listings (Issue #1261) ─────────────────────
+  // Mapped to DiscoverCityListingItem so the school-first panels/map consume them
+  // identically to areaListings. Empty for authenticated users.
+  const schoolRadiusListings = useMemo(
+    (): SchoolRadiusListingItem[] =>
+      (schoolRadiusData?.content ?? []).map(mapSchoolRadiusCard),
+    [schoolRadiusData],
+  );
+  const schoolRadiusListingsLoading = schoolRadiusEnabled && schoolRadiusQueryLoading;
+  const schoolRadiusHasMore = schoolRadiusData?.hasMore ?? false;
 
   const markerListings = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
     if (!filteredMarkersData?.markers) return [];
@@ -271,6 +318,9 @@ export function useDiscoverMapData({
     filteredListings,
     markerListings,
     areaListings,
+    schoolRadiusListings,
+    schoolRadiusListingsLoading,
+    schoolRadiusHasMore,
     areaMarkerListings,
     topLocalities,
     activeFocusBounds,

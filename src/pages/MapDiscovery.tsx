@@ -21,9 +21,10 @@ import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
-import { haversineKm } from '@/lib/geo';
-import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
+import { clampSchoolRadiusKm, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
+import { cityListingToPropertyListing } from '@/lib/discoverMappers';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
@@ -193,6 +194,169 @@ export function deriveDiscoverBadge({
     return { visible: false, count: null, loading: false };
   }
   return { visible: true, count: cityTotal, loading: false };
+}
+
+// ── Anon client-side PropertyFilter parity (Issue #1261, DECISION-1) ──────────
+//
+// The public /school-radius-listings endpoint takes NO property-filter params, so
+// when an anon user has active PropertyFilters we must apply them client-side over
+// the endpoint content to match the auth path's filtered result.
+//
+// Only filters whose backing field is present in the 20-field anon contract are
+// honoured:
+//   propertyTypes → propertyType        bedrooms → bedrooms (4 = "4 or more")
+//   priceMin/Max  → pricePaise (rupees) dateFrom/To → createdAt
+//   backOnMarket  → backOnMarket        newToMarket → daysOnMarket (1..7)
+//   readyToMove   → possessionStatus
+//
+// reraRegistered and sellerTypes are intentionally NOT applied — they rely on
+// reraNumber / sellerType which the server EXCLUDES from the anon payload (AC6).
+// Pure + exported so it can be unit-tested without mounting the page.
+export function applyAnonPropertyFilters(
+  listings: SchoolRadiusListingItem[],
+  filters: {
+    propertyTypes?: string[];
+    bedrooms?: number[];
+    priceMin?: number;
+    priceMax?: number;
+    dateFrom?: Date | null;
+    dateTo?: Date | null;
+    backOnMarket?: boolean;
+    newToMarket?: boolean;
+    readyToMove?: boolean;
+  },
+): SchoolRadiusListingItem[] {
+  let result = listings;
+
+  if (filters.propertyTypes && filters.propertyTypes.length > 0) {
+    const wanted = new Set(filters.propertyTypes.map((t) => t.toLowerCase()));
+    result = result.filter((l) => l.propertyType != null && wanted.has(l.propertyType.toLowerCase()));
+  }
+
+  if (filters.bedrooms && filters.bedrooms.length > 0) {
+    const has4Plus = filters.bedrooms.includes(4);
+    const exact = new Set(filters.bedrooms.filter((b) => b < 4));
+    result = result.filter((l) => {
+      if (l.bedrooms == null) return false;
+      if (has4Plus && l.bedrooms >= 4) return true;
+      return exact.has(l.bedrooms);
+    });
+  }
+
+  // pricePaise is in paise; filters.priceMin/Max are in rupees (×100).
+  if (filters.priceMin != null) {
+    const minPaise = filters.priceMin * 100;
+    result = result.filter((l) => l.pricePaise != null && l.pricePaise >= minPaise);
+  }
+  if (filters.priceMax != null) {
+    const maxPaise = filters.priceMax * 100;
+    result = result.filter((l) => l.pricePaise != null && l.pricePaise <= maxPaise);
+  }
+
+  if (filters.dateFrom) {
+    const fromMs = filters.dateFrom.getTime();
+    result = result.filter((l) => {
+      if (!l.createdAt) return false;
+      const t = new Date(l.createdAt).getTime();
+      return Number.isFinite(t) && t >= fromMs;
+    });
+  }
+  if (filters.dateTo) {
+    const toMs = filters.dateTo.getTime();
+    result = result.filter((l) => {
+      if (!l.createdAt) return false;
+      const t = new Date(l.createdAt).getTime();
+      return Number.isFinite(t) && t <= toMs;
+    });
+  }
+
+  if (filters.backOnMarket) {
+    result = result.filter((l) => l.backOnMarket === true);
+  }
+  if (filters.newToMarket) {
+    result = result.filter(
+      (l) => typeof l.daysOnMarket === 'number' && l.daysOnMarket > 0 && l.daysOnMarket <= 7,
+    );
+  }
+  if (filters.readyToMove) {
+    result = result.filter((l) => l.possessionStatus === 'ready_to_move');
+  }
+
+  return result;
+}
+
+/**
+ * Issue #1261 rev2 (AC11) — derive Leaflet-pin shape from the anon school-radius
+ * listings already fetched + filtered for the right panel. Mirrors the
+ * `areaMarkerListings` recipe in useDiscoverMapData.ts: filter null coordinates,
+ * normalise lat/lon, then reuse `cityListingToPropertyListing` so the resulting
+ * shape, popup content, and clustering pipeline are byte-identical to the existing
+ * anon area-marker pins. Pure function — exported for unit-test parity.
+ *
+ * Caller MUST pass the post-applyAnonPropertyFilters set (DECISION-1 parity) so the
+ * map and right panel reflect the same filtered universe. Empty input → empty output
+ * (preserves the #1118 area-fallback's role for the "no radius hits yet" case).
+ *
+ * ANON-SAFE: consumes only fields from the 20-field public contract carried on
+ * SchoolRadiusListingItem (id/propertyType/title/locality/pricePaise/primaryImageUrl/
+ * listingPurpose/bedrooms/builtArea/landArea + units/createdAt/lat/lon). Does NOT read or rely
+ * on trustTier/reraNumber/reraValid/sellerType/status/updatedAt/lastUpdatedAt/
+ * firstPublishedAt — those are excluded server-side and never reach this helper.
+ */
+export function deriveAnonSchoolRadiusMarkers(
+  listings: SchoolRadiusListingItem[],
+): (PropertyListing & { images?: PropertyImage[] })[] {
+  if (listings.length === 0) return [];
+  const now = new Date().toISOString();
+  return listings
+    .filter((l) => l.lat != null && l.lon != null)
+    .map((l) =>
+      cityListingToPropertyListing(
+        { ...l, lat: l.lat as number, lon: l.lon as number },
+        now,
+      ),
+    );
+}
+
+/**
+ * Issue #1261 delta (FINDING 1) — true when any client-side PropertyFilter that
+ * applyAnonPropertyFilters can SHRINK the result by is active.
+ *
+ * The "showing first N" hint (school-radius-more-hint) gates visibility on the
+ * server's UNFILTERED size+1 probe (`hasMore`) but displays the POST-filter count
+ * (`schoolListings.length`). When a property filter is active those extra unseen
+ * server rows may not match the filter, so the hint would dishonestly imply that
+ * more *matching* homes exist beyond the shown N. We suppress the hint in that case
+ * (AC8 truthfulness): the displayed filtered set IS the complete match over the
+ * fetched page, and the endpoint takes no filter params so there is no honest way to
+ * promise more matching results. The radius-only (no property filter) case keeps the
+ * accurate hint, since then the displayed count equals the unfiltered server page.
+ *
+ * Mirrors exactly the keys applyAnonPropertyFilters honours — schoolLat/schoolLon/
+ * schoolRadiusKm are deliberately excluded (they define the radius, not a refinement).
+ */
+export function hasActiveAnonPropertyFilter(filters: {
+  propertyTypes?: string[];
+  bedrooms?: number[];
+  priceMin?: number;
+  priceMax?: number;
+  dateFrom?: Date | string | null;
+  dateTo?: Date | string | null;
+  backOnMarket?: boolean;
+  newToMarket?: boolean;
+  readyToMove?: boolean;
+}): boolean {
+  return Boolean(
+    (filters.propertyTypes && filters.propertyTypes.length > 0) ||
+      (filters.bedrooms && filters.bedrooms.length > 0) ||
+      filters.priceMin != null ||
+      filters.priceMax != null ||
+      filters.dateFrom ||
+      filters.dateTo ||
+      filters.backOnMarket ||
+      filters.newToMarket ||
+      filters.readyToMove,
+  );
 }
 
 export default function MapDiscovery() {
@@ -389,6 +553,7 @@ export default function MapDiscovery() {
     isFetching,
     discoverAreas, listingsWithCoords, filteredListings,
     markerListings, areaListings, areaMarkerListings,
+    schoolRadiusListings, schoolRadiusListingsLoading, schoolRadiusHasMore,
     topLocalities, activeFocusBounds, trendsAreaKeys,
     cityCenter, cityZoom, schoolById, schoolByIdError, error,
     totalElements, totalPages,
@@ -609,6 +774,22 @@ export default function MapDiscovery() {
     [discoverAreas],
   );
 
+  // Issue #1261 rev2 (AC11) — pure helper that converts the already-fetched + already-
+  // client-filtered anon school-radius listings into Leaflet-pin shape for PropertyMap.
+  // Exported for unit-test parity with the marker derivation flow. Mirrors the
+  // areaMarkerListings useMemo in useDiscoverMapData.ts (filter null coords →
+  // normalise lat/lon → cityListingToPropertyListing). Reuses the existing mapper so
+  // the marker shape, popup, and clustering pipeline are identical to anon area pins.
+  //
+  // ANON-SAFE: consumes only fields from the 20-field public contract (id/propertyType/
+  // title/locality/pricePaise/primaryImageUrl/listingPurpose/bedrooms/builtArea/landArea + units/
+  // createdAt/lat/lon). Does NOT read trustTier/reraNumber/reraValid/sellerType/status/
+  // updatedAt/lastUpdatedAt/firstPublishedAt. cityListingToPropertyListing synthesises
+  // status='LIVE' and seller_type=null LOCALLY (no server private-field exposure).
+  //
+  // DECISION-1 parity: callers pass the post-applyAnonPropertyFilters set so map/panel/
+  // badge all reflect the same filtered universe.
+
   // Convert filteredListings (PropertyListing[]) to DiscoverCityListingItem[] for
   // SchoolSelectedPanel card list. filteredListings is the school-proximity-filtered
   // set when schoolLat/Lon/RadiusKm filters are active.
@@ -624,24 +805,26 @@ export default function MapDiscovery() {
   const schoolListings = useMemo(
     (): DiscoverCityListingItem[] => {
       if (!isAuthenticated) {
-        // Anonymous path: use full-field public data scoped to the selected area.
-        // Issue #1122 Cycle 2: when school coords + radius are set, filter
-        // areaListings to only those within the selected radius. This mirrors
-        // the auth path which uses the backend-filtered filteredListings.
-        // When no school is selected, return all areaListings (area-scoped browse).
         const sLat = filters.schoolLat;
         const sLon = filters.schoolLon;
         // Issue #1210: clamp so a 0 km radius does not silently filter out every
         // listing; the anon path mirrors the auth haversine filter's clamp.
         const radius = filters.schoolRadiusKm != null ? clampSchoolRadiusKm(filters.schoolRadiusKm) : null;
         if (sLat != null && sLon != null && radius != null) {
-          return areaListings.filter((l) => {
-            const lat = l.lat ?? l.latitude;
-            const lon = l.lon ?? l.longitude;
-            if (lat == null || lon == null) return false;
-            return haversineKm(sLat, sLon, lat, lon) <= radius;
-          });
+          // Issue #1261 — anon school-radius now sources from the PUBLIC
+          // /school-radius-listings endpoint (cross-area, server-side ST_DWithin),
+          // replacing the old single-area haversine over areaListings. The radius
+          // circle now matches the listing set across area boundaries.
+          //
+          // DECISION-1 (Option A): the active PropertyFilters are NOT sent to this
+          // endpoint (it has no filter params), so apply them CLIENT-SIDE here for
+          // parity with the auth path. Only filters whose backing fields exist in the
+          // 20-field anon contract are honoured. reraRegistered and sellerTypes rely on
+          // server-EXCLUDED fields (reraNumber/sellerType) and are intentionally NOT
+          // applied — anon never sees those fields (AC6).
+          return applyAnonPropertyFilters(schoolRadiusListings, filters);
         }
+        // No active school radius — fall back to area-scoped public browse.
         return areaListings;
       }
       // Authenticated path: map proximity-filtered listings (unchanged behaviour).
@@ -668,7 +851,25 @@ export default function MapDiscovery() {
         lon: l.longitude,
       }));
     },
-    [isAuthenticated, areaListings, filteredListings, filters],
+    [isAuthenticated, areaListings, schoolRadiusListings, filteredListings, filters],
+  );
+
+  // Issue #1261 rev2 (AC11) — radius-filtered marker pins from the PUBLIC school-radius
+  // endpoint for both auth and anon users. For anon: always the primary marker source
+  // (auth marker endpoint is disabled). For auth: serves as marker fallback BEFORE the
+  // #1115 bounded-search CTA is triggered (markersEnabled=false → schoolRadiusEnabled=true
+  // in the hook, so schoolRadiusListings is populated). Once CTA fires, markersEnabled
+  // becomes true, schoolRadiusEnabled becomes false, schoolRadiusListings drains, and the
+  // IIFE below switches to the richer auth markerListings instead.
+  // Derives from schoolRadiusListings (public endpoint, server-side ST_DWithin — genuinely
+  // radius-filtered) rather than schoolListings (which for auth users = city-wide
+  // filteredListings — NOT radius-filtered, wrong source for marker pins).
+  const schoolRadiusFallbackMarkers = useMemo(
+    () =>
+      urlState.journey === 'school-first' && urlState.schoolId
+        ? deriveAnonSchoolRadiusMarkers(schoolRadiusListings)
+        : [],
+    [urlState.journey, urlState.schoolId, schoolRadiusListings],
   );
 
   // Issue #1175 v3 — focusedGroup is needed by the badge before the group-map behaviour
@@ -721,7 +922,12 @@ export default function MapDiscovery() {
           // which would cause schoolListings.length to return 0 from an empty filteredListings
           // and the badge would briefly show "0 properties" instead of hiding.
           // Fix: also hide when the auth-path listing query is in-flight.
-          ? (isLoadingAreaListings || (isAuthenticated && listingDataLoading))
+          // Issue #1261: on the anon path, schoolListings now comes from the public
+          // /school-radius-listings endpoint, so hide while THAT query is in-flight too
+          // (schoolRadiusListingsLoading) to avoid a transient "0 properties" flash.
+          ? (isLoadingAreaListings
+              || (isAuthenticated && listingDataLoading)
+              || (!isAuthenticated && schoolRadiusListingsLoading))
             ? null
             : schoolListings.length
           : undefined,
@@ -735,7 +941,7 @@ export default function MapDiscovery() {
     // (number | null | undefined) so it is safe to use directly as a dep.
     // debouncedSearch: keyword search — badge shows filtered count when active (Issue #1185).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch],
+    [selectedArea, filters, isLoadingAreaListings, listingDataLoading, isAuthenticated, schoolRadiusListingsLoading, cityTotal, areaListings, schoolRadiusActive, schoolListings.length, groupListingsCount, debouncedSearch],
   );
 
   // Issue #1160 GAP 1 — listingsReadyKey: a stable primitive string that changes only when
@@ -1228,17 +1434,25 @@ export default function MapDiscovery() {
                   // placeholderData has no previous data. Keep area markers visible until
                   // the school-proximity query settles to avoid a blank-map flash.
                   if (urlState.schoolId) {
-                    // Fall back to areaMarkerListings while the school-proximity query is
-                    // either in-flight (authenticated) OR disabled (unauthenticated — #1118).
-                    // Without this, unauthenticated users see a blank map because markersEnabled
-                    // is false (no query fires), markerListings stays [], and markersLoading is
-                    // false (disabled queries are not "loading"). Both paths are covered by the
-                    // single guard: markersLoading covers the in-flight case; !isAuthenticated
-                    // covers the disabled/never-fired case.
-                    if (markerListings.length === 0 && (markersLoading || !isAuthenticated) && selectedArea && areaMarkerListings.length > 0) {
+                    // Issue #1261 rev2 (AC11+AC12) — three-tier marker priority for school-radius:
+                    //
+                    // Tier 1: richer auth markers (markersEnabled=true, CTA triggered, query resolved).
+                    if (markerListings.length > 0) return markerListings;
+                    //
+                    // Tier 2: school-radius fallback markers (both auth+anon). schoolRadiusFallbackMarkers
+                    // derives from schoolRadiusListings (public endpoint, server-side ST_DWithin —
+                    // genuinely radius-filtered). For anon: always active (auth endpoint disabled).
+                    // For auth: active before CTA (schoolRadiusEnabled=!markersEnabled=true in the hook);
+                    // drains automatically once markersEnabled flips true (auth query fires).
+                    // This satisfies the product truth: markers visible for ALL users regardless of auth.
+                    if (schoolRadiusFallbackMarkers.length > 0) return schoolRadiusFallbackMarkers;
+                    //
+                    // Tier 3: area-scoped markers while the auth proximity query is in-flight
+                    // (markersLoading=true after CTA, before the first /api/discover/markers response).
+                    if (markersLoading && selectedArea && areaMarkerListings.length > 0) {
                       return areaMarkerListings;
                     }
-                    return markerListings;
+                    return [];
                   }
                   // Issue #1074 Slice A: school-first + areaKey (no schoolId) → surface
                   // the area's property markers alongside the schools list. Mirrors the
@@ -1352,6 +1566,28 @@ export default function MapDiscovery() {
                 Showing{' '}
                 <strong>{discoverBadge.count.toLocaleString()}</strong>
                 {' '}properties
+              </div>
+            </div>
+          )}
+
+          {/* Issue #1261 — non-blocking "showing first N" hint for the anonymous
+              school-radius result. The public endpoint returns a single page (size=50)
+              with no total count; hasMore signals more listings exist beyond it.
+              DECISION-2: no load-more UI in this slice — only this advisory hint.
+              FINDING 1: hasMore reflects the UNFILTERED server probe but the shown
+              count is post-filter; when any client-side PropertyFilter is active the
+              extra server rows may not match, so suppress the hint to avoid promising
+              more *matching* homes than exist (AC8 truthfulness). */}
+          {!isAuthenticated &&
+            schoolRadiusActive &&
+            schoolRadiusHasMore &&
+            !hasActiveAnonPropertyFilter(filters) && (
+            <div className="absolute bottom-28 right-4 z-[1000]" data-testid="school-radius-more-hint">
+              <div
+                className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-xs text-muted-foreground border border-border max-w-[16rem]"
+                aria-live="polite"
+              >
+                Showing the first {schoolListings.length} homes near this school. Zoom or refine your search to narrow results.
               </div>
             </div>
           )}

@@ -589,20 +589,11 @@ export function SchoolSelectedPanel({
         </div>
       )}
 
-      {/* Issue #1193 — anonymous users get an area-scoped listing set (single areaKey +
-          client haversine), not the auth-only cross-area ST_DWithin proximity query. The
-          radius circle would otherwise imply a cross-area search the anon path can't deliver,
-          so honestly communicate the area-scope constraint. Derived from existing props only.
-          Gate excludes radiusKm null/0 (#1210) so the note never reads "within 0 km". */}
-      {!isAuthenticated && radiusKm != null && radiusKm > 0 && (
-        <p
-          data-testid="anon-school-radius-limit-note"
-          aria-live="polite"
-          className="px-4 py-2 text-xs text-muted-foreground border-b border-border"
-        >
-          Showing homes in this area only. Sign in to see all homes within {radiusKm} km of this school.
-        </p>
-      )}
+      {/* Issue #1261 — the anonymous school-radius listing set is now sourced from the
+          PUBLIC /school-radius-listings endpoint, which performs the same cross-area
+          ST_DWithin proximity query the authenticated path uses. The radius circle and the
+          listing set are therefore consistent for anon users, so the prior #1193
+          "Showing homes in this area only" limitation note has been removed. */}
 
       {/* Radius selector */}
       <div className="px-4 py-3 border-b border-border">
@@ -920,20 +911,10 @@ export function AreaSchoolCombinedPanel({
         {combinedChips}
       </div>
 
-      {/* Issue #1193 — anonymous users get an area-scoped listing set (single areaKey +
-          client haversine), not the auth-only cross-area ST_DWithin proximity query. The
-          radius circle would otherwise imply a cross-area search the anon path can't deliver,
-          so honestly communicate the area-scope constraint. Derived from existing props only.
-          Gate excludes radiusKm null/0 (#1210) so the note never reads "within 0 km". */}
-      {!isAuthenticated && radiusKm != null && radiusKm > 0 && (
-        <p
-          data-testid="anon-school-radius-limit-note"
-          aria-live="polite"
-          className="px-4 py-2 text-xs text-muted-foreground border-b border-border"
-        >
-          Showing homes in this area only. Sign in to see all homes within {radiusKm} km of this school.
-        </p>
-      )}
+      {/* Issue #1261 — the anonymous school-radius listing set is now sourced from the
+          PUBLIC /school-radius-listings endpoint (cross-area ST_DWithin), so the radius
+          circle and the listing set are consistent for anon users. The prior #1193
+          "Showing homes in this area only" limitation note has been removed. */}
 
       {/* Radius selector */}
       <div className="px-4 py-3 border-b border-border">
