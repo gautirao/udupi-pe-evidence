@@ -1,8 +1,9 @@
 import { PenTool, GraduationCap, X } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PropertyFilters } from '@/hooks/usePropertyListings';
+import { PropertyFilters, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
+import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 
 interface MapStatsBarProps {
   filters: PropertyFilters;
@@ -37,7 +38,7 @@ export function MapStatsBar({
               <div className="flex items-center gap-1.5 text-primary">
                 <GraduationCap className="h-4 w-4" />
                 <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
-                <span className="text-xs text-muted-foreground">({filters.schoolRadiusKm ?? 3} km)</span>
+                <span className="text-xs text-muted-foreground">({clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM)} km)</span>
               </div>
             </>
           )}

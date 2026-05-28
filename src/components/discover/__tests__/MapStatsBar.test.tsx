@@ -45,4 +45,34 @@ describe('MapStatsBar', () => {
     );
     expect(screen.getByText('Manipal Academy')).toBeInTheDocument();
   });
+
+  it('renders a valid school radius unchanged', () => {
+    render(
+      <MapStatsBar
+        filters={{ schoolRadiusKm: 5 }}
+        selectedSchool={mockSchool}
+        onPolygonClear={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('(5 km)')).toBeInTheDocument();
+  });
+
+  it('falls back to the default radius when schoolRadiusKm is undefined', () => {
+    render(
+      <MapStatsBar filters={emptyFilters} selectedSchool={mockSchool} onPolygonClear={vi.fn()} />,
+    );
+    expect(screen.getByText('(3 km)')).toBeInTheDocument();
+  });
+
+  it('clamps a 0 km radius to the minimum so it never shows "0 km" (issue #1220)', () => {
+    render(
+      <MapStatsBar
+        filters={{ schoolRadiusKm: 0 }}
+        selectedSchool={mockSchool}
+        onPolygonClear={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('(1 km)')).toBeInTheDocument();
+    expect(screen.queryByText('(0 km)')).not.toBeInTheDocument();
+  });
 });

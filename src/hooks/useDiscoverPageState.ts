@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PropertyFilters } from '@/hooks/usePropertyListings';
+import { PropertyFilters, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolResult } from '@/hooks/useSchoolSearch';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { CITY_CONFIG, DEFAULT_CITY } from '@/lib/localityUtils';
@@ -181,7 +181,7 @@ export function useDiscoverPageState({
   // sync schoolLat, schoolLon, and schoolRadiusKm into the filters so the "Near school" chip renders.
   useEffect(() => {
     if (selectedSchool && filters.schoolLat === undefined) {
-      const radiusKm = filters.schoolRadiusKm ?? 3;
+      const radiusKm = clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
       setFilters((prev) => ({
         ...prev,
         schoolLat: selectedSchool.latitude,
@@ -211,7 +211,7 @@ export function useDiscoverPageState({
     (school: SchoolResult | null) => {
       setSelectedSchool(school);
       if (school) {
-        const radiusKm = filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM;
+        const radiusKm = clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
         setFilters((prev) => ({
           ...prev,
           schoolLat: school.latitude,
