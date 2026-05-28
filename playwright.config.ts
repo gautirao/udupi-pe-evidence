@@ -47,6 +47,7 @@ export default defineConfig({
         '**/broker-smoke.spec.ts',
         '**/admin-smoke.spec.ts',
         '**/user-journeys.spec.ts',
+        '**/discover-real-data-smoke.spec.ts',
       ],
     },
     {
