@@ -1,0 +1,171 @@
+# TEMPLATE — .claude/autopilot/templates/definition-of-done.toml
+#
+# Purpose: a REUSABLE, per-issue Definition-of-Done (DoD). "Done" means the issue's
+# buyer-facing PRODUCT TRUTH is satisfied with CAPTURED EVIDENCE — not implementation
+# assumptions. This template is consumed (alongside an evidence-packet.toml) by the
+# AUTOPILOT_DOD_REVIEW gate (see .claude/autopilot/gates/AUTOPILOT_DOD_REVIEW.md).
+#
+# ── DRY-RUN ONLY ────────────────────────────────────────────────────────────────
+# The AUTOPILOT_DOD_REVIEW gate that reads this file is DRY-RUN ONLY in the current
+# foundation: it may emit a WOULD_AUTOMERGE verdict but performs NO real merge, NO PR
+# state update, and NO side effects. PR_REVIEW approval is NOT merge approval
+# (CLAUDE.md §10). See `autopilot_merge` below.
+#
+# HOW TO POPULATE FOR A NEW ISSUE:
+#   1. Copy this file to .claude/handoffs/issue-<N>/definition-of-done.toml
+#   2. Set `issue` and point `product_truth_ref` at the relevant product-truth doc.
+#   3. Add one [[criterion]] block per buyer-facing acceptance item. Each criterion's
+#      `truth_anchor` MUST reference a real section anchor in the product-truth doc
+#      (e.g. "markers.anon_visibility" in .claude/product-truth/discover.md).
+#   4. List the evidence keys each criterion requires in `evidence_required`; those keys
+#      MUST be produced in the matching evidence-packet.toml.
+#   5. Keep `schema_version` in lock-step with the evidence-packet.toml template version.
+
+schema_version = "1"
+gate           = "AUTOPILOT_DOD_REVIEW"
+issue          = 0
+
+# Path to the authoritative, implementation-independent product-truth document whose
+# section anchors the criteria below reference. Kept for backward compatibility; for a
+# multi-domain issue, prefer `product_truth_refs` (below) and the category mapping.
+product_truth_ref = ".claude/product-truth/discover.md"
+
+# Multi-file product-truth references. A criterion's `truth_anchor` resolves against the
+# product-truth file mapped to the issue's `category` (see [category_product_truth_map]).
+product_truth_refs = [
+  ".claude/product-truth/discover.md",          # buyer / demand side
+  ".claude/product-truth/listing-lifecycle.md", # supply side (submission/moderation/visibility)
+]
+
+# ── Issue category ────────────────────────────────────────────────────────────────
+# Set `category` to the issue's primary domain. It selects which product-truth file the
+# criteria reference and which default criteria typically apply (see guidance below).
+# A cross-cutting issue may list more than one in `categories`.
+category   = "buyer_discover"   # primary category (see [issue_categories].enum)
+categories = ["buyer_discover"] # one or more, for cross-cutting issues
+
+[issue_categories]
+enum = [
+  "buyer_discover",     # buyer-facing Discover/search/map journeys
+  "owner_submission",   # owner listing creation/submission
+  "broker_submission",  # broker/dealer listing creation/submission
+  "admin_moderation",   # admin approve/reject/return-for-edits
+  "listing_visibility", # what appears in public results / no private-field leakage
+  "search_indexing",    # search index / read-model lifecycle (currently forward-looking)
+  "workflow_only",      # Mode-3 / tooling / governance workflow changes
+  "test_only",          # test-only changes
+  "docs_only",          # docs/templates-only changes
+]
+
+# category -> product-truth file the criteria for that category resolve against.
+# "N/A" categories have no product-truth doc; their DoD is satisfied by process/scope
+# evidence (justified in the criterion notes), not by a buyer/supply truth anchor.
+[category_product_truth_map]
+buyer_discover     = ".claude/product-truth/discover.md"
+owner_submission   = ".claude/product-truth/listing-lifecycle.md"
+broker_submission  = ".claude/product-truth/listing-lifecycle.md"
+admin_moderation   = ".claude/product-truth/listing-lifecycle.md"
+listing_visibility = ".claude/product-truth/listing-lifecycle.md"
+search_indexing    = ".claude/product-truth/listing-lifecycle.md"  # future_search_index_truth (forward-looking)
+workflow_only      = "N/A"
+test_only          = "N/A"
+docs_only          = "N/A"
+
+# Per-category default criteria guidance — which product-truth anchors typically apply.
+# Guidance only; tailor the [[criterion]] blocks below to the specific issue.
+[category_default_guidance]
+buyer_discover     = "discover.md anchors: markers.anon_visibility, auth.card_vs_marker_contract, journeys.area_first, journeys.school_first, search.contextual_q, testing.real_data_smoke"
+owner_submission   = "listing-lifecycle.md anchors: owner_broker_submission (required fields + non-public start), search_display_truth (submission not public until LIVE)"
+broker_submission  = "listing-lifecycle.md anchors: owner_broker_submission (broker metadata/permissions, same lifecycle), search_display_truth"
+admin_moderation   = "listing-lifecycle.md anchors: admin_moderation (approve->LIVE/reject->REJECTED, reason required, no note leakage), search_display_truth"
+listing_visibility = "listing-lifecycle.md anchors: search_display_truth (only LIVE public; no private-field leak across cards/markers/counts), admin_moderation"
+search_indexing    = "listing-lifecycle.md anchor: future_search_index_truth (FORWARD-LOOKING — conditional invariants; verify no real index is silently assumed)"
+workflow_only      = "N/A product truth — satisfy via process/scope evidence (scope-lock, gate verdicts) with justification."
+test_only          = "N/A product truth — satisfy via test evidence + non-regression with justification."
+docs_only          = "N/A product truth — satisfy via structural assertions against the delivered docs with justification."
+
+# DRY-RUN guard. MUST be false in this foundation — the gate never performs a real
+# merge. Enabling real auto-merge is OUT OF SCOPE and would require a separate,
+# explicitly-approved change (see AUTOPILOT_DOD_REVIEW.md → Future-wiring appendix).
+autopilot_merge = false
+
+# ── Pass/fail mapping convention (machine-checkable) ──────────────────────────────
+# Each criterion declares a `pass_condition` drawn from this enum. The gate evaluates
+# the criterion against the evidence-packet and marks it PASS / FAIL / INDETERMINATE.
+#
+#   all_evidence_present_and_pass  — every key in evidence_required exists in the
+#                                    evidence-packet AND each has status PASS.
+#   any_evidence_present_and_pass  — at least one key exists with status PASS
+#                                    (use sparingly; prefer all_evidence_present_and_pass).
+#
+# DoD verdict roll-up (all-or-nothing — see AUTOPILOT_DOD_REVIEW.md):
+#   - WOULD_AUTOMERGE       requires EVERY applicable criterion = PASS.
+#   - DOD_NOT_MET           if any applicable criterion = FAIL.
+#   - NEEDS_MORE_EVIDENCE   if any applicable criterion = INDETERMINATE (missing artefact).
+#   - NEEDS_USER_DECISION   if any criterion is flagged requires_human_judgment = true
+#                           and cannot be resolved from evidence alone.
+[pass_fail_mapping]
+enum = ["all_evidence_present_and_pass", "any_evidence_present_and_pass"]
+rollup = "all-or-nothing: WOULD_AUTOMERGE requires ALL applicable criteria PASS; otherwise DOD_NOT_MET / NEEDS_MORE_EVIDENCE / NEEDS_USER_DECISION"
+
+# ── Criteria ──────────────────────────────────────────────────────────────────────
+# One [[criterion]] per buyer-facing DoD item. The examples below are illustrative,
+# drawn from the Discover product truth; replace/extend per issue.
+
+[[criterion]]
+id                    = "DOD-1"
+label                 = "Markers visible to anonymous users (area + school-radius journeys)"
+truth_anchor          = "markers.anon_visibility"
+evidence_required     = ["phase_7a", "real_data_smoke_j1", "real_data_smoke_j2"]
+pass_condition        = "all_evidence_present_and_pass"
+requires_human_judgment = false
+
+[[criterion]]
+id                    = "DOD-2"
+label                 = "Auth changes card content/actions, NOT marker visibility"
+truth_anchor          = "auth.card_vs_marker_contract"
+evidence_required     = ["phase_7a", "real_data_smoke_j3"]
+pass_condition        = "all_evidence_present_and_pass"
+requires_human_judgment = false
+
+[[criterion]]
+id                    = "DOD-3"
+label                 = "Area-first journey contract satisfied"
+truth_anchor          = "journeys.area_first"
+evidence_required     = ["eval_checklist_all_pass", "phase_7a", "real_data_smoke_j1"]
+pass_condition        = "all_evidence_present_and_pass"
+requires_human_judgment = false
+
+[[criterion]]
+id                    = "DOD-4"
+label                 = "Contextual keyword search filters cards + markers consistently"
+truth_anchor          = "search.contextual_q"
+evidence_required     = ["real_data_smoke_j4", "phase_7a"]
+pass_condition        = "all_evidence_present_and_pass"
+requires_human_judgment = false
+
+[[criterion]]
+id                    = "DOD-5"
+label                 = "Real-data smoke journeys pass (buyer-journey source of truth)"
+truth_anchor          = "testing.real_data_smoke"
+evidence_required     = ["real_data_smoke_all_journeys"]
+pass_condition        = "all_evidence_present_and_pass"
+requires_human_judgment = false
+
+[[criterion]]
+id                    = "DOD-6"
+label                 = "School-first journey contract satisfied"
+truth_anchor          = "journeys.school_first"
+evidence_required     = ["phase_7a", "real_data_smoke_j2", "real_data_smoke_j3"]
+pass_condition        = "all_evidence_present_and_pass"
+requires_human_judgment = false
+
+# ── Notes ───────────────────────────────────────────────────────────────────────
+[notes]
+text = """
+The criteria here intentionally reference PRODUCT-LEVEL evidence (visible buyer journeys
+proven by the real-data smoke suite + Phase 7A browser verification), not implementation
+details. See .claude/product-truth/discover.md → testing.implementation_boundary. A test
+that asserts an implementation quirk (field name, CSS class, internal state key) is NOT
+acceptable as DoD evidence — record only buyer-facing, visible outcomes.
+"""

@@ -1,0 +1,224 @@
+# TEMPLATE — .claude/autopilot/templates/evidence-packet.toml
+#
+# Purpose: the CAPTURED EVIDENCE that proves each Definition-of-Done criterion for an
+# issue. It is the companion to definition-of-done.toml: every key listed in a
+# criterion's `evidence_required` MUST appear here. Consumed by the AUTOPILOT_DOD_REVIEW
+# gate (see .claude/autopilot/gates/AUTOPILOT_DOD_REVIEW.md).
+#
+# Authored by the Main Agent AFTER Phase 7C, by reading the already-produced artefacts
+# from disk (product-verification.toml, product-sweep.toml, workdone-candidate.toml, the
+# verify-mode3-workdone.py preflight result, and real-data smoke run output). The gate
+# does not re-run anything; it reads this packet.
+#
+# ── DRY-RUN ONLY ────────────────────────────────────────────────────────────────
+# `dry_run = true` below is MANDATORY. The AUTOPILOT_DOD_REVIEW gate is dry-run only:
+# it may emit WOULD_AUTOMERGE but performs NO real merge / NO PR state update / NO side
+# effects. PR_REVIEW approval is NOT merge approval (CLAUDE.md §10).
+#
+# HOW TO POPULATE FOR A NEW ISSUE:
+#   1. Copy to .claude/handoffs/issue-<N>/evidence-packet.toml; set issue + captured_at.
+#   2. Keep schema_version IDENTICAL to the matching definition-of-done.toml.
+#   3. Add one section per evidence key referenced by the DoD criteria.
+#   4. Use the product-level vs implementation-level split below — bind DoD criteria to
+#      PRODUCT-LEVEL evidence; record implementation-level evidence as context only.
+#   5. If a referenced artefact/flow is absent, record it under [missing_evidence] so the
+#      gate emits NEEDS_MORE_EVIDENCE instead of silently passing.
+
+schema_version = "1"           # MUST match definition-of-done.toml schema_version
+gate           = "AUTOPILOT_DOD_REVIEW"
+issue          = 0
+captured_at    = "YYYY-MM-DDTHH:MM:SSZ"
+
+# MANDATORY: dry_run MUST be `true` — this gate is dry-run only. Setting this to `false`
+# is NOT permitted in this foundation; a separately-approved change is required to remove
+# the dry-run constraint (see AUTOPILOT_DOD_REVIEW.md → Future-wiring appendix).
+dry_run        = true
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# PRODUCT-LEVEL EVIDENCE  (BINDING for DoD)
+# ──────────────────────────────────────────────────────────────────────────────────
+# Visible, buyer-facing outcomes. These are the ONLY evidence that may satisfy a DoD
+# criterion: real-data smoke journeys, Phase 7A browser verification, exploratory sweep.
+# Per-evidence status enum: PASS | FAIL | NOT_RUN | TEST_ENV_FAILURE | SKIPPED
+# (mirrors CLAUDE.md §11 — a result is PASS only if the command ran AND assertions ran).
+# ══════════════════════════════════════════════════════════════════════════════════
+
+[product_level.phase_7a]
+key      = "phase_7a"
+status   = "PASS"                  # PASS | FAIL | SKIPPED | TEST_ENV_FAILURE
+evidence = ".claude/handoffs/issue-<N>/product-verification.toml"
+same_scenario_checked = true
+notes    = "Independent Phase 7A browser product verification (buyer-facing)."
+
+# NOTE: phase_7b uses its OWN outcome enum (below), NOT the PASS/FAIL status enum used by
+# the other product-level keys — exploratory sweeps produce findings, not binary pass/fail.
+# NO_MAJOR_FINDINGS is the "good" outcome; it does not map to the PASS literal.
+# phase_7b is collected for CONTEXT and is NOT referenced as evidence_required by any
+# DoD criterion in the example definition-of-done.toml (wire it to a criterion only if an
+# issue's DoD genuinely depends on the exploratory sweep).
+[product_level.phase_7b]
+key        = "phase_7b"
+applicable = true
+status     = "NO_MAJOR_FINDINGS"   # phase_7b enum: NO_MAJOR_FINDINGS | FINDINGS_REPORTED | BLOCKING_REGRESSION | SKIPPED
+evidence   = ".claude/handoffs/issue-<N>/product-sweep.toml"
+
+[product_level.real_data_smoke_j1]
+key       = "real_data_smoke_j1"
+journey   = "J1 area-first anon"
+command   = "bash scripts/run-e2e-local.sh --project=full e2e/discover-real-data-smoke.spec.ts"
+exit_code = 0
+status    = "PASS"                 # PASS | FAIL | NOT_RUN | TEST_ENV_FAILURE | SKIPPED
+notes     = "Real backend, no page.route() mocks (source-of-truth per discover.md testing.real_data_smoke)."
+
+[product_level.real_data_smoke_j2]
+key       = "real_data_smoke_j2"
+journey   = "J2 school-radius anon"
+exit_code = 0
+status    = "PASS"
+
+[product_level.real_data_smoke_j3]
+key       = "real_data_smoke_j3"
+journey   = "J3 school-first auth"
+exit_code = 0
+status    = "PASS"                 # use SKIPPED + justification if auth creds unavailable
+
+[product_level.real_data_smoke_j4]
+key       = "real_data_smoke_j4"
+journey   = "J4 keyword contextual"
+exit_code = 0
+status    = "PASS"
+
+[product_level.real_data_smoke_all_journeys]
+key        = "real_data_smoke_all_journeys"
+command    = "bash scripts/run-e2e-local.sh --project=full e2e/discover-real-data-smoke.spec.ts"
+total_pass = 4
+total_fail = 0
+exit_code  = 0
+status     = "PASS"
+
+# NOTE: eval_checklist_all_pass uses a ROLL-UP enum (ALL_PASS / PARTIAL / FAIL), NOT the
+# per-journey PASS/FAIL enum — this key aggregates across all workdone eval-checklist items.
+[product_level.eval_checklist_all_pass]
+key     = "eval_checklist_all_pass"
+source  = ".claude/handoffs/issue-<N>/workdone-candidate.toml [eval_checklist_result]"
+status  = "ALL_PASS"               # roll-up enum: ALL_PASS | PARTIAL | FAIL
+notes   = "Roll-up of the Team Lead eval-checklist self-check; each item PASS with evidence."
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# ROLE / JOURNEY EVIDENCE  (PRODUCT-LEVEL, BINDING — for role-scoped DoD criteria)
+# ──────────────────────────────────────────────────────────────────────────────────
+# Proves a journey behaves correctly FOR A SPECIFIC ROLE. Use for supply-side criteria
+# (owner/broker submission, admin moderation) and role-scoped visibility criteria.
+# `role` enum: anonymous | buyer_user | owner | broker_dealer | admin | support_operator
+# `status` enum (same as product-level): PASS | FAIL | NOT_RUN | TEST_ENV_FAILURE | SKIPPED
+# ══════════════════════════════════════════════════════════════════════════════════
+
+[[role_evidence]]
+role     = "anonymous"
+journey  = "public Discover shows only LIVE listings; no private fields"
+status   = "PASS"
+evidence = "<path / E2E journey / verification artefact>"
+notes    = "Public-safe fields only; no rejectionReason / internal notes / owner PII."
+
+[[role_evidence]]
+role     = "owner"
+journey  = "owner submits a listing → enters DRAFT/PENDING_REVIEW, NOT public"
+status   = "PASS"
+evidence = "<path>"
+
+[[role_evidence]]
+role     = "broker_dealer"
+journey  = "broker submits a listing → same lifecycle (non-public until approved)"
+status   = "PASS"
+evidence = "<path>"
+
+[[role_evidence]]
+role     = "admin"
+journey  = "admin approve→LIVE / reject→REJECTED (reason required); rejected stays non-public"
+status   = "PASS"
+evidence = "<path>"
+
+# Add buyer_user / support_operator entries as the issue's role-scoped criteria require.
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# LISTING LIFECYCLE-STATE EVIDENCE  (PRODUCT-LEVEL, BINDING — for visibility criteria)
+# ──────────────────────────────────────────────────────────────────────────────────
+# Proves a listing in a given lifecycle state has the correct PUBLIC VISIBILITY.
+# `state` enum: draft | pending_review | unverified | approved_public | rejected |
+#               expired_archived | deleted   (approved_public == LIVE)
+# `public_visible` MUST be true ONLY for approved_public (LIVE); false for all others.
+# ══════════════════════════════════════════════════════════════════════════════════
+
+[[lifecycle_evidence]]
+state          = "draft"
+public_visible = false
+status         = "PASS"
+evidence       = "<path / assertion that a DRAFT listing is absent from public results/markers/counts>"
+
+[[lifecycle_evidence]]
+state          = "pending_review"
+public_visible = false
+status         = "PASS"
+evidence       = "<path>"
+
+[[lifecycle_evidence]]
+state          = "approved_public"   # LIVE
+public_visible = true
+status         = "PASS"
+evidence       = "<path / assertion that a LIVE listing appears in public results + markers>"
+
+[[lifecycle_evidence]]
+state          = "rejected"
+public_visible = false
+status         = "PASS"
+evidence       = "<path / assertion REJECTED is absent from public results AND rejectionReason not leaked>"
+
+[[lifecycle_evidence]]
+state          = "expired_archived"
+public_visible = false
+status         = "PASS"
+evidence       = "<path>"
+
+[[lifecycle_evidence]]
+state          = "deleted"
+public_visible = false
+status         = "PASS"
+evidence       = "<path>"
+
+# Add unverified entries if the issue distinguishes an UNVERIFIED state.
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# IMPLEMENTATION-LEVEL EVIDENCE  (CONTEXT ONLY — NOT binding for DoD)
+# ──────────────────────────────────────────────────────────────────────────────────
+# Useful context (unit/integration test counts, the deterministic preflight result),
+# but MUST NOT be the sole proof of a buyer-facing DoD criterion. A refactor may change
+# these without changing buyer behaviour. See discover.md testing.implementation_boundary.
+# ══════════════════════════════════════════════════════════════════════════════════
+
+[implementation_level.unit_tests]
+key       = "unit_tests"
+command   = "npm run test -- --run"
+exit_code = 0
+total     = 0
+status    = "PASS"                 # PASS | FAIL | NOT_RUN | NOT_REQUIRED
+notes     = "Context only. Logic-in-isolation; does NOT by itself prove a buyer journey."
+
+[implementation_level.preflight_validator]
+key       = "preflight_validator"
+script    = ".claude/scripts/verify-mode3-workdone.py"
+pass      = true
+checks_ok = 4                       # sha256 chain, routing-log, scope-lock, eval-checklist
+notes     = "Deterministic integrity anchor; consumed as already-verified, not re-run."
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# MISSING / UNAVAILABLE EVIDENCE
+# ──────────────────────────────────────────────────────────────────────────────────
+# Record any DoD-referenced evidence key that could NOT be captured, with a reason.
+# Any entry here drives the gate to NEEDS_MORE_EVIDENCE (NOT a silent pass) for the
+# criterion that required it.
+# ══════════════════════════════════════════════════════════════════════════════════
+
+[[missing_evidence]]
+key    = ""                         # e.g. "real_data_smoke_j3"
+reason = ""                         # e.g. "auth credentials unavailable in this environment"
+impact = ""                         # e.g. "DOD-2 -> NEEDS_MORE_EVIDENCE"

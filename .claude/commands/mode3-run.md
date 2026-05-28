@@ -211,3 +211,27 @@ For bug issues, the full Bugfix Fast Path (Principle, Phases B0–B5, BUG_REPRO_
 - `.claude/mode3/contracts/workdone-review.md` — Phase 6 terminal artefact + Phase 7C WORKDONE_REVIEW
 - `.claude/mode3/contracts/browser-validation.md` — Phase 7A/7B (load only for user-visible changes)
 - `.claude/mode3/contracts/closeout.md` — Phases 8–12 + stale-PR/branch safety policy
+
+## Definition-of-Done (DoD) autopilot review gate — FOUNDATION, DRY-RUN ONLY
+
+> **DRY-RUN ONLY.** A Definition-of-Done (DoD) autopilot review gate has been **designed**
+> (not wired) as a foundation for future trusted autonomous execution. In its current form
+> it would run as **Phase 9B** (after `PR_REVIEW` surfaces `APPROVED_TO_MERGE`, before the
+> user merge-approval halt) and emit a `WOULD_AUTOMERGE` verdict when an issue's DoD is
+> satisfied by captured evidence. **It performs no real merge, no PR-state update, and has
+> no side effects.** No executable wiring is added: `openai_gate.py` and
+> `verify-mode3-workdone.py` are unchanged.
+>
+> **DRY RUN — no merge has been or will be executed.**
+
+**`PR_REVIEW` approval is NOT merge approval.** A `PR_REVIEW: APPROVED_TO_MERGE` verdict —
+and likewise an `AUTOPILOT_DOD_REVIEW: WOULD_AUTOMERGE` verdict — means a gate found the PR
+eligible / the DoD satisfied. Neither authorizes a release command. Per CLAUDE.md §10, the
+run STOPS and asks the user for explicit approval before any `gh pr merge`.
+
+Foundation artefacts (docs/templates only — see issue #1273):
+
+- `.claude/product-truth/discover.md` — authoritative, implementation-independent buyer-facing product truth for Discover (DoD criteria reference its section anchors).
+- `.claude/autopilot/templates/definition-of-done.toml` — reusable per-issue DoD template (product-truth-anchored, machine-checkable pass/fail; `autopilot_merge = false`).
+- `.claude/autopilot/templates/evidence-packet.toml` — reusable evidence template (`dry_run = true`; product-level vs implementation-level evidence split; missing-evidence convention).
+- `.claude/autopilot/gates/AUTOPILOT_DOD_REVIEW.md` — the full gate DESIGN (purpose, inputs, decision schema, verdict enum incl. `WOULD_AUTOMERGE` + `DOD_NOT_MET` + indeterminate verdicts, Phase 9B placement, dry-run-only behaviour, and a clearly-marked out-of-scope future-wiring appendix).
