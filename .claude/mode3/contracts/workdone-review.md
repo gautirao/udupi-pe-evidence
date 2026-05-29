@@ -4,8 +4,14 @@
 
 ## Phase 6 — Wait for terminal artefact
 
-Lead polls `.claude/handoffs/issue-<N>/` for one of:
+Lead **acts on the WORKDONE_CANDIDATE_READY or BLOCKED notification** from the orchestrator (per `.claude/mode3/contracts/notifications.md`). This replaces open-ended polling. On receiving either notification, Lead reads the cited on-disk artefact immediately — the disk artefact is the authoritative terminal signal.
+
+**Bounded fallback polling** (if the notification is missed or delayed): if the expected WORKDONE_CANDIDATE_READY or BLOCKED notification does not arrive within the **stall window (default 10 minutes, or `executor.max_minutes` if smaller)**, Lead performs ONE authoritative disk reconciliation read of `.claude/handoffs/issue-<N>/`. Hard cap: **at most 3 reconciliation reads per phase**. After the 3rd read with no terminal artefact and no progress, Lead escalates STALL_DETECTED to the user and halts. See `.claude/mode3/contracts/notifications.md` for the full numeric bounds.
+
+On receipt of the WORKDONE_CANDIDATE_READY notification (or on finding `workdone-candidate.toml` via fallback reconciliation):
 - `workdone-candidate.toml` (success path) → continue to Phase 7A (browser validation runs before WORKDONE_REVIEW).
+
+On receipt of the BLOCKED notification (or on finding `blocked.toml` via fallback reconciliation):
 - `blocked.toml` (failure / safe halt) → **WORKDONE_REVIEW is NOT invoked** regardless of reason_code (a blocked run has no workdone-candidate to review). Lead's response depends on the code:
   - `RATE_LIMITED`, `TIMEBOX_EXCEEDED`, `TOOL_UNAVAILABLE`, `AGENT_TEAMS_UNAVAILABLE`, `REVIEW_FAILED`, `SECURITY_FAILED`, `REROUTE_LIMIT_EXCEEDED`, `INDEX_UNAVAILABLE`, `INDEX_STALE` → report to user; halt.
   - `OUT_OF_SCOPE`, `SCOPE_EXPANSION_REQUIRED` → these are typically prompt-injection or scope-drift halts. Route via SCOPE_CHANGE_REVIEW path; do NOT proceed to WORKDONE_REVIEW until scope is re-approved.

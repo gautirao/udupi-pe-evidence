@@ -72,7 +72,7 @@ Main Agent: PR / PR_REVIEW / merge gate / closeout / loop to next issue         
 | 3 | Main Agent | Team lifecycle (reuse — created in 0.2) | inline below |
 | 4 | Main Agent | Sentinel probe (already passed in 0.2) | inline below |
 | 5 | Team Lead | Real execution (routing log, choreography, reroute, QA/E2E gate) | `.claude/mode3/contracts/team-lead.md` |
-| 6 | Main Agent | Wait for terminal artefact | `.claude/mode3/contracts/workdone-review.md` |
+| 6 | Main Agent | Act on WORKDONE_CANDIDATE_READY / BLOCKED notification; bounded fallback per notifications.md | `.claude/mode3/contracts/workdone-review.md` + `.claude/mode3/contracts/notifications.md` |
 | 7A | Main Agent | Final Product Verification (browser) — user-visible changes | `.claude/mode3/contracts/browser-validation.md` |
 | 7B | Main Agent | Conditional Exploratory Product Sweep | `.claude/mode3/contracts/browser-validation.md` |
 | 7C | Main Agent | OpenAI WORKDONE_REVIEW (consumes 7A/7B evidence) | `.claude/mode3/contracts/workdone-review.md` |
@@ -118,6 +118,8 @@ Main Agent: PR / PR_REVIEW / merge gate / closeout / loop to next issue         
 7. `product-sweep.toml` — written by the exploratory specialist during Phase 7B (conditional exploratory product sweep) when its triggers fire. Authoritative; the lead reads it from disk to decide the gate outcome. Absent when Phase 7B is skipped.
 
 File artefacts are authoritative. SendMessage is for notifications only. Lead determines completion state by reading from disk.
+
+> **Notification flow:** The orchestrator sends proactive SendMessage notifications at phase boundaries and terminal/stall states (SPECIALIST_DONE, BLOCKED, WORKDONE_CANDIDATE_READY, STALL_DETECTED and others). Main Agent REACTS to these notifications; bounded fallback polling (stall window 10 min, max 3 reconciliation reads per phase) is a safety net only. Full 12-event catalogue, payload schema, dual-channel invariant, and numeric bounds: `.claude/mode3/contracts/notifications.md`.
 
 ---
 
@@ -211,6 +213,7 @@ For bug issues, the full Bugfix Fast Path (Principle, Phases B0–B5, BUG_REPRO_
 - `.claude/mode3/contracts/workdone-review.md` — Phase 6 terminal artefact + Phase 7C WORKDONE_REVIEW
 - `.claude/mode3/contracts/browser-validation.md` — Phase 7A/7B (load only for user-visible changes)
 - `.claude/mode3/contracts/closeout.md` — Phases 8–12 + stale-PR/branch safety policy
+- `.claude/mode3/contracts/notifications.md` — 12-event notification catalogue, payload schema, dual-channel invariant, bounded fallback polling (replaces open-ended Phase 6 polling)
 
 ## Definition-of-Done (DoD) autopilot review gate — FOUNDATION, DRY-RUN ONLY
 

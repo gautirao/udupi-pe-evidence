@@ -177,3 +177,33 @@ artefact: `<workdone-candidate.toml | blocked.toml>`
 path: `.claude/handoffs/issue-<N>/<artefact>`
 sha256: `<hex digest of the artefact>`
 notes: `<free-text>`
+
+---
+
+## <ISO-8601 timestamp> — NOTIFICATION
+# Dual-channel disk record for a SendMessage notification.
+# This block MUST be appended BEFORE the corresponding SendMessage is sent.
+# Schema defined in .claude/mode3/contracts/notifications.md.
+# Template: .claude/templates/notification.toml
+phase: notification
+
+[notification]
+event               = ""   # REQUIRED — one of the 12 enum names (PLAN_READY, PLAN_REVIEW_REQUIRED,
+                           #   PLAN_REVIEW_RESULT, SPECIALIST_STARTED, SPECIALIST_DONE, BLOCKED,
+                           #   WORKDONE_CANDIDATE_READY, WORKDONE_REVIEW_REQUIRED,
+                           #   PR_REVIEW_REQUIRED, USER_MERGE_APPROVAL_REQUIRED,
+                           #   STALL_DETECTED, RUN_COMPLETE)
+issue               = 0    # REQUIRED — integer issue number
+run_phase           = ""   # REQUIRED — Mode-3 phase string (e.g. "0.7", "5", "6", "10")
+from                = ""   # REQUIRED — "orchestrator" | "main-agent"
+to                  = ""   # REQUIRED — "main-agent" | "orchestrator" | "user"
+ts                  = ""   # REQUIRED — ISO-8601 UTC timestamp
+artefact            = ""   # REQUIRED — disk path to the authoritative backing artefact.
+                           # MUST be non-empty. A notification with no on-disk backing
+                           # artefact is invalid and MUST NOT be sent.
+detail              = ""   # REQUIRED — one-line human summary
+status              = ""   # OPTIONAL — verdict if applicable
+reason_code         = ""   # OPTIONAL — REQUIRED when event=BLOCKED
+specialist          = ""   # OPTIONAL — specialist name for SPECIALIST_STARTED/DONE
+next_expected_event = ""   # OPTIONAL — next event recipient should expect
+                           # (drives the bounded-fallback 10-min stall window)

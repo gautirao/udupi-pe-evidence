@@ -14,7 +14,11 @@ The Main Agent sends the Team Lead (orchestrator, already spawned in Phase 0.2) 
 2. **If BUG** → run the BUG_REPRO phase FIRST (see `.claude/mode3/contracts/bug-repro.md` → Phase B1 / BUG_REPRO_REPORT). The Team Lead writes `bug-repro-report.toml`. No `team-lead-plan.toml` is valid for a bug until repro `status` is `REPRODUCED`, or an OpenAI-approved exception is in hand (`NOT_REPRODUCED` → diagnostic/test/comment/follow-up only; `PARTIALLY_REPRODUCED` / `ENVIRONMENT_OR_DATA_DEPENDENT` / `EVIDENCE_BASED_NON_REPRO_FIX` → bounded path, OpenAI must approve before implementation).
 3. **Coordinate read-only investigation specialists** via `Task`: `explorer-planner` (repo/issue evidence), `architect` (design/architecture impact when the architecture gate triggers), `qa-fast` (pre-implementation risk). These produce evidence; they do not implement.
 4. **Author the implementation plan** at `.claude/handoffs/issue-<N>/team-lead-plan.toml` from specialist evidence: acceptance criteria (testable), `files.likely_change`, `forbidden`, the proposed specialist sequence, qa requirements (unit/e2e required or justified NOT_REQUIRED), risks, and (for bugs) the reproduction reference + smallest-safe-fix rationale.
-5. Notify the Main Agent via SendMessage that `team-lead-plan.toml` (and `bug-repro-report.toml` if a bug) is on disk. **File artefacts are authoritative.**
+5. Notify the Main Agent via SendMessage by sending two notifications in sequence, each backed by the corresponding on-disk artefact before the SendMessage is sent (dual-channel invariant per `.claude/mode3/contracts/notifications.md`):
+   - **PLAN_READY** — signals that `team-lead-plan.toml` (and `bug-repro-report.toml` if a bug) is on disk and readable.
+   - **PLAN_REVIEW_REQUIRED** — explicit request that the Main Agent submit the plan to OpenAI PLAN_REVIEW. Gate sequence unchanged; this only signals readiness.
+
+   Append a `## <ts> — NOTIFICATION` block (carrying the `[notification]` payload per the schema in `.claude/mode3/contracts/notifications.md`) to `team-lead-execution-log.md` for EACH notification BEFORE sending the SendMessage. **File artefacts are authoritative.**
 
 The Main Agent does NOT investigate the codebase to second-guess the plan (≤2-file verification-read budget still applies, only to resolve a specific discrepancy). The plan is the Team Lead's.
 
@@ -109,6 +113,23 @@ After specialist edits, Orchestrator calls `mcp__jcodemunch__index_file` for eac
 Token savings come from: (a) orchestration on Sonnet not Opus, (b) indexed-first navigation, (c) compact specialist prompts, (d) sending each specialist only relevant handoff + qa-fast findings + scope, (e) avoiding broad Reads, (f) avoiding context duplication.
 
 Token savings MUST NOT come from: (a) skipping qa-fast where required, (b) skipping qa verification, (c) skipping code-reviewer where required, (d) skipping security-reviewer where Gate F triggers, (e) weakening reroute loops, (f) weakening OpenAI gates, (g) collapsing qa-fast and qa into a single call.
+
+### Required orchestrator notifications (Phase 5)
+
+The orchestrator MUST send SendMessage notifications at the following phase-5 events. Each notification MUST be backed by a durable on-disk record appended to `team-lead-execution-log.md` as a `## <ts> — NOTIFICATION` block (the `[notification]` payload) BEFORE the SendMessage is sent. Full schema and payload fields: `.claude/mode3/contracts/notifications.md`.
+
+| Event | When to send | Required |
+|---|---|---|
+| SPECIALIST_STARTED | Each time a specialist is invoked via Task | informational |
+| SPECIALIST_DONE | Each time a specialist returns a terminal verdict (PASS/FAIL/APPROVE/REQUEST_CHANGES/BLOCKING_FINDINGS/NOT_REQUIRED) | **MUST-fire — not poll-only** |
+| BLOCKED | Any phase — immediately after writing `blocked.toml` | **MUST-fire — not poll-only** |
+| WORKDONE_CANDIDATE_READY | After writing `workdone-candidate.toml` (QA/E2E gate satisfied) | MUST-fire |
+| WORKDONE_REVIEW_REQUIRED | At Phase 6→7C boundary — candidate + QA/E2E evidence complete | MUST-fire |
+| STALL_DETECTED | When an expected next event has not occurred within the stall window | **MUST-fire — not poll-only** |
+
+**SPECIALIST_DONE, BLOCKED, and STALL_DETECTED are REQUIRED notifications — not optional, not poll-only.** Failing to send any of these is a procedural violation.
+
+**Dual-channel disk-record requirement:** Every O2M notification MUST have a corresponding `## <ts> — NOTIFICATION` entry in `team-lead-execution-log.md` written BEFORE the SendMessage. SendMessage is a notification pointer only; the disk record is the authoritative signal. If the SendMessage fails or is dropped, the disk record ensures the Main Agent can recover via bounded fallback polling (see `.claude/mode3/contracts/notifications.md`).
 
 ### Rate-limit and timebox
 

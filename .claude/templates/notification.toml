@@ -1,0 +1,36 @@
+# TEMPLATE — .claude/templates/notification.toml
+#
+# Reusable notification payload template for Mode-3 SendMessage notifications.
+# Schema defined in .claude/mode3/contracts/notifications.md.
+#
+# Usage:
+#   1. Copy this block into the SendMessage body.
+#   2. Append the IDENTICAL block to team-lead-execution-log.md as:
+#        ## <ts> — NOTIFICATION
+#        <paste block here>
+#      BEFORE sending the SendMessage (dual-channel invariant).
+#   3. Never send a notification without a non-empty artefact field.
+
+[notification]
+event               = ""   # REQUIRED — one of: PLAN_READY, PLAN_REVIEW_REQUIRED,
+                           #   PLAN_REVIEW_RESULT, SPECIALIST_STARTED, SPECIALIST_DONE,
+                           #   BLOCKED, WORKDONE_CANDIDATE_READY, WORKDONE_REVIEW_REQUIRED,
+                           #   PR_REVIEW_REQUIRED, USER_MERGE_APPROVAL_REQUIRED,
+                           #   STALL_DETECTED, RUN_COMPLETE
+issue               = 0    # REQUIRED — integer issue number
+run_phase           = ""   # REQUIRED — e.g. "0.7", "5", "6", "7C", "10"
+from                = ""   # REQUIRED — "orchestrator" | "main-agent"
+to                  = ""   # REQUIRED — "main-agent" | "orchestrator" | "user"
+ts                  = ""   # REQUIRED — ISO-8601 UTC timestamp (e.g. "2026-05-29T00:00:00Z")
+artefact            = ""   # REQUIRED — disk path to the authoritative backing artefact.
+                           # MUST be non-empty. A notification with no on-disk backing
+                           # artefact is invalid and MUST NOT be sent.
+detail              = ""   # REQUIRED — one-line human summary of the event
+status              = ""   # OPTIONAL — verdict if applicable
+                           #   (PASS | FAIL | APPROVE | REQUEST_CHANGES | BLOCKING_FINDINGS |
+                           #    NOT_REQUIRED | APPROVED | REVISION_REQUIRED | NEEDS_FIXES |
+                           #    APPROVED_FOR_PR | APPROVED_TO_MERGE)
+reason_code         = ""   # OPTIONAL — REQUIRED when event=BLOCKED; one of the 18 reason codes
+specialist          = ""   # OPTIONAL — specialist name (SPECIALIST_STARTED / SPECIALIST_DONE)
+next_expected_event = ""   # OPTIONAL — next event the recipient should expect
+                           # (drives the bounded-fallback 10-min stall window)
