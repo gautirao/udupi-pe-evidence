@@ -166,18 +166,130 @@ user-approval gate — it is **not** a merge-block and **not** a prohibition. Af
 change may still be approved and merged by the user; the gate simply refuses to *auto*-treat a
 self-governance change as done.
 
+### Security-sensitive product-path pre-filter (evaluated SECOND, before criterion roll-up)
+
+**This is the SECOND pre-filter — evaluated after the governance pre-filter above, and before
+the all-or-nothing roll-up below.** It is deliberately **not** a DoD `[[criterion]]`: if it
+were, it would be swept into the roll-up and surface as `DOD_NOT_MET`, which is the wrong
+verdict. It is a phase-entry short-circuit.
+
+**Evaluation ordering.** The two pre-filters are evaluated in strict sequence:
+1. Governance pre-filter (FIRST) — if it fires, `NEEDS_USER_DECISION` is emitted immediately
+   and the security pre-filter is **not reached**.
+2. Security pre-filter (SECOND) — evaluated only if the governance pre-filter did **not** fire.
+   If it fires, `NEEDS_USER_DECISION` is emitted and the roll-up is **not reached**.
+3. All-or-nothing criterion roll-up — evaluated only if **neither** pre-filter fires.
+
+If a PR happens to touch both a governance-sensitive path (e.g. `.claude/**`) and a
+security-sensitive product path (e.g. `backend/src/**/auth/**`), the governance pre-filter
+fires on step 1 and `NEEDS_USER_DECISION` is emitted — the security pre-filter is not
+separately evaluated. The ordering ensures `NEEDS_USER_DECISION` is always the outcome; no PR
+can slip through by matching only the second filter.
+
+**Rule.** If the PR diff touches **any** security-sensitive product path (see path list below)
+**or** exhibits **any** semantic risk signal (see signal list below), the gate emits
+`NEEDS_USER_DECISION` **immediately** and does not evaluate the DoD criteria. This holds
+**regardless of file type** — a docs-only or test-only diff that touches a security-sensitive
+product path still yields `NEEDS_USER_DECISION`, **even if every applicable DoD criterion would
+otherwise PASS**. **File-type (docs-only / test-only) classification alone cannot override the
+security check.** Happy-path buyer smoke passing does not prove public data exposure or secrets
+handling is safe.
+
+**Path matching is independently sufficient.** A file in a security-sensitive path list entry is
+presumed to warrant human review regardless of whether the specific change is superficial (e.g. a
+comment edit in `AuthService.java`) — analogous to how the governance pre-filter treats governance
+paths. Human review (not the gate) determines whether the actual risk is present.
+
+**Whole-PR scope.** The unit of evaluation is the whole PR diff. If **any** file in the diff
+matches a security-sensitive path or any semantic risk signal is detected, the **entire** PR
+routes to `NEEDS_USER_DECISION` — even if the same PR also touches non-security files.
+
+**Security-sensitive path list.** A path is security-sensitive if it matches any of:
+
+- `backend/src/**/auth/**` — auth services, filters, guards
+- `backend/src/**/security/**` — Spring Security configuration
+- `backend/src/**/Jwt*` — JWT token creation, validation, and filter classes
+- `backend/src/**/config/**` — security-relevant backend configuration (CORS, CSP,
+  session, rate-limiting, token settings)
+- `backend/src/**/controller/**` — controller classes (public endpoint and access-guard
+  changes are the primary risk; human review confirms)
+- `backend/src/**/dto/**` — DTO classes (public field projection and field-addition
+  changes are the primary risk; human review confirms)
+- `backend/src/**/listing/**` — listing-domain classes (visibility/status filtering and
+  LIVE vs non-LIVE logic are the primary risk; human review confirms)
+- `backend/src/main/resources/db/migration/**` — Flyway database migrations (schema,
+  data, permission, or role changes)
+- `backend/src/main/resources/db/supabase-rpcs/**` — Supabase RLS and storage policy definitions
+- `.env*` — any `.env` file variant (`.env`, `.env.local`, `.env.seed`, etc.)
+- `*.env*` — env file variants at any path depth
+- `.gitignore` — when the change affects how env files or secrets are tracked
+- `scripts/*seed*` — credential-using seed scripts
+- `scripts/*credential*` — credential-loading or secret-reading scripts
+
+**Not, by itself, security-sensitive (for this filter):** ordinary product and test code that
+touches **none** of the above paths and exhibits **none** of the semantic risk signals below.
+Those follow the normal all-or-nothing DoD roll-up and remain eligible for `WOULD_AUTOMERGE`
+when no governance path is touched.
+(Self-governance changes — `.claude/**`, `CLAUDE.md`, `AGENTS.md`, workflow scripts —
+are covered separately by the governance pre-filter above. Do not conflate the two.)
+
+**Semantic risk signals.** The gate also inspects diff content for the following behavioural
+signals. **Any one signal is independently sufficient to fire the pre-filter, regardless of
+which file it appears in** — a signal in a file not on the path list above still fires the
+pre-filter.
+
+These signals are **heuristic triggers for human judgment**, not disqualifying verdicts.
+A signal does not reject the PR; it routes to `NEEDS_USER_DECISION` so the human reviewer
+can confirm the change is safe. After human review the change may be approved and merged;
+the gate simply refuses to *auto*-treat a security-sensitive change as done without human
+eyes.
+
+Signal list:
+- New `permitAll()` or publicly-accessible endpoint added or changed
+- New or changed anonymous/public endpoint (no authentication guard)
+- Public DTO field addition or changed field projection on a public-facing DTO
+- Listing visibility/status filter change (LIVE vs non-LIVE filtering logic)
+- Credential, env, or secrets handling added or changed
+- Database migration (any new Flyway version script)
+- Destructive SQL (DROP, DELETE without a filtering predicate, TRUNCATE)
+- Supabase RLS or storage policy addition or change
+- Rate-limiting configuration change
+
+**Semantic signals are derived from product code being changed, not from test code.** A
+test file added under `e2e/**` or `**/*.spec.*` that exercises security-sensitive product
+behaviour does not itself trigger the pre-filter. The pre-filter fires only if the actual
+product code (auth service, endpoint, migration, RLS policy, etc.) is modified. A test-only
+PR covering security flows can still classify as `WOULD_AUTOMERGE` provided the product
+code it tests is not itself being changed.
+
+**Signal source + audit trail.** The gate derives the changed-path set from the PR diff (the
+same `git diff --name-only origin/main...HEAD` / approved-scope changed-files list the run
+already produces) and inspects diff content for semantic signals. When the pre-filter fires,
+the matched path(s) and/or detected signal(s) are recorded in the verdict `summary` (and
+may be carried in `dod_check`) so there is an audit trail of *why* the PR was escalated.
+
+**Still DRY-RUN ONLY.** The pre-filter adds **no** new verdict (it reuses the existing
+`NEEDS_USER_DECISION`), **no** new merge authority, and **no** side effect.
+`dod_check.dry_run_mode` stays `true`. `NEEDS_USER_DECISION` is a **halt-for-human-judgment**,
+consistent with the CLAUDE.md §10 user-approval gate — it is **not** a merge-block and
+**not** a prohibition. After human review the change may still be approved and merged by
+the user; the gate simply refuses to *auto*-treat a security-sensitive product change as
+done.
+
 ### Partial satisfaction rule (all-or-nothing)
 
-> Evaluated **only after** the governance-path pre-filter above does **not** fire. The
-> pre-filter short-circuits to `NEEDS_USER_DECISION` before this roll-up runs.
+> Evaluated **only after** BOTH the governance-path pre-filter **and** the
+> security-sensitive product-path pre-filter above do **not** fire. Either pre-filter
+> short-circuits to `NEEDS_USER_DECISION` before this roll-up runs.
 
 - `WOULD_AUTOMERGE` requires **every applicable criterion = PASS** *and* the governance-path
-  pre-filter did not fire.
+  pre-filter did not fire *and* the security-sensitive product-path pre-filter did not fire.
 - Any criterion = FAIL → `DOD_NOT_MET`.
 - Any criterion = INDETERMINATE (missing/absent evidence) → `NEEDS_MORE_EVIDENCE`.
 - Any criterion flagged `requires_human_judgment` that cannot be resolved from evidence, **or**
-  the governance-path pre-filter fired → `NEEDS_USER_DECISION` *(when the pre-filter fires this
-  roll-up is not reached at all; this bullet names the emitted verdict for completeness)*.
+  either the governance-path pre-filter **or** the security-sensitive product-path pre-filter
+  fired → `NEEDS_USER_DECISION` *(when either pre-filter fires this roll-up is not reached at
+  all; this bullet names the emitted verdict for completeness)*.
 
 A partial pass **never** yields `WOULD_AUTOMERGE`.
 
@@ -190,7 +302,7 @@ A partial pass **never** yields `WOULD_AUTOMERGE`.
 | `WOULD_AUTOMERGE` | Every applicable DoD criterion is PASS against captured evidence. | **Dry-run signal only.** Logged + surfaced to the user. **No merge, no PR update, no side effect.** Run still halts for explicit user merge approval. |
 | `DOD_NOT_MET` | One or more criteria failed (evidence shows the buyer-facing contract is not satisfied). | Surfaced; route back per Mode-3 failure handling. No merge. |
 | `NEEDS_MORE_EVIDENCE` | One or more criteria are indeterminate — a referenced artefact/flow is missing. | Surfaced; capture the missing evidence and re-evaluate. No merge. |
-| `NEEDS_USER_DECISION` | Either the **governance-path pre-filter fired** (the diff touches a governance-sensitive path — see [Governance-path pre-filter](#governance-path-pre-filter-evaluated-first-before-any-criterion)), **or** a criterion needs human judgment (e.g. an ambiguous visual outcome). | Surfaced to the user for a decision. No merge. |
+| `NEEDS_USER_DECISION` | Either the **governance-path pre-filter fired** (diff touches a governance-sensitive path — see [Governance-path pre-filter](#governance-path-pre-filter-evaluated-first-before-any-criterion)), **or** the **security-sensitive product-path pre-filter fired** (diff touches a security-sensitive product path or exhibits a semantic risk signal — see [Security-sensitive product-path pre-filter](#security-sensitive-product-path-pre-filter-evaluated-second-before-criterion-roll-up)), **or** a criterion needs human judgment (e.g. an ambiguous visual outcome). | Surfaced to the user for a decision. No merge. |
 
 `WOULD_AUTOMERGE` names a **future** capability. The word "automerge" describes what an
 autonomous system *would* do once real wiring exists and is separately approved; it is
@@ -222,6 +334,29 @@ roll-up:
    missing a required buyer-journey artefact. The pre-filter does not fire (no governance path); the
    roll-up finds an INDETERMINATE criterion, so the gate emits `NEEDS_MORE_EVIDENCE` — not
    `WOULD_AUTOMERGE`.
+
+4. **#1262-style public/anonymous endpoint exposure PR → `NEEDS_USER_DECISION`.** A PR that
+   changes the anonymous school-radius frontend flow to call a new public backend endpoint, or
+   that adds a new `permitAll()` endpoint, or that changes a public DTO field projection, or
+   that modifies listing visibility / LIVE vs non-LIVE filtering logic. The security-sensitive
+   product-path pre-filter fires on the semantic risk signal (new public/anonymous endpoint, or
+   public DTO change, or LIVE-vs-non-LIVE filter change). The gate emits `NEEDS_USER_DECISION`
+   immediately — **even if happy-path buyer smoke passes and every DoD criterion would otherwise
+   be met**. `WOULD_AUTOMERGE` is unreachable for this PR. Happy-path buyer smoke does not prove
+   that public data exposure or private field leakage is safe; human review confirms it is.
+
+5. **#1266-style secrets/env handling PR → `NEEDS_USER_DECISION`.** A PR that changes a seed
+   script, `.env.seed.example`, or `.gitignore` in a way that affects env or secrets tracking.
+   The security-sensitive product-path pre-filter fires on the **path match** (`.env*`,
+   `.gitignore`, `scripts/*seed*`). The gate emits `NEEDS_USER_DECISION` immediately —
+   **even though file-type classification might see scripts/docs and classify the diff as
+   non-product code**. File-type classification alone cannot override the security check.
+   `WOULD_AUTOMERGE` is unreachable for this PR.
+
+   *(Examples 1–3 are **unchanged**. Example 2 in particular — a test-only non-governance PR →
+   `WOULD_AUTOMERGE` — remains correct: a PR touching only `e2e/**` and no security-sensitive
+   product path, and exhibiting no semantic risk signal, still yields `WOULD_AUTOMERGE`.
+   Semantic signals are derived from product code changes, not from test file additions.)*
 
 ---
 
