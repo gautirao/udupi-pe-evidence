@@ -141,3 +141,64 @@ Exact counts vary by seed.
 Never use the `[PERF]` prefix in real listing titles. The cleanup command
 deletes **all** rows matching `title LIKE '[PERF]%'` without further
 discrimination. A real listing with this prefix will be deleted during cleanup.
+
+---
+
+## Running the EXPLAIN Harness
+
+After generating a dataset with `gen_perf_listings.py`, run the EXPLAIN ANALYZE harness to capture Postgres query plans.
+
+### Prerequisites
+
+- Python 3.11+
+- `psycopg2-binary` installed (`pip install -r scripts/requirements-perf.txt`)
+- A Postgres database with PostGIS and pgcrypto extensions
+- At least one populated `cities` row with slug `udupi` and associated `areas` rows
+- `PERF_DB_URL` environment variable set
+
+### Step 1: Generate a dataset
+
+```bash
+python scripts/gen_perf_listings.py --count=10000 --seed=42 --db-url=$PERF_DB_URL
+```
+
+### Step 2: Run the harness
+
+```bash
+# Run all 8 query paths at 10k volume
+python scripts/run_explain_harness.py --volume=10k --db-url=$PERF_DB_URL
+
+# Run a single query path
+python scripts/run_explain_harness.py --volume=10k --query=QP-1c --db-url=$PERF_DB_URL
+
+# Dry run: print SQL without connecting to DB
+python scripts/run_explain_harness.py --dry-run
+```
+
+### Step 3: Review results
+
+Results are written to `docs/audit/evidence/explain/live/<volume>/`.
+
+Fill in `docs/audit/query-baseline-report.md` from the harness summary output.
+
+### Step 4: Compare at larger volumes
+
+To compare query plans at different data volumes:
+
+```bash
+# 10k
+python scripts/gen_perf_listings.py --count=10000 --seed=42 --db-url=$PERF_DB_URL
+python scripts/run_explain_harness.py --volume=10k --db-url=$PERF_DB_URL
+python scripts/gen_perf_listings.py --cleanup --confirm-delete-generated --db-url=$PERF_DB_URL
+
+# 100k
+python scripts/gen_perf_listings.py --count=100000 --seed=42 --db-url=$PERF_DB_URL
+python scripts/run_explain_harness.py --volume=100k --db-url=$PERF_DB_URL
+python scripts/gen_perf_listings.py --cleanup --confirm-delete-generated --db-url=$PERF_DB_URL
+```
+
+### Safety
+
+This script is **read-only**. It runs all EXPLAIN queries in a `READ ONLY` transaction that is rolled back. It never modifies application data.
+
+**Only use against LOCAL or STAGING databases. Never use against production.**

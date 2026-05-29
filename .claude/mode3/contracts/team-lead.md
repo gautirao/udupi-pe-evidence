@@ -3,6 +3,8 @@
 > Loaded for Phase 0.7 (investigation + plan authoring) and Phase 5 (execution). Companion agent definition: `.claude/agents/mode3-orchestrator.md` (the spawned teammate's own instructions). This contract is the command-side view; it does not redefine the orchestrator agent. Semantics unchanged from the original `mode3-run.md`.
 
 > **The "Team Lead" (execution owner) in this workflow is the `mode3-orchestrator` teammate.** The literal `team-lead.md` subagent was retired for Mode-3 (subagents cannot call `Task`). Wherever Mode-3 docs say "Team Lead", it means the spawned `mode3-orchestrator` teammate. The Team Lead owns investigation, the implementation plan, and execution. The Main Agent is the gate dispatcher and PR/closeout coordinator (see `.claude/mode3/contracts/main-agent.md`).
+>
+> **CRITICAL:** The orchestrator MUST be spawned with `mode: "auto"` (Phase 0.2 in `.claude/commands/mode3-run.md` line 147) so that it can invoke tools without blocking on permission prompts. Without `mode: "auto"`, the orchestrator hangs during Phase 0.7 investigation waiting for user approval on tool calls, causing a STALL_DETECTED halt.
 
 ---
 
