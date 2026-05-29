@@ -81,7 +81,8 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 
 | ID | Source | Description | Risk | Added |
 |----|--------|-------------|------|-------|
-| _(none yet)_ | | | | |
+| I-1 | #1250 | **`test_gen_perf_listings.py` coordinate bounds too loose** — Test 2 asserts lat∈[11,18], lon∈[73,79] but clusters span only [12.82–13.67°N, 74.64–77.64°E]. A misconfigured cluster center (wrong sign, transposed lat/lon) would not be caught. Tighten to: `assert 12.7 <= lat <= 13.8` and `assert 74.5 <= lon <= 77.7`. | Low | 2026-05-29 |
+| I-2 | #1250 | **`gen_perf_listings.py:72` comment references V61 migration** for property_type CHECK constraint. Verify V61 is still the correct migration (Flyway ceiling is V80; V65 is absent). Update comment if needed. | Very low | 2026-05-29 |
 
 ---
 
