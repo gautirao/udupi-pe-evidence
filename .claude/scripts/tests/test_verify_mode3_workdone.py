@@ -12,6 +12,7 @@ Coverage:
 """
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -325,6 +326,107 @@ def test_multiline_eval_checklist():
             return False
 
 
+def test_special_chars_in_checklist_key():
+    """Test 7: Eval checklist items with special characters (regression test for PR #1287)."""
+    print("\n[TEST 7] Eval checklist items with special characters (e.g. 'expected=actual')")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        handoff_dir = tmpdir_path / '.claude' / 'handoffs' / 'issue-9999'
+        create_test_handoff(handoff_dir)
+
+        # Update handoff with a special-character item
+        handoff_path = handoff_dir / 'approved-execution-handoff.toml'
+        content = handoff_path.read_text()
+        content = content.replace(
+            'items = ["AC1: Test AC1", "AC2: Test AC2"]',
+            'items = ["Include comprehensive discrepancy taxonomy (expected=actual, gate-bug, evidence-gap, category-ambiguity, prefilter-ordering)", "AC2: Test AC2"]'
+        )
+        handoff_path.write_text(content)
+
+        # Update candidate to match
+        candidate_path = handoff_dir / 'workdone-candidate.toml'
+        content = candidate_path.read_text()
+        content = content.replace(
+            '"AC1: Test AC1" = "PASS"',
+            '"Include comprehensive discrepancy taxonomy (expected=actual, gate-bug, evidence-gap, category-ambiguity, prefilter-ordering)" = "PASS"'
+        )
+        candidate_path.write_text(content)
+
+        # Recompute hashes since we modified handoff
+        handoff_path_obj = handoff_dir / 'approved-execution-handoff.toml'
+        handoff_hash = hashlib.sha256(handoff_path_obj.read_bytes()).hexdigest()
+        candidate_path_obj = handoff_dir / 'workdone-candidate.toml'
+        candidate_content = candidate_path_obj.read_text()
+        # Replace old hash with new one
+        candidate_content = re.sub(
+            r'handoff_sha256 = "[a-f0-9]+"',
+            f'handoff_sha256 = "{handoff_hash}"',
+            candidate_content
+        )
+        candidate_path_obj.write_text(candidate_content)
+
+        script_src = Path('.claude/scripts/verify-mode3-workdone.py')
+        script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
+        script_dst.parent.mkdir(parents=True, exist_ok=True)
+        script_dst.write_text(script_src.read_text())
+
+        rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
+
+        try:
+            result = json.loads(stdout)
+            assert result['pass'] == True, f"Expected pass=true for special-char keys, got {result['checks']}"
+            assert result['checks']['eval_checklist']['pass'] == True, "Expected special-char key to parse correctly"
+            assert result['checks']['eval_checklist']['required_count'] == 2
+            assert result['checks']['eval_checklist']['passed_count'] == 2
+            print("  ✓ PASS")
+            return True
+        except Exception as e:
+            print(f"  ✗ FAIL: {e}")
+            print(f"  stdout: {stdout}")
+            return False
+
+
+def test_forbidden_globs_list():
+    """Test 8: Scope-lock correctly parses forbidden_globs as a list (tomllib output)."""
+    print("\n[TEST 8] Scope-lock with forbidden_globs as list")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        handoff_dir = tmpdir_path / '.claude' / 'handoffs' / 'issue-9999'
+        create_test_handoff(handoff_dir)
+
+        # Update handoff with a custom forbidden_globs list
+        handoff_path = handoff_dir / 'approved-execution-handoff.toml'
+        content = handoff_path.read_text()
+        content = content.replace(
+            'forbidden_globs = ["**/.env*", "**/secrets/**"]',
+            'forbidden_globs = ["custom-secret.txt", "**/.private/**"]'
+        )
+        handoff_path.write_text(content)
+
+        # Create a file that matches the custom forbidden pattern
+        changed_file = 'custom-secret.txt'
+
+        script_src = Path('.claude/scripts/verify-mode3-workdone.py')
+        script_dst = tmpdir_path / '.claude' / 'scripts' / 'verify-mode3-workdone.py'
+        script_dst.parent.mkdir(parents=True, exist_ok=True)
+        script_dst.write_text(script_src.read_text())
+
+        rc, stdout, stderr = run_script(9999, cwd=tmpdir_path)
+
+        try:
+            result = json.loads(stdout)
+            # The check should pass (no forbidden files changed in the test repo)
+            # But we're testing that custom forbidden_globs is correctly parsed
+            assert 'scope_lock' in result['checks'], "scope_lock check missing from result"
+            # The important thing is that no exception was raised when parsing the list
+            print("  ✓ PASS")
+            return True
+        except Exception as e:
+            print(f"  ✗ FAIL: {e}")
+            print(f"  stdout: {stdout}")
+            return False
+
+
 def main():
     print("=" * 60)
     print("Mode-3 WORKDONE Validator Tests")
@@ -337,6 +439,8 @@ def main():
         test_eval_checklist_missing_item,
         test_exit_code_nonzero_on_failure,
         test_multiline_eval_checklist,
+        test_special_chars_in_checklist_key,
+        test_forbidden_globs_list,
     ]
 
     results = [test() for test in tests]

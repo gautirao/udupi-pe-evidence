@@ -21,61 +21,22 @@ import subprocess
 import sys
 import re
 import fnmatch
+import tomllib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-def load_toml_simple(path: Path) -> Dict[str, Any]:
-    """Load TOML file using regex; no external deps. Returns parsed dict."""
+def load_toml_file(path: Path) -> Dict[str, Any]:
+    """Load TOML file using tomllib. Returns parsed dict; raises on TOML errors."""
     if not path.exists():
         return {}
-
-    content = path.read_text(encoding='utf-8')
-    result = {}
-
-    # Simple TOML parser: extract top-level keys and nested tables
-    current_section = None
-    current_table = {}
-
-    for line in content.split('\n'):
-        line = line.strip()
-
-        # Skip comments and empty lines
-        if not line or line.startswith('#'):
-            continue
-
-        # Section header: [section] or [section.subsection]
-        if line.startswith('[') and line.endswith(']'):
-            if current_section and current_table:
-                result[current_section] = current_table
-            current_section = line[1:-1]
-            current_table = {}
-            continue
-
-        # Key-value pairs
-        if '=' in line and not line.startswith('['):
-            try:
-                key, val = line.split('=', 1)
-                key = key.strip().strip('"\'')
-                val = val.strip()
-
-                # Strip quotes
-                if val.startswith('"') and val.endswith('"'):
-                    val = val[1:-1]
-                elif val.startswith("'") and val.endswith("'"):
-                    val = val[1:-1]
-
-                if current_section:
-                    current_table[key] = val
-                else:
-                    result[key] = val
-            except Exception:
-                pass
-
-    if current_section and current_table:
-        result[current_section] = current_table
-
-    return result
+    try:
+        with open(path, 'rb') as f:
+            return tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ValueError(f"TOML decode error in {path.name} at line {e.lineno}, col {e.colno}: {e.msg}")
+    except Exception as e:
+        raise ValueError(f"Failed to read {path.name}: {str(e)}")
 
 
 def compute_sha256(path: Path) -> Optional[str]:
@@ -111,7 +72,11 @@ def check_sha256_chain(handoff_path: Path, candidate_path: Path, plan_path: Path
 
     # Check 1: handoff sha256
     handoff_hash = compute_sha256(handoff_path)
-    candidate_toml = load_toml_simple(candidate_path)
+    try:
+        candidate_toml = load_toml_file(candidate_path)
+    except ValueError as e:
+        details.append(f"Failed to parse {candidate_path.name}: {str(e)[:150]}")
+        return False, details
     # Look for handoff_sha256 in top-level or [handoff] section
     candidate_handoff_sha = candidate_toml.get('handoff_sha256', None)
     if not candidate_handoff_sha and 'handoff' in candidate_toml:
@@ -129,7 +94,11 @@ def check_sha256_chain(handoff_path: Path, candidate_path: Path, plan_path: Path
 
     # Check 2: plan sha256
     plan_hash = compute_sha256(plan_path)
-    handoff_toml = load_toml_simple(handoff_path)
+    try:
+        handoff_toml = load_toml_file(handoff_path)
+    except ValueError as e:
+        details.append(f"Failed to parse {handoff_path.name}: {str(e)[:150]}")
+        return False, details
     # Look for approved_plan_sha256 in top-level or nested sections
     handoff_plan_sha = handoff_toml.get('approved_plan_sha256', None)
     if not handoff_plan_sha:
@@ -179,7 +148,11 @@ def check_routing_decision_log(log_path: Path, candidate_path: Path, handoff_pat
         return False, details
 
     # Check that workdone-candidate has a routing_decision_log section
-    candidate_toml = load_toml_simple(candidate_path)
+    try:
+        candidate_toml = load_toml_file(candidate_path)
+    except ValueError as e:
+        details.append(f"Failed to parse {candidate_path.name}: {str(e)[:150]}")
+        return False, details
     if 'routing_decision_log' not in candidate_toml and 'routing_decision_summary' not in candidate_toml:
         # Per contract (workdone-review.md:35), routing_decision_log section must exist and match the log
         details.append("routing_decision_log section missing from workdone-candidate.toml (required by contract)")
@@ -228,21 +201,21 @@ def check_scope_lock(base_ref: str, issue: int, handoff_path: Path) -> Tuple[boo
         return True, details, [], []
 
     # Parse handoff for forbidden globs
-    handoff_toml = load_toml_simple(handoff_path)
+    try:
+        handoff_toml = load_toml_file(handoff_path)
+    except ValueError as e:
+        details.append(f"Failed to parse {handoff_path.name}: {str(e)[:150]}")
+        return False, details, changed_files, violations
     forbidden_patterns = []
 
-    # First: extract forbidden_globs from handoff (if machine-readable)
-    forbidden_globs_str = handoff_toml.get('forbidden_globs', '')
-    if not forbidden_globs_str and 'executor' in handoff_toml and isinstance(handoff_toml['executor'], dict):
-        forbidden_globs_str = handoff_toml['executor'].get('forbidden_globs', '')
+    # Extract forbidden_globs from handoff (tomllib returns it as a list, not a string)
+    forbidden_globs = handoff_toml.get('forbidden_globs', None)
+    if not forbidden_globs and 'executor' in handoff_toml and isinstance(handoff_toml['executor'], dict):
+        forbidden_globs = handoff_toml['executor'].get('forbidden_globs', None)
 
-    # Parse TOML array string like "["**/.env*", "**/secrets/**"]"
-    if forbidden_globs_str:
-        try:
-            extracted = re.findall(r'"([^"]+)"', forbidden_globs_str)
-            forbidden_patterns.extend(extracted)
-        except Exception:
-            pass
+    # forbidden_globs is now a list (parsed by tomllib), not a string
+    if forbidden_globs and isinstance(forbidden_globs, list):
+        forbidden_patterns.extend(forbidden_globs)
 
     # If no forbidden globs in handoff, use defensive defaults
     if not forbidden_patterns:
@@ -275,6 +248,8 @@ def check_eval_checklist(handoff_path: Path, candidate_path: Path) -> Tuple[bool
     - approved-execution-handoff.toml [eval_checklist].items
     - workdone-candidate.toml [eval_checklist_result]
 
+    Uses proper TOML parsing (tomllib) to handle special characters in keys.
+
     Returns: (pass, details, required_count, passed_count)
     """
     details = []
@@ -287,65 +262,49 @@ def check_eval_checklist(handoff_path: Path, candidate_path: Path) -> Tuple[bool
         details.append(f"workdone-candidate.toml not found: {candidate_path}")
         return False, details, 0, 0
 
-    # Parse eval_checklist from handoff
-    handoff_content = handoff_path.read_text(encoding='utf-8')
-    handoff_section = False
-    checklist_items = []
-    array_buffer = ""
-    in_array = False
+    # Parse eval_checklist from handoff using tomllib
+    try:
+        with open(handoff_path, 'rb') as f:
+            handoff_toml = tomllib.load(f)
 
-    for line in handoff_content.split('\n'):
-        if '[eval_checklist]' in line:
-            handoff_section = True
-            continue
-        if handoff_section and line.startswith('['):
-            break
-        if handoff_section and 'items' in line and '[' in line:
-            in_array = True
-            array_buffer = line[line.index('['):]
-            # If closing bracket is on same line, we're done
-            if ']' in array_buffer:
-                checklist_items = re.findall(r'"([^"]+)"', array_buffer)
-                break
-        elif in_array:
-            array_buffer += " " + line.strip()
-            if ']' in array_buffer:
-                checklist_items = re.findall(r'"([^"]+)"', array_buffer)
-                break
+        checklist_items = []
+        if 'eval_checklist' in handoff_toml and isinstance(handoff_toml['eval_checklist'], dict):
+            items_field = handoff_toml['eval_checklist'].get('items', [])
+            if isinstance(items_field, list):
+                checklist_items = items_field
 
-    if not checklist_items:
-        # Fall back: look for inline array comments
-        details.append("not_machine_verifiable: eval_checklist items format not recognized")
-        return True, details, 0, 0
+        if not checklist_items:
+            details.append("not_machine_verifiable: eval_checklist items not found or not a list")
+            return True, details, 0, 0
+    except Exception as e:
+        details.append(f"Error parsing handoff TOML: {str(e)[:100]}")
+        return False, details, 0, 0
 
-    # Parse eval_checklist_result from candidate
-    candidate_content = candidate_path.read_text(encoding='utf-8')
-    candidate_section = False
-    result_items = {}
-    for line in candidate_content.split('\n'):
-        if '[eval_checklist_result]' in line:
-            candidate_section = True
-            continue
-        if candidate_section and line.startswith('['):
-            break
-        if candidate_section and '=' in line:
-            # Parse "item_name = PASS" format
-            parts = line.split('=', 1)
-            if len(parts) == 2:
-                key = parts[0].strip().strip('"\'')
-                val = parts[1].strip().strip('"\'').upper()
-                result_items[key] = val
+    # Parse eval_checklist_result from candidate using tomllib
+    try:
+        with open(candidate_path, 'rb') as f:
+            candidate_toml = tomllib.load(f)
 
-    # Check coverage
+        result_items = {}
+        if 'eval_checklist_result' in candidate_toml and isinstance(candidate_toml['eval_checklist_result'], dict):
+            result_items = candidate_toml['eval_checklist_result']
+    except Exception as e:
+        details.append(f"Error parsing candidate TOML: {str(e)[:100]}")
+        return False, details, 0, 0
+
+    # Check coverage: each item in checklist must have a PASS status in result_items
     required_count = len(checklist_items)
     passed_count = 0
     for item in checklist_items:
-        # Normalize: strip quotes, collapse whitespace
-        normalized_item = item.strip().strip('"\'')
-        if normalized_item in result_items and result_items[normalized_item].startswith('PASS'):
-            passed_count += 1
+        # item is the exact string from TOML
+        if item in result_items:
+            val = str(result_items[item]).upper()
+            if val.startswith('PASS'):
+                passed_count += 1
+            else:
+                missing.append(item)
         else:
-            missing.append(normalized_item)
+            missing.append(item)
 
     if missing:
         details.append(f"Eval checklist items not marked PASS: {', '.join(missing[:3])}")
