@@ -970,3 +970,18 @@ If `Engineer materialization` is not `PASS` for Normal or High-risk code tasks, 
 - If `qa-fast: SKIPPED(Lean — ...)`: the cited `qa-risk:` entry MUST exist verbatim in `Sprint-level conventions` at the time of skip. A skip citing an entry that does not exist in the checkpoint is an INVALID record.
 - If `code-reviewer: APPROVE` but ADVISORY-FIX-STYLE items were deferred: those items MUST appear in TECH_DEBT.md at commit time. An APPROVE with undocumented deferred style items is an incomplete record.
 - If `budget_exceeded` is absent: actual agent count must be ≤ mode ceiling. If reviewer finds more agents ran than the ceiling permits without this field, flag as compliance gap.
+
+---
+
+## Model tiering & escalation (authoritative: `.claude/MODEL_TIERING_AND_ESCALATION.md`)
+
+Model-tier selection and escalation are **owned by the orchestration layer**, not by the subagent doing the work. Summary (full policy in the linked doc):
+
+- **Tiers:** `haiku` (bounded search/inspection, smoke checks, mechanical reports) · `sonnet` (normal implementation, focused review, QA interpretation) · `opus` (architecture, broad refactor, ambiguous cross-file root cause, workflow/gate-policy, security-sensitive, merge-risk, unresolved Sonnet escalations). Each agent declares its default tier in `model:` frontmatter.
+- **No self-escalation:** a subagent never raises its own model and never spawns agents. When its tier/scope is insufficient it stops and returns `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`).
+- **Escalation at delegation boundaries only:** the Orchestrator may apply documented overrides (`code-reviewer`/`security-reviewer`→opus for high-risk; route ambiguity to `architect`); any other opus/expensive use needs Main-Agent (and where convention requires, USER_DECISION / ChatGPT gate) approval. No silent model switch — a model that cannot route writes `blocked.toml`.
+- **Ownership:** Main Agent owns escalation approval for architectural/policy/high-risk/expensive work; the Team Lead / Orchestrator owns per-call routing + tier within its boundary; the subagent owns bounded execution + evidence only.
+- **Parallelism:** default max parallel subagents = 1; 2 only for clearly independent read-only investigations; 3+ needs Main-Agent approval. No recursive spawning.
+- **MCP/context + compact:** targeted jCodemunch use, summarise to compact evidence, and compact/checkpoint after PLAN_REVIEW approval, each substantial evidence return, large MCP output, before WORKDONE_REVIEW, and on planning→execution / issue switches.
+
+This section preserves existing gates and the existing `code-reviewer.md` opus-override; it makes the rule explicit and auditable. It does not weaken PLAN_REVIEW, WORKDONE_REVIEW, PR_REVIEW, code-reviewer, security-reviewer, QA, or E2E.

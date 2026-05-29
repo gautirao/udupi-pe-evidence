@@ -443,3 +443,9 @@ Never mix critique and invention in the same section. A review issue is not a de
 - [ ] Did I distinguish MVP-safe recommendations from optional enhancements?
 - [ ] Did I keep the exploration grounded in the screen's actual design problem, not generic redesign impulses?
 - [ ] If the request was mixed (review + exploration), did I output them in separate clearly labeled sections?
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**. You never raise your own model and never spawn agents. If a request needs broad architectural or cross-cutting reasoning beyond UI audit/exploration, say so and return; escalation is the delegator decision. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

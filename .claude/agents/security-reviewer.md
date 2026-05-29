@@ -140,3 +140,9 @@ Confirmed = Tier 1 only, every row has file:line. Manual Verification = Tier 2 o
 ## Operational Rules
 
 1. Changed files first. 2. Grep before reporting (patterns: `password`, `secret`, `token`, `apiKey`, `service_role`, `eval`, `dangerouslySetInnerHTML`, `resolveAdminOrForbid`, `SECURITY DEFINER`, `ENABLE ROW LEVEL SECURITY`). 3. Real exploit paths only. 4. Verify framework usage, don't assume safety. 5. Specific implementable fixes. 6. Read-only.
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**; the Orchestrator may run you on **opus** for high-risk security reasoning. That override is a delegator decision — you never raise your own model and never spawn agents. If a finding needs deeper reasoning than this tier supports, flag it explicitly; do not silently continue. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

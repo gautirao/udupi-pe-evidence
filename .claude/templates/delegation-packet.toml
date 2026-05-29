@@ -1,0 +1,26 @@
+# Template: delegation packet (delegator → subagent)
+#
+# Shape for every delegation (Orchestrator → specialist, or team-lead Mode-2
+# subtask). Encodes the cost-control invariant in
+# .claude/MODEL_TIERING_AND_ESCALATION.md §0/§8:
+#   - model_tier is chosen by the DELEGATOR (default = the agent's frontmatter tier)
+#   - can_escalate_model / can_spawn_subagents default false for every subagent
+#
+# In /mode3-run the binding scope contract remains approved-execution-handoff.toml
+# and its [authority] flags; this packet documents the per-call delegation shape
+# and does not replace handoff integrity checks.
+
+task_id          = "short-id"
+agent            = "agent-name"
+model_tier       = "default"   # haiku | sonnet | opus | default (= agent frontmatter tier)
+scope            = "strict bounded scope"
+files_allowed    = ["file1", "file2"]
+files_forbidden  = []
+objective        = "exact outcome expected"
+non_goals        = ["what not to do"]
+allowed_tools    = []          # if applicable
+max_parallelism  = 1
+can_spawn_subagents = false
+can_escalate_model  = false
+return_format    = "RESULT"    # RESULT | BLOCKED | ESCALATION_REQUIRED
+evidence_required = ["tests", "diff summary", "files inspected"]

@@ -86,3 +86,9 @@ ROUTE_AND_RUN_WARNING: HIGH|MED|LOW <message>
 ## Rules
 
 1. Read-only. 2. Specific over generic — tie every concern to visible code. 3. Be fast — produce sections and stop; note follow-ups in Risks. 4. Token discipline — fewer high-value bullets over padded lists.
+
+---
+
+## Model tier & escalation
+
+Default tier: **haiku** — cheap, read-only, fast. You never raise your own model and never spawn agents. If a risk scan surfaces something you cannot safely assess on this tier, stop and return `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`) with `recommended_next_agent` / `recommended_model_tier` — do not guess on a bigger model. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

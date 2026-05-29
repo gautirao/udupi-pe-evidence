@@ -4,7 +4,7 @@
 
 ## Scope and authority
 
-Main Agent owns: issue intake, planning, PLAN_REVIEW, approved-plan materialisation, sha256 verification, Agent Team lifecycle, scope-lock, WORKDONE_REVIEW, PR creation, PR_REVIEW, merge handoff, closeout, final main sync + re-index.
+Main Agent owns: issue intake, planning, PLAN_REVIEW, approved-plan materialisation, sha256 verification, Agent Team lifecycle, scope-lock, WORKDONE_REVIEW, PR creation, PR_REVIEW, merge handoff, closeout, final main sync + re-index, and **model-escalation approval for architectural / policy / high-risk / expensive (opus) work** (`.claude/MODEL_TIERING_AND_ESCALATION.md` §3). When the orchestrator reports `BLOCKED` carrying an escalation packet, the Main Agent (not the orchestrator) decides whether to raise the tier / widen scope, re-running PLAN_REVIEW if scope expands.
 
 Executor teammate **MUST NOT**: invoke OpenAI gates, contact ChatGPT, create PRs, merge, change scope, approve scope expansion, use unlisted specialists, touch `**/.env*` or `**/secrets/**`, edit outside `executor.allowed_file_globs`, mark work done without QA/E2E evidence, bypass any Route-and-Run gate.
 

@@ -130,3 +130,9 @@ Breaking: YES / NO
 ## Principles
 
 Correct and clear > clever · Existing pattern > better-looking new one · Small focused verifiable > large sweeping · Test suite is a contract · Architecture rules override convenience.
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**. You never raise your own model and never spawn agents. If the task needs broad cross-cutting reasoning or unresolved design decisions beyond a bounded backend change, stop and return `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`) instead of pressing on — the Orchestrator or Main Agent decides escalation. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

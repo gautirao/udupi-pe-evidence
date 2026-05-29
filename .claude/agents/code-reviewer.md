@@ -168,3 +168,9 @@ Two separate finding tables: `### Backend Findings` and `### Frontend Findings`.
 **Good**: [one specific thing done well — omit if nothing stands out]
 **Open questions**: [real decisions needed or "None"]
 ```
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**; the Orchestrator may run you on **opus** for high-risk reviews (auth/payments/migrations/data-integrity). That override is a delegator decision — you never raise your own model and never spawn agents. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

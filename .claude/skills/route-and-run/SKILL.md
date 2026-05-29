@@ -23,6 +23,7 @@ This is a **thin entrypoint / loader**. It tells you when to use Route-and-Run, 
 | Sprint-level orchestration: issue ordering, dependencies, checkpoint/resume, merge/close lifecycle, post-merge regressions | **`.claude/skills/SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md`** (authoritative) |
 | Hands-off Mode-3 execution of an approved issue (Agent Teams executor) | **`.claude/commands/mode3-run.md`** + **`.claude/mode3/contracts/*`** |
 | Routing recommendation analysis (sprint kickoff / complex decomposition) | `.claude/agents/team-lead.md` (Modes 1 & 2 only) |
+| Model tier per agent, who may raise a tier, escalation protocol, delegation-packet shape, parallelism / MCP-context / compact policy | **`.claude/MODEL_TIERING_AND_ESCALATION.md`** (authoritative for model/escalation) |
 
 **Authority order:** `ROUTE_AND_RUN.md` is the single source of truth for per-PR execution policy; `SPRINT_EXECUTOR_ROLLING_CHECKPOINT.md` is authoritative for sprint-level orchestration. If `ROUTE_AND_RUN_TABLES.md` contradicts prose, the table wins. This entrypoint never overrides those docs.
 
@@ -55,6 +56,7 @@ Tier controls orchestration heaviness only. Change classification (doc-only / tr
 - **Durable truth files:** ChatGPT conversation = review history; `current-approved-plan.toml` = execution truth; `SPRINT_CHECKPOINT.md` = resume truth. Approved-plan integrity is anchored by sha256. (`gates.md`)
 - **Local E2E is the primary merge gate** (CI green is a bonus; block only on code failure, not infra failure).
 - **Mode-3 only:** Main Agent owns all OpenAI gates / PR / merge / scope; the execution owner (`mode3-orchestrator`) cannot contact ChatGPT, invoke `openai_gate.py`, open PRs, merge, or change scope. Sub-agents use their configured/default models unless specifically justified. (`.claude/commands/mode3-run.md`, `.claude/mode3/contracts/*`)
+- **Model escalation is owned by the orchestration layer, not the subagent.** A subagent runs on its configured tier and MUST NOT raise its own model or spawn other agents; when its tier/scope is insufficient it returns `ESCALATION_REQUIRED`. Tiers are raised only at delegation boundaries — documented Orchestrator overrides (e.g. `code-reviewer`→opus for high-risk), else Main-Agent/USER_DECISION approval for expensive/architectural work. Default max parallel subagents = 1. (`.claude/MODEL_TIERING_AND_ESCALATION.md`)
 
 ## Usage examples
 

@@ -125,3 +125,9 @@ Every recommendation must state: what to change, why it helps (mechanism), impac
 ## Anti-Noise
 
 Don't: recommend memo without repeated cost mechanism · present DB index as confirmed · report micro-opts when a real bottleneck exists · surface non-perf issues · list patterns without code evidence · recommend complexity for negligible gain · flag hotspots already mitigated (check for caching, pagination, staleTime, debounce, lazy loading).
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**. You never raise your own model and never spawn agents. If profiling needs reasoning beyond a bounded analysis, return `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`) rather than continuing. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

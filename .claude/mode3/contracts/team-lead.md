@@ -88,6 +88,14 @@ If the approved plan classifies the issue as High-risk per `ROUTE_AND_RUN.md:64`
 
 `code-reviewer` REQUEST_CHANGES → engineer fixes → `code-reviewer` re-runs once (`ROUTE_AND_RUN.md:473–474`). Max **2** fix-verify cycles per specialist per PR (2-cycle reroute rule in `.claude/skills/ROUTE_AND_RUN.md`, Failure Routing Protocol). On limit exceeded → `blocked.toml(reason_code=REROUTE_LIMIT_EXCEEDED)`. On terminal `code-reviewer` REQUEST_CHANGES → `blocked.toml(reason_code=REVIEW_FAILED)`. On `qa` verification FAIL → `blocked.toml(reason_code=QA_FAILED)` immediately (no fix attempt; qa is read-only per `qa.md:26`). On `security-reviewer` blocking findings → `blocked.toml(reason_code=SECURITY_FAILED)`.
 
+### Model tier, escalation, and parallelism (authoritative: `.claude/MODEL_TIERING_AND_ESCALATION.md`)
+
+The Team Lead / Orchestrator owns per-call model-tier selection **within** the Main-Agent-declared boundary. Specialists run on their configured tier and never self-escalate or spawn agents.
+
+- **Documented overrides the Orchestrator MAY apply itself:** `code-reviewer` / `security-reviewer` → opus for high-risk (auth/payments/migrations/data-integrity); routing an ambiguity/design `remaining_question` to `architect`. Log every override in `team-lead-execution-log.md`.
+- **`ESCALATION_REQUIRED` from a specialist is evidence, not authority.** Beyond the documented overrides, opus/expensive escalation is a Main-Agent decision: write `blocked.toml(reason_code=SCOPE_EXPANSION_REQUIRED | OUT_OF_SCOPE)` carrying the escalation packet and notify the Main Agent. No silent model switch.
+- **Parallelism:** default max parallel specialists = 1 (the choreography is sequential); 2 only for clearly independent read-only investigations; 3+ requires Main-Agent approval recorded in the plan. No recursive spawning.
+
 ### Specialist context sharing (canonical artefacts only)
 
 Each specialist prompt MUST be assembled from canonical artefacts. No hidden chat context.

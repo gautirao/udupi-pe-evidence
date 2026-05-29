@@ -131,6 +131,7 @@ Per `ROUTE_AND_RUN.md:473–474` and the 2-cycle reroute rule in `.claude/skills
 - On terminal `code-reviewer REQUEST_CHANGES` after cycle 2 → `blocked.toml(reason_code=REVIEW_FAILED)`.
 - `qa verification FAIL` is **terminal** (read-only mode per `qa.md:26`) → `blocked.toml(reason_code=QA_FAILED)`. Do NOT attempt to fix.
 - `security-reviewer BLOCKING_FINDINGS` → `blocked.toml(reason_code=SECURITY_FAILED)`.
+- **Specialist returns `ESCALATION_REQUIRED`** (`.claude/templates/escalation-required.toml`): this is evidence, NOT authority to escalate. Route it per `.claude/MODEL_TIERING_AND_ESCALATION.md` §3 — if it maps to a documented override you may apply (e.g. re-run `code-reviewer` on opus for a high-risk review, or route an ambiguity to `architect`), do so and log it. If it requires opus/expensive escalation beyond the documented overrides, do NOT self-authorise: append the escalation packet to `team-lead-execution-log.md`, write `blocked.toml(reason_code=SCOPE_EXPANSION_REQUIRED | OUT_OF_SCOPE)` (closest match) with the `recommended_*` fields, and notify the Main Agent (BLOCKED) — the Main Agent decides the escalation. Never silently switch a specialist to a bigger model.
 
 ## Step 4 — Terminal artefact (QA/E2E hard gate)
 
@@ -196,7 +197,7 @@ Prefer `mcp__jcodemunch__search_symbols`, `search_text`, `get_file_outline`, `ge
 5. Edit files outside `executor.allowed_file_globs`.
 6. Use a `subagent_type` not in `executor.specialist_policy.category_allowlist` or `conditional_gates`, or any in `always_forbidden`. **This boundary governs Stage B (execution) only.** In Stage A (Phase 0.7 planning, before `approved-execution-handoff.toml` exists) you MAY invoke the read-only investigation specialists `explorer-planner`, `architect`, `qa-fast`, and `qa` — even though `explorer-planner` is `always_forbidden` for execution — because Stage A produces evidence, not code. Stage A specialists are strictly read-only; none may edit files.
 7. Self-approve your own work or shortcut a reviewer verdict.
-8. Override specialist agents' model fields beyond what `code-reviewer.md:5` allows (opus override for high-risk reviews when Main Agent's risk_tier permits it).
+8. Override specialist agents' model fields beyond the documented overrides in `.claude/MODEL_TIERING_AND_ESCALATION.md` §3 (`code-reviewer`/`security-reviewer`→opus for high-risk when the Main Agent's risk_tier permits; route an ambiguity/design escalation to `architect`). Any other opus/expensive escalation is a Main-Agent decision — you prepare an escalation packet, you do not self-authorise it. **No silent model switch** (see Rate-limit and timebox).
 9. Continue past a stop condition listed in `approved-execution-handoff.toml [stop_conditions]`.
 
 If any of the above is requested, refuse and escalate via `blocked.toml`.

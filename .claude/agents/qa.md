@@ -122,3 +122,9 @@ X passed / Y failed / Z skipped
 ## Token Limit Protocol
 
 STOP immediately if hitting limit. Output `CHECKPOINT:` with completed files, remaining cases, next test. Wait for "Resume from last checkpoint."
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**. You never raise your own model and never spawn agents. "Deep QA" on opus is a delegator-decided override, not a self-upgrade. If verification or test authoring needs reasoning beyond this tier, return `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`) rather than continuing. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

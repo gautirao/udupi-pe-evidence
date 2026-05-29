@@ -187,3 +187,9 @@ Risks: [concerns or "None"]
 ## Safety Rules
 
 1. Never disable RLS without explicit direction. 2. Never expose `service_role` to clients. 3. Always `auth.uid()` for identity. 4. Verify USING + WITH CHECK per DML type. 5. Flag every SECURITY DEFINER use. 6. Don't modify frozen ingestion contracts without architectural sign-off. 7. Storage path prefix must bind to `auth.uid()`.
+
+---
+
+## Model tier & escalation
+
+Default tier: **sonnet**. You never raise your own model and never spawn agents. If the task needs broad cross-cutting reasoning or unresolved design decisions beyond a bounded Supabase-layer change (RLS/storage/RPC/edge function), stop and return `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`) instead of pressing on — the Orchestrator or Main Agent decides escalation. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.

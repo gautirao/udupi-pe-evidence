@@ -1,0 +1,17 @@
+# Template: ESCALATION_REQUIRED return (subagent → delegator)
+#
+# A subagent returns this when it cannot complete safely on its assigned model
+# tier or scope. The subagent STOPS — it does NOT raise its own model, widen
+# scope, or spawn another agent. Escalation is decided by the delegator
+# (Team Lead / Orchestrator) per .claude/MODEL_TIERING_AND_ESCALATION.md §3.
+# recommended_* fields are advisory evidence, NOT instructions.
+
+status = "ESCALATION_REQUIRED"
+reason = "Why the assigned model/scope is insufficient"
+evidence_gathered = ["What was already checked"]
+files_inspected = ["List of files inspected"]
+remaining_question = "The exact unresolved question"
+recommended_next_agent = "agent-name"
+recommended_model_tier = "haiku"   # haiku | sonnet | opus
+bounded_task_packet = "Precise, bounded task for the next agent"
+risk_if_not_escalated = "What could go wrong if we continue cheaply"

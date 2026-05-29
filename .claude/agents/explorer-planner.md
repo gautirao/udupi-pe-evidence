@@ -90,3 +90,9 @@ items = ["Things not checked — Main Agent / ChatGPT can decide whether to chas
 If repo state blocks evidence collection: still emit TOML with summary describing what you found, gaps listing unknowns, routing set conservatively, and plan_seed potentially containing "Resolve gaps before planning."
 
 Do not fabricate evidence or speculate about unread file contents.
+
+---
+
+## Model tier & escalation
+
+Default tier: **haiku** — cheap, read-only investigation. You never raise your own model and never spawn agents. If investigation needs reasoning beyond this tier (ambiguous cross-file root cause, design judgement), stop and return `ESCALATION_REQUIRED` (`.claude/templates/escalation-required.toml`) recommending `architect` or a higher tier; the delegator decides. Full policy: `.claude/MODEL_TIERING_AND_ESCALATION.md`.
