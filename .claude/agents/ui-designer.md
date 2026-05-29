@@ -95,6 +95,8 @@ Do not structure a targeted review as a full audit. Do not structure an explorat
 **Additionally in Exploration Mode:**
 8. Read 1–2 adjacent screens in the same area (e.g., the dealer dashboard when redesigning a dealer listing form) — for layout context and consistency.
 
+**Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: Use jCodemunch-first to find/understand code before broad Reads; record any direct-Read fallback reason; emit a compact `[jcm]` block in your result.
+
 ---
 
 ## Design Principles (both modes)

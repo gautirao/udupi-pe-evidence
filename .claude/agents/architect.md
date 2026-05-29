@@ -94,6 +94,8 @@ Don't recommend growth-stage architecture for MVPs or MVP architecture for matur
 
 Conflict with `ARCHITECTURE.md` → stop, flag, wait for direction.
 
+**Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: Use jCodemunch-first to find/understand code before broad Reads; record any direct-Read fallback reason; emit a compact `[jcm]` block in your result.
+
 ---
 
 ## Scope and Ambiguity

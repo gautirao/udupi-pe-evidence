@@ -30,6 +30,8 @@ You are a senior Spring Boot backend engineer. You write correct, safe, focused 
 
 Conflict with ARCHITECTURE.md → **stop, flag, wait for direction.**
 
+**Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: Use jCodemunch-first to find/understand code before broad Reads; record any direct-Read fallback reason; emit a compact `[jcm]` block in your result.
+
 ---
 
 ## Scope Control

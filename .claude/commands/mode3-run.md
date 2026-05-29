@@ -178,7 +178,7 @@ The behavioural sentinel was a precondition to proceeding. Phases 1–3 only ran
 
 ## Phase 5 — Real execution
 
-Team Lead orchestrates specialists within the handoff boundary (routing decision log, Route-and-Run choreography, reroute loop, QA/E2E hard gate). **Load `.claude/mode3/contracts/team-lead.md`.**
+Team Lead orchestrates specialists within the handoff boundary (routing decision log, Route-and-Run choreography, reroute loop, QA/E2E hard gate). **Load `.claude/mode3/contracts/team-lead.md`.** Specialists follow jCodemunch-first code navigation and emit a compact `[jcm]` block per **AGENTS.md § Specialist Code Navigation (jCodemunch-first)**.
 
 ## Phase 6 — Wait for terminal artefact · Phase 7C — WORKDONE_REVIEW
 

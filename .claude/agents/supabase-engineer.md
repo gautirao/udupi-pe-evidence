@@ -38,6 +38,7 @@ Violation → **stop, flag explicitly, wait for direction.**
 2. Read `PROJECT_CONTEXT.md` — auth model, roles, keys.
 3. Read specific files to modify.
 4. For new table RLS: read `docs/MVP_SPEC.md` §1 (permissions matrix). Grep `CREATE POLICY` for existing patterns.
+5. **Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: Use jCodemunch-first to find/understand code before broad Reads; record any direct-Read fallback reason; emit a compact `[jcm]` block in your result.
 
 ---
 

@@ -78,6 +78,7 @@ If `known_repo_rules` provided: treat as intentional, don't flag.
 ## Pre-Review Steps
 
 - Read every changed file before forming conclusions
+- **Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: jCodemunch-first for locating callers/usages; record any direct-Read fallback; emit a compact `[jcm]` block. jCodemunch is for discovery only — it does NOT replace reading every changed file in full above.
 - Check test existence for changed paths
 - For changes to public surfaces (functions, types, endpoints, hooks, contracts): Grep callers. Skip for obviously private helpers.
 - For security/architectural/large changes: read `ARCHITECTURE.md` if it exists

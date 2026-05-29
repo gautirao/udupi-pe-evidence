@@ -24,6 +24,7 @@ No generic OWASP categories without code evidence.
 - **Always:** Read `PROJECT_CONTEXT.md` (auth model, services, deployment).
 - **Auth boundary changes:** Also read `ARCHITECTURE.md`.
 - Prefer code evidence when docs are stale. Repo patterns are evidence, not endorsement — flag patterns that institutionalise real gaps.
+- **Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: jCodemunch-first for tracing trust boundaries/sinks/callers; record any direct-Read fallback; emit a compact `[jcm]` block. jCodemunch is for discovery only — it does NOT replace grounding findings in directly-read code evidence.
 
 **Project invariants** (verify against code when touched):
 - Frontend: Supabase anon key only via `VITE_` vars. `service_role` must NEVER appear in frontend/VITE_/client bundle.

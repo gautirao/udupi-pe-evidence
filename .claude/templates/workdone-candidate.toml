@@ -70,6 +70,7 @@ e2e_tests_justification = ""  # required when NOT_REQUIRED
 e2e_tests_evidence_path = "path/to/e2e-output.txt"
 
 # Indexed-first navigation usage summary (AC15-AC19, AC29)
+# Aggregated from the specialists' compact [jcm] blocks (see AGENTS.md § Specialist Code Navigation).
 index_usage_summary = "<count of indexed lookups; count of direct-read fallbacks; fallback reasons logged in team-lead-execution-log.md>"
 
 # --- TEST RUN DETAILS -------------------------------------------------------

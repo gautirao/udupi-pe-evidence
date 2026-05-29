@@ -72,3 +72,27 @@ Replace `<your-model-id>` with your active model:
 
 The `model=` parameter rides on the existing `plan_turn` call — it does **not** add a separate tool invocation. If `plan_turn` is not appropriate for a non-code task, call `announce_model(model="...")` once instead.
 
+## Specialist Code Navigation (jCodemunch-first)
+
+This section is the single canonical home for the Mode-3 specialist navigation rule. It **references** — and does NOT duplicate — the existing policy in project `CLAUDE.md` §9 ("jCodemunch & Code Navigation") and the global **Code Exploration Policy** above. The tool catalogue, re-index mechanics, and start-of-session steps already live there; only the new specialist-facing rules are stated here.
+
+**Rule:** All Mode-3 specialists use jCodemunch-first for code discovery (`search_symbols` / `search_text` / `get_file_outline` / `get_context_bundle` / `find_references`) BEFORE broad file Reads. Direct `Read` is an allowed fallback that MUST be recorded (see CLAUDE.md §9 — the main repo index covers all files; `Read` is also required immediately before any `Edit`/`Write`).
+
+**Recognised fallback reasons** (use the shortest accurate one):
+- index stale for the file
+- file missing from index / newly created
+- exact files already supplied in the approved plan
+- docs-only task with no code navigation
+
+**[jcm] evidence block.** A navigating specialist emits a compact `[jcm]` block in its result; a specialist that did no code navigation still emits the block with `used = false` and a short fallback reason. Compact only — NO file-path lists, NO query text, NO result/content dumps.
+
+```
+[jcm]
+used = true            # bool — was jCodemunch used for code discovery on this call?
+queries = 2            # count (or short list) of jCodemunch queries run
+files = 3              # count of files navigation targeted/opened
+fallback = "NONE"      # "NONE" or a SHORT reason (one of the recognised reasons above)
+```
+
+**Discovery-only clause (verbatim intent):** jCodemunch is for DISCOVERY and navigation only. It NEVER replaces an agent's required obligations — code-reviewer must still read every changed file in full before forming conclusions; security-reviewer must still ground findings in directly-read code evidence.
+

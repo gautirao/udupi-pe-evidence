@@ -105,6 +105,13 @@ evidence_ref: `<git diff stat or path>`
 post_edit_index_calls: [
   "mcp__jcodemunch__index_file { path: '/abs/path/File.ext' }",
 ]
+# Compact jCodemunch navigation record (see AGENTS.md § Specialist Code Navigation).
+# Copy verbatim from the specialist's [jcm] block. 4 fields only; no path lists / query text / dumps.
+[jcm]
+used = true            # bool — did the specialist use jCodemunch for code discovery?
+queries = 2            # count (or short list) of jCodemunch queries run
+files = 3              # count of files navigation targeted/opened
+fallback = "NONE"      # "NONE" or a SHORT recognised fallback reason
 notes: `<free-text>`
 
 ---

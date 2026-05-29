@@ -42,6 +42,7 @@ When in doubt, treat as one level higher.
 - **Before a new pattern**: Inspect 2+ similar production examples. Follow dominant convention when sound. Name and reason any deviation in output.
 - **Before a new UI primitive**: Search `src/components/ui/` and domain folders for existing components. Reuse when reasonable. Create new only when nothing fits.
 - **Before shell commands**: Read `.claude/TOOLING.md`. Run only pre-approved commands.
+- **Code discovery (per AGENTS.md § Specialist Code Navigation (jCodemunch-first))**: Use jCodemunch-first to find/understand code before broad Reads; record any direct-Read fallback reason; emit a compact `[jcm]` block in your result.
 
 ---
 
