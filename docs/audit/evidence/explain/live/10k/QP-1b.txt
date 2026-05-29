@@ -1,0 +1,51 @@
+Query:     QP-1b — Listings SELECT page (city only, with lateral hero-image)
+Timestamp: 2026-05-29T21:30:01.250854+00:00
+Volume:    10k
+City:      bangalore
+Exec time: 5.624 ms
+======================================================================
+
+Limit  (cost=50.26..95.92 rows=5 width=133) (actual time=5.485..5.504 rows=20 loops=1)
+  Buffers: shared hit=1500
+  ->  Result  (cost=50.26..95.92 rows=5 width=133) (actual time=5.484..5.501 rows=20 loops=1)
+        Buffers: shared hit=1500
+        ->  Sort  (cost=50.26..50.27 rows=5 width=101) (actual time=5.412..5.414 rows=20 loops=1)
+              Sort Key: pl.created_at DESC
+              Sort Method: top-N heapsort  Memory: 31kB
+              Buffers: shared hit=1454
+              ->  Nested Loop  (cost=24.25..50.20 rows=5 width=101) (actual time=0.051..3.654 rows=8971 loops=1)
+                    Buffers: shared hit=1451
+                    ->  HashAggregate  (cost=24.00..24.01 rows=1 width=32) (actual time=0.025..0.027 rows=10 loops=1)
+                          Group Key: a.area_key
+                          Batches: 1  Memory Usage: 24kB
+                          Buffers: shared hit=3
+                          ->  Hash Join  (cost=8.18..24.00 rows=1 width=32) (actual time=0.017..0.022 rows=10 loops=1)
+                                Hash Cond: (a.city_id = c.id)
+                                Buffers: shared hit=3
+                                ->  Seq Scan on areas a  (cost=0.00..14.60 rows=460 width=36) (actual time=0.003..0.005 rows=37 loops=1)
+                                      Buffers: shared hit=1
+                                ->  Hash  (cost=8.17..8.17 rows=1 width=4) (actual time=0.007..0.008 rows=1 loops=1)
+                                      Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                      Buffers: shared hit=2
+                                      ->  Index Scan using cities_slug_key on cities c  (cost=0.15..8.17 rows=1 width=4) (actual time=0.003..0.004 rows=1 loops=1)
+                                            Index Cond: (slug = 'bangalore'::text)
+                                            Buffers: shared hit=2
+                    ->  Index Scan using idx_property_listings_area_key on property_listings pl  (cost=0.25..17.93 rows=826 width=124) (actual time=0.005..0.283 rows=897 loops=10)
+                          Index Cond: (area_key = a.area_key)
+                          Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status))
+                          Buffers: shared hit=1448
+        SubPlan 1
+          ->  Limit  (cost=5.51..9.12 rows=1 width=52) (actual time=0.004..0.004 rows=0 loops=20)
+                Buffers: shared hit=46
+                ->  Incremental Sort  (cost=5.51..16.34 rows=3 width=52) (actual time=0.004..0.004 rows=0 loops=20)
+                      Sort Key: li."position", li.id
+                      Presorted Key: li."position"
+                      Full-sort Groups: 20  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+                      Buffers: shared hit=46
+                      ->  Index Scan using idx_listing_images_listing_position on listing_images li  (cost=0.15..16.20 rows=3 width=52) (actual time=0.000..0.000 rows=0 loops=20)
+                            Index Cond: (listing_id = pl.id)
+                            Buffers: shared hit=40
+Planning:
+  Buffers: shared hit=71
+Planning Time: 0.392 ms
+Execution Time: 5.624 ms

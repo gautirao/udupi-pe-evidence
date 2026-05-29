@@ -1,0 +1,38 @@
+Query:     QP-3a — Markers city-only (LIMIT 1001)
+Timestamp: 2026-05-29T21:30:01.277226+00:00
+Volume:    10k
+City:      bangalore
+Exec time: 5.717 ms
+======================================================================
+
+Limit  (cost=50.26..50.27 rows=5 width=48) (actual time=5.543..5.661 rows=1001 loops=1)
+  Buffers: shared hit=1451
+  ->  Sort  (cost=50.26..50.27 rows=5 width=48) (actual time=5.542..5.589 rows=1001 loops=1)
+        Sort Key: pl.id
+        Sort Method: top-N heapsort  Memory: 230kB
+        Buffers: shared hit=1451
+        ->  Nested Loop  (cost=24.25..50.20 rows=5 width=48) (actual time=0.032..3.853 rows=8971 loops=1)
+              Buffers: shared hit=1451
+              ->  HashAggregate  (cost=24.00..24.01 rows=1 width=32) (actual time=0.022..0.026 rows=10 loops=1)
+                    Group Key: a.area_key
+                    Batches: 1  Memory Usage: 24kB
+                    Buffers: shared hit=3
+                    ->  Hash Join  (cost=8.18..24.00 rows=1 width=32) (actual time=0.013..0.020 rows=10 loops=1)
+                          Hash Cond: (a.city_id = c.id)
+                          Buffers: shared hit=3
+                          ->  Seq Scan on areas a  (cost=0.00..14.60 rows=460 width=36) (actual time=0.004..0.006 rows=37 loops=1)
+                                Buffers: shared hit=1
+                          ->  Hash  (cost=8.17..8.17 rows=1 width=4) (actual time=0.007..0.007 rows=1 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                Buffers: shared hit=2
+                                ->  Index Scan using cities_slug_key on cities c  (cost=0.15..8.17 rows=1 width=4) (actual time=0.005..0.006 rows=1 loops=1)
+                                      Index Cond: (slug = 'bangalore'::text)
+                                      Buffers: shared hit=2
+              ->  Index Scan using idx_property_listings_area_key on property_listings pl  (cost=0.25..17.93 rows=826 width=71) (actual time=0.004..0.302 rows=897 loops=10)
+                    Index Cond: (area_key = a.area_key)
+                    Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status))
+                    Buffers: shared hit=1448
+Planning:
+  Buffers: shared hit=3
+Planning Time: 0.193 ms
+Execution Time: 5.717 ms

@@ -1,0 +1,38 @@
+Query:     QP-5 — City-area listings (ROW_NUMBER OVER PARTITION BY area_key)
+Timestamp: 2026-05-29T21:30:01.284853+00:00
+Volume:    10k
+City:      bangalore
+Exec time: 17.130 ms
+======================================================================
+
+Subquery Scan on sub  (cost=50.25..50.41 rows=2 width=128) (actual time=12.790..16.999 rows=10 loops=1)
+  Filter: (sub.rn <= 5)
+  Rows Removed by Filter: 8961
+  Buffers: shared hit=1451
+  ->  WindowAgg  (cost=50.25..50.35 rows=5 width=128) (actual time=12.789..16.472 rows=8971 loops=1)
+        Buffers: shared hit=1451
+        ->  Sort  (cost=50.25..50.26 rows=5 width=120) (actual time=12.768..13.263 rows=8971 loops=1)
+              Sort Key: pl.area_key, pl.created_at DESC
+              Sort Method: quicksort  Memory: 2716kB
+              Buffers: shared hit=1451
+              ->  Nested Loop  (cost=8.43..50.19 rows=5 width=120) (actual time=0.037..4.619 rows=8971 loops=1)
+                    Buffers: shared hit=1451
+                    ->  Hash Join  (cost=8.18..24.00 rows=1 width=32) (actual time=0.012..0.024 rows=10 loops=1)
+                          Hash Cond: (a.city_id = c.id)
+                          Buffers: shared hit=3
+                          ->  Seq Scan on areas a  (cost=0.00..14.60 rows=460 width=36) (actual time=0.005..0.009 rows=37 loops=1)
+                                Buffers: shared hit=1
+                          ->  Hash  (cost=8.17..8.17 rows=1 width=4) (actual time=0.004..0.005 rows=1 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                Buffers: shared hit=2
+                                ->  Index Scan using cities_slug_key on cities c  (cost=0.15..8.17 rows=1 width=4) (actual time=0.003..0.003 rows=1 loops=1)
+                                      Index Cond: (slug = 'bangalore'::text)
+                                      Buffers: shared hit=2
+                    ->  Index Scan using idx_property_listings_area_key on property_listings pl  (cost=0.25..17.93 rows=826 width=120) (actual time=0.003..0.372 rows=897 loops=10)
+                          Index Cond: (area_key = a.area_key)
+                          Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status))
+                          Buffers: shared hit=1448
+Planning:
+  Buffers: shared hit=3
+Planning Time: 0.284 ms
+Execution Time: 17.130 ms

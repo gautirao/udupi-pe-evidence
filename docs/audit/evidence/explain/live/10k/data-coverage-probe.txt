@@ -1,0 +1,75 @@
+Data Coverage Probe — Issue #1295
+Captured: 2026-05-29 (fix-cycle-2, post-cleanup verification)
+DB:        localhost:5434 (non-production Docker, PostgreSQL 14.23)
+======================================================================
+
+--- POST-CLEANUP VERIFICATION (captured live in fix-cycle-2) ---
+
+Query: SELECT COUNT(*) AS perf_rows_remaining FROM property_listings WHERE title LIKE '[PERF]%';
+Result: 0
+Interpretation: All [PERF]-tagged rows confirmed deleted by cleanup step.
+
+Query: SELECT COUNT(*) AS total_property_listings FROM property_listings;
+Result: 0
+Interpretation: DB contains 0 property_listings rows at time of this capture
+               (the synthetic profile row inserted in fix-cycle-1 for broker-id
+               resolution remains in the profiles table only, not in property_listings).
+
+Query: SELECT slug FROM cities ORDER BY slug;
+Result:
+  bangalore
+  kundapur
+  mangalore
+  udupi
+Interpretation: 4 cities present; all 4 slugs match those referenced in the harness
+               and probe results below.
+
+--- FIX-CYCLE-1 DISTRIBUTION OBSERVATION (observed during live run; not re-capturable post-cleanup) ---
+
+After: python scripts/gen_perf_listings.py --count=10000 --seed=42 --broker-id=00000000-0000-0000-0000-000000000001
+
+Query run during fix-cycle-1:
+  SELECT c.slug, count(*)
+  FROM property_listings pl
+  JOIN areas a ON pl.area_key=a.area_key
+  JOIN cities c ON c.id=a.city_id
+  WHERE pl.title LIKE '[PERF]%'
+  GROUP BY c.slug ORDER BY 2 DESC;
+
+Observed result:
+  bangalore | 8971
+  mangalore | 1029
+  (udupi: 0 — not returned; confirmed by separate probe in fix-cycle-1 session)
+
+Root cause: gen_perf_listings.py _load_area_keys() queries LIMIT 20; the first 20
+  area_key rows in this DB sort to Bengaluru/Mangalore keys, causing the _pick()
+  fallback to assign non-Udupi keys to all clusters.
+
+Action taken: harness re-run with --city-slug=bangalore --count-check=8000 to obtain
+  real EXPLAIN ANALYZE plans against the 8,971-row dominant subset.
+
+--- ADDITIONAL PROBES (fix-cycle-1) ---
+
+pl.geog column check:
+  Query: SELECT COUNT(*) FROM property_listings WHERE title LIKE '[PERF]%' AND geog IS NULL;
+  Result: ERROR — column "geog" does not exist
+  Interpretation: No geography column in schema; QP-1c/QP-3b → DATA_GAP.
+
+listing_images row count:
+  Query: SELECT COUNT(*) FROM listing_images;
+  Result: 0
+  Interpretation: Lateral hero-image cost understated in QP-1b/QP-1d plans.
+
+FTS coverage check (fix-cycle-1):
+  Query: SELECT COUNT(*) FROM property_listings WHERE title LIKE '[PERF]%'
+         AND search_vector @@ websearch_to_tsquery('english','apartment udupi');
+  Result: 360
+  Interpretation: FTS matches exist in non-udupi areas; GIN index functionally present.
+
+Bbox coordinate coverage (fix-cycle-1):
+  Query: SELECT COUNT(*) FROM property_listings WHERE title LIKE '[PERF]%'
+         AND latitude BETWEEN 13.32 AND 13.36 AND longitude BETWEEN 74.72 AND 74.77;
+  Result: 1,002
+  Interpretation: Coordinates overlap the bbox range but area_keys are non-udupi;
+                  QP-3b DATA_GAP persists regardless.
+======================================================================

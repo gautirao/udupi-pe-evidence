@@ -1,0 +1,45 @@
+Query:     QP-2 — Aggregates GROUP BY locality
+Timestamp: 2026-05-29T21:30:01.267621+00:00
+Volume:    10k
+City:      bangalore
+Exec time: 8.154 ms
+======================================================================
+
+Limit  (cost=50.41..50.42 rows=5 width=16) (actual time=8.089..8.092 rows=6 loops=1)
+  Buffers: shared hit=1457
+  ->  Sort  (cost=50.41..50.42 rows=5 width=16) (actual time=8.088..8.090 rows=6 loops=1)
+        Sort Key: (count(*)) DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=1457
+        ->  GroupAggregate  (cost=50.26..50.35 rows=5 width=16) (actual time=7.111..8.074 rows=11 loops=1)
+              Group Key: pl.locality
+              Buffers: shared hit=1454
+              ->  Sort  (cost=50.26..50.27 rows=5 width=8) (actual time=7.016..7.432 rows=8971 loops=1)
+                    Sort Key: pl.locality
+                    Sort Method: quicksort  Memory: 805kB
+                    Buffers: shared hit=1454
+                    ->  Nested Loop  (cost=24.25..50.20 rows=5 width=8) (actual time=0.088..4.317 rows=8971 loops=1)
+                          Buffers: shared hit=1451
+                          ->  HashAggregate  (cost=24.00..24.01 rows=1 width=32) (actual time=0.031..0.034 rows=10 loops=1)
+                                Group Key: a.area_key
+                                Batches: 1  Memory Usage: 24kB
+                                Buffers: shared hit=3
+                                ->  Hash Join  (cost=8.18..24.00 rows=1 width=32) (actual time=0.022..0.028 rows=10 loops=1)
+                                      Hash Cond: (a.city_id = c.id)
+                                      Buffers: shared hit=3
+                                      ->  Seq Scan on areas a  (cost=0.00..14.60 rows=460 width=36) (actual time=0.004..0.006 rows=37 loops=1)
+                                            Buffers: shared hit=1
+                                      ->  Hash  (cost=8.17..8.17 rows=1 width=4) (actual time=0.015..0.016 rows=1 loops=1)
+                                            Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                            Buffers: shared hit=2
+                                            ->  Index Scan using cities_slug_key on cities c  (cost=0.15..8.17 rows=1 width=4) (actual time=0.003..0.004 rows=1 loops=1)
+                                                  Index Cond: (slug = 'bangalore'::text)
+                                                  Buffers: shared hit=2
+                          ->  Index Scan using idx_property_listings_area_key on property_listings pl  (cost=0.25..17.93 rows=826 width=31) (actual time=0.008..0.361 rows=897 loops=10)
+                                Index Cond: (area_key = a.area_key)
+                                Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status))
+                                Buffers: shared hit=1448
+Planning:
+  Buffers: shared hit=18
+Planning Time: 0.225 ms
+Execution Time: 8.154 ms
