@@ -14,9 +14,12 @@ import org.springframework.security.web.SecurityFilterChain;
 public class JwtConfig {
 
     private final IngestionApiKeyFilter ingestionApiKeyFilter;
+    private final PrometheusApiKeyFilter prometheusApiKeyFilter;
 
-    public JwtConfig(IngestionApiKeyFilter ingestionApiKeyFilter) {
+    public JwtConfig(IngestionApiKeyFilter ingestionApiKeyFilter,
+                     PrometheusApiKeyFilter prometheusApiKeyFilter) {
         this.ingestionApiKeyFilter = ingestionApiKeyFilter;
+        this.prometheusApiKeyFilter = prometheusApiKeyFilter;
     }
 
     @Bean
@@ -26,14 +29,17 @@ public class JwtConfig {
                 // Do NOT add .cors() here — it would create a second CorsFilter causing duplicate headers.
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Register ingestion API key filter before JWT validation so
-                // BearerTokenAuthenticationFilter never runs on this path.
+                // Register API key filters before JWT validation so
+                // BearerTokenAuthenticationFilter never runs on these paths.
                 .addFilterBefore(ingestionApiKeyFilter, BearerTokenAuthenticationFilter.class)
+                .addFilterBefore(prometheusApiKeyFilter, BearerTokenAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         // Allow CORS preflight requests — BearerTokenAuthenticationFilter
                         // runs before CORS headers are evaluated, causing 401 on OPTIONS.
                         .requestMatchers(HttpMethod.OPTIONS).permitAll()
                         .requestMatchers("/actuator/health").permitAll()
+                        // Prometheus metrics endpoint — auth enforced by PrometheusApiKeyFilter (#1249)
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         // permitAll() here so Spring Security does not apply JWT validation;
                         // the actual auth check is enforced by IngestionApiKeyFilter.
                         .requestMatchers("/api/ingestion/ingest-posts").permitAll()

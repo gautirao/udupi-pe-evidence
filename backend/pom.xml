@@ -64,6 +64,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Micrometer Prometheus registry — exposes /actuator/prometheus for scraping -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <!-- Jackson for JSON processing (included via spring-boot-starter-web) -->
 
         <!-- Bean Validation (Hibernate Validator) — required for @Valid/@Pattern on request bodies -->

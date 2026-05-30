@@ -64,13 +64,21 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info, metrics
+        include: health, info, metrics, prometheus
   endpoint:
     health:
       show-details: never
+
   metrics:
     tags:
       application: ${spring.application.name:udupi-property-explorer}
+    distribution:
+      percentiles-histogram:
+        discover.markers.query.latency.seconds: true
+        discover.listings.query.latency.seconds: true
+      percentiles:
+        discover.markers.query.latency.seconds: 0.5,0.95,0.99
+        discover.listings.query.latency.seconds: 0.5,0.95,0.99
   info:
     env:
       enabled: false
