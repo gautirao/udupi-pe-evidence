@@ -528,6 +528,12 @@ test.describe('@integration-ui SchoolSelectedPanel — markers q= forwarding —
     // Search chip confirms q is active.
     await expect(page.getByTestId('chip-search')).toBeVisible({ timeout: 8_000 });
 
+    // Post-#1115: markersEnabled requires the bounded-search CTA to be clicked first.
+    const cta = page.getByTestId('school-bounded-search-cta');
+    await expect(cta).toBeVisible({ timeout: 8_000 });
+    await cta.click();
+    await page.waitForTimeout(350);
+
     // At least one markers request must include q=villa.
     await expect
       .poll(
@@ -555,6 +561,20 @@ test.describe('@integration-ui SchoolSelectedPanel — markers q= forwarding —
 
     const searchChip = page.getByTestId('chip-search');
     await expect(searchChip).toBeVisible({ timeout: 8_000 });
+
+    // Post-#1115: markersEnabled requires the bounded-search CTA to be clicked first.
+    const cta = page.getByTestId('school-bounded-search-cta');
+    await expect(cta).toBeVisible({ timeout: 8_000 });
+    await cta.click();
+
+    // Wait for the initial q=villa markers request to arrive before snapshotting
+    // countBefore — ensures the slice(countBefore) baseline is past the CTA-triggered request.
+    await expect
+      .poll(
+        () => markersCapture.requests.some((r) => r.url().includes('q=villa')),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
     // Record how many requests were made before clearing.
     const countBefore = markersCapture.requests.length;
@@ -591,6 +611,11 @@ test.describe('@integration-ui SchoolSelectedPanel — markers q= forwarding —
     ).toBeVisible({ timeout: 15_000 });
     await waitForSchoolPanel(page);
     await expect(page.getByTestId('chip-search')).toBeVisible({ timeout: 8_000 });
+
+    // Post-#1115: markersEnabled requires the bounded-search CTA to be clicked first.
+    const cta = page.getByTestId('school-bounded-search-cta');
+    await expect(cta).toBeVisible({ timeout: 8_000 });
+    await cta.click();
 
     // Confirm filtered markers request fired.
     await expect

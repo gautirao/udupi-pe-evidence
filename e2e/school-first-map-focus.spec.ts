@@ -624,11 +624,11 @@ test.describe('@integration-ui school-first auth markers gate (#1160 v3)', () =>
 
   /**
    * MF-9: Authenticated user, top-level school-first deep-link with NO areaKey
-   * (just schoolId + radiusKm). Bug A2 enables markersEnabled in this state, and
-   * Bug A1's sync coord injection (or async restore via useSchoolById) ensures
-   * the markers query fires with schoolLat/schoolLon/schoolRadiusKm in the URL.
-   * We assert via page.waitForRequest that /api/discover/markers is called with
-   * these three query params present.
+   * (just schoolId + radiusKm). Post-#1115, markersEnabled requires the
+   * bounded-search CTA (`school-bounded-search-cta`) to be clicked first
+   * (boundedSearchTriggered=true). We click the CTA and then assert via
+   * page.waitForRequest that /api/discover/markers is called with schoolLat,
+   * schoolLon, and schoolRadiusKm in the URL.
    */
   test('MF-9: auth + top-level schoolId deep-link → markers query fires with school coords', async ({ page }) => {
     await stubTrendsOptions(page);
@@ -657,6 +657,11 @@ test.describe('@integration-ui school-first auth markers gate (#1160 v3)', () =>
     await page.goto(
       `/discover?city=udupi&journey=school-first&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=${DEFAULT_RADIUS_KM}`,
     );
+
+    // Post-#1115: markersEnabled requires the bounded-search CTA to be clicked first.
+    const cta = page.getByTestId('school-bounded-search-cta');
+    await expect(cta).toBeVisible({ timeout: 15_000 });
+    await cta.click();
 
     // Markers request must have fired with school coords
     const markersRequest = await markersRequestPromise;
@@ -785,8 +790,9 @@ test.describe('@integration-ui school-first cold-cache race guard (#1160 v4)', (
   /**
    * MF-12: Authenticated user, cold cache — schoolId present in URL on arrival,
    * but filters.schoolLat/schoolLon are not yet set (restore effect must fire
-   * useSchoolById first). The markersEnabled guard introduced in #1160 v4 must
-   * prevent a city-wide markers call from firing before coords are ready.
+   * useSchoolById first). Post-#1115 the bounded-search CTA gates markersEnabled
+   * (boundedSearchTriggered=true required). We wait for school hydration, click
+   * the CTA, then verify all markers calls carry school coords (no city-wide call).
    *
    * Asserts:
    *   - At least 1 /api/discover/markers request fires in total.
@@ -821,6 +827,11 @@ test.describe('@integration-ui school-first cold-cache race guard (#1160 v4)', (
     await expect
       .poll(() => getDebugSchoolCenter(page), { timeout: 15_000 })
       .toMatchObject({ lat: SCHOOL_LAT, lon: SCHOOL_LON });
+
+    // Post-#1115: markersEnabled requires the bounded-search CTA to be clicked.
+    const cta = page.getByTestId('school-bounded-search-cta');
+    await expect(cta).toBeVisible({ timeout: 15_000 });
+    await cta.click();
 
     // Allow time for any spurious queued requests to settle.
     await page.waitForTimeout(1_500);
