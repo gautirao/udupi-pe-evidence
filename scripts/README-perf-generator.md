@@ -202,3 +202,94 @@ python scripts/gen_perf_listings.py --cleanup --confirm-delete-generated --db-ur
 This script is **read-only**. It runs all EXPLAIN queries in a `READ ONLY` transaction that is rolled back. It never modifies application data.
 
 **Only use against LOCAL or STAGING databases. Never use against production.**
+
+---
+
+## Database prerequisites (V73 schema — geospatial paths)
+
+The harness query paths **QP-1c** (school-radius ST_DWithin) and **QP-3b** (bbox `&&` operator)
+require the `geog` geography column and PostGIS to be present on the target database.
+
+If either is missing the harness degrades gracefully: those two queries are skipped with
+`DATA_GAP` status in the summary table and the per-query `.txt` file contains a clear note
+explaining what to apply. All other query paths (QP-1a/1b/1d/2/3a/5) run normally.
+
+### Idempotent provisioning SQL (perf DB only)
+
+A helper script is provided at `scripts/perf_db_apply_geog.sql`. Apply it against the
+**non-production** perf container:
+
+```bash
+psql $PERF_DB_URL -f scripts/perf_db_apply_geog.sql
+```
+
+Or apply the three statements inline:
+
+```sql
+-- 1. PostGIS extension
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- 2. geog generated column (mirrors V73 migration)
+ALTER TABLE property_listings
+    ADD COLUMN IF NOT EXISTS geog geography(Point,4326)
+    GENERATED ALWAYS AS (
+        CASE
+            WHEN latitude IS NOT NULL AND longitude IS NOT NULL
+            THEN ST_MakePoint(longitude, latitude)::geography
+            ELSE NULL
+        END
+    ) STORED;
+
+-- 3. GiST spatial index
+CREATE INDEX IF NOT EXISTS idx_property_listings_geog
+    ON property_listings USING GIST (geog)
+    WHERE geog IS NOT NULL;
+```
+
+> **Note:** This SQL is NOT a Flyway migration. It is a manual provisioning helper for
+> the throwaway perf container. The equivalent production change is already in
+> `V73__add_geog_column.sql`. Never apply this to the production database.
+
+The `geog` column is `GENERATED ALWAYS AS ... STORED`, so `gen_perf_listings.py` correctly
+omits it from `INSERT_COLUMNS` — PostgreSQL auto-populates it from `latitude`/`longitude`
+on every INSERT. After provisioning, all inserted `[PERF]` rows will have a non-null `geog`
+value (assuming `latitude` and `longitude` are non-null, which is guaranteed by the generator).
+
+### Container image note
+
+The standard `postgres:14` Docker image does **not** include PostGIS. To use a PostGIS-capable
+perf container, switch to `postgis/postgis:14-3.3` (or any `14-*` PostGIS image):
+
+```bash
+docker run -d --name perf-pg-geo \
+  -e POSTGRES_PASSWORD=perf \
+  -p 5434:5432 \
+  postgis/postgis:14-3.3
+```
+
+Then re-apply migrations and run `perf_db_apply_geog.sql`.
+
+---
+
+## area_key distribution fix (Issue #1297)
+
+**Previous behaviour:** `_load_area_keys` queried `SELECT area_key FROM public.areas LIMIT 20`
+(heap-ordered). The 20 rows returned could omit all 3 Udupi-cluster keys, causing the
+`next(iter(available_keys))` cross-cluster fallback to assign 80%+ of rows to one arbitrary
+key (observed: 0% Udupi rows in a 10k dataset).
+
+**Fixed behaviour (v1297+):** The function now queries the 5 specific preferred keys via
+`SELECT area_key FROM public.areas WHERE area_key = ANY(%s)`. Each cluster maps to its OWN
+preferred key if present, or `None` if absent. There is no cross-cluster fallback — a missing
+key produces `NULL` for that cluster only (which is valid since `area_key` is nullable per V6).
+The result is fully deterministic: same DB state → same mapping on every run.
+
+Expected area_key distribution with a correctly seeded areas table and `seed=42`:
+
+| Cluster    | area_key                       | % of rows |
+|------------|--------------------------------|-----------|
+| udupi      | IN\|KA\|Udupi\|Udupi          | ~60%      |
+| manipal    | IN\|KA\|Udupi\|Manipal         | ~10%      |
+| kundapura  | IN\|KA\|Udupi\|Kundapura       | ~10%      |
+| mangaluru  | IN\|KA\|Mangalore\|Kadri       | ~10%      |
+| bengaluru  | IN\|KA\|Bengaluru\|Koramangala | ~10%      |

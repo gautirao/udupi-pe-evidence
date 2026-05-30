@@ -367,17 +367,70 @@ def run_harness(
 
     summary_rows: list[dict] = []
 
+    # Query IDs that require the geog column and PostGIS
+    GEO_QUERY_IDS = {"QP-1c", "QP-3b"}
+
     try:
         cur = conn.cursor()
 
         # Pre-flight checks
         run_preflight(cur, count_check)
 
+        # Geo capability probe (read-only, same cursor/transaction)
+        cur.execute("SELECT 1 FROM pg_extension WHERE extname='postgis'")
+        postgis_present = cur.fetchone() is not None
+        cur.execute(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name='property_listings' AND column_name='geog'"
+        )
+        geog_col_present = cur.fetchone() is not None
+        geog_available = postgis_present and geog_col_present
+
+        if not geog_available:
+            print(
+                f"WARNING: geog/PostGIS not fully available "
+                f"(postgis={postgis_present}, geog_col={geog_col_present}). "
+                f"Queries {sorted(GEO_QUERY_IDS)} will be skipped with DATA_GAP status.",
+                file=sys.stderr,
+            )
+
         # Run EXPLAIN ANALYZE for each query
         for query in queries:
+            output_file = output_dir / f"{query.id}.txt"
+
+            # Skip geo queries when geog/PostGIS is unavailable
+            if not geog_available and query.id in GEO_QUERY_IDS:
+                print(f"Skipping {query.id}: {query.description} [DATA_GAP]")
+                data_gap_note = (
+                    f"Query:     {query.id} — {query.description}\n"
+                    f"Status:    DATA_GAP — geog/PostGIS not present; apply V73 "
+                    f"(CREATE EXTENSION postgis + geog generated column) to this DB.\n"
+                    f"{'=' * 70}\n\n"
+                    f"This query requires:\n"
+                    f"  1. PostGIS extension: CREATE EXTENSION IF NOT EXISTS postgis;\n"
+                    f"  2. geog generated column on property_listings (V73 migration):\n"
+                    f"     ALTER TABLE property_listings ADD COLUMN IF NOT EXISTS geog\n"
+                    f"       geography(Point,4326)\n"
+                    f"       GENERATED ALWAYS AS (\n"
+                    f"         CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL\n"
+                    f"         THEN ST_MakePoint(longitude, latitude)::geography\n"
+                    f"         ELSE NULL END) STORED;\n"
+                    f"  3. GiST index: CREATE INDEX IF NOT EXISTS idx_property_listings_geog\n"
+                    f"       ON property_listings USING GIST (geog) WHERE geog IS NOT NULL;\n"
+                )
+                output_file.write_text(data_gap_note, encoding="utf-8")
+                summary_rows.append(
+                    {
+                        "id": query.id,
+                        "exec_ms": None,
+                        "plan_type": "DATA_GAP",
+                        "index_used": False,
+                    }
+                )
+                continue
+
             params = _build_params(query, city_slug)
             explain_sql = f"EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) {query.sql}"
-            output_file = output_dir / f"{query.id}.txt"
 
             print(f"Running {query.id}: {query.description} ...", end=" ", flush=True)
             start_ts = datetime.now(tz=timezone.utc)
@@ -442,9 +495,15 @@ def run_harness(
     print(f"{'Query':<10} {'Runtime (ms)':>14} {'Plan type':<35} {'Index used?':>12}")
     print("-" * 70)
     for row in summary_rows:
-        rt = f"{row['exec_ms']:.3f}" if row["exec_ms"] is not None else "ERROR"
+        plan_type = row["plan_type"]
+        if plan_type == "ERROR":
+            rt = "ERROR"
+        elif plan_type == "DATA_GAP":
+            rt = "DATA_GAP"
+        else:
+            rt = f"{row['exec_ms']:.3f}" if row["exec_ms"] is not None else "N/A"
         idx = "YES" if row["index_used"] else "no"
-        print(f"{row['id']:<10} {rt:>14} {row['plan_type']:<35} {idx:>12}")
+        print(f"{row['id']:<10} {rt:>14} {plan_type:<35} {idx:>12}")
     print("=" * 70)
     print(f"\nResults written to: {output_dir}/")
 

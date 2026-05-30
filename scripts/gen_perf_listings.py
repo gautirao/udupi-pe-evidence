@@ -340,12 +340,21 @@ def _load_area_keys(conn) -> dict:
     """
     Query the areas table and map cluster names to area_key values.
 
-    Returns a dict of {cluster_name: area_key}.
-    If the areas table is empty, area_key will be None for all clusters,
-    which is allowed since area_key is nullable (V6 schema).
+    Queries the 5 specific preferred keys defined in CLUSTER_FALLBACK_AREA_KEYS.
+    Each cluster maps to its OWN preferred key if present, else None.
+    No cross-cluster fallback — missing keys produce None for that cluster only.
+
+    Returns a dict of {cluster_name: area_key | None}.
+    If the areas table returns no matching rows, area_key will be None for all
+    clusters (area_key is nullable per V6 schema).
     """
+    preferred_keys = list(CLUSTER_FALLBACK_AREA_KEYS.values())
+
     with conn.cursor() as cur:
-        cur.execute("SELECT area_key FROM public.areas LIMIT 20")
+        cur.execute(
+            "SELECT area_key FROM public.areas WHERE area_key = ANY(%s)",
+            (preferred_keys,),
+        )
         rows = cur.fetchall()
 
     if not rows:
@@ -355,21 +364,21 @@ def _load_area_keys(conn) -> dict:
         )
         return {name: None for name in CLUSTER_FALLBACK_AREA_KEYS}
 
-    available_keys = {r[0] for r in rows}
+    fetched_keys = {r[0] for r in rows}
 
-    def _pick(preferred: str) -> Optional[str]:
-        if preferred in available_keys:
-            return preferred
-        # Fall back to first available key if the preferred one isn't seeded
-        return next(iter(available_keys), None)
+    result: dict = {}
+    for cluster_name, preferred_key in CLUSTER_FALLBACK_AREA_KEYS.items():
+        if preferred_key in fetched_keys:
+            result[cluster_name] = preferred_key
+        else:
+            print(
+                f"WARNING: preferred area_key {preferred_key!r} for cluster "
+                f"{cluster_name!r} not found in areas table. area_key will be NULL.",
+                file=sys.stderr,
+            )
+            result[cluster_name] = None
 
-    return {
-        "udupi":     _pick("IN|KA|Udupi|Udupi"),
-        "manipal":   _pick("IN|KA|Udupi|Manipal"),
-        "kundapura": _pick("IN|KA|Udupi|Kundapura"),
-        "mangaluru": _pick("IN|KA|Mangalore|Kadri"),
-        "bengaluru": _pick("IN|KA|Bengaluru|Koramangala"),
-    }
+    return result
 
 
 # ---------------------------------------------------------------------------

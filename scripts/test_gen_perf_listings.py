@@ -179,3 +179,130 @@ def test_insert_batches_commits_per_batch():
     assert mock_conn.commit.call_count == expected_commits, (
         f"Expected {expected_commits} commits for {count} rows, got {mock_conn.commit.call_count}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 9: _load_area_keys — all 5 preferred keys present
+# ---------------------------------------------------------------------------
+
+def test_load_area_keys_all_present():
+    """When all 5 preferred keys are in the areas table, each cluster maps to its OWN key."""
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    # fetchall returns all 5 preferred keys
+    all_keys = list(gen.CLUSTER_FALLBACK_AREA_KEYS.values())
+    mock_cursor.fetchall.return_value = [(k,) for k in all_keys]
+
+    result = gen._load_area_keys(mock_conn)
+
+    # Every cluster must map to its OWN preferred key (no cross-cluster substitution)
+    for cluster_name, expected_key in gen.CLUSTER_FALLBACK_AREA_KEYS.items():
+        assert result[cluster_name] == expected_key, (
+            f"Cluster {cluster_name!r}: expected {expected_key!r}, got {result[cluster_name]!r}"
+        )
+
+    # Confirm the SQL used = ANY(%s) and NOT LIMIT 20
+    executed_sql = mock_cursor.execute.call_args[0][0]
+    assert "= ANY(%s)" in executed_sql, (
+        f"Expected parameterised '= ANY(%s)' in SQL, got: {executed_sql!r}"
+    )
+    assert "LIMIT 20" not in executed_sql, (
+        f"Old 'LIMIT 20' pattern must not appear in SQL, got: {executed_sql!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 10: _load_area_keys — Udupi-cluster keys missing (regression test)
+# ---------------------------------------------------------------------------
+
+def test_load_area_keys_udupi_keys_missing():
+    """When Udupi/Manipal/Kundapura keys are absent, those clusters map to None.
+
+    This is the regression test for DEFECT 1: the old code used next(iter(available_keys))
+    cross-cluster fallback, causing udupi/manipal/kundapura to get a Mangalore or
+    Bengaluru key instead of None.
+    """
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    # Only Mangalore and Bengaluru keys present; all 3 Udupi-cluster keys missing
+    partial_keys = [
+        gen.CLUSTER_FALLBACK_AREA_KEYS["mangaluru"],
+        gen.CLUSTER_FALLBACK_AREA_KEYS["bengaluru"],
+    ]
+    mock_cursor.fetchall.return_value = [(k,) for k in partial_keys]
+
+    result = gen._load_area_keys(mock_conn)
+
+    # Udupi-cluster must map to None — NOT to any Mangalore/Bengaluru key
+    for cluster_name in ("udupi", "manipal", "kundapura"):
+        assert result[cluster_name] is None, (
+            f"Cluster {cluster_name!r} must be None when its preferred key is absent, "
+            f"got {result[cluster_name]!r}"
+        )
+        # Explicitly confirm it did NOT get a cross-cluster key (old bug)
+        assert result[cluster_name] not in partial_keys, (
+            f"Cluster {cluster_name!r} must not fall back to a cross-cluster key"
+        )
+
+    # Mangalore and Bengaluru must still map correctly
+    assert result["mangaluru"] == gen.CLUSTER_FALLBACK_AREA_KEYS["mangaluru"]
+    assert result["bengaluru"] == gen.CLUSTER_FALLBACK_AREA_KEYS["bengaluru"]
+
+
+# ---------------------------------------------------------------------------
+# Test 11: _load_area_keys — empty result → all clusters None
+# ---------------------------------------------------------------------------
+
+def test_load_area_keys_empty_result():
+    """When fetchall returns [], all clusters map to None."""
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_cursor.fetchall.return_value = []
+
+    result = gen._load_area_keys(mock_conn)
+
+    assert set(result.keys()) == set(gen.CLUSTER_FALLBACK_AREA_KEYS.keys()), (
+        "Result must have all cluster keys"
+    )
+    for cluster_name, value in result.items():
+        assert value is None, (
+            f"Cluster {cluster_name!r}: expected None for empty result, got {value!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 12: SQL uses = ANY(%s) parameterised form, not LIMIT 20
+# ---------------------------------------------------------------------------
+
+def test_load_area_keys_sql_is_parameterised():
+    """The SQL query must use = ANY(%s) and NOT LIMIT 20.
+
+    This guards against regression to the old 'LIMIT 20' pattern which allowed
+    heap-order to omit the Udupi-cluster keys.
+    """
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+    mock_cursor.fetchall.return_value = []  # empty is fine — we only care about SQL shape
+
+    gen._load_area_keys(mock_conn)
+
+    # The first positional arg to execute() is the SQL string
+    executed_sql = mock_cursor.execute.call_args[0][0]
+    assert "= ANY(%s)" in executed_sql, (
+        f"SQL must use '= ANY(%s)' parameterised form, got: {executed_sql!r}"
+    )
+    assert "LIMIT 20" not in executed_sql, (
+        f"SQL must NOT contain 'LIMIT 20', got: {executed_sql!r}"
+    )
