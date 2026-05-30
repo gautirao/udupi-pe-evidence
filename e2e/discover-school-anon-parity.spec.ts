@@ -419,8 +419,12 @@ test.describe('@integration-ui school-first anonymous parity (#1132)', () => {
     await expect(propertyMarkers.first()).toBeVisible({ timeout: 15_000 });
     expect(await propertyMarkers.count()).toBeGreaterThan(0);
 
-    // The old single-area /listings path must NOT be the marker source.
-    expect(cityListingsRequestFired).toBe(false);
+    // The school-radius endpoint must have been called — positive assertion that it
+    // was the listing source, rather than a negative assertion on /listings.
+    // city-listings legitimately fires for the area panel when areaKey is in the URL
+    // (useDiscoverCityListings is enabled when selectedArea is non-null), so
+    // cityListingsRequestFired===false is not a valid guard here.
+    expect(radiusCapture.requests.length).toBeGreaterThan(0);
 
     // Auth-gated markers endpoint must NOT have been called.
     expect(markersRequestFired).toBe(false);

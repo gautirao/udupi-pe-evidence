@@ -174,6 +174,69 @@ test('BCP-3: groupId + areaKey → badge shows area listingCount (5), not group 
 
 test('BCP-4: schoolId + radiusKm + areaKey → badge shows school-scoped count, not area count', async ({ page }) => {
   await stubBase(page, CITY_LISTINGS_NEAR_SCHOOL);
+
+  // Register AFTER base stubs so this more-specific path wins over the broader /listings
+  // glob — Playwright matches the most-recently-added route first.
+  // Post-#1261: schoolListingsCount (badge source) comes from school-radius-listings
+  // (server-side ST_DWithin), not from haversine over city-listings.
+  // Fixture: exactly 2 cards within radiusKm=2 of SCHOOL_LAT/LON (13.18911, 75.00151).
+  //   card 1: (13.19, 75.00) → ~0.1 km from school ✓
+  //   card 2: (13.18, 75.01) → ~0.9 km from school ✓
+  // These are the 2 school-scoped listings the badge must show (area count is 5, must NOT win).
+  await page.route('**/api/discover/cities/*/school-radius-listings**', (r) =>
+    json(r, 200, {
+      content: [
+        {
+          id: 'sr-bcp-1',
+          listingNumber: 9030,
+          propertyType: 'apartment',
+          title: 'Near School 1',
+          locality: 'Manipal',
+          areaKey: AREA_KEY_A,
+          pricePaise: 500_000_000,
+          landArea: null,
+          landAreaUnit: null,
+          builtArea: 900,
+          builtAreaUnit: 'sqft',
+          bedrooms: 2,
+          latitude: 13.19,
+          longitude: 75.00,
+          heroImageUrl: null,
+          listingPurpose: 'sale',
+          possessionStatus: 'ready_to_move',
+          daysOnMarket: 3,
+          backOnMarket: false,
+          createdAt: '2026-05-01T00:00:00Z',
+        },
+        {
+          id: 'sr-bcp-2',
+          listingNumber: 9031,
+          propertyType: 'house',
+          title: 'Near School 2',
+          locality: 'Manipal',
+          areaKey: AREA_KEY_A,
+          pricePaise: 600_000_000,
+          landArea: null,
+          landAreaUnit: null,
+          builtArea: 1100,
+          builtAreaUnit: 'sqft',
+          bedrooms: 3,
+          latitude: 13.18,
+          longitude: 75.01,
+          heroImageUrl: null,
+          listingPurpose: 'sale',
+          possessionStatus: 'ready_to_move',
+          daysOnMarket: 5,
+          backOnMarket: false,
+          createdAt: '2026-05-01T00:00:00Z',
+        },
+      ],
+      page: 0,
+      size: 50,
+      hasMore: false,
+    }),
+  );
+
   const encodedAreaKey = encodeURIComponent(AREA_KEY_A);
   const url = `/discover?city=${CITY}&journey=school-first&schoolId=${SCHOOL_ID}&radiusKm=2&lat=${SCHOOL_LAT}&lon=${SCHOOL_LON}&zoom=14&areaKey=${encodedAreaKey}`;
   await page.goto(url);

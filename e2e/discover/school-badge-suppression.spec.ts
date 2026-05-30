@@ -181,9 +181,71 @@ test('SBS-1: school-radius active with zero nearby listings → badge IS visible
 test('SBS-2: school-radius active with 2 nearby listings → badge IS visible showing 2 (scoped count)', async ({ page }) => {
   await stubBaseRoutes(page, CITY_LISTINGS_WITH_MATCHES_FIXTURE);
 
-  // Include areaKey so selectedArea gets populated → areaListings is fetched and
-  // the haversine filter in schoolListings useMemo can count the 2 nearby listings.
-  // Without areaKey, selectedArea is null and areaListings = [] (see useDiscoverMapData.ts:202).
+  // Register AFTER base stubs so this more-specific path wins over the broader /listings
+  // glob — Playwright matches the most-recently-added route first.
+  // Post-#1261: schoolListingsCount (badge source) comes from school-radius-listings
+  // (server-side ST_DWithin), not from haversine over city-listings.
+  // Fixture: 2 cards with latitude/longitude within radiusKm=5 of SCHOOL_LAT/LON.
+  //   card 1: (13.19, 75.00) → ~0.1 km from school (13.18911, 75.00151) ✓
+  //   card 2: (13.21, 75.01) → ~2.4 km from school                       ✓
+  // mapSchoolRadiusCard maps c.latitude/c.longitude → lat/lon for marker derivation.
+  await page.route('**/api/discover/cities/*/school-radius-listings**', (route) =>
+    fulfillJson(route, 200, {
+      content: [
+        {
+          id: 'sr-sbs-1',
+          listingNumber: 9020,
+          propertyType: 'apartment',
+          title: 'Near School Property 1',
+          locality: 'Manipal',
+          areaKey: AREA_KEY,
+          pricePaise: 500_000_000,
+          landArea: null,
+          landAreaUnit: null,
+          builtArea: 900,
+          builtAreaUnit: 'sqft',
+          bedrooms: 2,
+          latitude: 13.19,
+          longitude: 75.00,
+          heroImageUrl: null,
+          listingPurpose: 'sale',
+          possessionStatus: 'ready_to_move',
+          daysOnMarket: 3,
+          backOnMarket: false,
+          createdAt: '2026-05-01T00:00:00Z',
+        },
+        {
+          id: 'sr-sbs-2',
+          listingNumber: 9021,
+          propertyType: 'house',
+          title: 'Near School Property 2',
+          locality: 'Manipal',
+          areaKey: AREA_KEY,
+          pricePaise: 600_000_000,
+          landArea: null,
+          landAreaUnit: null,
+          builtArea: 1200,
+          builtAreaUnit: 'sqft',
+          bedrooms: 3,
+          latitude: 13.21,
+          longitude: 75.01,
+          heroImageUrl: null,
+          listingPurpose: 'sale',
+          possessionStatus: 'ready_to_move',
+          daysOnMarket: 7,
+          backOnMarket: false,
+          createdAt: '2026-05-01T00:00:00Z',
+        },
+      ],
+      page: 0,
+      size: 50,
+      hasMore: false,
+    }),
+  );
+
+  // Include areaKey so selectedArea gets populated → areaListings is fetched.
+  // schoolListingsCount for the badge comes from school-radius-listings (post-#1261),
+  // not from haversine over city-listings.
   const encodedAreaKey = encodeURIComponent(AREA_KEY);
   const url = `/discover?city=${CITY}&journey=school-first&schoolId=${SCHOOL_ID}&radiusKm=5&lat=${SCHOOL_LAT}&lon=${SCHOOL_LON}&zoom=12&areaKey=${encodedAreaKey}`;
   await page.goto(url);

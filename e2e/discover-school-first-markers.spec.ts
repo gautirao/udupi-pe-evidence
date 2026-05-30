@@ -185,6 +185,50 @@ async function stubCityListings(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Stub the post-#1261 public school-radius endpoint.
+ * Card has latitude/longitude (API contract); mapSchoolRadiusCard maps these to lat/lon
+ * for deriveAnonSchoolRadiusMarkers. Distance from sch-1 (13.3525, 74.7864): ~0.08 km,
+ * well within radiusKm=3.
+ *
+ * Register AFTER base stubs (including the /listings fallback) so this more-specific
+ * path wins — Playwright matches the most-recently-added route first.
+ */
+async function stubSchoolRadiusListings(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — exercises the post-#1261 anon marker source
+  await page.route('**/api/discover/cities/*/school-radius-listings**', (route) =>
+    fulfillJson(route, 200, {
+      content: [
+        {
+          id: 'sr-focus-1',
+          listingNumber: 9001,
+          propertyType: 'house',
+          title: 'Focus Test Property',
+          locality: 'Manipal',
+          areaKey: MANIPAL_AREA_KEY,
+          pricePaise: 4_500_000,
+          landArea: null,
+          landAreaUnit: null,
+          builtArea: 1100,
+          builtAreaUnit: 'sqft',
+          bedrooms: 3,
+          latitude: 13.3530,
+          longitude: 74.7870,
+          heroImageUrl: null,
+          listingPurpose: 'sale',
+          possessionStatus: 'ready_to_move',
+          daysOnMarket: 4,
+          backOnMarket: false,
+          createdAt: '2026-05-01T00:00:00Z',
+        },
+      ],
+      page: 0,
+      size: 50,
+      hasMore: false,
+    }),
+  );
+}
+
 function getUrlParam(page: Page, key: string): string | null {
   return new URL(page.url()).searchParams.get(key);
 }
@@ -245,6 +289,10 @@ test.describe('@integration-ui school-first focus mode (#1130)', () => {
     await stubSchoolById(page, MANIPAL_SCHOOL);
     await stubDiscoverListings(page);
     await stubCityListings(page);
+    // Register AFTER base stubs so this more-specific path wins (Playwright matches
+    // most-recently-added route first). Post-#1261: anon property markers sourced from
+    // school-radius-listings (server-side ST_DWithin), not city-listings + haversine.
+    await stubSchoolRadiusListings(page);
 
     await page.goto(
       `/discover?city=udupi&journey=school-first&zoom=14&areaKey=${ENCODED_AREA_KEY}&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`,

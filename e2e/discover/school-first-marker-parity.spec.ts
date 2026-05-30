@@ -255,6 +255,50 @@ async function stubAuthGatedListings(page: Page): Promise<void> {
   );
 }
 
+/**
+ * Stub the post-#1261 public school-radius endpoint and return a fixture with 1 card.
+ * Card has latitude/longitude (API contract); mapSchoolRadiusCard maps these to lat/lon
+ * for deriveAnonSchoolRadiusMarkers. Distance from MIT (13.35250, 74.79226): ~0.07 km,
+ * well within radiusKm=3.
+ *
+ * Register AFTER base stubs so this more-specific path wins over the broader /listings
+ * glob — Playwright matches the most-recently-added route first.
+ */
+async function stubSchoolRadiusListings(page: Page): Promise<void> {
+  // INTEGRATION-UI: stub justified — exercises the post-#1261 anon marker source
+  await page.route('**/api/discover/cities/*/school-radius-listings**', (route) =>
+    fulfillJson(route, 200, {
+      content: [
+        {
+          id: 'sr-par-1',
+          listingNumber: 9010,
+          propertyType: 'house',
+          title: 'House Near MIT',
+          locality: 'Manipal',
+          areaKey: MANIPAL_AREA_KEY,
+          pricePaise: 500_000_000,
+          landArea: null,
+          landAreaUnit: null,
+          builtArea: 1200,
+          builtAreaUnit: 'sqft',
+          bedrooms: 3,
+          latitude: MIT_LAT + 0.001,
+          longitude: MIT_LON + 0.001,
+          heroImageUrl: null,
+          listingPurpose: 'sale',
+          possessionStatus: 'ready_to_move',
+          daysOnMarket: 5,
+          backOnMarket: false,
+          createdAt: '2026-05-01T00:00:00Z',
+        },
+      ],
+      page: 0,
+      size: 50,
+      hasMore: false,
+    }),
+  );
+}
+
 function getUrlParam(page: Page, key: string): string | null {
   return new URL(page.url()).searchParams.get(key);
 }
@@ -269,6 +313,10 @@ async function stubAll(page: Page): Promise<void> {
   await stubSchoolsByArea(page);
   await stubCityListings(page);
   await stubAuthGatedListings(page);
+  // Register AFTER base stubs so this more-specific path wins (Playwright matches
+  // most-recently-added route first). Post-#1261: anon property markers sourced from
+  // school-radius-listings (server-side ST_DWithin), not city-listings + haversine.
+  await stubSchoolRadiusListings(page);
 }
 
 // ---------------------------------------------------------------------------
