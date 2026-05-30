@@ -258,4 +258,19 @@ class DiscoverMarkersControllerTest {
 
         verifyNoInteractions(service);
     }
+
+    // ── Cache-Control: no-store (authenticated endpoint) ─────────────────────
+
+    @Test
+    void getMarkers_responseHasCacheControlNoStore() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(header().string("Cache-Control", not(containsString("public"))));
+    }
 }

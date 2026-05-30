@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -120,7 +121,9 @@ public class DiscoverListingsController {
                 includeAggregates
         );
 
-        return ResponseEntity.ok(service.getListings(query));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(service.getListings(query));
     }
 
     /**

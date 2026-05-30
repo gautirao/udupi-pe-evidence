@@ -146,4 +146,17 @@ class ListingMarkersControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.markers[0].pricePaise").doesNotExist());
     }
+
+    // ── Cache-Control: no-store (SCRAPED provenance unconfirmed) ─────────────
+
+    @Test
+    void getMarkers_responseHasCacheControlNoStore() throws Exception {
+        when(listingMarkersService.getMarkersForCity("udupi"))
+                .thenReturn(new ListingMarkersResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/listings/markers").param("city", "udupi"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(header().string("Cache-Control", not(containsString("public"))));
+    }
 }

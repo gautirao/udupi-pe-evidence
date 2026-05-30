@@ -2,6 +2,7 @@ package com.example.realestate.discover;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,6 +11,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Public (unauthenticated) endpoint returning school-radius listings crossing area boundaries.
@@ -89,7 +92,8 @@ public class PublicSchoolRadiusListingsController {
         // Server-clamp size: [1, 50]
         int effectiveSize = Math.max(MIN_SIZE, Math.min(size, MAX_SIZE));
 
-        return ResponseEntity.ok(
-                service.getListings(city, schoolLat, schoolLon, effectiveRadius, page, effectiveSize));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
+                .body(service.getListings(city, schoolLat, schoolLon, effectiveRadius, page, effectiveSize));
     }
 }

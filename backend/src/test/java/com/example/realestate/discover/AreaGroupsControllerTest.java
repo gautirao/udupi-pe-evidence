@@ -17,11 +17,15 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -175,5 +179,21 @@ class AreaGroupsControllerTest {
     void getAreaGroups_missingCityParam_returns400() throws Exception {
         mockMvc.perform(get("/api/discover/area-groups"))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ── Cache-Control: public, max-age=120 ───────────────────────────────────
+
+    @Test
+    void getAreaGroups_responseHasCacheControlPublicMaxAge120() throws Exception {
+        when(areaGroupsService.getGroupsByCity("udupi"))
+                .thenReturn(new AreaGroupsResponse("udupi", List.of()));
+
+        // andDo(print()) captures the exact rendered Cache-Control string in test output
+        mockMvc.perform(get("/api/discover/area-groups").param("city", "udupi"))
+                .andDo(print())
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("max-age=120")))
+                .andExpect(header().string("Cache-Control", containsString("public")))
+                .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
     }
 }

@@ -17,8 +17,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -143,5 +145,19 @@ class AreaSummaryControllerTest {
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.areas[0].schoolCount", is(7)));
+    }
+
+    // ── Cache-Control: public, max-age=120 ───────────────────────────────────
+
+    @Test
+    void getAreas_responseHasCacheControlPublicMaxAge120() throws Exception {
+        when(areaSummaryService.getAreasByCity("udupi"))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("max-age=120")))
+                .andExpect(header().string("Cache-Control", containsString("public")))
+                .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
     }
 }

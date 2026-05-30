@@ -448,4 +448,19 @@ class CityAreaListingsControllerTest {
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
                 null, null, null, null, null);
     }
+
+    // ── Cache-Control: public, max-age=60 ────────────────────────────────────
+
+    @Test
+    void getCityAreaListings_responseHasCacheControlPublicMaxAge60() throws Exception {
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
+
+        mockMvc.perform(get("/api/discover/cities/udupi/listings")
+                        .param("areaKeys", "IN|KA|Udupi|Malpe"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("max-age=60")))
+                .andExpect(header().string("Cache-Control", containsString("public")))
+                .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
+    }
 }

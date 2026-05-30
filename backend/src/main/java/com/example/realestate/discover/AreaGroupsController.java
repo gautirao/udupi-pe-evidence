@@ -2,11 +2,14 @@ package com.example.realestate.discover;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.concurrent.TimeUnit;
 
 /**
  * Public (unauthenticated) endpoint that returns area groups for a city.
@@ -38,6 +41,8 @@ public class AreaGroupsController {
 
         log.debug("GET /api/discover/area-groups city={}", city);
         AreaGroupsResponse response = areaGroupsService.getGroupsByCity(city);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic())
+                .body(response);
     }
 }

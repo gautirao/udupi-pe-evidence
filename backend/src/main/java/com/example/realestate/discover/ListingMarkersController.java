@@ -2,6 +2,7 @@ package com.example.realestate.discover;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,7 +45,9 @@ public class ListingMarkersController {
         ListingMarkersResponse response = b != null
                 ? listingMarkersService.getMarkersForCityInBbox(city, b[0], b[1], b[2], b[3])
                 : listingMarkersService.getMarkersForCity(city);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(response);
     }
 
     /** Parses {@code "south,west,north,east"} → double[4], or returns null on invalid input. */

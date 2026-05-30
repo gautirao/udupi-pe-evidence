@@ -232,4 +232,19 @@ class DiscoverListingsControllerTest {
 
         verifyNoInteractions(service);
     }
+
+    // ── Cache-Control: no-store (authenticated endpoint) ─────────────────────
+
+    @Test
+    void getListings_responseHasCacheControlNoStore() throws Exception {
+        when(service.getListings(any())).thenReturn(
+                new DiscoverListingsPage(List.of(), 0, 20, 0L, 0, null));
+
+        mockMvc.perform(get("/api/discover/listings")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(header().string("Cache-Control", not(containsString("public"))));
+    }
 }

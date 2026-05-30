@@ -317,4 +317,20 @@ class PublicSchoolRadiusListingsControllerTest {
 
         verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(0.0), eq(0), anyInt());
     }
+
+    // ── Cache-Control: public, max-age=60 ────────────────────────────────────
+
+    @Test
+    void getSchoolRadiusListings_responseHasCacheControlPublicMaxAge60() throws Exception {
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+                .thenReturn(emptyPage());
+
+        mockMvc.perform(get(BASE_URL)
+                        .param("schoolLat", "13.3")
+                        .param("schoolLon", "74.7"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("max-age=60")))
+                .andExpect(header().string("Cache-Control", containsString("public")))
+                .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
+    }
 }
