@@ -76,7 +76,7 @@ class DiscoverMarkersControllerTest {
     void validCity_returns200() throws Exception {
         DiscoverMarker marker = new DiscoverMarker("abc-id", 13.3, 74.7, 5_000_000L, "Malpe");
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(marker), false));
+                new DiscoverMarkersResponse("udupi", List.of(marker), false, 1, 1L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
@@ -88,7 +88,11 @@ class DiscoverMarkersControllerTest {
                 .andExpect(jsonPath("$.markers[0].lat", is(13.3)))
                 .andExpect(jsonPath("$.markers[0].lon", is(74.7)))
                 .andExpect(jsonPath("$.markers[0].pricePaise", is(5_000_000)))
-                .andExpect(jsonPath("$.truncated", is(false)));
+                .andExpect(jsonPath("$.truncated", is(false)))
+                .andExpect(jsonPath("$.returnedElements", is(1)))
+                .andExpect(jsonPath("$.totalFilteredElements", is(1)))
+                .andExpect(jsonPath("$.limit", is(1000)))
+                .andExpect(jsonPath("$.boundsApplied", is(false)));
     }
 
     // ── 3. Polygon with fewer than 3 vertices → 400 ───────────────────────────
@@ -124,13 +128,16 @@ class DiscoverMarkersControllerTest {
     void truncatedResponse_returnsTruncatedTrue() throws Exception {
         DiscoverMarker marker = new DiscoverMarker("abc-id", 13.3, 74.7, 5_000_000L, "Malpe");
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(marker), true));
+                new DiscoverMarkersResponse("udupi", List.of(marker), true, 1, 1500L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
                         .with(jwt()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.truncated", is(true)));
+                .andExpect(jsonPath("$.truncated", is(true)))
+                .andExpect(jsonPath("$.returnedElements", is(1)))
+                .andExpect(jsonPath("$.totalFilteredElements", is(1500)))
+                .andExpect(jsonPath("$.limit", is(1000)));
     }
 
     // ── 6. Valid bbox → 200, bbox passed to service ───────────────────────────
@@ -139,7 +146,7 @@ class DiscoverMarkersControllerTest {
     void validBbox_returns200_andBboxPassedToService() throws Exception {
         DiscoverMarker marker = new DiscoverMarker("m1", 13.35, 74.75, null, "Malpe");
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(marker), false));
+                new DiscoverMarkersResponse("udupi", List.of(marker), false, 1, 1L, 1000, true));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
@@ -189,7 +196,7 @@ class DiscoverMarkersControllerTest {
     @Test
     void qParam_nonEmpty_passedToFilters() throws Exception {
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(), false));
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
@@ -205,7 +212,7 @@ class DiscoverMarkersControllerTest {
     @Test
     void qParam_empty_passesNullToFilters() throws Exception {
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(), false));
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
@@ -219,7 +226,7 @@ class DiscoverMarkersControllerTest {
     @Test
     void qParam_absent_passesNullToFilters() throws Exception {
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(), false));
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
@@ -233,7 +240,7 @@ class DiscoverMarkersControllerTest {
     @Test
     void qParam_withSurroundingWhitespace_isTrimmed() throws Exception {
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(), false));
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")
@@ -264,7 +271,7 @@ class DiscoverMarkersControllerTest {
     @Test
     void getMarkers_responseHasCacheControlNoStore() throws Exception {
         when(service.getMarkers(any())).thenReturn(
-                new DiscoverMarkersResponse("udupi", List.of(), false));
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
 
         mockMvc.perform(get("/api/discover/markers")
                         .param("city", "udupi")

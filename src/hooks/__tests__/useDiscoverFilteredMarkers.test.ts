@@ -544,4 +544,58 @@ describe('useDiscoverFilteredMarkers', () => {
   });
 
   // ─── End AC5 (#1245) ─────────────────────────────────────────────────────
+
+  // ─── AC-F2: marker truncation metadata passthrough (#944) ─────────────────
+
+  it('AC_F2_truncation_metadata_flows_through_hook_data', async () => {
+    const TRUNCATED_RESPONSE = {
+      city: 'udupi',
+      markers: [{ id: 'm1', lat: 13.34, lon: 74.74, pricePaise: 5000000, locality: 'Katapadi' }],
+      truncated: true,
+      returnedElements: 1000,
+      totalFilteredElements: 4200,
+      limit: 1000,
+      boundsApplied: true,
+    };
+    mockGet.mockResolvedValue(TRUNCATED_RESPONSE);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.truncated).toBe(true);
+    expect(result.current.data?.returnedElements).toBe(1000);
+    expect(result.current.data?.totalFilteredElements).toBe(4200);
+    expect(result.current.data?.limit).toBe(1000);
+    expect(result.current.data?.boundsApplied).toBe(true);
+  });
+
+  it('AC_F2_not_truncated_metadata_flows_through_hook_data', async () => {
+    const NOT_TRUNCATED_RESPONSE = {
+      city: 'udupi',
+      markers: [{ id: 'm1', lat: 13.34, lon: 74.74, pricePaise: 5000000, locality: 'Katapadi' }],
+      truncated: false,
+      returnedElements: 42,
+      totalFilteredElements: 42,
+      limit: 1000,
+      boundsApplied: true,
+    };
+    mockGet.mockResolvedValue(NOT_TRUNCATED_RESPONSE);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.truncated).toBe(false);
+    expect(result.current.data?.returnedElements).toBe(42);
+    expect(result.current.data?.totalFilteredElements).toBe(42);
+  });
+
+  // ─── End AC-F2 (#944) ─────────────────────────────────────────────────────
 });

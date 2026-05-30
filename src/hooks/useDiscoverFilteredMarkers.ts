@@ -14,7 +14,19 @@ export interface DiscoverFilteredMarker {
 export interface DiscoverFilteredMarkersResponse {
   city: string;
   markers: DiscoverFilteredMarker[];
+  /** True when the backend capped the result set (more markers matched than were returned). */
   truncated?: boolean;
+  /** Number of markers returned in this response (= markers.length). */
+  returnedElements?: number;
+  /**
+   * Viewport-scoped total: count of all markers matching the current filters + bbox.
+   * Equals returnedElements when not truncated; exceeds returnedElements when truncated.
+   */
+  totalFilteredElements?: number;
+  /** Active marker cap (server-side FETCH_LIMIT constant). */
+  limit?: number;
+  /** True only when a valid bbox was applied to this query. */
+  boundsApplied?: boolean;
 }
 
 export function useDiscoverFilteredMarkers(

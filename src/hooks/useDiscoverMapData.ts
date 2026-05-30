@@ -84,6 +84,14 @@ export interface UseDiscoverMapDataResult {
   /** Pagination metadata from the listings endpoint */
   totalElements: number;
   totalPages: number;
+  /**
+   * Marker truncation metadata — present only when the markers query has settled
+   * and markersEnabled is true. All fields are undefined when not applicable
+   * (e.g. anonymous path, query not yet enabled).
+   */
+  markersTruncated: boolean;
+  markersReturnedElements: number | undefined;
+  markersTotalFilteredElements: number | undefined;
 }
 
 export function useDiscoverMapData({
@@ -306,6 +314,11 @@ export function useDiscoverMapData({
   const totalElements = discoverListingsPage?.totalElements ?? 0;
   const totalPages = discoverListingsPage?.totalPages ?? 0;
 
+  // ── Marker truncation metadata ────────────────────────────────────────────
+  const markersTruncated = filteredMarkersData?.truncated ?? false;
+  const markersReturnedElements = filteredMarkersData?.returnedElements;
+  const markersTotalFilteredElements = filteredMarkersData?.totalFilteredElements;
+
   return {
     areasLoading,
     listingDataLoading,
@@ -334,5 +347,8 @@ export function useDiscoverMapData({
     error,
     totalElements,
     totalPages,
+    markersTruncated,
+    markersReturnedElements,
+    markersTotalFilteredElements,
   };
 }

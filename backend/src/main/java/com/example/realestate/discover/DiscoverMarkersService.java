@@ -55,7 +55,12 @@ public class DiscoverMarkersService {
 
     @Transactional(readOnly = true)
     public DiscoverMarkersResponse getMarkers(DiscoverListingPredicateBuilder.Filters filters) {
+        // Build the WHERE fragment once — shared by the main SELECT and the conditional COUNT.
+        // bboxApplied is authoritative: set inside build() when the ST_MakeEnvelope clause was
+        // actually appended, so it stays correct if the builder ever adds further bbox validity
+        // checks beyond the null guard.
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);
+        boolean boundsApplied = predicate.bboxApplied();
 
         String sql = "SELECT pl.id, pl.latitude, pl.longitude, pl.price_paise, pl.locality"
                 + " FROM property_listings pl"
@@ -63,7 +68,9 @@ public class DiscoverMarkersService {
                 + " ORDER BY pl.id"
                 + " LIMIT " + FETCH_LIMIT;
 
-        List<Object> params = predicate.params();
+        // Materialise params to a single array shared by both JDBC call sites (SELECT + COUNT).
+        // Avoids any risk of the two calls receiving divergent arrays after a future refactor.
+        final Object[] paramArray = predicate.params().toArray();
 
         Timer.Sample sample = Timer.start(meterRegistry);
         String resultStatus = "success";
@@ -77,7 +84,7 @@ public class DiscoverMarkersService {
                             rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
                             rs.getString("locality")
                     ),
-                    params.toArray()
+                    paramArray
             );
 
             boolean truncated = markers.size() > CAP;
@@ -88,8 +95,41 @@ public class DiscoverMarkersService {
             if (markers.isEmpty()) {
                 resultStatus = "empty";
             }
-            log.debug("getMarkers city={} returned {} markers (truncated={})", filters.city(), markers.size(), truncated);
-            return new DiscoverMarkersResponse(filters.city(), markers, truncated);
+
+            int returnedElements = markers.size();
+
+            // totalFilteredElements — viewport-scoped (Option A: same WHERE including bbox).
+            //
+            // Performance contract: COUNT(*) runs ONLY on the truncated path.
+            //   - Truncated: fetch returned FETCH_LIMIT rows, meaning more rows match than CAP.
+            //     Run COUNT(*) with the same WHERE fragment to report the full matching set size.
+            //     The geog GiST index (idx_property_listings_geog) is reused by the COUNT query
+            //     because it references the same pl.geog predicates (ST_MakeEnvelope && pl.geog,
+            //     ST_DWithin, etc.) from the shared predicate.whereFragment().
+            //   - Not truncated: all matching rows were already fetched. totalFilteredElements
+            //     equals returnedElements — no extra query issued.
+            long totalFilteredElements;
+            if (truncated) {
+                String countSql = "SELECT COUNT(*) FROM property_listings pl WHERE " + predicate.whereFragment();
+                Long countResult = jdbc.queryForObject(countSql, Long.class, paramArray);
+                totalFilteredElements = countResult != null ? countResult : returnedElements;
+                log.debug("getMarkers city={} truncated, totalFilteredElements={}", filters.city(), totalFilteredElements);
+            } else {
+                totalFilteredElements = returnedElements;
+            }
+
+            log.debug("getMarkers city={} returned={} total={} truncated={} boundsApplied={}",
+                    filters.city(), returnedElements, totalFilteredElements, truncated, boundsApplied);
+
+            return new DiscoverMarkersResponse(
+                    filters.city(),
+                    markers,
+                    truncated,
+                    returnedElements,
+                    totalFilteredElements,
+                    CAP,
+                    boundsApplied
+            );
         } catch (DataAccessException ex) {
             resultStatus = "error";
             throw ex;

@@ -12,7 +12,7 @@ import { derivePanelContent } from '@/utils/discoverPanelState';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
-import { MapStatsBar } from '@/components/discover/MapStatsBar';
+import { MapStatsBar, MarkersTruncationNotice } from '@/components/discover/MapStatsBar';
 import { MapEmptyGuidance } from '@/components/discover/MapEmptyGuidance';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
@@ -557,6 +557,7 @@ export default function MapDiscovery() {
     topLocalities, activeFocusBounds, trendsAreaKeys,
     cityCenter, cityZoom, schoolById, schoolByIdError, error,
     totalElements, totalPages,
+    markersTruncated, markersReturnedElements, markersTotalFilteredElements,
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
@@ -1598,6 +1599,12 @@ export default function MapDiscovery() {
               onPolygonClear={handlePolygonCleared}
             />
           )}
+
+          <MarkersTruncationNotice
+            truncated={markersTruncated}
+            returnedElements={markersReturnedElements}
+            totalFilteredElements={markersTotalFilteredElements}
+          />
 
           <MapEmptyGuidance
             cityTotal={cityTotal}

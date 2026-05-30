@@ -42,7 +42,16 @@ public class DiscoverListingPredicateBuilder {
             String q                       // keyword search query; null/blank = no FTS filter
     ) {}
 
-    public record Sql(String whereFragment, List<Object> params) {}
+    /**
+     * Assembled SQL fragment + bound params + derived flags.
+     *
+     * <p>{@code bboxApplied} is {@code true} iff a non-null {@link Bbox} was present in the
+     * {@link Filters} and the {@code ST_MakeEnvelope} predicate was appended to the WHERE
+     * fragment. Callers must derive the response {@code boundsApplied} field from this flag
+     * rather than re-inspecting {@code filters.bbox() != null}, so the flag stays correct if
+     * the builder ever adds further bbox validity checks.
+     */
+    public record Sql(String whereFragment, List<Object> params, boolean bboxApplied) {}
 
     public static Sql build(Filters f) {
         StringBuilder sb = new StringBuilder();
@@ -197,6 +206,7 @@ public class DiscoverListingPredicateBuilder {
         // ST_MakeEnvelope(west, south, east, north, srid) produces a geometry bounding box;
         // casting to ::geography makes the && operands type-compatible with pl.geog.
         // Antimeridian-crossing boxes (west > east) are rejected at the controller layer.
+        boolean bboxApplied = false;
         if (f.bbox() != null) {
             Bbox b = f.bbox();
             sb.append(" AND pl.geog && ST_MakeEnvelope(?, ?, ?, ?, 4326)::geography");
@@ -204,6 +214,7 @@ public class DiscoverListingPredicateBuilder {
             params.add(b.south());
             params.add(b.east());
             params.add(b.north());
+            bboxApplied = true;
         }
 
         // keyword search — FTS via the search_vector generated column added by V18.
@@ -217,6 +228,6 @@ public class DiscoverListingPredicateBuilder {
             params.add(normQ);
         }
 
-        return new Sql(sb.toString(), params);
+        return new Sql(sb.toString(), params, bboxApplied);
     }
 }
