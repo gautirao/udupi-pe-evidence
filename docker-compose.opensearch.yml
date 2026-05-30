@@ -1,0 +1,25 @@
+# OpenSearch local POC — issue #1309
+# WARNING: DISABLE_SECURITY_PLUGIN=true — LOCAL DEVELOPMENT ONLY.
+# No auth, no TLS. Never deploy this to production or shared networks.
+# To clean data: docker compose -f docker-compose.opensearch.yml down -v
+version: '3.8'
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: opensearch-poc
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - opensearch-poc-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9200"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  opensearch-poc-data:
