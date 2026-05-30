@@ -1,0 +1,61 @@
+Query:     QP-1c — Listings SELECT with school-radius (ST_DWithin)
+Timestamp: 2026-05-30T07:49:47.545806+00:00
+Volume:    postgis-100k
+City:      udupi
+Exec time: 102.590 ms
+======================================================================
+
+Limit  (cost=1807.42..1816.56 rows=1 width=132) (actual time=100.636..100.796 rows=20 loops=1)
+  Buffers: shared hit=6493
+  ->  Result  (cost=1807.42..1816.56 rows=1 width=132) (actual time=100.544..100.664 rows=20 loops=1)
+        Buffers: shared hit=6493
+        ->  Sort  (cost=1807.42..1807.43 rows=1 width=100) (actual time=99.877..99.959 rows=20 loops=1)
+              Sort Key: pl.created_at DESC
+              Sort Method: top-N heapsort  Memory: 30kB
+              Buffers: shared hit=6447
+              ->  Nested Loop  (cost=185.85..1807.41 rows=1 width=100) (actual time=70.381..98.680 rows=5175 loops=1)
+                    Buffers: shared hit=6444
+                    ->  HashAggregate  (cost=9.60..9.61 rows=1 width=23) (actual time=1.291..1.648 rows=12 loops=1)
+                          Group Key: a.area_key
+                          Batches: 1  Memory Usage: 24kB
+                          Buffers: shared hit=3
+                          ->  Hash Join  (cost=8.18..9.60 rows=1 width=23) (actual time=0.797..0.924 rows=12 loops=1)
+                                Hash Cond: (a.city_id = c.id)
+                                Buffers: shared hit=3
+                                ->  Seq Scan on areas a  (cost=0.00..1.33 rows=33 width=27) (actual time=0.046..0.051 rows=33 loops=1)
+                                      Buffers: shared hit=1
+                                ->  Hash  (cost=8.17..8.17 rows=1 width=4) (actual time=0.191..0.213 rows=1 loops=1)
+                                      Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                      Buffers: shared hit=2
+                                      ->  Index Scan using cities_slug_key on cities c  (cost=0.15..8.17 rows=1 width=4) (actual time=0.075..0.076 rows=1 loops=1)
+                                            Index Cond: (slug = 'udupi'::text)
+                                            Buffers: shared hit=2
+                    ->  Bitmap Heap Scan on property_listings pl  (cost=176.25..1797.78 rows=2 width=120) (actual time=6.956..8.033 rows=431 loops=12)
+                          Recheck Cond: (area_key = a.area_key)
+                          Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status) AND st_dwithin(geog, '0101000020E61000002497FF907EAF5240AD69DE718AAE2A40'::geography, '2000'::double precision, true))
+                          Rows Removed by Filter: 141
+                          Heap Blocks: exact=5117
+                          Buffers: shared hit=6441
+                          ->  BitmapAnd  (cost=176.25..176.25 rows=57 width=0) (actual time=1.624..1.625 rows=0 loops=12)
+                                Buffers: shared hit=1266
+                                ->  Bitmap Index Scan on idx_property_listings_geog  (cost=0.00..14.55 rows=286 width=0) (actual time=1.151..1.151 rows=6867 loops=12)
+                                      Index Cond: (geog && _st_expand('0101000020E61000002497FF907EAF5240AD69DE718AAE2A40'::geography, '2000'::double precision))
+                                      Buffers: shared hit=1188
+                                ->  Bitmap Index Scan on idx_property_listings_area_key  (cost=0.00..161.44 rows=20000 width=0) (actual time=0.349..0.349 rows=5830 loops=12)
+                                      Index Cond: (area_key = a.area_key)
+                                      Buffers: shared hit=78
+        SubPlan 1
+          ->  Limit  (cost=5.51..9.12 rows=1 width=52) (actual time=0.019..0.019 rows=0 loops=20)
+                Buffers: shared hit=46
+                ->  Incremental Sort  (cost=5.51..16.34 rows=3 width=52) (actual time=0.015..0.015 rows=0 loops=20)
+                      Sort Key: li."position", li.id
+                      Presorted Key: li."position"
+                      Full-sort Groups: 20  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+                      Buffers: shared hit=46
+                      ->  Index Scan using idx_listing_images_listing_position on listing_images li  (cost=0.15..16.20 rows=3 width=52) (actual time=0.000..0.000 rows=0 loops=20)
+                            Index Cond: (listing_id = pl.id)
+                            Buffers: shared hit=40
+Planning:
+  Buffers: shared hit=322
+Planning Time: 25.522 ms
+Execution Time: 102.590 ms

@@ -118,3 +118,155 @@ The post-cleanup `COUNT(*)=0` assertion and the `pl.geog` / `listing_images` pro
 | `pl.geog` column existence | Absent (ERROR on probe) | data-coverage-probe.txt — live capture |
 | `listing_images` rows | 0 | data-coverage-probe.txt — live capture |
 | PERF rows remaining after cleanup | 0 | data-coverage-probe.txt — live capture (fix-cycle-2) |
+
+---
+
+## Follow-up Proof — PostGIS Geog Baseline (Issue #1299)
+
+**Date:** 2026-05-30
+**Container:** `postgis/postgis:14-3.3` (port 5434, non-production, Rosetta/amd64 on Apple Silicon)
+**Dataset:** 1k synthetic `[PERF]`-tagged rows (seed=42)
+**City slug:** `udupi`
+**Evidence files:** `docs/audit/evidence/explain/live/postgis-1k/QP-1c.txt`, `QP-3b.txt`
+
+This section closes the two DATA_GAP entries from the original baseline (Known Limitations §a and §b).
+Both gaps are now resolved: the `pl.geog` column is confirmed present and populated, and area_key
+distribution is correct after the #1297 fix.
+
+### Setup commands
+
+```bash
+# 1. Start PostGIS-enabled container
+docker run -d --name perf-pg -e POSTGRES_PASSWORD=perf -p 5434:5432 postgis/postgis:14-3.3
+
+# 2. Apply all migrations (V0–V80) with V73 placeholder substituted
+for f in $(ls -v backend/src/main/resources/db/migration/V*.sql); do
+  sed 's/\${concurrently_keyword}/CONCURRENTLY /g' "$f" | psql "$PERF_DB_URL"
+done
+
+# 3. Insert test broker profile (plain postgres — no Supabase auth roles)
+psql "$PERF_DB_URL" -c "INSERT INTO profiles (user_id, email) VALUES ('00000000-0000-0000-0000-000000000001', 'perf@test.local') ON CONFLICT (user_id) DO NOTHING;"
+
+# 4. Apply perf_db_apply_geog.sql (idempotent — all IF NOT EXISTS)
+psql "$PERF_DB_URL" -f scripts/perf_db_apply_geog.sql
+
+# 5. Generate 1k rows
+python3 scripts/gen_perf_listings.py --count=1000 --seed=42 \
+  --broker-id=00000000-0000-0000-0000-000000000001 --db-url="$PERF_DB_URL"
+
+# 6. Run geo queries
+python3 scripts/run_explain_harness.py --volume=postgis-1k \
+  --query=QP-1c --db-url="$PERF_DB_URL" --count-check=1000
+python3 scripts/run_explain_harness.py --volume=postgis-1k \
+  --query=QP-3b --db-url="$PERF_DB_URL" --count-check=1000
+```
+
+All commands exited 0.
+
+### Geog column and area_key verification
+
+| Probe | Result |
+|-------|--------|
+| PostGIS extension | `postgis 3.3.4` — confirmed via `SELECT extname, extversion FROM pg_extension` |
+| `geog` column on `property_listings` | Present — `geography(Point,4326)` GENERATED ALWAYS AS STORED |
+| PERF rows total | 1,000 |
+| PERF rows with non-null `geog` | 1,000 (0 null) |
+| Area_key distribution (city=udupi) | Udupi: 621 (62.1%), Manipal: 111 (11.1%), Kundapura: 87 (8.7%), Mangaluru: 91 (9.1%), Bengaluru: 90 (9.0%) |
+
+Area_key distribution matches the expected clusters from #1297 — no cross-cluster fallback, no 0% Udupi.
+
+### QP-1c — Listings SELECT with school-radius (ST_DWithin)
+
+| Metric | Value |
+|--------|-------|
+| Status | MEASURED — no DATA_GAP |
+| Planning time | 25.513 ms |
+| Execution time | 74.713 ms |
+| Top plan node | Limit → Result → Sort → Nested Loop Semi Join |
+| Index used | `idx_property_listings_status` (status Index Scan) |
+| Actual rows returned | 20 |
+| ST_DWithin filter | Applied as row filter after status scan; 962 rows removed by filter; 38 survived |
+
+**Plan note:** At 1k scale the planner chose the status btree index over the GiST spatial index. This is
+expected — 1k rows are small enough that a status scan + `ST_DWithin` post-filter is cheaper than a
+spatial probe. The `geog` column evaluated correctly (no error, real rows returned). At 10k+ scale the
+GiST index is expected to take over as the spatial predicate becomes more selective. Evidence:
+`docs/audit/evidence/explain/live/postgis-1k/QP-1c.txt`.
+
+### QP-3b — Markers with bbox (`&&` operator)
+
+| Metric | Value |
+|--------|-------|
+| Status | MEASURED — no DATA_GAP |
+| Planning time | 21.359 ms |
+| Execution time | 3.146 ms |
+| Top plan node | Limit → Sort → Nested Loop Semi Join |
+| Index used | **`idx_property_listings_geog` (GiST spatial Index Scan)** |
+| Index condition | `geog && ST_MakeEnvelope(...)::geography` |
+| Actual rows returned | 91 |
+
+**Plan note:** GiST index used directly for the `&&` bbox predicate — confirmed spatial index path. This
+is the intended production behaviour. Evidence: `docs/audit/evidence/explain/live/postgis-1k/QP-3b.txt`.
+
+### Known Limitations update
+
+**(a) RESOLVED.** `pl.geog` is present and populated. V73 applied successfully on `postgis/postgis:14-3.3`.
+QP-1c and QP-3b both return real rows at 1k scale with no DATA_GAP. The original gap was purely a
+container image issue — `postgres:14` has no PostGIS; `postgis/postgis:14-3.3` does.
+
+**(b) RESOLVED.** Area_key distribution is correct after the #1297 fix to `_load_area_keys()`.
+Udupi cluster receives 62.1% of generated rows as expected. The harness ran against `city-slug=udupi`
+with real Udupi-area data.
+
+### 10k re-run — GiST index confirmed
+
+**Dataset:** 10k synthetic `[PERF]`-tagged rows (seed=42, same PostGIS container, ANALYZE run after insert)
+**Evidence files:** `docs/audit/evidence/explain/live/postgis-10k/QP-1c.txt`, `QP-3b.txt`
+
+| Probe | Result |
+|-------|--------|
+| Generated rows with non-null `geog` | 10,000 / 10,000 |
+| Area_key — Udupi cluster | 5,999 (60.0%); Manipal 1,004 (10.0%); Mangaluru 1,029 (10.3%); Bengaluru 1,011 (10.1%); Kundapura 957 (9.6%) |
+
+**QP-1c at 10k:**
+
+| Metric | Value |
+|--------|-------|
+| Execution time | 71.035 ms |
+| Top plan node | Limit → Sort (top-N heapsort 31kB) → Nested Loop → BitmapAnd |
+| Indexes used | **`idx_property_listings_geog` (GiST Bitmap Index Scan) + `idx_property_listings_area_key` (Bitmap Index Scan)** |
+| GiST index condition | `geog && _st_expand(school_point, 2000m)` — spatial bounding box probe |
+| ST_DWithin applied | Exact distance filter in Bitmap Heap Scan recheck (15 rows removed per area loop) |
+| Actual rows returned | 20 |
+
+At 10k scale the planner switched from the status btree scan (1k) to a `BitmapAnd` combining both spatial
+and area_key indexes. `idx_property_listings_geog` is now the primary access path for the radius predicate.
+This is the expected production behaviour.
+
+**QP-3b at 10k:**
+
+| Metric | Value |
+|--------|-------|
+| Execution time | 9.168 ms |
+| Top plan node | Limit → Sort (quicksort 160kB) → Nested Loop → BitmapAnd |
+| Indexes used | **`idx_property_listings_geog` (GiST Bitmap Index Scan) + `idx_property_listings_area_key` (Bitmap Index Scan)** |
+| GiST index condition | `geog && envelope_geography` — direct bbox probe |
+| Actual rows returned | 1,001 (LIMIT sentinel hit — all markers returned) |
+
+GiST `idx_property_listings_geog` is the primary access path for the bbox predicate at 10k, consistent
+with the 1k result but now intersected with `idx_property_listings_area_key` via BitmapAnd.
+
+### Remaining gaps (none blocking)
+
+All required correctness and index-path proofs are complete:
+
+- `pl.geog` non-null at 1k, 10k, and 100k ✓
+- QP-1c GiST index used at 10k and 100k ✓ (status btree at 1k is a dataset-size artifact, not a schema issue)
+- QP-3b GiST index used at 1k, 10k, and 100k ✓
+
+The ~71–102ms runtimes for QP-1c include ~22–25ms planning overhead and Rosetta/amd64-on-ARM64
+emulation cost. Absolute timings are not directly comparable to production. The index selection and
+plan structure are the meaningful artefacts.
+
+**Durable cross-volume baseline:** `docs/audit/postgis-baseline-1k-10k-100k.md` —
+full 1k/10k/100k tables, plan evolution, interpretation, and #1249 recommendations.

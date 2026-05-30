@@ -1,0 +1,37 @@
+Query:     QP-3b — Markers with bbox (&& operator)
+Timestamp: 2026-05-30T07:18:20.575687+00:00
+Volume:    postgis-1k
+City:      udupi
+Exec time: 3.146 ms
+======================================================================
+
+Limit  (cost=16.64..16.64 rows=1 width=72) (actual time=2.606..2.651 rows=91 loops=1)
+  Buffers: shared hit=296
+  ->  Sort  (cost=16.64..16.64 rows=1 width=72) (actual time=2.488..2.493 rows=91 loops=1)
+        Sort Key: pl.id
+        Sort Method: quicksort  Memory: 35kB
+        Buffers: shared hit=296
+        ->  Nested Loop Semi Join  (cost=0.45..16.63 rows=1 width=72) (actual time=1.662..2.086 rows=91 loops=1)
+              Buffers: shared hit=293
+              ->  Index Scan using idx_property_listings_geog on property_listings pl  (cost=0.14..8.16 rows=1 width=104) (actual time=1.010..1.123 rows=91 loops=1)
+                    Index Cond: (geog && '0103000020E61000000100000005000000AE47E17A14AE5240A4703D0AD7A32A40AE47E17A14AE5240B81E85EB51B82A40E17A14AE47B15240B81E85EB51B82A40E17A14AE47B15240A4703D0AD7A32A40AE47E17A14AE5240A4703D0AD7A32A40'::geography)
+                    Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status))
+                    Buffers: shared hit=109
+              ->  Nested Loop  (cost=0.31..8.46 rows=1 width=32) (actual time=0.010..0.010 rows=1 loops=91)
+                    Buffers: shared hit=184
+                    ->  Index Scan using areas_pkey on areas a  (cost=0.15..8.17 rows=1 width=36) (actual time=0.006..0.006 rows=1 loops=91)
+                          Index Cond: (area_key = pl.area_key)
+                          Buffers: shared hit=182
+                    ->  Memoize  (cost=0.16..0.28 rows=1 width=4) (actual time=0.004..0.004 rows=1 loops=91)
+                          Cache Key: a.city_id
+                          Cache Mode: logical
+                          Hits: 90  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                          Buffers: shared hit=2
+                          ->  Index Scan using cities_pkey on cities c  (cost=0.15..0.27 rows=1 width=4) (actual time=0.024..0.024 rows=1 loops=1)
+                                Index Cond: (id = a.city_id)
+                                Filter: (slug = 'udupi'::text)
+                                Buffers: shared hit=2
+Planning:
+  Buffers: shared hit=235
+Planning Time: 21.359 ms
+Execution Time: 3.146 ms

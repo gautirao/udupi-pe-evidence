@@ -1,0 +1,51 @@
+Query:     QP-1c — Listings SELECT with school-radius (ST_DWithin)
+Timestamp: 2026-05-30T07:18:15.124025+00:00
+Volume:    postgis-1k
+City:      udupi
+Exec time: 74.713 ms
+======================================================================
+
+Limit  (cost=41.64..50.78 rows=1 width=230) (actual time=73.929..74.001 rows=20 loops=1)
+  Buffers: shared hit=278
+  ->  Result  (cost=41.64..50.78 rows=1 width=230) (actual time=73.833..73.870 rows=20 loops=1)
+        Buffers: shared hit=278
+        ->  Sort  (cost=41.64..41.65 rows=1 width=198) (actual time=73.111..73.114 rows=20 loops=1)
+              Sort Key: pl.created_at DESC
+              Sort Method: quicksort  Memory: 32kB
+              Buffers: shared hit=232
+              ->  Nested Loop Semi Join  (cost=0.45..41.63 rows=1 width=198) (actual time=70.691..72.790 rows=38 loops=1)
+                    Buffers: shared hit=229
+                    ->  Index Scan using idx_property_listings_status on property_listings pl  (cost=0.14..33.16 rows=1 width=230) (actual time=69.971..71.815 rows=38 loops=1)
+                          Index Cond: (status = 'LIVE'::listing_status)
+                          Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND st_dwithin(geog, '0101000020E61000002497FF907EAF5240AD69DE718AAE2A40'::geography, '2000'::double precision, true))
+                          Rows Removed by Filter: 962
+                          Buffers: shared hit=151
+                    ->  Nested Loop  (cost=0.31..8.46 rows=1 width=32) (actual time=0.025..0.025 rows=1 loops=38)
+                          Buffers: shared hit=78
+                          ->  Index Scan using areas_pkey on areas a  (cost=0.15..8.17 rows=1 width=36) (actual time=0.014..0.014 rows=1 loops=38)
+                                Index Cond: (area_key = pl.area_key)
+                                Buffers: shared hit=76
+                          ->  Memoize  (cost=0.16..0.28 rows=1 width=4) (actual time=0.009..0.009 rows=1 loops=38)
+                                Cache Key: a.city_id
+                                Cache Mode: logical
+                                Hits: 37  Misses: 1  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                                Buffers: shared hit=2
+                                ->  Index Scan using cities_pkey on cities c  (cost=0.15..0.27 rows=1 width=4) (actual time=0.026..0.026 rows=1 loops=1)
+                                      Index Cond: (id = a.city_id)
+                                      Filter: (slug = 'udupi'::text)
+                                      Buffers: shared hit=2
+        SubPlan 1
+          ->  Limit  (cost=5.51..9.12 rows=1 width=52) (actual time=0.021..0.021 rows=0 loops=20)
+                Buffers: shared hit=46
+                ->  Incremental Sort  (cost=5.51..16.34 rows=3 width=52) (actual time=0.018..0.018 rows=0 loops=20)
+                      Sort Key: li."position", li.id
+                      Presorted Key: li."position"
+                      Full-sort Groups: 20  Sort Method: quicksort  Average Memory: 25kB  Peak Memory: 25kB
+                      Buffers: shared hit=46
+                      ->  Index Scan using idx_listing_images_listing_position on listing_images li  (cost=0.15..16.20 rows=3 width=52) (actual time=0.000..0.000 rows=0 loops=20)
+                            Index Cond: (listing_id = pl.id)
+                            Buffers: shared hit=40
+Planning:
+  Buffers: shared hit=256 read=11 dirtied=1
+Planning Time: 25.513 ms
+Execution Time: 74.713 ms

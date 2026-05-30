@@ -1,0 +1,47 @@
+Query:     QP-3b — Markers with bbox (&& operator)
+Timestamp: 2026-05-30T07:30:34.192041+00:00
+Volume:    postgis-10k
+City:      udupi
+Exec time: 9.168 ms
+======================================================================
+
+Limit  (cost=53.69..53.69 rows=1 width=48) (actual time=7.345..7.570 rows=1001 loops=1)
+  Buffers: shared hit=1006
+  ->  Sort  (cost=53.69..53.69 rows=1 width=48) (actual time=7.202..7.322 rows=1001 loops=1)
+        Sort Key: pl.id
+        Sort Method: quicksort  Memory: 160kB
+        Buffers: shared hit=1006
+        ->  Nested Loop  (cost=30.96..53.68 rows=1 width=48) (actual time=3.593..6.612 rows=1047 loops=1)
+              Buffers: shared hit=1003
+              ->  HashAggregate  (cost=9.60..9.61 rows=1 width=23) (actual time=1.304..1.611 rows=12 loops=1)
+                    Group Key: a.area_key
+                    Batches: 1  Memory Usage: 24kB
+                    Buffers: shared hit=3
+                    ->  Hash Join  (cost=8.18..9.60 rows=1 width=23) (actual time=0.788..0.910 rows=12 loops=1)
+                          Hash Cond: (a.city_id = c.id)
+                          Buffers: shared hit=3
+                          ->  Seq Scan on areas a  (cost=0.00..1.33 rows=33 width=27) (actual time=0.050..0.054 rows=33 loops=1)
+                                Buffers: shared hit=1
+                          ->  Hash  (cost=8.17..8.17 rows=1 width=4) (actual time=0.176..0.193 rows=1 loops=1)
+                                Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                Buffers: shared hit=2
+                                ->  Index Scan using cities_slug_key on cities c  (cost=0.15..8.17 rows=1 width=4) (actual time=0.068..0.068 rows=1 loops=1)
+                                      Index Cond: (slug = 'udupi'::text)
+                                      Buffers: shared hit=2
+              ->  Bitmap Heap Scan on property_listings pl  (cost=21.36..44.01 rows=6 width=68) (actual time=0.339..0.403 rows=87 loops=12)
+                    Recheck Cond: ((geog && '0103000020E61000000100000005000000AE47E17A14AE5240A4703D0AD7A32A40AE47E17A14AE5240B81E85EB51B82A40E17A14AE47B15240B81E85EB51B82A40E17A14AE47B15240A4703D0AD7A32A40AE47E17A14AE5240A4703D0AD7A32A40'::geography) AND (area_key = a.area_key))
+                    Filter: ((archived_at IS NULL) AND (NOT is_duplicate) AND (status = 'LIVE'::listing_status))
+                    Heap Blocks: exact=689
+                    Buffers: shared hit=1000
+                    ->  BitmapAnd  (cost=21.36..21.36 rows=6 width=0) (actual time=0.292..0.293 rows=0 loops=12)
+                          Buffers: shared hit=245
+                          ->  Bitmap Index Scan on idx_property_listings_geog  (cost=0.00..4.36 rows=28 width=0) (actual time=0.243..0.243 rows=1138 loops=12)
+                                Index Cond: (geog && '0103000020E61000000100000005000000AE47E17A14AE5240A4703D0AD7A32A40AE47E17A14AE5240B81E85EB51B82A40E17A14AE47B15240B81E85EB51B82A40E17A14AE47B15240A4703D0AD7A32A40AE47E17A14AE5240A4703D0AD7A32A40'::geography)
+                                Buffers: shared hit=216
+                          ->  Bitmap Index Scan on idx_property_listings_area_key  (cost=0.00..16.74 rows=2000 width=0) (actual time=0.023..0.023 rows=645 loops=12)
+                                Index Cond: (area_key = a.area_key)
+                                Buffers: shared hit=29
+Planning:
+  Buffers: shared hit=268
+Planning Time: 21.765 ms
+Execution Time: 9.168 ms
