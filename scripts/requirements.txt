@@ -1,0 +1,19 @@
+# scripts/requirements.txt — Python dependencies for OpenSearch pipeline scripts
+# Issue #1312 (incremental indexing) + #1315 (full rebuild)
+#
+# Install: pip install -r scripts/requirements.txt
+# For dev: pip install -r scripts/requirements.txt pytest
+
+# OpenSearch client (full rebuild + incremental consumer)
+opensearch-py>=2.0
+
+# Postgres client (relay, simulator, rebuild)
+psycopg2-binary>=2.9.0
+
+# HTTP utilities (used by opensearch_query_poc.py et al.)
+requests>=2.28
+
+# Kafka client — confluent-kafka (backed by librdkafka; production-grade)
+# Used by: opensearch_outbox_relay.py, opensearch_indexer_consumer.py
+# Redpanda is wire-compatible; no broker-specific library needed.
+confluent-kafka>=2.3.0

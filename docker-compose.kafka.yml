@@ -1,0 +1,44 @@
+# docker-compose.kafka.yml — Redpanda local broker for incremental indexing prototype
+# Issue #1312 — LOCAL DEVELOPMENT ONLY.
+#
+# WARNING: PLAINTEXT listener only, no auth, no TLS.
+# Port is bound to 127.0.0.1 ONLY — never 0.0.0.0.
+# NEVER deploy this to a shared or production network.
+#
+# Bring up:
+#   docker compose -f docker-compose.kafka.yml up -d
+# Tear down (keep data):
+#   docker compose -f docker-compose.kafka.yml down
+# Tear down + wipe data:
+#   docker compose -f docker-compose.kafka.yml down -v
+
+version: '3.8'
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v23.3.21
+    container_name: redpanda-poc
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=256M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://127.0.0.1:9092
+    ports:
+      # Bound to 127.0.0.1 ONLY — never accessible from remote hosts.
+      - "127.0.0.1:9092:9092"
+    volumes:
+      - redpanda-poc-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info", "--brokers", "127.0.0.1:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  redpanda-poc-data:
