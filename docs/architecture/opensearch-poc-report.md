@@ -72,6 +72,8 @@ Scripts used:
 
 Fields indexed (15 fields, all public-safe):
 
+> **Note (#1311):** The 15-field count reflects the #1309 live-run snapshot. `city_slug` and `hero_image_url` are now derivable via join/subquery and added to the backfill — see §9 (RESOLVED) and [discover-read-model-fields-and-fts-alignment.md](discover-read-model-fields-and-fts-alignment.md).
+
 | Field | OpenSearch type | Source column | Notes |
 |-------|-----------------|---------------|-------|
 | `id` | `keyword` | `id` | Document `_id` |
@@ -179,15 +181,15 @@ and manageable via `operator: "and"`.
 
 ## 9. Gaps and Next Steps
 
-| Gap | Severity | Next issue |
-|-----|----------|-----------|
-| `city_slug` does not exist on `property_listings` — removed from mapping | Low (column absent, not a data leak) | Track in #1254 when denormalised read-model is designed |
-| `hero_image_url` does not exist on `property_listings` — removed from mapping | Low | Join to `listing_images` in full read-model |
-| FTS `operator: "and"` not set — counts diverge from Postgres | Advisory | Configure per-query in production wiring |
-| Latency comparison at 10k/100k not yet run | Advisory | Re-run generator with `--count 10000` / `100000` |
-| Postgres parity for QP-combo not measured (no baseline) | Low | Add in next scale run |
-| OFFSET/LIMIT pagination in backfill — server-side cursor needed at 100k+ | Low | #1254 |
-| Full reindex pipeline (CDC/Kafka/outbox) | Out of scope for POC | #1254 / ADR Phase 2 |
+| Gap | Severity | Status | Next issue |
+|-----|----------|--------|-----------|
+| `city_slug` does not exist on `property_listings` — removed from mapping | Low | **RESOLVED (#1311)** — added via `areas → cities` join in backfill SELECT + `keyword` mapping field. Acquisition strategy + pitfall documented in [discover-read-model-fields-and-fts-alignment.md §2.3](discover-read-model-fields-and-fts-alignment.md#23-city_slug-acquisition-strategy). | — |
+| `hero_image_url` does not exist on `property_listings` — removed from mapping | Low | **RESOLVED (#1311)** — added via `listing_images` correlated subquery (ORDER BY position ASC, id ASC LIMIT 1) in backfill SELECT + `keyword` mapping field. NULL-safe. See [discover-read-model-fields-and-fts-alignment.md §2.4](discover-read-model-fields-and-fts-alignment.md#24-hero_image_url-acquisition-strategy). | — |
+| FTS `operator: "and"` not set — counts diverge from Postgres | Advisory | **ADDRESSED (#1311)** — `opensearch_fts_compare.py` compares 5 strategies (OR, AND best_fields, AND cross_fields, MSM-100%, MSM-75%) with Postgres baseline. Recommended default: `type:best_fields operator:and`. See [discover-read-model-fields-and-fts-alignment.md §1.4](discover-read-model-fields-and-fts-alignment.md#14-recommended-discover-default-fts-strategy). | Configure per-query in production wiring (#1254) |
+| Latency comparison at 10k/100k not yet run | Advisory | Open | Re-run generator with `--count 10000` / `100000` |
+| Postgres parity for QP-combo not measured (no baseline) | Low | Open | Add in next scale run |
+| OFFSET/LIMIT pagination in backfill — server-side cursor needed at 100k+ | Low | Open | #1254 |
+| Full reindex pipeline (CDC/Kafka/outbox) | Out of scope for POC | Open | #1254 / ADR Phase 2 |
 
 ---
 

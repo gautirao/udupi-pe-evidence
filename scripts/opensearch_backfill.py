@@ -50,6 +50,9 @@ INDEX_MAPPING: dict[str, Any] = {
             },
             "description": {"type": "text"},
             "area_key": {"type": "keyword"},
+            # city_slug: derived via areas→cities join (area_key → areas.city_id → cities.slug).
+            # NOT parsed from area_key — area_key is opaque; city_slug is always fetched via join.
+            "city_slug": {"type": "keyword"},
             "property_type": {"type": "keyword"},
             "seller_type": {"type": "keyword"},
             "bedrooms": {"type": "integer"},
@@ -61,23 +64,50 @@ INDEX_MAPPING: dict[str, Any] = {
             "location": {"type": "geo_point"},
             "status": {"type": "keyword"},
             "created_at": {"type": "date"},
+            # hero_image_url: lowest-position image url from listing_images
+            # (ORDER BY position ASC, id ASC LIMIT 1). NULL when no image exists.
+            "hero_image_url": {"type": "keyword"},
         }
     },
 }
 
-# Explicit column whitelist — never use SELECT *
-SELECT_COLUMNS = (
-    "id, title, locality, description, area_key, property_type, "
-    "seller_type, bedrooms, bathrooms, price_paise, latitude, longitude, "
-    "status, created_at"
-)
-
-SELECT_SQL = (
-    f"SELECT {SELECT_COLUMNS} "
-    f"FROM property_listings "
-    f"WHERE status = 'LIVE' "
-    f"ORDER BY id"
-)
+# Explicit column whitelist — never use SELECT *.
+# city_slug: derived via LEFT JOIN areas → cities (area_key → city_id → slug).
+#   Never parsed from area_key — area_key is opaque and must not be string-split.
+#   NULL-safe: listing with no matching area or city gets city_slug = NULL.
+# hero_image_url: correlated subquery — lowest-position image (ORDER BY position ASC, id ASC LIMIT 1).
+#   NULL-safe: listing with no listing_images rows gets hero_image_url = NULL.
+# Security: no PII columns (user_id, seller_id, phone, email, supabase_user_id, rejectionReason).
+SELECT_SQL = """
+SELECT
+    pl.id,
+    pl.title,
+    pl.locality,
+    pl.description,
+    pl.area_key,
+    pl.property_type,
+    pl.seller_type,
+    pl.bedrooms,
+    pl.bathrooms,
+    pl.price_paise,
+    pl.latitude,
+    pl.longitude,
+    pl.status,
+    pl.created_at,
+    c.slug AS city_slug,
+    (
+        SELECT li.url
+        FROM listing_images li
+        WHERE li.listing_id = pl.id
+        ORDER BY li.position ASC, li.id ASC
+        LIMIT 1
+    ) AS hero_image_url
+FROM property_listings pl
+LEFT JOIN areas a ON a.area_key = pl.area_key
+LEFT JOIN cities c ON c.id = a.city_id
+WHERE pl.status = 'LIVE'
+ORDER BY pl.id
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +135,18 @@ def _build_opensearch_client(url: str) -> OpenSearch:
     return OpenSearch(hosts=hosts, http_compress=True, use_ssl=(scheme == "https"))
 
 
+def _paginate_sql(base: str, limit: int, offset: int) -> str:
+    """
+    Append LIMIT/OFFSET to a base SQL string.
+
+    Strips any trailing whitespace and semicolons from *base* before appending
+    so a future edit to SELECT_SQL (trailing newline, added semicolon) cannot
+    silently corrupt pagination.  limit/offset are always ints — no user input.
+    """
+    clean = base.rstrip().rstrip(";")
+    return f"{clean} LIMIT {limit} OFFSET {offset}"
+
+
 def _ensure_index(client: OpenSearch) -> None:
     """Create the index with explicit mapping if it does not already exist."""
     if client.indices.exists(index=INDEX_NAME):
@@ -128,7 +170,7 @@ def _row_to_doc(row: dict) -> dict | None:
     if isinstance(created_at, datetime):
         created_at = created_at.isoformat()
 
-    return {
+    doc: dict[str, Any] = {
         "_index": INDEX_NAME,
         "_id": str(row["id"]),
         "_source": {
@@ -137,6 +179,8 @@ def _row_to_doc(row: dict) -> dict | None:
             "locality": row.get("locality"),
             "description": row.get("description"),
             "area_key": row.get("area_key"),
+            # city_slug: comes from the areas→cities join in SELECT_SQL; may be None
+            "city_slug": row.get("city_slug"),
             "property_type": row.get("property_type"),
             "seller_type": row.get("seller_type"),
             "bedrooms": row.get("bedrooms"),
@@ -148,8 +192,17 @@ def _row_to_doc(row: dict) -> dict | None:
             "location": {"lat": float(lat), "lon": float(lon)},
             "status": row.get("status"),
             "created_at": created_at,
+            # hero_image_url: lowest-position image; may be None when no images exist
+            "hero_image_url": row.get("hero_image_url"),
         },
     }
+    # Omit null-valued optional fields so the index stays lean;
+    # presence/absence is treated as None by callers either way.
+    if doc["_source"]["city_slug"] is None:
+        del doc["_source"]["city_slug"]
+    if doc["_source"]["hero_image_url"] is None:
+        del doc["_source"]["hero_image_url"]
+    return doc
 
 
 # ---------------------------------------------------------------------------
@@ -196,11 +249,13 @@ def run_backfill(args: argparse.Namespace) -> None:
             batch_num = 0
             total_indexed = 0
             total_skipped = 0
+            total_city_slug_null = 0
+            total_hero_null = 0
             overall_start = time.perf_counter()
 
             while offset < total_live:
                 limit = min(batch_size, total_live - offset)
-                paged_sql = f"{SELECT_SQL} LIMIT {limit} OFFSET {offset}"
+                paged_sql = _paginate_sql(SELECT_SQL, limit, offset)
 
                 batch_start = time.perf_counter()
                 cur.execute(paged_sql)
@@ -209,11 +264,17 @@ def run_backfill(args: argparse.Namespace) -> None:
                 docs = []
                 skipped = 0
                 for row in rows:
-                    doc = _row_to_doc(dict(row))
+                    row_dict = dict(row)
+                    doc = _row_to_doc(row_dict)
                     if doc is None:
                         skipped += 1
                     else:
                         docs.append(doc)
+                        # Track null coverage for post-run summary
+                        if row_dict.get("city_slug") is None:
+                            total_city_slug_null += 1
+                        if row_dict.get("hero_image_url") is None:
+                            total_hero_null += 1
 
                 total_skipped += skipped
 
@@ -257,6 +318,34 @@ def run_backfill(args: argparse.Namespace) -> None:
             )
             if total_skipped:
                 print(f"Skipped {total_skipped} rows with null coordinates")
+
+            # Null-coverage summary for new fields
+            city_slug_non_null = total_indexed - total_city_slug_null
+            hero_non_null = total_indexed - total_hero_null
+            print(
+                f"city_slug:      {city_slug_non_null} non-null / {total_city_slug_null} null"
+            )
+            print(
+                f"hero_image_url: {hero_non_null} non-null / {total_hero_null} null"
+            )
+            if total_city_slug_null == total_indexed and total_indexed > 0:
+                print(
+                    "WARNING: city_slug is 100% null among indexed rows — seeded area_keys "
+                    "may not be present in the 'areas' table, or areas lack a cities join. "
+                    "Acceptable for POC seed; verify with production data."
+                )
+            if total_hero_null == total_indexed and total_indexed > 0:
+                print(
+                    "WARNING: hero_image_url is 100% null among indexed rows — "
+                    "gen_perf_listings.py did not seed listing_images rows for this dataset. "
+                    "Acceptable for POC seed; verify with production data."
+                )
+            print(
+                "\nNOTE: If you modified the index mapping (added city_slug/hero_image_url), "
+                "an existing index will have the OLD mapping. To apply the new mapping:\n"
+                "  docker compose -f docker-compose.opensearch.yml down -v\n"
+                "  Then re-run this backfill script."
+            )
 
     finally:
         conn.close()
