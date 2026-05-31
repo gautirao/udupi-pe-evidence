@@ -71,6 +71,19 @@ must_provide = [
 allowed_changes = []    # from OpenAI [scope].allowed_changes
 forbidden_changes = []  # from OpenAI [scope].forbidden_changes
 
+# --- VALIDATION MATRIX (risk-triggered evidence packet) ----------------------
+# Carried forward VERBATIM from team-lead-plan.toml as validated by PLAN_REVIEW.
+# level = NOT_REQUIRED | COMPACT | FULL. Hard-trigger categories require FULL;
+# trivial changes may use NOT_REQUIRED (one-line reason); normal bounded work
+# may use COMPACT. The Team Lead authors the matrix at required_artifact during
+# execution for COMPACT/FULL; WORKDONE_REVIEW checks presence/verdict; PR_REVIEW
+# consumes it. Full policy + decision table + templates:
+#   .claude/mode3/contracts/validation-matrix.md
+[validation_matrix]
+level = "COMPACT"   # NOT_REQUIRED | COMPACT | FULL
+reason = "<one line — mandatory for NOT_REQUIRED; recommended otherwise>"
+required_artifact = ".claude/handoffs/issue-<N>/validation-matrix.md"  # empty for NOT_REQUIRED
+
 [executor]
 # MVP default model = "sonnet" for the first 3 dry-runs.
 # After 3 successful Sonnet runs, a separate cost-optimisation issue evaluates

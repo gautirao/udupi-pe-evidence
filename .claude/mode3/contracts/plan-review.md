@@ -58,6 +58,10 @@ Either path is verbatim copying of OpenAI's own output — never Main-Agent-inve
 5. On `verdict = APPROVED`, materialise the approved plan to `.claude/handoffs/issue-<N>/approved-plan.toml` and to `.claude/state/current-approved-plan.toml`. The approved-plan content is the Team Lead's plan as approved.
 6. On `verdict = REVISION_REQUIRED`, halt and surface revisions to the user. **Revisions route back to the Team Lead/specialists** — the Main Agent must NOT invent the implementation mechanism to satisfy OpenAI feedback.
 
+### Validation-level check (part of PLAN_REVIEW)
+
+PLAN_REVIEW MUST validate the `[validation_matrix].level` proposed in `team-lead-plan.toml`. The Team Lead MAY over-classify (a higher level than necessary is allowed; advisory only) but MUST NOT under-classify. PLAN_REVIEW blocks or requires revision on an unsafe downgrade — e.g. an auth change marked `NOT_REQUIRED` → BLOCKED; an OpenSearch/Kafka/indexing change marked `COMPACT` → BLOCKED or REVISION_REQUIRED; a workflow/validator change marked `NOT_REQUIRED` → BLOCKED. A docs typo marked `FULL` is allowed (advisory: may be overkill). Hard-trigger categories and the full decision table live in `.claude/mode3/contracts/validation-matrix.md`.
+
 ---
 
 ## Phase 2 — Build `approved-execution-handoff.toml` (boundary only)
@@ -84,5 +88,6 @@ This phase writes the **boundary** the Orchestrator must operate within. It does
 13. Set `limits.max_specialist_invocations = 12` and `limits.max_minutes = 45` (overridable from plan).
 14. Set `[escalation_rules]`: what the Orchestrator does on (a) Gate F discovered after start (ADD security-reviewer; do NOT halt unless re-routing impossible), (b) scope expansion needed (`blocked.toml(SCOPE_EXPANSION_REQUIRED)`), (c) Lean-mode skip eligible (orchestrator MAY skip if all conditions hold AND logs the four AC26 fields).
 15. **Transcribe the OpenAI PLAN_REVIEW acceptance contract** into the handoff: copy the `[eval_checklist].items`, `[required_evidence].must_provide`, and `[scope].allowed_changes`/`forbidden_changes` verbatim from the PLAN_REVIEW verdict (or, under the current transcription mechanism, from the verdict's `required_changes` + `approved_scope` + `blocking_issues`). The Team Lead executes against `[eval_checklist]` and self-checks against it before workdone. Do NOT add Main-Agent-invented criteria.
+16. **Carry the validation level forward.** Copy the `[validation_matrix]` block (the PLAN_REVIEW-approved `level` + `reason` + `required_artifact`) from `team-lead-plan.toml`/the PLAN_REVIEW verdict into `approved-execution-handoff.toml` verbatim, so WORKDONE_REVIEW and PR_REVIEW can enforce the matrix. See `.claude/mode3/contracts/validation-matrix.md`.
 
 Template: `.claude/templates/approved-execution-handoff.toml`.

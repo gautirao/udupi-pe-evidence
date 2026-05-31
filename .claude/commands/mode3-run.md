@@ -48,9 +48,12 @@ Team Lead: execute against eval_checklist; self-check; write workdone-candidate.
 Main Agent: independent Phase 7A browser validation → Phase 7B if triggered     [Phase 7A/7B]
   ↓
 Main Agent: submit to OpenAI WORKDONE_REVIEW (contract_check + self_critic;
-            consumes 7A/7B evidence)                                            [Phase 7C]
+            consumes 7A/7B evidence; checks validation-matrix presence/verdict) [Phase 7C]
   ↓
-Main Agent: PR / PR_REVIEW / merge gate / closeout / loop to next issue         [Phase 8–12]
+VALIDATION_MATRIX: risk-triggered evidence packet (NOT_REQUIRED | COMPACT | FULL);
+            required matrix complete before PR_REVIEW is sent                    [between 7C and 8]
+  ↓
+Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop  [Phase 8–12]
 ```
 
 ---
@@ -75,8 +78,9 @@ Main Agent: PR / PR_REVIEW / merge gate / closeout / loop to next issue         
 | 6 | Main Agent | Act on WORKDONE_CANDIDATE_READY / BLOCKED notification; bounded fallback per notifications.md | `.claude/mode3/contracts/workdone-review.md` + `.claude/mode3/contracts/notifications.md` |
 | 7A | Main Agent | Final Product Verification (browser) — user-visible changes | `.claude/mode3/contracts/browser-validation.md` |
 | 7B | Main Agent | Conditional Exploratory Product Sweep | `.claude/mode3/contracts/browser-validation.md` |
-| 7C | Main Agent | OpenAI WORKDONE_REVIEW (consumes 7A/7B evidence) | `.claude/mode3/contracts/workdone-review.md` |
-| 8–12 | Main Agent | PR / PR_REVIEW / merge / cleanup / sync / closeout | `.claude/mode3/contracts/closeout.md` |
+| 7C | Main Agent | OpenAI WORKDONE_REVIEW (consumes 7A/7B evidence; checks validation matrix) | `.claude/mode3/contracts/workdone-review.md` + `.claude/mode3/contracts/validation-matrix.md` |
+| VM | Team Lead / Main Agent | Validation matrix (NOT_REQUIRED \| COMPACT \| FULL) — evidence packet PR_REVIEW consumes; required matrix complete before PR_REVIEW | `.claude/mode3/contracts/validation-matrix.md` |
+| 8–12 | Main Agent | PR / PR_REVIEW (consumes matrix) / merge / cleanup / sync / closeout | `.claude/mode3/contracts/closeout.md` |
 | Fallback | Main Agent | Path C (direct orchestration) — explicit only | `.claude/mode3/contracts/main-agent.md` |
 
 **Conditional loads:** `.claude/mode3/contracts/bug-repro.md` loads only after the issue is classified a BUG. `.claude/mode3/contracts/browser-validation.md` loads only for user-visible changes (skip for docs/backend-only/test-only/pure-refactor). `.claude/mode3/contracts/closeout.md`'s stale-PR/branch safety policy is needed only at Phase 8–12. Do not load any contract before its phase.
@@ -116,6 +120,7 @@ Main Agent: PR / PR_REVIEW / merge gate / closeout / loop to next issue         
 5. `preflight-probe.txt` — written by executor during Phase 4 behavioural sentinel probe.
 6. `product-verification.toml` — written by the product-check specialist during Phase 7A (final browser product verification). Authoritative; the lead reads it from disk to decide the gate outcome.
 7. `product-sweep.toml` — written by the exploratory specialist during Phase 7B (conditional exploratory product sweep) when its triggers fire. Authoritative; the lead reads it from disk to decide the gate outcome. Absent when Phase 7B is skipped.
+8. `validation-matrix.md` — written by the Team Lead during Phase 5–6 when `validation_matrix.level` = `COMPACT`/`FULL`. The risk-triggered evidence packet PR_REVIEW consumes. Absent for `NOT_REQUIRED` (one-line justification lives in `team-lead-plan.toml`/`workdone-candidate.toml`). Policy: `.claude/mode3/contracts/validation-matrix.md`.
 
 File artefacts are authoritative. SendMessage is for notifications only. Lead determines completion state by reading from disk.
 
@@ -211,6 +216,7 @@ For bug issues, the full Bugfix Fast Path (Principle, Phases B0–B5, BUG_REPRO_
 - `.claude/mode3/contracts/bug-repro.md` — Bugfix Fast Path (load only for bugs)
 - `.claude/mode3/contracts/plan-review.md` — Phase 1 PLAN_REVIEW + Phase 2 handoff build + eval-checklist mechanism
 - `.claude/mode3/contracts/workdone-review.md` — Phase 6 terminal artefact + Phase 7C WORKDONE_REVIEW
+- `.claude/mode3/contracts/validation-matrix.md` — risk-triggered validation matrix (NOT_REQUIRED \| COMPACT \| FULL); proposed at Phase 0.7, validated at PLAN_REVIEW, authored at Phase 5–6, checked at WORKDONE_REVIEW, consumed by PR_REVIEW
 - `.claude/mode3/contracts/browser-validation.md` — Phase 7A/7B (load only for user-visible changes)
 - `.claude/mode3/contracts/closeout.md` — Phases 8–12 + stale-PR/branch safety policy
 - `.claude/mode3/contracts/notifications.md` — 12-event notification catalogue, payload schema, dual-channel invariant, bounded fallback polling (replaces open-ended Phase 6 polling)

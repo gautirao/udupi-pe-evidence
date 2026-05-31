@@ -6,9 +6,10 @@
 
 1. `git push -u origin <branch>`.
 2. `gh pr create --title "<conventional>" --body "<assembled from approved plan + workdone-candidate>"`. PR body includes Closes #<N> reference.
-3. Assemble `.claude/handoffs/issue-<N>/pr-review-request.toml`.
-4. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate PR_REVIEW --input .claude/handoffs/issue-<N>/pr-review-request.toml`.
-5. On APPROVED → Phase 9. On REVISION_REQUIRED → reroute.
+3. Assemble `.claude/handoffs/issue-<N>/pr-review-request.toml`. For `validation_matrix.level` = `COMPACT`/`FULL`, **include the validation matrix** (`.claude/handoffs/issue-<N>/validation-matrix.md`) as the evidence packet PR_REVIEW consumes; for `NOT_REQUIRED`, include the one-line justification.
+4. **Gate before PR_REVIEW is sent (validation matrix consumption).** PR_REVIEW MUST NOT be submitted/approved while the required matrix is incomplete. PR_REVIEW MUST NOT approve if: the required matrix is missing; its verdict is `REQUEST_CHANGES`; required changes remain; hard safety/failure-mode rows are missing for `FULL`; factual claims are unsupported; or deferred `NOT_PROVEN` items invalidate the PR's main goal. PR_REVIEW MAY approve **with non-blocking follow-ups** when the main goal is proven, deferred items are explicitly out of scope, follow-ups are documented, and no safety rule is violated. Full rules: `.claude/mode3/contracts/validation-matrix.md`.
+5. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate PR_REVIEW --input .claude/handoffs/issue-<N>/pr-review-request.toml`.
+6. On APPROVED → Phase 9. On REVISION_REQUIRED → reroute.
 
 ---
 

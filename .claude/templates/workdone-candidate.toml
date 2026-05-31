@@ -161,6 +161,22 @@ test_name = ""
 # "No unrelated behaviour changed" = "PASS - evidence..."
 # "Post-fix evidence shows the bug no longer occurs" = "PASS - evidence..."
 
+# --- VALIDATION MATRIX RESULT -----------------------------------------------
+# Mirror the approved validation_matrix.level from approved-execution-handoff.toml.
+#   level = NOT_REQUIRED → matrix_path = "" AND reason carries the one-line
+#                          justification (trivial change; touches none of the
+#                          NOT_REQUIRED-excluded categories).
+#   level = COMPACT | FULL → matrix_path points to the authored matrix and
+#                          verdict MUST be "APPROVE" with no required changes left.
+# WORKDONE_REVIEW (step 6b) and PR_REVIEW enforce this. Policy:
+#   .claude/mode3/contracts/validation-matrix.md
+[validation_matrix_result]
+level = "COMPACT"          # mirror from handoff: NOT_REQUIRED | COMPACT | FULL
+matrix_path = ".claude/handoffs/issue-<N>/validation-matrix.md"  # "" when NOT_REQUIRED
+verdict = "APPROVE"        # APPROVE | REQUEST_CHANGES ("" when NOT_REQUIRED)
+required_changes_remaining = false   # MUST be false to hand off for WORKDONE_REVIEW
+reason = ""                # one-line justification — REQUIRED when level = NOT_REQUIRED
+
 [deviations]
 items = []
 
