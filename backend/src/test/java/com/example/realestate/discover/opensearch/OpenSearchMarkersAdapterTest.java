@@ -40,7 +40,7 @@ class OpenSearchMarkersAdapterTest {
         server = MockRestServiceServer.bindTo(restTemplate).build();
         RestClient restClient = RestClient.builder(restTemplate).baseUrl(BASE_URL).build();
 
-        OpenSearchProperties props = new OpenSearchProperties(true, BASE_URL, ALIAS, 500, 1000, "", "", "");
+        OpenSearchProperties props = new OpenSearchProperties(true, BASE_URL, ALIAS, 500, 1000, "", "", "", false, 500, 1.0, 10);
         adapter = new OpenSearchMarkersAdapter(restClient, props, objectMapper);
     }
 

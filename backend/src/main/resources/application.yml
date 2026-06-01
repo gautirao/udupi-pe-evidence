@@ -177,3 +177,9 @@ discover:
     username: ${OPENSEARCH_USERNAME:}
     password: ${OPENSEARCH_PASSWORD:}
     api-key: ${OPENSEARCH_API_KEY:}
+    # Shadow-read / parity mode: fires OS query fire-and-forget beside Postgres response.
+    # Only active when shadow-enabled=true AND enabled=false (Postgres-primary path).
+    shadow-enabled: false
+    shadow-timeout-ms: 500
+    shadow-sample-rate: 1.0
+    shadow-top-n: 10

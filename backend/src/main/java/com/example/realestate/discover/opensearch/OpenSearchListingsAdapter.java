@@ -9,7 +9,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -20,10 +20,11 @@ import java.util.Map;
 /**
  * OpenSearch-backed implementation of {@link DiscoverListingsPort}.
  *
- * <p>Active only when {@code discover.opensearch.enabled=true}.
+ * <p>Active when {@code discover.opensearch.enabled=true} (primary path) OR
+ * {@code discover.opensearch.shadow-enabled=true} (shadow/parity path).
  */
 @Component
-@ConditionalOnProperty(name = "discover.opensearch.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnExpression("'${discover.opensearch.enabled:false}'.equals('true') or '${discover.opensearch.shadow-enabled:false}'.equals('true')")
 public class OpenSearchListingsAdapter implements DiscoverListingsPort {
 
     private static final Logger log = LoggerFactory.getLogger(OpenSearchListingsAdapter.class);

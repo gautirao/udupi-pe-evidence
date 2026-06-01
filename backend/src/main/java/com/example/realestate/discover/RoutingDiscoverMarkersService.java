@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.discover.shadow.ShadowComparisonRunner;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -36,6 +37,12 @@ public class RoutingDiscoverMarkersService implements DiscoverMarkersPort {
     private final Counter fallbackErrorCounter;
     private final Counter fallbackTimeoutCounter;
 
+    // Field injection (not constructor) — avoids a circular dependency: ShadowComparisonRunner
+    // injects DiscoverMarkersPort (the @Primary bean = this class). Constructor injection here
+    // would force Spring to instantiate both at the same time.
+    @Autowired(required = false)
+    private ShadowComparisonRunner shadowRunner;
+
     public RoutingDiscoverMarkersService(
             DiscoverMarkersService postgresService,
             @Autowired(required = false) DiscoverMarkersPort openSearchAdapter,
@@ -60,7 +67,11 @@ public class RoutingDiscoverMarkersService implements DiscoverMarkersPort {
     @Override
     public DiscoverMarkersResponse getMarkers(DiscoverListingPredicateBuilder.Filters filters) {
         if (!enabled || openSearchAdapter == null) {
-            return postgresService.getMarkers(filters);
+            DiscoverMarkersResponse markersResponse = postgresService.getMarkers(filters);
+            if (shadowRunner != null) {
+                shadowRunner.submitMarkersShadow(filters, markersResponse);
+            }
+            return markersResponse;
         }
         try {
             return openSearchAdapter.getMarkers(filters);

@@ -109,3 +109,73 @@ discover_markers_query_latency_seconds_bucket{query_path="bbox",result_status="s
 discover_markers_query_latency_seconds_count{query_path="bbox",result_status="success",...} 42
 discover_markers_query_latency_seconds_sum{query_path="bbox",result_status="success",...} 1.234
 ```
+
+---
+
+## Shadow-Read / Parity Metrics (issue #1318)
+
+Shadow mode fires a fire-and-forget OpenSearch query alongside every Postgres-primary
+response. It is activated by `discover.opensearch.shadow-enabled=true` combined with
+`discover.opensearch.enabled=false`. No query result is altered.
+
+### Configuration
+
+| Property | Default | Description |
+|---|---|---|
+| `discover.opensearch.shadow-enabled` | `false` | Enable shadow mode |
+| `discover.opensearch.shadow-timeout-ms` | `500` | Wall-clock budget for shadow OS call (ms) |
+| `discover.opensearch.shadow-sample-rate` | `1.0` | Fraction of requests to shadow (0.0–1.0) |
+| `discover.opensearch.shadow-top-n` | `10` | Number of top results used for order-overlap metric |
+
+### Metric Names
+
+| Metric name | Type | When emitted |
+|---|---|---|
+| `discover.opensearch.shadow.count` | Counter | Every shadow decision: MATCH, MISMATCH, TIMEOUT, ERROR, SKIPPED |
+| `discover.opensearch.shadow.count_delta` | DistributionSummary | MATCH and MISMATCH comparisons; records `abs(pgCount - osCount)` |
+| `discover.opensearch.shadow.mismatch_pct` | DistributionSummary | MATCH and MISMATCH; `(missing + extra) / max(pgCount,1) * 100` |
+| `discover.opensearch.shadow.missing_count` | DistributionSummary | MATCH and MISMATCH; IDs in Postgres but absent from OpenSearch |
+| `discover.opensearch.shadow.extra_count` | DistributionSummary | MATCH and MISMATCH; IDs in OpenSearch but absent from Postgres |
+| `discover.opensearch.shadow.top_n_overlap` | DistributionSummary | Ordered query types only (see below); fraction of top-N that overlap |
+| `discover.opensearch.shadow.latency` | Timer | Wall time of the shadow OpenSearch call |
+
+### Tag Reference (all shadow metrics)
+
+All shadow metrics carry exactly three tags. No user-supplied values are ever used as tag values.
+
+| Tag key | Values |
+|---|---|
+| `query_type` | `KEYWORD`, `BBOX`, `SCHOOL_RADIUS`, `POLYGON`, `CITY_BROWSE`, `MARKERS` |
+| `comparison_status` | `MATCH`, `MISMATCH`, `TIMEOUT`, `ERROR`, `SKIPPED` |
+| `result_status` | `POSTGRES_ONLY`, `POSTGRES_SHADOW_OK`, `POSTGRES_SHADOW_TIMEOUT`, `POSTGRES_SHADOW_ERROR`, `POSTGRES_SHADOW_SKIPPED` |
+
+### `query_type` values
+
+Derived from field PRESENCE in the query object — never from field values.
+
+| Value | Condition |
+|---|---|
+| `KEYWORD` | `q` is non-null and non-blank |
+| `SCHOOL_RADIUS` | `schoolLat`, `schoolLon`, `schoolRadiusKm` all present |
+| `POLYGON` | `polygon` list is non-null and non-empty |
+| `BBOX` | `bbox` is present |
+| `CITY_BROWSE` | None of the above (city-scoped browse) |
+| `MARKERS` | Markers endpoint (always; set by the runner directly) |
+
+### Top-N overlap and the MARKERS NOT_COMPARABLE case
+
+`discover.opensearch.shadow.top_n_overlap` is emitted only when the query type's sort
+order is the same in Postgres and OpenSearch:
+
+- **Listings paths** (KEYWORD / BBOX / SCHOOL_RADIUS / POLYGON / CITY_BROWSE):
+  both use `created_at DESC` → orders match → top-N overlap is comparable → **metric emitted**.
+- **MARKERS path**: Postgres uses `ORDER BY id ASC`; OpenSearch uses `created_at DESC` →
+  orders differ → top-N overlap is NOT_COMPARABLE → **metric NOT emitted** for MARKERS.
+
+### Cardinality
+
+Shadow metrics add at most:
+- `query_type` × `comparison_status` × `result_status` = 6 × 5 × 5 = 150 time series
+  (in practice far fewer since not all combinations occur)
+
+All tag values are enum-derived constants — user input is never propagated into tag values.
