@@ -7,12 +7,15 @@ import com.example.realestate.discover.DiscoverListingsPort;
 import com.example.realestate.discover.DiscoverListingsQuery;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -34,54 +37,94 @@ public class OpenSearchListingsAdapter implements DiscoverListingsPort {
     private final RestClient restClient;
     private final OpenSearchProperties props;
     private final ObjectMapper objectMapper;
+    private final OpenSearchQueryMetrics queryMetrics;
 
     public OpenSearchListingsAdapter(RestClient discoverOpenSearchRestClient,
                                      OpenSearchProperties props,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     OpenSearchQueryMetrics queryMetrics) {
         this.restClient = discoverOpenSearchRestClient;
         this.props = props;
         this.objectMapper = objectMapper;
+        this.queryMetrics = queryMetrics;
     }
 
     @Override
     public DiscoverListingsPage getListings(DiscoverListingsQuery query) {
-        Map<String, Object> queryBody = DiscoverQueryDsl.buildListingsQuery(query);
+        OpenSearchQueryMetrics.QueryType queryType = resolveQueryType(query);
+        Timer.Sample sample = queryMetrics.startSample();
+        try {
+            Map<String, Object> queryBody = DiscoverQueryDsl.buildListingsQuery(query);
 
-        String responseBody = restClient.post()
-                .uri("/" + props.indexAlias() + "/_search")
-                .header("Content-Type", "application/json")
-                .body(queryBody)
-                .retrieve()
-                .body(String.class);
+            String responseBody = restClient.post()
+                    .uri("/" + props.indexAlias() + "/_search")
+                    .header("Content-Type", "application/json")
+                    .body(queryBody)
+                    .retrieve()
+                    .body(String.class);
 
-        Map<String, Object> response = parseJson(responseBody);
+            Map<String, Object> response = parseJson(responseBody);
 
-        // Extract total hits (track_total_hits: true)
-        long totalElements = extractTotalHits(response);
+            // Extract total hits (track_total_hits: true)
+            long totalElements = extractTotalHits(response);
 
-        // Map hits to listing responses
-        List<Map<String, Object>> hits = extractHits(response);
-        List<DiscoverListingResponse> content = new ArrayList<>(hits.size());
-        for (Map<String, Object> hit : hits) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> source = (Map<String, Object>) hit.get("_source");
-            if (source == null) continue;
-            content.add(OpenSearchHitMapper.toListing(source));
+            // Map hits to listing responses
+            List<Map<String, Object>> hits = extractHits(response);
+            List<DiscoverListingResponse> content = new ArrayList<>(hits.size());
+            for (Map<String, Object> hit : hits) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> source = (Map<String, Object>) hit.get("_source");
+                if (source == null) continue;
+                content.add(OpenSearchHitMapper.toListing(source));
+            }
+
+            int effectiveSize = query.size();
+            int totalPages = effectiveSize > 0 ? (int) Math.ceil((double) totalElements / effectiveSize) : 0;
+
+            // Parse aggregates if requested
+            DiscoverListingsAggregates aggregates = null;
+            if (query.includeAggregates()) {
+                aggregates = extractAggregates(response);
+            }
+
+            OpenSearchQueryMetrics.ResultStatus resultStatus = content.isEmpty()
+                    ? OpenSearchQueryMetrics.ResultStatus.EMPTY
+                    : OpenSearchQueryMetrics.ResultStatus.SUCCESS;
+            queryMetrics.recordListingsQuery(queryType, resultStatus, sample);
+
+            log.debug("OpenSearch listings city={} page={} size={} total={}",
+                    query.city(), query.page(), effectiveSize, totalElements);
+
+            return new DiscoverListingsPage(content, query.page(), effectiveSize, totalElements, totalPages, aggregates);
+
+        } catch (ResourceAccessException e) {
+            if (e.getCause() instanceof SocketTimeoutException) {
+                queryMetrics.recordListingsQuery(queryType, OpenSearchQueryMetrics.ResultStatus.TIMEOUT, sample);
+                queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.TIMEOUT);
+            } else {
+                queryMetrics.recordListingsQuery(queryType, OpenSearchQueryMetrics.ResultStatus.ERROR, sample);
+                queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.ERROR);
+            }
+            throw e;
+        } catch (Exception e) {
+            queryMetrics.recordListingsQuery(queryType, OpenSearchQueryMetrics.ResultStatus.ERROR, sample);
+            queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.ERROR);
+            throw e;
         }
+    }
 
-        int effectiveSize = query.size();
-        int totalPages = effectiveSize > 0 ? (int) Math.ceil((double) totalElements / effectiveSize) : 0;
-
-        // Parse aggregates if requested
-        DiscoverListingsAggregates aggregates = null;
-        if (query.includeAggregates()) {
-            aggregates = extractAggregates(response);
-        }
-
-        log.debug("OpenSearch listings city={} page={} size={} total={}",
-                query.city(), query.page(), effectiveSize, totalElements);
-
-        return new DiscoverListingsPage(content, query.page(), effectiveSize, totalElements, totalPages, aggregates);
+    /**
+     * Derives the query type from field PRESENCE only — never from field values.
+     * Keeps metric tag cardinality bounded regardless of user input.
+     */
+    private static OpenSearchQueryMetrics.QueryType resolveQueryType(DiscoverListingsQuery query) {
+        boolean hasText   = query.q() != null && !query.q().isBlank();
+        boolean hasRadius = query.schoolLat() != null && query.schoolLon() != null
+                && query.schoolRadiusKm() != null;
+        if (hasText && hasRadius) return OpenSearchQueryMetrics.QueryType.COMBINED;
+        if (hasText)              return OpenSearchQueryMetrics.QueryType.TEXT;
+        if (hasRadius)            return OpenSearchQueryMetrics.QueryType.RADIUS;
+        return OpenSearchQueryMetrics.QueryType.BBOX;
     }
 
     @SuppressWarnings("unchecked")

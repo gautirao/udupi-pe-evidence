@@ -76,9 +76,17 @@ management:
       percentiles-histogram:
         discover.markers.query.latency.seconds: true
         discover.listings.query.latency.seconds: true
+        discover.opensearch.listings.query.latency.seconds: true
+        discover.opensearch.markers.query.latency.seconds: true
+        discover.opensearch.shadow.latency.seconds: true
+        discover.opensearch.rebuild.duration.seconds: true
       percentiles:
         discover.markers.query.latency.seconds: 0.5,0.95,0.99
         discover.listings.query.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.listings.query.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.markers.query.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.shadow.latency.seconds: 0.5,0.95,0.99
+        discover.opensearch.rebuild.duration.seconds: 0.5,0.95,0.99
   info:
     env:
       enabled: false

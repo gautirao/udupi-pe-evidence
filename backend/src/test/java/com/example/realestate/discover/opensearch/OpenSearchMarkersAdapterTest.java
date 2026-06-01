@@ -4,6 +4,7 @@ import com.example.realestate.discover.DiscoverListingPredicateBuilder;
 import com.example.realestate.discover.DiscoverMarker;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -41,7 +42,8 @@ class OpenSearchMarkersAdapterTest {
         RestClient restClient = RestClient.builder(restTemplate).baseUrl(BASE_URL).build();
 
         OpenSearchProperties props = new OpenSearchProperties(true, BASE_URL, ALIAS, 500, 1000, "", "", "", false, 500, 1.0, 10);
-        adapter = new OpenSearchMarkersAdapter(restClient, props, objectMapper);
+        OpenSearchQueryMetrics queryMetrics = new OpenSearchQueryMetrics(new SimpleMeterRegistry());
+        adapter = new OpenSearchMarkersAdapter(restClient, props, objectMapper, queryMetrics);
     }
 
     private static DiscoverListingPredicateBuilder.Filters simpleFilters() {

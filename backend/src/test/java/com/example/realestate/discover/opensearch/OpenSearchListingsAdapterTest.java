@@ -3,6 +3,7 @@ package com.example.realestate.discover.opensearch;
 import com.example.realestate.discover.DiscoverListingsPage;
 import com.example.realestate.discover.DiscoverListingsQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -37,7 +38,8 @@ class OpenSearchListingsAdapterTest {
         RestClient restClient = RestClient.builder(restTemplate).baseUrl(BASE_URL).build();
 
         OpenSearchProperties props = new OpenSearchProperties(true, BASE_URL, ALIAS, 500, 1000, "", "", "", false, 500, 1.0, 10);
-        adapter = new OpenSearchListingsAdapter(restClient, props, objectMapper);
+        OpenSearchQueryMetrics queryMetrics = new OpenSearchQueryMetrics(new SimpleMeterRegistry());
+        adapter = new OpenSearchListingsAdapter(restClient, props, objectMapper, queryMetrics);
     }
 
     private static DiscoverListingsQuery basicQuery(boolean includeAggregates) {

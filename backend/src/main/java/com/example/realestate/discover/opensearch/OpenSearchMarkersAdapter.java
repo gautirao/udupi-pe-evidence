@@ -6,12 +6,15 @@ import com.example.realestate.discover.DiscoverMarkersPort;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -37,73 +40,103 @@ public class OpenSearchMarkersAdapter implements DiscoverMarkersPort {
     private final RestClient restClient;
     private final OpenSearchProperties props;
     private final ObjectMapper objectMapper;
+    private final OpenSearchQueryMetrics queryMetrics;
 
     public OpenSearchMarkersAdapter(RestClient discoverOpenSearchRestClient,
                                     OpenSearchProperties props,
-                                    ObjectMapper objectMapper) {
+                                    ObjectMapper objectMapper,
+                                    OpenSearchQueryMetrics queryMetrics) {
         this.restClient = discoverOpenSearchRestClient;
         this.props = props;
         this.objectMapper = objectMapper;
+        this.queryMetrics = queryMetrics;
     }
 
     @Override
     public DiscoverMarkersResponse getMarkers(DiscoverListingPredicateBuilder.Filters filters) {
-        Map<String, Object> queryBody = DiscoverQueryDsl.buildMarkersQuery(filters);
-        boolean boundsApplied = filters.bbox() != null;
+        Timer.Sample sample = queryMetrics.startSample();
+        // Default to ERROR so the finally block records even on unexpected paths.
+        OpenSearchQueryMetrics.ResultStatus resultStatus = OpenSearchQueryMetrics.ResultStatus.ERROR;
+        try {
+            Map<String, Object> queryBody = DiscoverQueryDsl.buildMarkersQuery(filters);
+            boolean boundsApplied = filters.bbox() != null;
 
-        String responseBody = restClient.post()
-                .uri("/" + props.indexAlias() + "/_search")
-                .header("Content-Type", "application/json")
-                .body(queryBody)
-                .retrieve()
-                .body(String.class);
+            String responseBody = restClient.post()
+                    .uri("/" + props.indexAlias() + "/_search")
+                    .header("Content-Type", "application/json")
+                    .body(queryBody)
+                    .retrieve()
+                    .body(String.class);
 
-        Map<String, Object> response = parseJson(responseBody);
-        List<Map<String, Object>> rawHits = extractHits(response);
-        int rawHitCount = rawHits.size();
+            Map<String, Object> response = parseJson(responseBody);
+            List<Map<String, Object>> rawHits = extractHits(response);
+            int rawHitCount = rawHits.size();
 
-        List<DiscoverMarker> markers = rawHits.stream()
-                .map(hit -> {
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> source = (Map<String, Object>) hit.get("_source");
-                    if (source == null) return null;
-                    return OpenSearchHitMapper.toMarker(source);
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(ArrayList::new));
+            List<DiscoverMarker> markers = rawHits.stream()
+                    .map(hit -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> source = (Map<String, Object>) hit.get("_source");
+                        if (source == null) return null;
+                        return OpenSearchHitMapper.toMarker(source);
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toCollection(ArrayList::new));
 
-        // Truncation is determined by the raw hit count (before null-filtering) so that
-        // missing lat/lon on a boundary hit does not cause under-reporting.
-        boolean truncated = rawHitCount > CAP;
-        if (truncated) {
-            log.warn("OpenSearch markers cap hit for city {}: {} raw hits (capped at {})",
-                    filters.city(), rawHitCount, CAP);
-            markers = markers.stream().limit(CAP).collect(Collectors.toCollection(ArrayList::new));
+            // Truncation is determined by the raw hit count (before null-filtering) so that
+            // missing lat/lon on a boundary hit does not cause under-reporting.
+            boolean truncated = rawHitCount > CAP;
+            if (truncated) {
+                log.warn("OpenSearch markers cap hit for city {}: {} raw hits (capped at {})",
+                        filters.city(), rawHitCount, CAP);
+                markers = markers.stream().limit(CAP).collect(Collectors.toCollection(ArrayList::new));
+            }
+
+            int returnedElements = markers.size();
+
+            long totalFilteredElements;
+            if (truncated) {
+                // Run a _count query with the same DSL to get the true total
+                totalFilteredElements = runCountQuery(filters);
+                log.debug("OpenSearch markers city={} truncated, totalFilteredElements={}", filters.city(), totalFilteredElements);
+            } else {
+                totalFilteredElements = rawHitCount;
+            }
+
+            resultStatus = returnedElements == 0
+                    ? OpenSearchQueryMetrics.ResultStatus.EMPTY
+                    : OpenSearchQueryMetrics.ResultStatus.SUCCESS;
+
+            log.debug("OpenSearch markers city={} returned={} total={} truncated={} boundsApplied={}",
+                    filters.city(), returnedElements, totalFilteredElements, truncated, boundsApplied);
+
+            return new DiscoverMarkersResponse(
+                    filters.city(),
+                    markers,
+                    truncated,
+                    returnedElements,
+                    totalFilteredElements,
+                    CAP,
+                    boundsApplied
+            );
+
+        } catch (ResourceAccessException e) {
+            if (e.getCause() instanceof SocketTimeoutException) {
+                resultStatus = OpenSearchQueryMetrics.ResultStatus.TIMEOUT;
+                queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.TIMEOUT);
+            } else {
+                resultStatus = OpenSearchQueryMetrics.ResultStatus.ERROR;
+                queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.ERROR);
+            }
+            throw e;
+        } catch (Exception e) {
+            resultStatus = OpenSearchQueryMetrics.ResultStatus.ERROR;
+            queryMetrics.recordFallback(OpenSearchQueryMetrics.FallbackReason.ERROR);
+            throw e;
+        } finally {
+            // Always called exactly once — eliminates the double-stop risk when runCountQuery
+            // or any code after the success recordMarkersQuery call throws.
+            queryMetrics.recordMarkersQuery(resultStatus, sample);
         }
-
-        int returnedElements = markers.size();
-
-        long totalFilteredElements;
-        if (truncated) {
-            // Run a _count query with the same DSL to get the true total
-            totalFilteredElements = runCountQuery(filters);
-            log.debug("OpenSearch markers city={} truncated, totalFilteredElements={}", filters.city(), totalFilteredElements);
-        } else {
-            totalFilteredElements = rawHitCount;
-        }
-
-        log.debug("OpenSearch markers city={} returned={} total={} truncated={} boundsApplied={}",
-                filters.city(), returnedElements, totalFilteredElements, truncated, boundsApplied);
-
-        return new DiscoverMarkersResponse(
-                filters.city(),
-                markers,
-                truncated,
-                returnedElements,
-                totalFilteredElements,
-                CAP,
-                boundsApplied
-        );
     }
 
     private long runCountQuery(DiscoverListingPredicateBuilder.Filters filters) {

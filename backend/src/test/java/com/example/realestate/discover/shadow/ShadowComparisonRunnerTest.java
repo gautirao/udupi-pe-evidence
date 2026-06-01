@@ -9,6 +9,7 @@ import com.example.realestate.discover.DiscoverMarker;
 import com.example.realestate.discover.DiscoverMarkersPort;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.example.realestate.discover.opensearch.OpenSearchProperties;
+import com.example.realestate.discover.shadow.ShadowQueryMetrics;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -80,8 +81,8 @@ class ShadowComparisonRunnerTest {
         ShadowComparisonRunner runner = new ShadowComparisonRunner(
                 props(false, true),
                 SYNC_EXECUTOR,
-                registry,
                 comparator,
+                new ShadowQueryMetrics(registry),
                 ShadowComparisonRunner.SamplingPredicate.alwaysSample());
 
         runner.submitListingsShadow(query(), emptyPage(), null /* listingsAdapter = null */);
@@ -99,8 +100,9 @@ class ShadowComparisonRunnerTest {
 
         verify(listingsAdapter, never()).getListings(any());
 
-        Counter skipped = registry.find("discover.opensearch.shadow.count")
-                .tag("comparison_status", "SKIPPED")
+        Counter skipped = registry.find("discover.opensearch.shadow.comparison.total")
+                .tag("query_type", "city_browse")
+                .tag("comparison_status", "skipped")
                 .counter();
         assertThat(skipped).isNotNull();
         assertThat(skipped.count()).isGreaterThanOrEqualTo(1.0);
@@ -123,9 +125,10 @@ class ShadowComparisonRunnerTest {
         assertThat(postgresResult.content()).isEmpty();
         assertThat(postgresResult.totalElements()).isZero();
 
-        // ERROR counter must be present
-        Counter errorCounter = registry.find("discover.opensearch.shadow.count")
-                .tag("comparison_status", "ERROR")
+        // ERROR comparison must be recorded via ShadowQueryMetrics (query type is CITY_BROWSE)
+        Counter errorCounter = registry.find("discover.opensearch.shadow.comparison.total")
+                .tag("query_type", "city_browse")
+                .tag("comparison_status", "error")
                 .counter();
         assertThat(errorCounter).isNotNull();
         assertThat(errorCounter.count()).isGreaterThanOrEqualTo(1.0);
@@ -144,6 +147,26 @@ class ShadowComparisonRunnerTest {
         verify(listingsAdapter).getListings(any());
         // compare() now takes 3 args (resultStatus removed — always POSTGRES_SHADOW_OK on success path)
         verify(comparator).compare(any(), any(), any());
+    }
+
+    // ---- TC6b: shadow comparison emits ShadowQueryMetrics counter ----
+
+    @Test
+    void shadowRuns_shadowQueryMetricsCounterIncremented() {
+        when(comparator.compare(any(), any(), any())).thenReturn("MATCH");
+        when(listingsAdapter.getListings(any())).thenReturn(emptyPage());
+
+        ShadowComparisonRunner runner = runner(props(false, true));
+        runner.submitListingsShadow(query(), emptyPage(), listingsAdapter);
+
+        // discover.opensearch.shadow.comparison.total must be incremented (A3 advisory)
+        io.micrometer.core.instrument.Counter counter = registry
+                .find("discover.opensearch.shadow.comparison.total")
+                .tag("query_type", "city_browse")
+                .tag("comparison_status", "match")
+                .counter();
+        assertThat(counter).isNotNull();
+        assertThat(counter.count()).isGreaterThanOrEqualTo(1.0);
     }
 
     // ---- TC7: markers — shadow disabled → no submit ----
@@ -167,8 +190,9 @@ class ShadowComparisonRunnerTest {
         assertThatNoException().isThrownBy(() ->
                 runner.submitMarkersShadow(markersFilters(), postgresResponse, markersAdapter));
 
-        Counter errorCounter = registry.find("discover.opensearch.shadow.count")
-                .tag("comparison_status", "ERROR")
+        Counter errorCounter = registry.find("discover.opensearch.shadow.comparison.total")
+                .tag("query_type", "markers")
+                .tag("comparison_status", "error")
                 .counter();
         assertThat(errorCounter).isNotNull();
         assertThat(errorCounter.count()).isGreaterThanOrEqualTo(1.0);
@@ -198,8 +222,8 @@ class ShadowComparisonRunnerTest {
         return new ShadowComparisonRunner(
                 p,
                 SYNC_EXECUTOR,
-                registry,
                 comparator,
+                new ShadowQueryMetrics(registry),
                 predicate);
     }
 

@@ -7,8 +7,6 @@ import com.example.realestate.discover.DiscoverListingsQuery;
 import com.example.realestate.discover.DiscoverMarkersPort;
 import com.example.realestate.discover.DiscoverMarkersResponse;
 import com.example.realestate.discover.opensearch.OpenSearchProperties;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +18,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
+
+import static com.example.realestate.discover.shadow.ShadowQueryMetrics.ComparisonStatus;
 
 /**
  * Fires fire-and-forget shadow OpenSearch comparisons alongside the Postgres-primary path.
@@ -66,8 +66,8 @@ public class ShadowComparisonRunner {
 
     private final OpenSearchProperties props;
     private final Executor shadowExecutor;
-    private final MeterRegistry meterRegistry;
     private final ParityComparator comparator;
+    private final ShadowQueryMetrics shadowQueryMetrics;
     private final SamplingPredicate samplingPredicate;
 
     /**
@@ -83,12 +83,12 @@ public class ShadowComparisonRunner {
     public ShadowComparisonRunner(
             OpenSearchProperties props,
             @Qualifier("shadowExecutor") Executor shadowExecutor,
-            MeterRegistry meterRegistry,
-            ParityComparator comparator) {
+            ParityComparator comparator,
+            ShadowQueryMetrics shadowQueryMetrics) {
         this.props = props;
         this.shadowExecutor = shadowExecutor;
-        this.meterRegistry = meterRegistry;
         this.comparator = comparator;
+        this.shadowQueryMetrics = shadowQueryMetrics;
         this.samplingPredicate = SamplingPredicate.random();
     }
 
@@ -98,13 +98,13 @@ public class ShadowComparisonRunner {
     public ShadowComparisonRunner(
             OpenSearchProperties props,
             Executor shadowExecutor,
-            MeterRegistry meterRegistry,
             ParityComparator comparator,
+            ShadowQueryMetrics shadowQueryMetrics,
             SamplingPredicate samplingPredicate) {
         this.props = props;
         this.shadowExecutor = shadowExecutor;
-        this.meterRegistry = meterRegistry;
         this.comparator = comparator;
+        this.shadowQueryMetrics = shadowQueryMetrics;
         this.samplingPredicate = samplingPredicate;
     }
 
@@ -134,7 +134,7 @@ public class ShadowComparisonRunner {
             return;
         }
         if (!samplingPredicate.shouldSample(props.shadowSampleRate())) {
-            emitSkippedCounter(ShadowQueryType.fromListingsQuery(query).name());
+            shadowQueryMetrics.recordSkipped(ShadowQueryType.fromListingsQuery(query));
             return;
         }
 
@@ -146,30 +146,24 @@ public class ShadowComparisonRunner {
 
         try {
             CompletableFuture.runAsync(() -> {
-                Timer.Sample timerSample = Timer.start(meterRegistry);
-                String compStatus = "ERROR";
-                String resStatus = "POSTGRES_SHADOW_ERROR";
+                Timer.Sample timerSample = shadowQueryMetrics.startSample();
+                ComparisonStatus comparisonStatus = ComparisonStatus.ERROR;
                 try {
                     DiscoverListingsPage osResult = listingsAdapter.getListings(query);
                     List<String> osIds = osResult.content().stream().map(r -> r.id()).toList();
-                    // compare() always records result_status=POSTGRES_SHADOW_OK and returns comparisonStatus
-                    compStatus = comparator.compare(capturedPostgresIds, osIds, queryType);
-                    resStatus = "POSTGRES_SHADOW_OK";
+                    // compare() records parity distribution summaries and returns MATCH or MISMATCH
+                    String rawStatus = comparator.compare(capturedPostgresIds, osIds, queryType);
+                    comparisonStatus = "MATCH".equals(rawStatus)
+                            ? ComparisonStatus.MATCH
+                            : ComparisonStatus.COUNT_MISMATCH;
                 } catch (Throwable t) {
                     boolean isTimeout = isTimeoutException(t);
-                    compStatus = isTimeout ? "TIMEOUT" : "ERROR";
-                    resStatus = isTimeout ? "POSTGRES_SHADOW_TIMEOUT" : "POSTGRES_SHADOW_ERROR";
-                    emitErrorCounter(queryType.name(), compStatus, resStatus);
+                    comparisonStatus = isTimeout ? ComparisonStatus.TIMEOUT : ComparisonStatus.ERROR;
                     log.debug("Shadow comparison error (non-fatal) queryType={}: {}",
                             queryType.name(), t.getMessage());
                 } finally {
-                    String finalResStatus = resStatus;
-                    String finalCompStatus = compStatus;
-                    timerSample.stop(Timer.builder("discover.opensearch.shadow.latency")
-                            .tag("query_type", queryType.name())
-                            .tag("comparison_status", finalCompStatus)
-                            .tag("result_status", finalResStatus)
-                            .register(meterRegistry));
+                    shadowQueryMetrics.recordComparison(queryType, comparisonStatus,
+                            0L, 0L, 0L, 0L, timerSample);
                 }
             }, shadowExecutor);
         } catch (RejectedExecutionException e) {
@@ -200,7 +194,7 @@ public class ShadowComparisonRunner {
             return;
         }
         if (!samplingPredicate.shouldSample(props.shadowSampleRate())) {
-            emitSkippedCounter(ShadowQueryType.MARKERS.name());
+            shadowQueryMetrics.recordSkipped(ShadowQueryType.MARKERS);
             return;
         }
 
@@ -210,28 +204,22 @@ public class ShadowComparisonRunner {
 
         try {
             CompletableFuture.runAsync(() -> {
-                Timer.Sample timerSample = Timer.start(meterRegistry);
-                String compStatus = "ERROR";
-                String resStatus = "POSTGRES_SHADOW_ERROR";
+                Timer.Sample timerSample = shadowQueryMetrics.startSample();
+                ComparisonStatus comparisonStatus = ComparisonStatus.ERROR;
                 try {
                     DiscoverMarkersResponse osResult = markersAdapter.getMarkers(filters);
                     List<String> osIds = osResult.markers().stream().map(m -> m.id()).toList();
-                    compStatus = comparator.compare(capturedPostgresIds, osIds, ShadowQueryType.MARKERS);
-                    resStatus = "POSTGRES_SHADOW_OK";
+                    String rawStatus = comparator.compare(capturedPostgresIds, osIds, ShadowQueryType.MARKERS);
+                    comparisonStatus = "MATCH".equals(rawStatus)
+                            ? ComparisonStatus.MATCH
+                            : ComparisonStatus.COUNT_MISMATCH;
                 } catch (Throwable t) {
                     boolean isTimeout = isTimeoutException(t);
-                    compStatus = isTimeout ? "TIMEOUT" : "ERROR";
-                    resStatus = isTimeout ? "POSTGRES_SHADOW_TIMEOUT" : "POSTGRES_SHADOW_ERROR";
-                    emitErrorCounter(ShadowQueryType.MARKERS.name(), compStatus, resStatus);
+                    comparisonStatus = isTimeout ? ComparisonStatus.TIMEOUT : ComparisonStatus.ERROR;
                     log.debug("Shadow markers comparison error (non-fatal): {}", t.getMessage());
                 } finally {
-                    String finalResStatus = resStatus;
-                    String finalCompStatus = compStatus;
-                    timerSample.stop(Timer.builder("discover.opensearch.shadow.latency")
-                            .tag("query_type", ShadowQueryType.MARKERS.name())
-                            .tag("comparison_status", finalCompStatus)
-                            .tag("result_status", finalResStatus)
-                            .register(meterRegistry));
+                    shadowQueryMetrics.recordComparison(ShadowQueryType.MARKERS, comparisonStatus,
+                            0L, 0L, 0L, 0L, timerSample);
                 }
             }, shadowExecutor);
         } catch (RejectedExecutionException e) {
@@ -240,24 +228,6 @@ public class ShadowComparisonRunner {
     }
 
     // ---- private helpers ----
-
-    private void emitSkippedCounter(String queryTypeName) {
-        Counter.builder("discover.opensearch.shadow.count")
-                .tag("query_type", queryTypeName)
-                .tag("comparison_status", "SKIPPED")
-                .tag("result_status", "POSTGRES_SHADOW_SKIPPED")
-                .register(meterRegistry)
-                .increment();
-    }
-
-    private void emitErrorCounter(String queryTypeName, String compStatus, String resStatus) {
-        Counter.builder("discover.opensearch.shadow.count")
-                .tag("query_type", queryTypeName)
-                .tag("comparison_status", compStatus)
-                .tag("result_status", resStatus)
-                .register(meterRegistry)
-                .increment();
-    }
 
     private static boolean isTimeoutException(Throwable t) {
         if (t instanceof java.util.concurrent.TimeoutException) return true;

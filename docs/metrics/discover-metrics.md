@@ -112,7 +112,131 @@ discover_markers_query_latency_seconds_sum{query_path="bbox",result_status="succ
 
 ---
 
+## OpenSearch Query Metrics (implemented: #1319)
+
+Primary-path latency metrics emitted by the OpenSearch adapters when
+`discover.opensearch.enabled=true`. All tag values are enum-derived constants.
+
+**`discover.opensearch.listings.query.latency.seconds`** (Timer)
+Tags: `query_type` ∈ {`text`, `bbox`, `radius`, `combined`}, `result_status` ∈ {`success`, `empty`, `error`, `timeout`, `fallback`}
+Emitted by: `OpenSearchQueryMetrics` (wired in `OpenSearchListingsAdapter`)
+Fires when: The listings adapter executes a query against OpenSearch
+Design ref: opensearch-observability-and-cutover-metrics.md §3
+
+| `query_type` value | Condition (field PRESENCE only — never field values) |
+|---|---|
+| `text` | `q` non-blank, no school radius |
+| `bbox` | No `q`, no school radius (default viewport query) |
+| `radius` | `schoolLat` + `schoolLon` + `schoolRadiusKm` set, no `q` |
+| `combined` | Both `q` and school radius set |
+
+| `result_status` value | Condition |
+|---|---|
+| `success` | Query returned one or more results |
+| `empty` | Query returned zero results |
+| `error` | Exception other than timeout |
+| `timeout` | `ResourceAccessException` wrapping `SocketTimeoutException` |
+| `fallback` | Reserved (not currently emitted by adapter; used in future routing) |
+
+**`discover.opensearch.markers.query.latency.seconds`** (Timer)
+Tags: `query_type` = `bbox` (always), `result_status` ∈ {`success`, `empty`, `error`, `timeout`, `fallback`}
+Emitted by: `OpenSearchQueryMetrics` (wired in `OpenSearchMarkersAdapter`)
+Fires when: The markers adapter executes a query against OpenSearch
+
+**`discover.opensearch.fallback.total`** (Counter)
+Tags: `fallback_reason` ∈ {`error`, `timeout`, `disabled`, `unavailable`}
+Emitted by: `OpenSearchQueryMetrics`
+Note: Complements the existing `discover.opensearch.fallback.count` counter
+(router-level, `endpoint`/`reason` tags) with adapter-level granularity.
+
+---
+
+## OpenSearch Shadow/Parity Metrics (implemented: #1319)
+
+`ShadowQueryMetrics` provides a pre-registered, clean API for shadow comparison metrics.
+The current live recording is done inline in `ShadowComparisonRunner` + `ParityComparator`;
+`ShadowQueryMetrics` will replace those when those classes are refactored.
+
+**`discover.opensearch.shadow.comparison.total`** (Counter)
+Tags: `query_type` ∈ {`keyword`, `bbox`, `school_radius`, `polygon`, `city_browse`, `markers`}, `comparison_status` ∈ {`match`, `count_mismatch`, `content_mismatch`, `timeout`, `error`, `skipped`}
+Note: `skipped` is emitted by `ShadowQueryMetrics.recordSkipped()` when the sampling gate rejects a request — no shadow query is executed in this case.
+
+**`discover.opensearch.shadow.count_delta`** (DistributionSummary)
+Tags: same as above
+Records: `abs(pgCount - osCount)`
+
+**`discover.opensearch.shadow.missing_docs`** (DistributionSummary)
+Tags: same as above
+Records: count of IDs in Postgres but absent from OpenSearch
+
+**`discover.opensearch.shadow.extra_docs`** (DistributionSummary)
+Tags: same as above
+Records: count of IDs in OpenSearch but absent from Postgres
+
+**`discover.opensearch.shadow.top_n_overlap`** (DistributionSummary)
+Tags: same as above
+Records: count of IDs in the intersection of top-N ordered results (0..N)
+
+**`discover.opensearch.shadow.latency.seconds`** (Timer)
+Tags: same as above
+Records: wall time of the shadow comparison operation
+
+---
+
+## Safety Metrics (implemented: #1319 — placeholder)
+
+Safety counters that MUST remain at zero in production. Any nonzero value is a
+cutover-blocking incident. Call sites require a Java rebuild/indexing service
+(current rebuild is Python-only via `scripts/opensearch_rebuild.py`).
+
+**`discover.opensearch.safety.non_public_indexed`** (Counter, no tags)
+Incremented when a document with non-LIVE status is detected in the indexing pipeline.
+
+**`discover.opensearch.safety.whitelist_violation`** (Counter, no tags)
+Incremented when an index operation includes a field outside the approved whitelist.
+
+**`discover.opensearch.safety.schema_validation_failure`** (Counter, no tags)
+Incremented when a document fails OpenSearch schema validation at index time.
+
+---
+
+## Rebuild/Backfill Metrics (placeholder: #1319)
+
+Rebuild pipeline metrics. NOT active — current rebuild is `scripts/opensearch_rebuild.py`
+(Python-only). These will be populated when a Java rebuild orchestration service is added.
+
+**`discover.opensearch.rebuild.documents.total`** (Counter)
+Tags: `pipeline_stage` ∈ {`read`, `indexed`, `skipped`, `failed`}
+
+**`discover.opensearch.rebuild.duration.seconds`** (Timer)
+Tags: `result` ∈ {`success`, `failure`}
+
+**`discover.opensearch.rebuild.alias_swap.total`** (Counter)
+Tags: `result` ∈ {`success`, `failure`}
+
+---
+
+## Future Placeholders / Deferred Metrics
+
+The following metrics are not yet implemented. They are listed here for planning reference.
+
+| Metric | Reason deferred |
+|---|---|
+| Index lag (e.g. `discover.opensearch.index_lag.seconds`) | No reliable `indexed_at` timestamp in the current OpenSearch document schema |
+| Outbox/queue depth | No Java outbox worker; rebuild is Python-only |
+| DLQ metrics | No dead-letter queue in the current architecture |
+| Kafka consumer lag / offset metrics | Kafka not present in this service (hard constraint) |
+
+---
+
 ## Shadow-Read / Parity Metrics (issue #1318)
+
+> **Deprecated metric names (pre-#1319):**
+> The metric names `discover.opensearch.shadow.latency` and `discover.opensearch.shadow.count`
+> were used in the #1318 shadow-read implementation. These names are superseded by
+> `discover.opensearch.shadow.latency.seconds` and `discover.opensearch.shadow.comparison.total`
+> as part of the #1319 observability redesign. Do not configure alerts on the deprecated names.
+> The section below is retained for historical reference only.
 
 Shadow mode fires a fire-and-forget OpenSearch query alongside every Postgres-primary
 response. It is activated by `discover.opensearch.shadow-enabled=true` combined with
@@ -131,13 +255,13 @@ response. It is activated by `discover.opensearch.shadow-enabled=true` combined 
 
 | Metric name | Type | When emitted |
 |---|---|---|
-| `discover.opensearch.shadow.count` | Counter | Every shadow decision: MATCH, MISMATCH, TIMEOUT, ERROR, SKIPPED |
+| ~~`discover.opensearch.shadow.count`~~ **[SUPERSEDED by `discover.opensearch.shadow.comparison.total` — #1319]** | Counter | Every shadow decision: MATCH, MISMATCH, TIMEOUT, ERROR, SKIPPED |
 | `discover.opensearch.shadow.count_delta` | DistributionSummary | MATCH and MISMATCH comparisons; records `abs(pgCount - osCount)` |
 | `discover.opensearch.shadow.mismatch_pct` | DistributionSummary | MATCH and MISMATCH; `(missing + extra) / max(pgCount,1) * 100` |
 | `discover.opensearch.shadow.missing_count` | DistributionSummary | MATCH and MISMATCH; IDs in Postgres but absent from OpenSearch |
 | `discover.opensearch.shadow.extra_count` | DistributionSummary | MATCH and MISMATCH; IDs in OpenSearch but absent from Postgres |
 | `discover.opensearch.shadow.top_n_overlap` | DistributionSummary | Ordered query types only (see below); fraction of top-N that overlap |
-| `discover.opensearch.shadow.latency` | Timer | Wall time of the shadow OpenSearch call |
+| ~~`discover.opensearch.shadow.latency`~~ **[SUPERSEDED by `discover.opensearch.shadow.latency.seconds` — #1319]** | Timer | Wall time of the shadow OpenSearch call |
 
 ### Tag Reference (all shadow metrics)
 
