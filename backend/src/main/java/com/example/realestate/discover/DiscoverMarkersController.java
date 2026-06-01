@@ -33,10 +33,10 @@ public class DiscoverMarkersController {
     private static final TypeReference<List<List<Double>>> POLYGON_TYPE =
             new TypeReference<>() {};
 
-    private final DiscoverMarkersService service;
+    private final DiscoverMarkersPort service;
     private final ObjectMapper objectMapper;
 
-    public DiscoverMarkersController(DiscoverMarkersService service, ObjectMapper objectMapper) {
+    public DiscoverMarkersController(DiscoverMarkersPort service, ObjectMapper objectMapper) {
         this.service = service;
         this.objectMapper = objectMapper;
     }

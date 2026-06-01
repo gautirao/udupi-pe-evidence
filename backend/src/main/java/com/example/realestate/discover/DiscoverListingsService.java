@@ -27,7 +27,7 @@ import java.util.Map;
  * for the same filters.
  */
 @Service
-public class DiscoverListingsService {
+public class DiscoverListingsService implements DiscoverListingsPort {
 
     private static final Logger log = LoggerFactory.getLogger(DiscoverListingsService.class);
 

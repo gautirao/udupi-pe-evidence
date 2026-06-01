@@ -1,0 +1,158 @@
+package com.example.realestate.discover.opensearch;
+
+import com.example.realestate.discover.DiscoverListingResponse;
+import com.example.realestate.discover.DiscoverListingsAggregates;
+import com.example.realestate.discover.DiscoverListingsPage;
+import com.example.realestate.discover.DiscoverListingsPort;
+import com.example.realestate.discover.DiscoverListingsQuery;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * OpenSearch-backed implementation of {@link DiscoverListingsPort}.
+ *
+ * <p>Active only when {@code discover.opensearch.enabled=true}.
+ */
+@Component
+@ConditionalOnProperty(name = "discover.opensearch.enabled", havingValue = "true", matchIfMissing = false)
+public class OpenSearchListingsAdapter implements DiscoverListingsPort {
+
+    private static final Logger log = LoggerFactory.getLogger(OpenSearchListingsAdapter.class);
+
+    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
+
+    private final RestClient restClient;
+    private final OpenSearchProperties props;
+    private final ObjectMapper objectMapper;
+
+    public OpenSearchListingsAdapter(RestClient discoverOpenSearchRestClient,
+                                     OpenSearchProperties props,
+                                     ObjectMapper objectMapper) {
+        this.restClient = discoverOpenSearchRestClient;
+        this.props = props;
+        this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public DiscoverListingsPage getListings(DiscoverListingsQuery query) {
+        Map<String, Object> queryBody = DiscoverQueryDsl.buildListingsQuery(query);
+
+        String responseBody = restClient.post()
+                .uri("/" + props.indexAlias() + "/_search")
+                .header("Content-Type", "application/json")
+                .body(queryBody)
+                .retrieve()
+                .body(String.class);
+
+        Map<String, Object> response = parseJson(responseBody);
+
+        // Extract total hits (track_total_hits: true)
+        long totalElements = extractTotalHits(response);
+
+        // Map hits to listing responses
+        List<Map<String, Object>> hits = extractHits(response);
+        List<DiscoverListingResponse> content = new ArrayList<>(hits.size());
+        for (Map<String, Object> hit : hits) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> source = (Map<String, Object>) hit.get("_source");
+            if (source == null) continue;
+            content.add(OpenSearchHitMapper.toListing(source));
+        }
+
+        int effectiveSize = query.size();
+        int totalPages = effectiveSize > 0 ? (int) Math.ceil((double) totalElements / effectiveSize) : 0;
+
+        // Parse aggregates if requested
+        DiscoverListingsAggregates aggregates = null;
+        if (query.includeAggregates()) {
+            aggregates = extractAggregates(response);
+        }
+
+        log.debug("OpenSearch listings city={} page={} size={} total={}",
+                query.city(), query.page(), effectiveSize, totalElements);
+
+        return new DiscoverListingsPage(content, query.page(), effectiveSize, totalElements, totalPages, aggregates);
+    }
+
+    @SuppressWarnings("unchecked")
+    private long extractTotalHits(Map<String, Object> response) {
+        try {
+            Map<String, Object> hitsOuter = (Map<String, Object>) response.get("hits");
+            if (hitsOuter == null) return 0L;
+            Object total = hitsOuter.get("total");
+            if (total instanceof Map<?, ?> totalMap) {
+                Object value = totalMap.get("value");
+                if (value instanceof Number n) return n.longValue();
+            } else if (total instanceof Number n) {
+                return n.longValue();
+            }
+        } catch (ClassCastException e) {
+            log.warn("Unexpected OpenSearch hits.total structure", e);
+        }
+        return 0L;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> extractHits(Map<String, Object> response) {
+        try {
+            Map<String, Object> hitsOuter = (Map<String, Object>) response.get("hits");
+            if (hitsOuter == null) return List.of();
+            Object hitsArray = hitsOuter.get("hits");
+            if (!(hitsArray instanceof List<?> list)) return List.of();
+            List<Map<String, Object>> result = new ArrayList<>(list.size());
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> m) {
+                    result.add((Map<String, Object>) m);
+                }
+            }
+            return result;
+        } catch (ClassCastException e) {
+            log.warn("Unexpected OpenSearch hits structure", e);
+            return List.of();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private DiscoverListingsAggregates extractAggregates(Map<String, Object> response) {
+        try {
+            Object aggregations = response.get("aggregations");
+            if (!(aggregations instanceof Map<?, ?> aggsMap)) return null;
+            Object localityAgg = aggsMap.get("locality_agg");
+            if (!(localityAgg instanceof Map<?, ?> localityMap)) return null;
+            Object bucketsObj = localityMap.get("buckets");
+            if (!(bucketsObj instanceof List<?> buckets)) return null;
+
+            List<DiscoverListingsAggregates.LocalityCount> topLocalities = new ArrayList<>(buckets.size());
+            for (Object bucket : buckets) {
+                if (!(bucket instanceof Map<?, ?> b)) continue;
+                Object key = b.get("key");
+                Object count = b.get("doc_count");
+                if (key != null && count instanceof Number n) {
+                    topLocalities.add(new DiscoverListingsAggregates.LocalityCount(
+                            key.toString(), n.intValue()));
+                }
+            }
+            return new DiscoverListingsAggregates(topLocalities);
+        } catch (ClassCastException e) {
+            log.warn("Unexpected OpenSearch aggregations structure", e);
+            return null;
+        }
+    }
+
+    private Map<String, Object> parseJson(String json) {
+        try {
+            return objectMapper.readValue(json, MAP_TYPE);
+        } catch (Exception e) {
+            throw new OpenSearchQueryException("Failed to parse OpenSearch response", e);
+        }
+    }
+}

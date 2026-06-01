@@ -20,7 +20,7 @@ import java.util.Map;
  * for the same filters — by construction, not by agreement.
  */
 @Service
-public class DiscoverMarkersService {
+public class DiscoverMarkersService implements DiscoverMarkersPort {
 
     private static final Logger log = LoggerFactory.getLogger(DiscoverMarkersService.class);
 

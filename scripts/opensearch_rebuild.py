@@ -87,6 +87,19 @@ INDEX_MAPPING: dict[str, Any] = {
             # hero_image_url: lowest-position image url from listing_images
             # (ORDER BY position ASC, id ASC LIMIT 1). NULL when no image exists.
             "hero_image_url": {"type": "keyword"},
+            "listing_number": {"type": "integer"},
+            "land_area": {"type": "float"},
+            "land_area_unit": {"type": "keyword"},
+            "built_area": {"type": "float"},
+            "built_area_unit": {"type": "keyword"},
+            "rera_number": {"type": "keyword"},
+            "trust_tier": {"type": "keyword"},
+            "possession_status": {"type": "keyword"},
+            "listing_purpose": {"type": "keyword"},
+            "updated_at": {"type": "date"},
+            "last_updated_at": {"type": "date"},
+            "first_published_at": {"type": "date"},
+            "back_to_market_at": {"type": "date"},
         }
     },
 }
@@ -114,6 +127,19 @@ SELECT
     pl.longitude,
     pl.status,
     pl.created_at,
+    pl.updated_at,
+    pl.first_published_at,
+    pl.last_updated_at,
+    pl.back_to_market_at,
+    pl.listing_number,
+    pl.land_area,
+    pl.land_area_unit,
+    pl.built_area,
+    pl.built_area_unit,
+    pl.rera_number,
+    pl.trust_tier,
+    pl.possession_status,
+    pl.listing_purpose,
     c.slug AS city_slug,
     (
         SELECT li.url
@@ -175,9 +201,18 @@ def _row_to_doc(row: dict, index_name: str) -> dict | None:
     if lat is None or lon is None:
         return None
 
-    created_at = row.get("created_at")
-    if isinstance(created_at, datetime):
-        created_at = created_at.isoformat()
+    def _to_iso(val: Any) -> str | None:
+        if val is None:
+            return None
+        if isinstance(val, datetime):
+            return val.isoformat()
+        return val
+
+    created_at = _to_iso(row.get("created_at"))
+    updated_at = _to_iso(row.get("updated_at"))
+    first_published_at = _to_iso(row.get("first_published_at"))
+    last_updated_at = _to_iso(row.get("last_updated_at"))
+    back_to_market_at = _to_iso(row.get("back_to_market_at"))
 
     doc: dict[str, Any] = {
         "_index": index_name,
@@ -201,16 +236,34 @@ def _row_to_doc(row: dict, index_name: str) -> dict | None:
             "location": {"lat": float(lat), "lon": float(lon)},
             "status": row.get("status"),
             "created_at": created_at,
+            "updated_at": updated_at,
+            "first_published_at": first_published_at,
+            "last_updated_at": last_updated_at,
+            "back_to_market_at": back_to_market_at,
             # hero_image_url: lowest-position image; may be None when no images exist
             "hero_image_url": row.get("hero_image_url"),
+            "listing_number": row.get("listing_number"),
+            "land_area": float(row["land_area"]) if row.get("land_area") is not None else None,
+            "land_area_unit": row.get("land_area_unit"),
+            "built_area": float(row["built_area"]) if row.get("built_area") is not None else None,
+            "built_area_unit": row.get("built_area_unit"),
+            "rera_number": row.get("rera_number"),
+            "trust_tier": row.get("trust_tier"),
+            "possession_status": row.get("possession_status"),
+            "listing_purpose": row.get("listing_purpose"),
         },
     }
     # Omit null-valued optional fields so the index stays lean;
     # presence/absence is treated as None by callers either way.
-    if doc["_source"]["city_slug"] is None:
-        del doc["_source"]["city_slug"]
-    if doc["_source"]["hero_image_url"] is None:
-        del doc["_source"]["hero_image_url"]
+    _OPTIONAL_FIELDS = (
+        "city_slug", "hero_image_url", "updated_at", "first_published_at",
+        "last_updated_at", "back_to_market_at", "listing_number", "land_area",
+        "land_area_unit", "built_area", "built_area_unit", "rera_number",
+        "trust_tier", "possession_status", "listing_purpose",
+    )
+    for field in _OPTIONAL_FIELDS:
+        if doc["_source"].get(field) is None:
+            doc["_source"].pop(field, None)
     return doc
 
 

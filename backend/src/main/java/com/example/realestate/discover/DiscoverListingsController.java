@@ -35,10 +35,10 @@ public class DiscoverListingsController {
     private static final TypeReference<List<List<Double>>> POLYGON_TYPE =
             new TypeReference<>() {};
 
-    private final DiscoverListingsService service;
+    private final DiscoverListingsPort service;
     private final ObjectMapper objectMapper;
 
-    public DiscoverListingsController(DiscoverListingsService service, ObjectMapper objectMapper) {
+    public DiscoverListingsController(DiscoverListingsPort service, ObjectMapper objectMapper) {
         this.service = service;
         this.objectMapper = objectMapper;
     }

@@ -160,3 +160,20 @@ trust:
 proximity:
   batch:
     cron: ${PROXIMITY_BATCH_CRON:0 0 2 * * *}
+
+# OpenSearch discover adapter — disabled by default.
+# Set discover.opensearch.enabled=true + OPENSEARCH_URL to enable.
+# The timeout values are intentionally aggressive: OS must respond in 500ms (read)
+# or 1000ms (connect) or the routing service falls back to Postgres.
+discover:
+  opensearch:
+    enabled: false
+    url: ${OPENSEARCH_URL:http://localhost:9200}
+    index-alias: listings_read
+    timeout-ms: 500
+    connect-timeout-ms: 1000
+    # Optional auth for production OpenSearch clusters (leave blank for unauthenticated/local).
+    # API key takes precedence over username+password when both are set.
+    username: ${OPENSEARCH_USERNAME:}
+    password: ${OPENSEARCH_PASSWORD:}
+    api-key: ${OPENSEARCH_API_KEY:}
