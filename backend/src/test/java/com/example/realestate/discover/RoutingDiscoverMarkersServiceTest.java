@@ -54,7 +54,7 @@ class RoutingDiscoverMarkersServiceTest {
     }
 
     private RoutingDiscoverMarkersService routing(boolean enabled, DiscoverMarkersPort osAdapter) {
-        return new RoutingDiscoverMarkersService(postgresService, osAdapter, meterRegistry, enabled);
+        return new RoutingDiscoverMarkersService(postgresService, osAdapter, meterRegistry, enabled, null);
     }
 
     // -----------------------------------------------------------------------

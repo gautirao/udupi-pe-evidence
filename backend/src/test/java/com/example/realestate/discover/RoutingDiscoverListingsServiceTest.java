@@ -51,7 +51,7 @@ class RoutingDiscoverListingsServiceTest {
     }
 
     private RoutingDiscoverListingsService routing(boolean enabled, DiscoverListingsPort osAdapter) {
-        return new RoutingDiscoverListingsService(postgresService, osAdapter, meterRegistry, enabled);
+        return new RoutingDiscoverListingsService(postgresService, osAdapter, meterRegistry, enabled, null);
     }
 
     // -----------------------------------------------------------------------

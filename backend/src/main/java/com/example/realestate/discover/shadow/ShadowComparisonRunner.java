@@ -65,30 +65,27 @@ public class ShadowComparisonRunner {
     }
 
     private final OpenSearchProperties props;
-    private final DiscoverListingsPort listingsAdapter;
-    private final DiscoverMarkersPort markersAdapter;
     private final Executor shadowExecutor;
     private final MeterRegistry meterRegistry;
     private final ParityComparator comparator;
     private final SamplingPredicate samplingPredicate;
 
     /**
-     * Primary constructor — used by Spring. Adapters are optional (absent when OpenSearch is
-     * not configured at all); shadow mode is effectively disabled in that case.
+     * Primary constructor — used by Spring.
+     *
+     * <p>Adapters are passed per-call (see {@link #submitListingsShadow} and
+     * {@link #submitMarkersShadow}) to avoid a circular bean dependency:
+     * {@code RoutingDiscoverListingsService} and {@code RoutingDiscoverMarkersService} are the
+     * {@code @Primary} implementations of the adapter ports, and they hold a reference to this
+     * bean. Injecting the ports here would form a cycle Spring cannot resolve at startup.
      */
     @Autowired
     public ShadowComparisonRunner(
             OpenSearchProperties props,
-            @Autowired(required = false) DiscoverListingsPort listingsAdapter,
-            @Autowired(required = false) DiscoverMarkersPort markersAdapter,
             @Qualifier("shadowExecutor") Executor shadowExecutor,
             MeterRegistry meterRegistry,
             ParityComparator comparator) {
         this.props = props;
-        // Guard against self-injection: if no separate adapter bean exists, Spring may inject
-        // the @Primary RoutingDiscoverListingsService back. Detect and nullify.
-        this.listingsAdapter = isSelf(listingsAdapter) ? null : listingsAdapter;
-        this.markersAdapter = isSelf(markersAdapter) ? null : markersAdapter;
         this.shadowExecutor = shadowExecutor;
         this.meterRegistry = meterRegistry;
         this.comparator = comparator;
@@ -100,15 +97,11 @@ public class ShadowComparisonRunner {
      */
     public ShadowComparisonRunner(
             OpenSearchProperties props,
-            DiscoverListingsPort listingsAdapter,
-            DiscoverMarkersPort markersAdapter,
             Executor shadowExecutor,
             MeterRegistry meterRegistry,
             ParityComparator comparator,
             SamplingPredicate samplingPredicate) {
         this.props = props;
-        this.listingsAdapter = listingsAdapter;
-        this.markersAdapter = markersAdapter;
         this.shadowExecutor = shadowExecutor;
         this.meterRegistry = meterRegistry;
         this.comparator = comparator;
@@ -127,10 +120,12 @@ public class ShadowComparisonRunner {
      *       already increments SKIPPED)
      * </ol>
      *
-     * @param query         the listings query that was just served by Postgres
-     * @param postgresPage  the Postgres result (not modified)
+     * @param query           the listings query that was just served by Postgres
+     * @param postgresPage    the Postgres result (not modified)
+     * @param listingsAdapter the OpenSearch listings adapter (may be null when OS is not configured)
      */
-    public void submitListingsShadow(DiscoverListingsQuery query, DiscoverListingsPage postgresPage) {
+    public void submitListingsShadow(DiscoverListingsQuery query, DiscoverListingsPage postgresPage,
+                                     DiscoverListingsPort listingsAdapter) {
         // O3: shadow only on !enabled && shadowEnabled
         if (!props.shadowEnabled() || props.enabled()) {
             return;
@@ -189,12 +184,14 @@ public class ShadowComparisonRunner {
      *
      * <p>Uses the same guard order as {@link #submitListingsShadow}.
      *
-     * @param filters         the markers filters that were just served by Postgres
+     * @param filters          the markers filters that were just served by Postgres
      * @param postgresResponse the Postgres result (not modified)
+     * @param markersAdapter   the OpenSearch markers adapter (may be null when OS is not configured)
      */
     public void submitMarkersShadow(
             DiscoverListingPredicateBuilder.Filters filters,
-            DiscoverMarkersResponse postgresResponse) {
+            DiscoverMarkersResponse postgresResponse,
+            DiscoverMarkersPort markersAdapter) {
 
         if (!props.shadowEnabled() || props.enabled()) {
             return;
@@ -271,8 +268,4 @@ public class ShadowComparisonRunner {
         return false;
     }
 
-    /** Returns true if the injected bean is "this" (self-injection guard). */
-    private boolean isSelf(Object bean) {
-        return bean == this;
-    }
 }

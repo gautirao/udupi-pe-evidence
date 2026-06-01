@@ -59,7 +59,7 @@ class ShadowComparisonRunnerTest {
     @Test
     void shadowDisabled_noAdapterCall() {
         ShadowComparisonRunner runner = runner(props(false, false));
-        runner.submitListingsShadow(query(), emptyPage());
+        runner.submitListingsShadow(query(), emptyPage(), listingsAdapter);
         verify(listingsAdapter, never()).getListings(any());
     }
 
@@ -69,7 +69,7 @@ class ShadowComparisonRunnerTest {
     void opensearchEnabled_noShadow() {
         // enabled=true, shadowEnabled=true → shadow must NOT fire
         ShadowComparisonRunner runner = runner(props(true, true));
-        runner.submitListingsShadow(query(), emptyPage());
+        runner.submitListingsShadow(query(), emptyPage(), listingsAdapter);
         verify(listingsAdapter, never()).getListings(any());
     }
 
@@ -79,14 +79,12 @@ class ShadowComparisonRunnerTest {
     void adapterNull_noSubmit() {
         ShadowComparisonRunner runner = new ShadowComparisonRunner(
                 props(false, true),
-                null,        // listingsAdapter = null
-                null,
                 SYNC_EXECUTOR,
                 registry,
                 comparator,
                 ShadowComparisonRunner.SamplingPredicate.alwaysSample());
 
-        runner.submitListingsShadow(query(), emptyPage());
+        runner.submitListingsShadow(query(), emptyPage(), null /* listingsAdapter = null */);
         verify(comparator, never()).compare(any(), any(), any());
     }
 
@@ -97,7 +95,7 @@ class ShadowComparisonRunnerTest {
         ShadowComparisonRunner runner = runner(props(false, true),
                 ShadowComparisonRunner.SamplingPredicate.neverSample());
 
-        runner.submitListingsShadow(query(), emptyPage());
+        runner.submitListingsShadow(query(), emptyPage(), listingsAdapter);
 
         verify(listingsAdapter, never()).getListings(any());
 
@@ -119,7 +117,7 @@ class ShadowComparisonRunnerTest {
 
         // Must not throw
         assertThatNoException().isThrownBy(() ->
-                runner.submitListingsShadow(query(), postgresResult));
+                runner.submitListingsShadow(query(), postgresResult, listingsAdapter));
 
         // Postgres result content is unmodified (empty list, 0 total)
         assertThat(postgresResult.content()).isEmpty();
@@ -141,7 +139,7 @@ class ShadowComparisonRunnerTest {
         when(listingsAdapter.getListings(any())).thenReturn(osPage);
 
         ShadowComparisonRunner runner = runner(props(false, true));
-        runner.submitListingsShadow(query(), emptyPage());
+        runner.submitListingsShadow(query(), emptyPage(), listingsAdapter);
 
         verify(listingsAdapter).getListings(any());
         // compare() now takes 3 args (resultStatus removed — always POSTGRES_SHADOW_OK on success path)
@@ -153,7 +151,7 @@ class ShadowComparisonRunnerTest {
     @Test
     void markers_shadowDisabled_noAdapterCall() {
         ShadowComparisonRunner runner = runner(props(false, false));
-        runner.submitMarkersShadow(markersFilters(), emptyMarkersResponse());
+        runner.submitMarkersShadow(markersFilters(), emptyMarkersResponse(), markersAdapter);
         verify(markersAdapter, never()).getMarkers(any());
     }
 
@@ -167,7 +165,7 @@ class ShadowComparisonRunnerTest {
         DiscoverMarkersResponse postgresResponse = emptyMarkersResponse();
 
         assertThatNoException().isThrownBy(() ->
-                runner.submitMarkersShadow(markersFilters(), postgresResponse));
+                runner.submitMarkersShadow(markersFilters(), postgresResponse, markersAdapter));
 
         Counter errorCounter = registry.find("discover.opensearch.shadow.count")
                 .tag("comparison_status", "ERROR")
@@ -183,7 +181,7 @@ class ShadowComparisonRunnerTest {
         when(markersAdapter.getMarkers(any())).thenReturn(emptyMarkersResponse());
 
         ShadowComparisonRunner runner = runner(props(false, true));
-        runner.submitMarkersShadow(markersFilters(), emptyMarkersResponse());
+        runner.submitMarkersShadow(markersFilters(), emptyMarkersResponse(), markersAdapter);
 
         verify(markersAdapter).getMarkers(any());
         verify(comparator).compare(any(), any(), any());
@@ -199,8 +197,6 @@ class ShadowComparisonRunnerTest {
                                           ShadowComparisonRunner.SamplingPredicate predicate) {
         return new ShadowComparisonRunner(
                 p,
-                listingsAdapter,
-                markersAdapter,
                 SYNC_EXECUTOR,
                 registry,
                 comparator,

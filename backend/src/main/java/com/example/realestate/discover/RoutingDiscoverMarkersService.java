@@ -37,23 +37,21 @@ public class RoutingDiscoverMarkersService implements DiscoverMarkersPort {
     private final Counter fallbackErrorCounter;
     private final Counter fallbackTimeoutCounter;
 
-    // Field injection (not constructor) — avoids a circular dependency: ShadowComparisonRunner
-    // injects DiscoverMarkersPort (the @Primary bean = this class). Constructor injection here
-    // would force Spring to instantiate both at the same time.
-    @Autowired(required = false)
-    private ShadowComparisonRunner shadowRunner;
+    private final ShadowComparisonRunner shadowRunner;
 
     public RoutingDiscoverMarkersService(
             DiscoverMarkersService postgresService,
             @Autowired(required = false) DiscoverMarkersPort openSearchAdapter,
             MeterRegistry meterRegistry,
-            @Value("${discover.opensearch.enabled:false}") boolean enabled) {
+            @Value("${discover.opensearch.enabled:false}") boolean enabled,
+            @Autowired(required = false) ShadowComparisonRunner shadowRunner) {
         this.postgresService = postgresService;
         // Avoid self-reference: if the only available DiscoverMarkersPort bean is this
         // service itself (when OS adapter is absent), Spring would inject us back. Guard
         // by checking whether the injected bean is a different instance.
         this.openSearchAdapter = (openSearchAdapter == this) ? null : openSearchAdapter;
         this.enabled = enabled;
+        this.shadowRunner = shadowRunner;
         this.fallbackErrorCounter = Counter.builder(FALLBACK_COUNTER_NAME)
                 .tag("endpoint", "markers")
                 .tag("reason", "error")
@@ -69,7 +67,7 @@ public class RoutingDiscoverMarkersService implements DiscoverMarkersPort {
         if (!enabled || openSearchAdapter == null) {
             DiscoverMarkersResponse markersResponse = postgresService.getMarkers(filters);
             if (shadowRunner != null) {
-                shadowRunner.submitMarkersShadow(filters, markersResponse);
+                shadowRunner.submitMarkersShadow(filters, markersResponse, openSearchAdapter);
             }
             return markersResponse;
         }
