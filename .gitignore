@@ -57,6 +57,13 @@ e2e/.test-listing-id
 e2e/fixtures/*-auth.json
 coverage/*
 
+# Local DB dump files — never commit (may contain PII or large data)
+tmp/*.dump
+tmp/*.sql
+tmp/*.backup
+*.dump
+*.backup
+
 # Claude Code local development artifacts
 .claude/worktrees/
 .claude/state/
