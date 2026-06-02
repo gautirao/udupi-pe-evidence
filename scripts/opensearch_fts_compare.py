@@ -35,6 +35,13 @@ import psycopg2
 import psycopg2.extras
 from opensearchpy import OpenSearch
 
+# Make scripts/ importable regardless of the working directory from which this
+# script is invoked (e.g. project root vs scripts/).
+_SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+from opensearch_auth import build_opensearch_client as _build_opensearch_client_impl  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -96,11 +103,8 @@ def _safe_db_url_display(url: str) -> str:
 
 
 def _build_opensearch_client(url: str) -> OpenSearch:
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    hosts = [{"host": parsed.hostname, "port": parsed.port or 9200}]
-    scheme = parsed.scheme or "http"
-    return OpenSearch(hosts=hosts, http_compress=True, use_ssl=(scheme == "https"))
+    """Build an authenticated OpenSearch client. Auth from opensearch_auth module."""
+    return _build_opensearch_client_impl(url)
 
 
 def _multi_match_query(query_str: str, extra: dict[str, Any], top_n: int) -> dict[str, Any]:
