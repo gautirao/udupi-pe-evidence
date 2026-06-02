@@ -17,6 +17,9 @@ import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.OwnerListingLimitException;
 import com.example.realestate.poi.PoiQueryProfile;
+import com.example.realestate.search.outbox.SearchOutboxEventType;
+import com.example.realestate.search.outbox.SearchOutboxOperation;
+import com.example.realestate.search.outbox.SearchOutboxWriter;
 import com.example.realestate.trust.BadgeInvalidationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +59,7 @@ public class ListingCrudService {
     private final ListingDeduplicationService listingDeduplicationService;
     private final PriceChangeLogRepository priceChangeLogRepository;
     private final BadgeInvalidationService badgeInvalidationService;
+    private final SearchOutboxWriter searchOutboxWriter;
 
     public ListingCrudService(
             ListingRepository listingRepository,
@@ -63,13 +67,15 @@ public class ListingCrudService {
             ListingOwnershipGuard listingOwnershipGuard,
             ListingDeduplicationService listingDeduplicationService,
             PriceChangeLogRepository priceChangeLogRepository,
-            BadgeInvalidationService badgeInvalidationService) {
+            BadgeInvalidationService badgeInvalidationService,
+            SearchOutboxWriter searchOutboxWriter) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
         this.listingDeduplicationService = listingDeduplicationService;
         this.priceChangeLogRepository = priceChangeLogRepository;
         this.badgeInvalidationService = badgeInvalidationService;
+        this.searchOutboxWriter = searchOutboxWriter;
     }
 
     /**
@@ -188,6 +194,12 @@ public class ListingCrudService {
         Listing saved = listingRepository.save(listing);
         log.info("Created draft listing listingId={} createdBy={} sellerType={} isDuplicate={}",
                 saved.getId(), createdBy, sellerType, saved.isDuplicate());
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_CREATED,
+                SearchOutboxOperation.INDEX,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         return saved;
     }
 
@@ -423,6 +435,12 @@ public class ListingCrudService {
 
         Listing saved = listingRepository.save(listing);
         log.info("Updated listing listingId={} by userId={}", listingId, userId);
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_UPDATED,
+                SearchOutboxOperation.INDEX,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
 
         // Revoke EARNED badges whose trust-relevant fields changed in this edit.
         // This runs inside the same transaction — if invalidation fails, the whole update
@@ -486,6 +504,12 @@ public class ListingCrudService {
         listing.setUpdatedAt(OffsetDateTime.now());
         listingRepository.save(listing);
         log.info("Soft-deleted (archived) listing listingId={} by userId={}", listingId, userId);
+        searchOutboxWriter.writeEvent(
+                listing.getId(),
+                SearchOutboxEventType.LISTING_DELETED,
+                SearchOutboxOperation.DELETE,
+                listing.getStatus(),
+                listing.getUpdatedAt() != null ? listing.getUpdatedAt().toInstant() : null);
     }
 
     /**

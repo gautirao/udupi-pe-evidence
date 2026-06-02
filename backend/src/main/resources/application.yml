@@ -191,3 +191,14 @@ discover:
     shadow-timeout-ms: 500
     shadow-sample-rate: 1.0
     shadow-top-n: 10
+
+# Search indexer — outbox-driven OpenSearch write path.
+# Disabled by default; set SEARCH_INDEXER_ENABLED=true to activate the poller.
+# Reuses discover.opensearch.* for URL and credentials (same cluster, same index alias).
+search:
+  indexer:
+    enabled: ${SEARCH_INDEXER_ENABLED:false}
+  outbox:
+    poll-interval-seconds: ${SEARCH_OUTBOX_POLL_INTERVAL_SECONDS:30}
+    batch-size: ${SEARCH_OUTBOX_BATCH_SIZE:100}
+    min-event-age-seconds: ${SEARCH_OUTBOX_MIN_EVENT_AGE_SECONDS:0}

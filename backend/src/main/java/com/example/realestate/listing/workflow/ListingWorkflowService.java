@@ -21,6 +21,9 @@ import com.example.realestate.listing.exception.ListingValidationException;
 import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.search.outbox.SearchOutboxEventType;
+import com.example.realestate.search.outbox.SearchOutboxOperation;
+import com.example.realestate.search.outbox.SearchOutboxWriter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -78,6 +81,7 @@ public class ListingWorkflowService {
     private final ObjectMapper snapshotMapper;
     private final BookingCascadeService bookingCascadeService;
     private final boolean bookingCascadeEnabled;
+    private final SearchOutboxWriter searchOutboxWriter;
 
     public ListingWorkflowService(
             ListingRepository listingRepository,
@@ -89,7 +93,8 @@ public class ListingWorkflowService {
             ListingImageRepository imageRepository,
             ObjectMapper objectMapper,
             BookingCascadeService bookingCascadeService,
-            @Value("${listing.lifecycle.booking-cascade.enabled:false}") boolean bookingCascadeEnabled) {
+            @Value("${listing.lifecycle.booking-cascade.enabled:false}") boolean bookingCascadeEnabled,
+            SearchOutboxWriter searchOutboxWriter) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -102,6 +107,7 @@ public class ListingWorkflowService {
                 .setSerializationInclusion(JsonInclude.Include.ALWAYS);
         this.bookingCascadeService = bookingCascadeService;
         this.bookingCascadeEnabled = bookingCascadeEnabled;
+        this.searchOutboxWriter = searchOutboxWriter;
     }
 
     /**
@@ -217,6 +223,12 @@ public class ListingWorkflowService {
                             listingTitle, saved.getPropertyType(), saved.getPricePaise()));
         }
 
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_APPROVED,
+                SearchOutboxOperation.INDEX,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Approved listing listingId={} by adminId={} status=LIVE fromStatus={}",
                 listingId, adminUserId, currentStatus);
         return saved;
@@ -281,6 +293,12 @@ public class ListingWorkflowService {
                     new ListingRejectedEvent(saved, listing.getCreatedBy(), title, rejectionReason));
         }
 
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_REJECTED,
+                SearchOutboxOperation.DELETE,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Rejected listing listingId={} by adminId={} fromStatus={} reason='{}'",
                 listingId, adminUserId, currentStatus, rejectionReason);
         return saved;
@@ -417,6 +435,12 @@ public class ListingWorkflowService {
             bookingCascadeService.freezeConfirmedBookings(listingId, CANCELLATION_REASON_LISTING_ARCHIVED);
         }
 
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_ARCHIVED,
+                SearchOutboxOperation.DELETE,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Archived listing listingId={} by actorId={} fromStatus={}", listingId, actorId, previousStatus);
         return saved;
     }
@@ -632,6 +656,12 @@ public class ListingWorkflowService {
             bookingCascadeService.unfreezeBookings(listingId);
         }
 
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_APPROVED,
+                SearchOutboxOperation.INDEX,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Fast-restored archived listing listingId={} by actorId={} fromStatus={} toStatus=LIVE",
                 listingId, actorId, previousStatus);
         return saved;
@@ -707,7 +737,12 @@ public class ListingWorkflowService {
         }
 
         // No event publishing — exceptional admin override path
-
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_APPROVED,
+                SearchOutboxOperation.INDEX,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Restored rejected listing listingId={} by adminId={} fromStatus={} toStatus=LIVE note='{}'",
                 listingId, adminId, currentStatus, moderationNote);
         return saved;
@@ -760,6 +795,12 @@ public class ListingWorkflowService {
         }
         statusHistoryRepository.save(history);
 
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_ARCHIVED,
+                SearchOutboxOperation.DELETE,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Admin archived listing listingId={} by adminId={} fromStatus={} reasonNote='{}'",
                 listingId, adminId, currentStatus, reasonNote);
         return saved;
@@ -789,6 +830,12 @@ public class ListingWorkflowService {
         listing.setArchivedAt(now);
         listing.setUpdatedAt(now.atOffset(ZoneOffset.UTC));
         listingRepository.save(listing);
+        searchOutboxWriter.writeEvent(
+                listing.getId(),
+                SearchOutboxEventType.LISTING_DELETED,
+                SearchOutboxOperation.DELETE,
+                listing.getStatus(),
+                listing.getUpdatedAt() != null ? listing.getUpdatedAt().toInstant() : null);
         log.info("adminForceDelete: archived listingId={} by adminId={}", listingId, adminId);
         return true;
     }
@@ -962,6 +1009,12 @@ public class ListingWorkflowService {
                             listingTitle, saved.getPropertyType(), saved.getPricePaise()));
         }
 
+        searchOutboxWriter.writeEvent(
+                saved.getId(),
+                SearchOutboxEventType.LISTING_APPROVED,
+                SearchOutboxOperation.INDEX,
+                saved.getStatus(),
+                saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Approved scraped listing listingId={} by adminId={} fromStatus={} toStatus=LIVE",
                 listingId, adminId, currentStatus);
         return saved;

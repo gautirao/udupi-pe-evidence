@@ -19,6 +19,7 @@ import com.example.realestate.listing.exception.ListingValidationException;
 import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.search.outbox.SearchOutboxWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,6 +74,9 @@ class ListingWorkflowServiceTest {
     @Mock
     private BookingCascadeService bookingCascadeService;
 
+    @Mock
+    private SearchOutboxWriter searchOutboxWriter;
+
     // Real ObjectMapper — buildSnapshot exercises actual JSON serialisation
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -87,14 +91,14 @@ class ListingWorkflowServiceTest {
         workflowService = new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
-                imageRepository, objectMapper, bookingCascadeService, false);
+                imageRepository, objectMapper, bookingCascadeService, false, searchOutboxWriter);
     }
 
     private ListingWorkflowService workflowServiceCascadeEnabled() {
         return new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
-                imageRepository, objectMapper, bookingCascadeService, true);
+                imageRepository, objectMapper, bookingCascadeService, true, searchOutboxWriter);
     }
 
     // --- Notification decoupling tests ---
@@ -517,6 +521,55 @@ class ListingWorkflowServiceTest {
                 () -> workflowService.adminForceDelete(listingId, UUID.randomUUID()));
 
         verify(listingRepository, never()).save(any());
+    }
+
+    // ===== approveScrapedListing — search outbox event =====
+
+    @Test
+    void approveScrapedListing_writesSearchOutboxEvent() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = new Listing();
+        listing.setId(listingId);
+        listing.setCreatedBy(ownerId);
+        listing.setStatus(ListingStatus.SCRAPED.toDbValue());
+        listing.setPropertyType("house");
+        listing.setLocality("Udupi");
+        listing.setPrice(new BigDecimal("1000000"));
+        listing.setPricePaise(100_000_000L);
+        listing.setAddressConfirmed(true);
+        listing.setUpdatedAt(OffsetDateTime.now());
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> {
+            Listing l = inv.getArgument(0);
+            l.setStatus(ListingStatus.LIVE.toDbValue());
+            return l;
+        });
+        lenient().when(imageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
+
+        workflowService.approveScrapedListing(listingId, adminId);
+
+        ArgumentCaptor<com.example.realestate.search.outbox.SearchOutboxEventType> eventTypeCaptor =
+                ArgumentCaptor.forClass(com.example.realestate.search.outbox.SearchOutboxEventType.class);
+        ArgumentCaptor<com.example.realestate.search.outbox.SearchOutboxOperation> operationCaptor =
+                ArgumentCaptor.forClass(com.example.realestate.search.outbox.SearchOutboxOperation.class);
+        ArgumentCaptor<UUID> idCaptor = ArgumentCaptor.forClass(UUID.class);
+
+        verify(searchOutboxWriter).writeEvent(
+                idCaptor.capture(),
+                eventTypeCaptor.capture(),
+                operationCaptor.capture(),
+                any(),
+                any());
+
+        assertThat(idCaptor.getValue()).isEqualTo(listingId);
+        assertThat(eventTypeCaptor.getValue())
+                .isEqualTo(com.example.realestate.search.outbox.SearchOutboxEventType.LISTING_APPROVED);
+        assertThat(operationCaptor.getValue())
+                .isEqualTo(com.example.realestate.search.outbox.SearchOutboxOperation.INDEX);
     }
 
     // ===== RE-124: submitListing — policy delegation, history writing, lifecycle fields =====
