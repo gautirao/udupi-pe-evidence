@@ -1,5 +1,29 @@
 # Deployment Rules
 
+## Topology
+
+```
+Cloudflare Pages (frontend, static)
+        |
+        | HTTPS — public API only
+        v
+Render Web Service (Spring Boot backend)
+  srv-d648gt0gjchc739iegb0, region: oregon
+        |
+        | HTTPS + Basic auth (backend-only; frontend never gets OpenSearch creds)
+        v
+Render Web Service (OpenSearch 2.x)
+  [validation-only, NOT yet provisioned]
+  DISABLE_SECURITY_PLUGIN=false — auth required
+```
+
+OpenSearch is validation-only (shadow-read / parity testing). Feature flags
+`discover.opensearch.enabled` and `discover.opensearch.shadow-enabled` default
+`false` and must stay `false` in production until explicitly flipped in a
+validated environment.
+
+See full provisioning runbook: [docs/deployment/render-opensearch.md](../docs/deployment/render-opensearch.md)
+
 This document defines **deployment invariants**.
 These rules constrain *where* and *how* the system is deployed.
 Concrete values (URLs, keys) live in `PROJECT_CONTEXT.md`.
