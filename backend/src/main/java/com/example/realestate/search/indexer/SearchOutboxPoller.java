@@ -24,10 +24,20 @@ import java.util.UUID;
  * is driven by {@code @Scheduled(fixedDelayString)} so each poll cycle starts only
  * after the previous one completes — no concurrent overlapping polls.
  *
- * <p>Error handling: a failure processing one entry marks that entry FAILED and
- * records the truncated exception message, but does NOT abort the rest of the batch.
- * FAILED entries are excluded from future polls by the repository query — they require
- * manual intervention or a separate retry mechanism to reprocess.
+ * <p><b>Concurrency invariant (LOAD-BEARING):</b>
+ * This poller is correct only when a single instance is active at a time. Safety is
+ * provided by {@code @Scheduled(fixedDelay)} with the default single-threaded scheduler
+ * and a single application instance. If the scheduler thread-pool size is increased, or
+ * this application is deployed to multiple instances, a distributed lock (e.g.
+ * {@code SELECT ... FOR UPDATE SKIP LOCKED} or ShedLock) MUST be introduced before
+ * enabling that change. Without a lock, concurrent pollers can double-process the same
+ * batch, leading to duplicate OpenSearch operations and incorrect retry_count increments.
+ *
+ * <p>Error handling: a failure processing one entry increments {@code retry_count}.
+ * If {@code retry_count >= maxRetryAttempts} the entry transitions to DEAD (terminal);
+ * otherwise {@code next_attempt_at} is set to {@code now + retryDelaySeconds} so the
+ * entry is re-armed for a future poll cycle. One entry failure never aborts the batch
+ * (poison-event isolation).
  *
  * <p><b>processEntry routing:</b>
  * <ul>
@@ -46,35 +56,41 @@ public class SearchOutboxPoller {
     private static final String OPERATION_DELETE = "DELETE";
     private static final String OPERATION_INDEX = "INDEX";
     private static final String STATUS_LIVE = "LIVE";
-    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_DEAD = "DEAD";
     private static final int ERROR_MESSAGE_MAX_LENGTH = 1000;
 
     private final ListingSearchOutboxRepository repository;
     private final OpenSearchIndexingAdapter indexingAdapter;
     private final SearchIndexerProperties props;
     private final ListingRepository listingRepository;
+    private final SearchOutboxMetrics metrics;
 
     public SearchOutboxPoller(
             ListingSearchOutboxRepository repository,
             OpenSearchIndexingAdapter indexingAdapter,
             SearchIndexerProperties props,
-            ListingRepository listingRepository) {
+            ListingRepository listingRepository,
+            SearchOutboxMetrics metrics) {
         this.repository = repository;
         this.indexingAdapter = indexingAdapter;
         this.props = props;
         this.listingRepository = listingRepository;
+        this.metrics = metrics;
     }
 
     /**
      * Polls unpublished outbox entries and dispatches OpenSearch operations.
-     * Runs on a fixed delay after the previous execution completes.
-     * FAILED entries are excluded by the repository query and will not be reprocessed here.
+     * Runs on a fixed delay after the previous execution completes (single-threaded).
+     *
+     * <p>See class-level Javadoc for the load-bearing single-instance concurrency invariant.
      */
     @Scheduled(fixedDelayString = "${search.outbox.poll-interval-seconds:30}000")
     public void pollAndPublish() {
-        Instant maxAge = Instant.now().minusSeconds(props.getOutbox().getMinEventAgeSeconds());
+        Instant now = Instant.now();
+        Instant maxAge = now.minusSeconds(props.getOutbox().getMinEventAgeSeconds());
         List<ListingSearchOutboxEntry> batch = repository.findUnpublishedBatch(
                 maxAge,
+                now,
                 PageRequest.of(0, props.getOutbox().getBatchSize()));
 
         if (batch.isEmpty()) {
@@ -86,18 +102,60 @@ public class SearchOutboxPoller {
         for (ListingSearchOutboxEntry entry : batch) {
             try {
                 processEntry(entry);
+                // Use Instant.now() here (time-of-completion) to record when this
+                // specific entry was published, which may differ slightly from the
+                // poll-cycle start time captured in `now`.
                 entry.setPublishedAt(Instant.now());
+                entry.setNextAttemptAt(null);
             } catch (Exception e) {
-                log.warn("SearchOutboxPoller: failed to process entryId={} listingId={}: {}",
-                        entry.getId(), entry.getListingId(), e.getMessage(), e);
-                entry.setStatus(STATUS_FAILED);
-                entry.setErrorMessage(truncate(e.getMessage(), ERROR_MESSAGE_MAX_LENGTH));
-                entry.setFailedAt(Instant.now());
+                // Pass the poll-cycle `now` so nextAttemptAt = now + retryDelaySeconds
+                // is consistent with the single Instant captured at the top of this cycle.
+                handleFailure(entry, e, now);
             }
             repository.save(entry);
         }
 
         log.info("SearchOutboxPoller: processed {} entries", batch.size());
+    }
+
+    /**
+     * Handles a processing failure for a single outbox entry.
+     *
+     * <p>Increments {@code retry_count} first, then decides fate:
+     * <ul>
+     *   <li>retry_count {@literal >=} maxRetryAttempts → DEAD (terminal; never re-polled)</li>
+     *   <li>retry_count {@literal <} maxRetryAttempts → re-arm: set next_attempt_at to future</li>
+     * </ul>
+     *
+     * <p>The success path never calls this method and never touches retry_count,
+     * so a first-attempt success leaves retry_count=0.
+     *
+     * <p><b>Clock invariant:</b> {@code failureTime} must be the single {@code Instant} captured
+     * at the top of the enclosing poll cycle (not a fresh {@code Instant.now()} call here), so
+     * that {@code next_attempt_at = failureTime + retryDelaySeconds} is deterministic and
+     * consistent with the {@code now} value passed to the repository query.
+     */
+    private void handleFailure(ListingSearchOutboxEntry entry, Exception e, Instant failureTime) {
+        int newRetryCount = entry.getRetryCount() + 1;
+        entry.setRetryCount(newRetryCount);
+        entry.setErrorMessage(truncate(e.getMessage(), ERROR_MESSAGE_MAX_LENGTH));
+        entry.setFailedAt(failureTime);
+
+        int maxAttempts = props.getOutbox().getMaxRetryAttempts();
+        if (newRetryCount >= maxAttempts) {
+            entry.setStatus(STATUS_DEAD);
+            entry.setNextAttemptAt(null);
+            metrics.recordTerminal();
+            log.warn("SearchOutboxPoller: entryId={} listingId={} exhausted {} attempts — marked DEAD: {}",
+                    entry.getId(), entry.getListingId(), maxAttempts, e.getMessage(), e);
+        } else {
+            long delaySeconds = props.getOutbox().getRetryDelaySeconds();
+            entry.setNextAttemptAt(failureTime.plusSeconds(delaySeconds));
+            metrics.recordRetry();
+            log.warn("SearchOutboxPoller: entryId={} listingId={} attempt {}/{} failed — retry at {}: {}",
+                    entry.getId(), entry.getListingId(), newRetryCount, maxAttempts,
+                    entry.getNextAttemptAt(), e.getMessage(), e);
+        }
     }
 
     /**

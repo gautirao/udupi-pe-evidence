@@ -13,8 +13,18 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * JPA entity mapping the {@code listing_search_outbox} table (V81 + V82 migrations).
- * Rows are written by {@link SearchOutboxWriter} inside the same transaction as
+ * JPA entity mapping the {@code listing_search_outbox} table (V81–V83 migrations).
+ *
+ * <ul>
+ *   <li>V81 — initial table: event_id, listing_id, operation, status, occurred_at, payload,
+ *       published_at, aggregate_type, event_type, event_version, source_updated_at.</li>
+ *   <li>V82 — adds error_message and failed_at columns for failure diagnostics.</li>
+ *   <li>V83 — adds retry_count and next_attempt_at for bounded-retry support; backfills
+ *       existing FAILED rows to DEAD (terminal); recreates the pending partial index to
+ *       exclude both terminal states (DEAD and FAILED).</li>
+ * </ul>
+ *
+ * <p>Rows are written by {@link SearchOutboxWriter} inside the same transaction as
  * the listing mutation, and consumed by the {@code SearchOutboxPoller} to drive
  * OpenSearch index/delete operations.
  *
@@ -70,6 +80,13 @@ public class ListingSearchOutboxEntry {
 
     @Column(name = "failed_at")
     private Instant failedAt;
+
+    // V83 columns — retry support
+    @Column(name = "retry_count", nullable = false)
+    private int retryCount = 0;
+
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
 
     // --- Getters and setters ---
 
@@ -179,5 +196,21 @@ public class ListingSearchOutboxEntry {
 
     public void setFailedAt(Instant failedAt) {
         this.failedAt = failedAt;
+    }
+
+    public int getRetryCount() {
+        return retryCount;
+    }
+
+    public void setRetryCount(int retryCount) {
+        this.retryCount = retryCount;
+    }
+
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
+    }
+
+    public void setNextAttemptAt(Instant nextAttemptAt) {
+        this.nextAttemptAt = nextAttemptAt;
     }
 }

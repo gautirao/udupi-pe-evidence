@@ -5,6 +5,7 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.search.indexer.ListingIndexDocument;
 import com.example.realestate.search.indexer.OpenSearchIndexingAdapter;
 import com.example.realestate.search.indexer.SearchIndexerProperties;
+import com.example.realestate.search.indexer.SearchOutboxMetrics;
 import com.example.realestate.search.indexer.SearchOutboxPoller;
 import com.example.realestate.search.outbox.ListingSearchOutboxEntry;
 import com.example.realestate.search.outbox.ListingSearchOutboxRepository;
@@ -40,6 +41,8 @@ class SearchOutboxPollerTest {
     private OpenSearchIndexingAdapter indexingAdapter;
     @Mock
     private ListingRepository listingRepository;
+    @Mock
+    private SearchOutboxMetrics metrics;
 
     private SearchIndexerProperties props;
     private SearchOutboxPoller poller;
@@ -49,7 +52,7 @@ class SearchOutboxPollerTest {
         props = new SearchIndexerProperties();
         props.getOutbox().setBatchSize(10);
         props.getOutbox().setMinEventAgeSeconds(0);
-        poller = new SearchOutboxPoller(repository, indexingAdapter, props, listingRepository);
+        poller = new SearchOutboxPoller(repository, indexingAdapter, props, listingRepository, metrics);
     }
 
     private ListingSearchOutboxEntry makeEntry(String operation, String status) {
@@ -79,7 +82,7 @@ class SearchOutboxPollerTest {
         ListingSearchOutboxEntry entry = makeEntry("INDEX", "LIVE");
         UUID listingUuid = UUID.fromString(entry.getListingId());
         Listing listing = buildListing(listingUuid, "Nice House", "Udupi Central");
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of(entry));
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of(entry));
         when(listingRepository.findById(listingUuid)).thenReturn(Optional.of(listing));
 
         poller.pollAndPublish();
@@ -97,7 +100,7 @@ class SearchOutboxPollerTest {
     void pollAndPublish_indexesLiveListing_listingNotFound_deletesFromIndex() {
         ListingSearchOutboxEntry entry = makeEntry("INDEX", "LIVE");
         UUID listingUuid = UUID.fromString(entry.getListingId());
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of(entry));
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of(entry));
         when(listingRepository.findById(listingUuid)).thenReturn(Optional.empty());
 
         poller.pollAndPublish();
@@ -110,7 +113,7 @@ class SearchOutboxPollerTest {
     @Test
     void pollAndPublish_deletesOnDeleteOperation() {
         ListingSearchOutboxEntry entry = makeEntry("DELETE", "ARCHIVED");
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of(entry));
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of(entry));
 
         poller.pollAndPublish();
 
@@ -122,7 +125,7 @@ class SearchOutboxPollerTest {
     @Test
     void pollAndPublish_deletesNonLiveListing() {
         ListingSearchOutboxEntry entry = makeEntry("INDEX", "DRAFT");
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of(entry));
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of(entry));
 
         poller.pollAndPublish();
 
@@ -133,33 +136,40 @@ class SearchOutboxPollerTest {
     }
 
     @Test
-    void pollAndPublish_marksFailedOnException() {
+    void pollAndPublish_rearmsEntryOnFirstFailure() {
+        // With maxRetryAttempts=3 (default), a single failure should re-arm (not go DEAD).
         ListingSearchOutboxEntry entry = makeEntry("DELETE", "ARCHIVED");
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of(entry));
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of(entry));
         doThrow(new RuntimeException("Connection refused")).when(indexingAdapter).deleteListing(any());
 
         poller.pollAndPublish();
 
-        assertThat(entry.getStatus()).isEqualTo("FAILED");
+        // First failure: retryCount=1 < maxRetryAttempts=3 → re-armed, not DEAD.
+        assertThat(entry.getRetryCount()).isEqualTo(1);
+        assertThat(entry.getNextAttemptAt()).isNotNull();
+        assertThat(entry.getStatus()).isNotEqualTo("DEAD");
         assertThat(entry.getErrorMessage()).contains("Connection refused");
         assertThat(entry.getFailedAt()).isNotNull();
         assertThat(entry.getPublishedAt()).isNull();
         verify(repository).save(entry);
+        verify(metrics).recordRetry();
     }
 
     @Test
     void pollAndPublish_continuesBatchAfterFailure() {
         ListingSearchOutboxEntry failEntry = makeEntry("DELETE", "ARCHIVED");
         ListingSearchOutboxEntry okEntry = makeEntry("DELETE", "ARCHIVED");
-        when(repository.findUnpublishedBatch(any(Instant.class), any()))
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any()))
                 .thenReturn(List.of(failEntry, okEntry));
         doThrow(new RuntimeException("error"))
                 .when(indexingAdapter).deleteListing(eq(failEntry.getListingId()));
 
         poller.pollAndPublish();
 
-        assertThat(failEntry.getStatus()).isEqualTo("FAILED");
+        // failEntry: retryCount incremented, re-armed (not DEAD, not published).
+        assertThat(failEntry.getRetryCount()).isEqualTo(1);
         assertThat(failEntry.getPublishedAt()).isNull();
+        // okEntry: processed successfully.
         assertThat(okEntry.getPublishedAt()).isNotNull();
         verify(repository, times(2)).save(any(ListingSearchOutboxEntry.class));
     }
@@ -167,13 +177,13 @@ class SearchOutboxPollerTest {
     @Test
     void pollAndPublish_respectsMinEventAge() {
         props.getOutbox().setMinEventAgeSeconds(60);
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of());
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of());
 
         poller.pollAndPublish();
 
         // Verify the maxOccurredAt passed is approximately now - 60s
         ArgumentCaptor<Instant> instantCaptor = ArgumentCaptor.forClass(Instant.class);
-        verify(repository).findUnpublishedBatch(instantCaptor.capture(), any());
+        verify(repository).findUnpublishedBatch(instantCaptor.capture(), any(Instant.class), any());
         Instant captured = instantCaptor.getValue();
         Instant expectedBefore = Instant.now().minusSeconds(55);
         Instant expectedAfter = Instant.now().minusSeconds(65);
@@ -187,19 +197,19 @@ class SearchOutboxPollerTest {
     @Test
     void pollAndPublish_respectsBatchSize() {
         props.getOutbox().setBatchSize(5);
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of());
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of());
 
         poller.pollAndPublish();
 
         // Verify PageRequest with batchSize=5 is passed
-        verify(repository).findUnpublishedBatch(any(Instant.class), eq(PageRequest.of(0, 5)));
+        verify(repository).findUnpublishedBatch(any(Instant.class), any(Instant.class), eq(PageRequest.of(0, 5)));
     }
 
     @Test
-    void pollAndPublish_doesNotRepollFailedEntries() {
-        // FAILED entries are excluded by the repository query — the mock returns empty
-        // to simulate the WHERE (status IS NULL OR status <> 'FAILED') filter in effect.
-        when(repository.findUnpublishedBatch(any(Instant.class), any())).thenReturn(List.of());
+    void pollAndPublish_doesNotRepollDeadEntries() {
+        // DEAD entries are excluded by the repository query — the mock returns empty
+        // to simulate the WHERE (status IS NULL OR status <> 'DEAD') filter in effect.
+        when(repository.findUnpublishedBatch(any(Instant.class), any(Instant.class), any())).thenReturn(List.of());
 
         poller.pollAndPublish();
 

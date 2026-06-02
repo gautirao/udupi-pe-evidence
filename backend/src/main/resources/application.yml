@@ -202,3 +202,7 @@ search:
     poll-interval-seconds: ${SEARCH_OUTBOX_POLL_INTERVAL_SECONDS:30}
     batch-size: ${SEARCH_OUTBOX_BATCH_SIZE:100}
     min-event-age-seconds: ${SEARCH_OUTBOX_MIN_EVENT_AGE_SECONDS:0}
+    # Retry: bounded attempts with delay before marking an entry DEAD (terminal).
+    # Override via SEARCH_OUTBOX_MAX_RETRY_ATTEMPTS / SEARCH_OUTBOX_RETRY_DELAY_SECONDS.
+    max-retry-attempts: ${SEARCH_OUTBOX_MAX_RETRY_ATTEMPTS:3}
+    retry-delay-seconds: ${SEARCH_OUTBOX_RETRY_DELAY_SECONDS:60}
