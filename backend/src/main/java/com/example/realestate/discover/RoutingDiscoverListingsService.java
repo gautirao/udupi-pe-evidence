@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -41,15 +42,12 @@ public class RoutingDiscoverListingsService implements DiscoverListingsPort {
 
     public RoutingDiscoverListingsService(
             DiscoverListingsService postgresService,
-            @Autowired(required = false) DiscoverListingsPort openSearchAdapter,
+            @Qualifier("openSearchListingsAdapter") @Autowired(required = false) DiscoverListingsPort openSearchAdapter,
             MeterRegistry meterRegistry,
             @Value("${discover.opensearch.enabled:false}") boolean enabled,
             @Autowired(required = false) ShadowComparisonRunner shadowRunner) {
         this.postgresService = postgresService;
-        // Avoid self-reference: if the only available DiscoverListingsPort bean is this
-        // service itself (when OS adapter is absent), Spring would inject us back. Guard
-        // by checking whether the injected bean is a different instance.
-        this.openSearchAdapter = (openSearchAdapter == this) ? null : openSearchAdapter;
+        this.openSearchAdapter = openSearchAdapter;
         this.enabled = enabled;
         this.shadowRunner = shadowRunner;
         this.fallbackErrorCounter = Counter.builder(FALLBACK_COUNTER_NAME)
