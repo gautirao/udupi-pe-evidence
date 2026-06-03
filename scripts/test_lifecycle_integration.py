@@ -16,6 +16,7 @@ Without those env-vars the entire suite SKIPs (TC-10 proves this explicitly).
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -849,3 +850,722 @@ def test_skip_when_env_absent():
     os_url = os.getenv("OPENSEARCH_URL")
     assert db_url, "TC-10 precondition: DATABASE_URL must be set when suite runs"
     assert os_url, "TC-10 precondition: OPENSEARCH_URL must be set when suite runs"
+
+
+# ===========================================================================
+# TC-11: Explicit outbox row path — insert to listing_search_outbox, process
+#        via _apply_event, assert indexed in OpenSearch.
+# ===========================================================================
+
+
+def test_live_create_via_outbox_row(os_client, pg_conn):
+    """TC-11: Explicit outbox row path proof — insert to listing_search_outbox, process via _apply_event, assert indexed."""
+    cur = pg_conn.cursor()
+    listing_row, city_slug = _insert_test_listing(cur)
+    pg_conn.commit()
+
+    listing_id = listing_row["id"]
+    source_updated_at = datetime.now(timezone.utc)
+    event_id = str(uuid.uuid4())
+    payload = json.dumps({
+        "listing_id": listing_id,
+        "event_type": "LISTING_APPROVED",
+        "operation": "INDEX",
+        "status": "LIVE",
+    })
+
+    cur.execute(
+        """
+        INSERT INTO listing_search_outbox
+          (event_id, listing_id, event_type, operation, status,
+           occurred_at, source_updated_at, payload, published_at, retry_count, next_attempt_at)
+        VALUES
+          (%s, %s, 'LISTING_APPROVED', 'INDEX', 'LIVE',
+           NOW() - INTERVAL '60 seconds', %s, %s::jsonb, NULL, 0, NULL)
+        """,
+        (event_id, listing_id, source_updated_at, payload),
+    )
+    pg_conn.commit()
+
+    # Read back the inserted row to confirm it was persisted
+    cur.execute(
+        "SELECT event_id, listing_id, operation, status, source_updated_at "
+        "FROM listing_search_outbox WHERE event_id = %s",
+        (event_id,),
+    )
+    outbox_row = cur.fetchone()
+    assert outbox_row is not None, "Outbox row must be present after insert"
+    assert outbox_row["listing_id"] == listing_id
+    assert outbox_row["operation"] == "INDEX"
+    assert outbox_row["status"] == "LIVE"
+
+    # Build event dict from outbox row data (mirrors what SearchOutboxPoller builds)
+    event = _make_event(
+        listing_id=listing_id,
+        status="LIVE",
+        event_type="LISTING_APPROVED",
+        listing_row=listing_row,
+        city_slug=city_slug,
+        source_updated_at=source_updated_at,
+    )
+
+    counters = PipelineCounters()
+
+    try:
+        result = _apply_event(
+            os_client, _noop_producer(), event, TEST_INDEX, counters,
+            datetime.now(timezone.utc),
+        )
+        _refresh(os_client)
+
+        assert result is True, "_apply_event must return True for LIVE outbox-row event"
+        assert counters.indexed == 1, f"Expected indexed=1, got {counters.indexed}"
+        assert counters.failures == 0
+
+        doc = os_client.get(index=TEST_INDEX, id=listing_id)
+        assert doc["_source"]["title"] == listing_row["title"], (
+            f"Indexed title mismatch: {doc['_source']['title']!r} != {listing_row['title']!r}"
+        )
+    finally:
+        pg_conn.rollback()
+        cur.execute(
+            "DELETE FROM listing_search_outbox WHERE listing_id = %s", (listing_id,)
+        )
+        _delete_os_doc(os_client, listing_id)
+        _delete_test_listing(cur, listing_id, listing_row["area_key"], city_slug)
+        pg_conn.commit()
+        cur.close()
+
+
+# ===========================================================================
+# TC-12: Text update reflected in FTS via outbox path.
+# ===========================================================================
+
+
+def test_text_update_via_outbox_path(os_client, pg_conn):
+    """TC-12: Text update (title/description/locality) reflected in FTS via outbox path."""
+    cur = pg_conn.cursor()
+    listing_row, city_slug = _insert_test_listing(cur)
+    pg_conn.commit()
+
+    listing_id = listing_row["id"]
+    t1_ts = datetime.now(timezone.utc)
+    t1_title = listing_row["title"]
+
+    # Step 1: index T1 (original title)
+    event_t1 = _make_event(
+        listing_id=listing_id,
+        status="LIVE",
+        event_type="LISTING_APPROVED",
+        listing_row=listing_row,
+        city_slug=city_slug,
+        source_updated_at=t1_ts,
+    )
+    counters_t1 = PipelineCounters()
+    _apply_event(
+        os_client, _noop_producer(), event_t1, TEST_INDEX, counters_t1,
+        datetime.now(timezone.utc),
+    )
+    _refresh(os_client)
+    assert counters_t1.indexed == 1, "Pre-condition: T1 must be indexed"
+
+    # Step 2: update title and description in DB
+    t2_title = f"Updated FTS Title {uuid.uuid4().hex[:8]}"
+    t2_description = "Updated description for FTS proof TC-12"
+    cur.execute(
+        "UPDATE property_listings SET title = %s, description = %s WHERE id = %s",
+        (t2_title, t2_description, listing_id),
+    )
+    pg_conn.commit()
+
+    # Step 3: insert outbox row for T2 with strictly higher source_updated_at
+    t2_ts = t1_ts + timedelta(seconds=5)
+    event_id_t2 = str(uuid.uuid4())
+    payload_t2 = json.dumps({
+        "listing_id": listing_id,
+        "event_type": "LISTING_UPDATED",
+        "operation": "INDEX",
+        "status": "LIVE",
+    })
+    cur.execute(
+        """
+        INSERT INTO listing_search_outbox
+          (event_id, listing_id, event_type, operation, status,
+           occurred_at, source_updated_at, payload, published_at, retry_count, next_attempt_at)
+        VALUES
+          (%s, %s, 'LISTING_UPDATED', 'INDEX', 'LIVE',
+           NOW() - INTERVAL '60 seconds', %s, %s::jsonb, NULL, 0, NULL)
+        """,
+        (event_id_t2, listing_id, t2_ts, payload_t2),
+    )
+    pg_conn.commit()
+
+    # Step 4: build T2 event dict with updated title/description and apply
+    listing_row_t2 = dict(listing_row)
+    listing_row_t2["title"] = t2_title
+    listing_row_t2["description"] = t2_description
+
+    event_t2 = _make_event(
+        listing_id=listing_id,
+        status="LIVE",
+        event_type="LISTING_UPDATED",
+        listing_row=listing_row_t2,
+        city_slug=city_slug,
+        source_updated_at=t2_ts,
+    )
+    counters_t2 = PipelineCounters()
+
+    try:
+        result = _apply_event(
+            os_client, _noop_producer(), event_t2, TEST_INDEX, counters_t2,
+            datetime.now(timezone.utc),
+        )
+        _refresh(os_client)
+
+        assert result is True, "_apply_event must return True for T2 update"
+        assert counters_t2.indexed == 1, f"Expected indexed=1 for T2, got {counters_t2.indexed}"
+        assert counters_t2.failures == 0
+
+        # Assert: _source now carries T2 title
+        doc = os_client.get(index=TEST_INDEX, id=listing_id)
+        assert doc["_source"]["title"] == t2_title, (
+            f"_source title should be T2={t2_title!r}, got {doc['_source']['title']!r}"
+        )
+
+        # Assert: FTS match query returns the listing for the T2 title
+        fts_hits = os_client.search(
+            index=TEST_INDEX,
+            body={"query": {"match": {"title": t2_title}}},
+        )
+        hit_ids = [h["_id"] for h in fts_hits["hits"]["hits"]]
+        assert listing_id in hit_ids, (
+            f"FTS search for T2 title {t2_title!r} must return listing {listing_id}"
+        )
+
+        # Assert: FTS search for old T1 title returns 0 hits for this listing_id
+        fts_old_hits = os_client.search(
+            index=TEST_INDEX,
+            body={"query": {"bool": {"must": [
+                {"match": {"title": t1_title}},
+                {"term": {"id": listing_id}},
+            ]}}},
+        )
+        old_total = fts_old_hits["hits"]["total"]["value"]
+        assert old_total == 0, (
+            f"T1 title {t1_title!r} must NOT match listing {listing_id} after T2 update, "
+            f"got {old_total} hits"
+        )
+    finally:
+        pg_conn.rollback()
+        cur.execute(
+            "DELETE FROM listing_search_outbox WHERE listing_id = %s", (listing_id,)
+        )
+        _delete_os_doc(os_client, listing_id)
+        _delete_test_listing(cur, listing_id, listing_row["area_key"], city_slug)
+        pg_conn.commit()
+        cur.close()
+
+
+# ===========================================================================
+# TC-13: Location update reflected in geo queries via outbox path.
+# ===========================================================================
+
+
+def test_location_update_via_outbox_path(os_client, pg_conn):
+    """TC-13: Location update reflected in geo_distance queries via outbox path."""
+    cur = pg_conn.cursor()
+    listing_row, city_slug = _insert_test_listing(cur)
+    pg_conn.commit()
+
+    listing_id = listing_row["id"]
+    t1_ts = datetime.now(timezone.utc)
+
+    # Udupi coordinates (from _insert_test_listing default)
+    udupi_lat = 13.3409
+    udupi_lon = 74.7421
+    # Bangalore coordinates (~880 km from Udupi)
+    blr_lat = 12.9716
+    blr_lon = 77.5946
+
+    # Step 1: index T1 at Udupi
+    event_t1 = _make_event(
+        listing_id=listing_id,
+        status="LIVE",
+        event_type="LISTING_APPROVED",
+        listing_row=listing_row,
+        city_slug=city_slug,
+        source_updated_at=t1_ts,
+    )
+    counters_t1 = PipelineCounters()
+    _apply_event(
+        os_client, _noop_producer(), event_t1, TEST_INDEX, counters_t1,
+        datetime.now(timezone.utc),
+    )
+    _refresh(os_client)
+    assert counters_t1.indexed == 1, "Pre-condition: T1 must be indexed at Udupi"
+
+    doc_t1 = os_client.get(index=TEST_INDEX, id=listing_id)
+    assert doc_t1["_source"]["location"] == {"lat": udupi_lat, "lon": udupi_lon}, (
+        f"T1 location mismatch: {doc_t1['_source']['location']}"
+    )
+
+    # Step 2: update latitude/longitude in DB to Bangalore
+    cur.execute(
+        "UPDATE property_listings SET latitude = %s, longitude = %s WHERE id = %s",
+        (blr_lat, blr_lon, listing_id),
+    )
+    pg_conn.commit()
+
+    # Step 3: insert outbox row for T2 with strictly higher source_updated_at
+    t2_ts = t1_ts + timedelta(seconds=5)
+    event_id_t2 = str(uuid.uuid4())
+    payload_t2 = json.dumps({
+        "listing_id": listing_id,
+        "event_type": "LISTING_UPDATED",
+        "operation": "INDEX",
+        "status": "LIVE",
+    })
+    cur.execute(
+        """
+        INSERT INTO listing_search_outbox
+          (event_id, listing_id, event_type, operation, status,
+           occurred_at, source_updated_at, payload, published_at, retry_count, next_attempt_at)
+        VALUES
+          (%s, %s, 'LISTING_UPDATED', 'INDEX', 'LIVE',
+           NOW() - INTERVAL '60 seconds', %s, %s::jsonb, NULL, 0, NULL)
+        """,
+        (event_id_t2, listing_id, t2_ts, payload_t2),
+    )
+    pg_conn.commit()
+
+    # Step 4: build T2 event dict with Bangalore coords and apply
+    listing_row_t2 = dict(listing_row)
+    listing_row_t2["latitude"] = blr_lat
+    listing_row_t2["longitude"] = blr_lon
+
+    event_t2 = _make_event(
+        listing_id=listing_id,
+        status="LIVE",
+        event_type="LISTING_UPDATED",
+        listing_row=listing_row_t2,
+        city_slug=city_slug,
+        source_updated_at=t2_ts,
+    )
+    counters_t2 = PipelineCounters()
+
+    try:
+        result = _apply_event(
+            os_client, _noop_producer(), event_t2, TEST_INDEX, counters_t2,
+            datetime.now(timezone.utc),
+        )
+        # CRITICAL: refresh before any geo queries
+        _refresh(os_client)
+
+        assert result is True, "_apply_event must return True for T2 location update"
+        assert counters_t2.indexed == 1, f"Expected indexed=1 for T2, got {counters_t2.indexed}"
+        assert counters_t2.failures == 0
+
+        # Assert: _source location is now Bangalore
+        doc_t2 = os_client.get(index=TEST_INDEX, id=listing_id)
+        assert doc_t2["_source"]["location"] == {"lat": blr_lat, "lon": blr_lon}, (
+            f"T2 location should be Bangalore, got {doc_t2['_source']['location']}"
+        )
+
+        # Positive: geo_distance around Bangalore must include this listing
+        geo_blr_hits = os_client.search(
+            index=TEST_INDEX,
+            body={"query": {"geo_distance": {
+                "distance": "5km",
+                "location": {"lat": blr_lat, "lon": blr_lon},
+            }}},
+        )
+        blr_hit_ids = [h["_id"] for h in geo_blr_hits["hits"]["hits"]]
+        assert listing_id in blr_hit_ids, (
+            f"Listing {listing_id} must appear in 5km geo query around Bangalore"
+        )
+
+        # Negative: geo_distance around Udupi must NOT include this listing
+        geo_udupi_hits = os_client.search(
+            index=TEST_INDEX,
+            body={"query": {"geo_distance": {
+                "distance": "5km",
+                "location": {"lat": udupi_lat, "lon": udupi_lon},
+            }}},
+        )
+        udupi_hit_ids = [h["_id"] for h in geo_udupi_hits["hits"]["hits"]]
+        assert listing_id not in udupi_hit_ids, (
+            f"Listing {listing_id} must NOT appear in 5km geo query around Udupi after relocation"
+        )
+    finally:
+        pg_conn.rollback()
+        cur.execute(
+            "DELETE FROM listing_search_outbox WHERE listing_id = %s", (listing_id,)
+        )
+        _delete_os_doc(os_client, listing_id)
+        _delete_test_listing(cur, listing_id, listing_row["area_key"], city_slug)
+        pg_conn.commit()
+        cur.close()
+
+
+# ===========================================================================
+# TC-14: Non-LIVE listing (INDEX+REJECTED) removed from OpenSearch via outbox
+#         routing — proves _apply_event recomputes operation from status.
+# ===========================================================================
+
+
+def test_non_live_listing_deleted_from_opensearch(os_client, pg_conn):
+    """TC-14: INDEX+REJECTED event routed to delete by _apply_event (status overrides operation)."""
+    cur = pg_conn.cursor()
+    listing_row, city_slug = _insert_test_listing(cur)
+    pg_conn.commit()
+
+    listing_id = listing_row["id"]
+    t1_ts = datetime.now(timezone.utc)
+
+    # Step 1: index LIVE listing at T1
+    event_live = _make_event(
+        listing_id=listing_id,
+        status="LIVE",
+        event_type="LISTING_APPROVED",
+        listing_row=listing_row,
+        city_slug=city_slug,
+        source_updated_at=t1_ts,
+    )
+    counters_live = PipelineCounters()
+    _apply_event(
+        os_client, _noop_producer(), event_live, TEST_INDEX, counters_live,
+        datetime.now(timezone.utc),
+    )
+    _refresh(os_client)
+    assert counters_live.indexed == 1, "Pre-condition: LIVE listing must be indexed"
+    # Confirm doc is present before rejection
+    doc_before = os_client.get(index=TEST_INDEX, id=listing_id)
+    assert doc_before["found"] is True, "Doc must be present before REJECTED event"
+
+    # Step 2: update listing status to REJECTED in DB
+    cur.execute(
+        "UPDATE property_listings SET status = 'REJECTED' WHERE id = %s", (listing_id,)
+    )
+    pg_conn.commit()
+
+    # Step 3: insert outbox row with operation=INDEX, status=REJECTED
+    # (mirrors exactly what SearchOutboxWriter emits for a rejection event)
+    t2_ts = t1_ts + timedelta(seconds=5)
+    event_id_t2 = str(uuid.uuid4())
+    payload_t2 = json.dumps({
+        "listing_id": listing_id,
+        "event_type": "LISTING_REJECTED",
+        "operation": "INDEX",
+        "status": "REJECTED",
+    })
+    cur.execute(
+        """
+        INSERT INTO listing_search_outbox
+          (event_id, listing_id, event_type, operation, status,
+           occurred_at, source_updated_at, payload, published_at, retry_count, next_attempt_at)
+        VALUES
+          (%s, %s, 'LISTING_REJECTED', 'INDEX', 'REJECTED',
+           NOW() - INTERVAL '60 seconds', %s, %s::jsonb, NULL, 0, NULL)
+        """,
+        (event_id_t2, listing_id, t2_ts, payload_t2),
+    )
+    pg_conn.commit()
+
+    # Step 4: build event dict with operation=INDEX, status=REJECTED
+    # _apply_event MUST recompute operation → DELETE because status != LIVE
+    event_rejected = {
+        "event_id": str(uuid.uuid4()),
+        "event_type": "LISTING_REJECTED",
+        "event_version": 1,
+        "aggregate_type": "LISTING",
+        "listing_id": listing_id,
+        "occurred_at": datetime.now(timezone.utc).isoformat(),
+        "source_updated_at": t2_ts.isoformat(),
+        "status": "REJECTED",
+        "operation": "INDEX",  # producer sets INDEX; _apply_event must override to DELETE
+    }
+    counters_rejected = PipelineCounters()
+
+    try:
+        result = _apply_event(
+            os_client, _noop_producer(), event_rejected, TEST_INDEX, counters_rejected,
+            datetime.now(timezone.utc),
+        )
+        _refresh(os_client)
+
+        assert result is True, "_apply_event must return True for REJECTED event"
+
+        # Doc must be absent — routing to delete worked
+        search_result = os_client.search(
+            index=TEST_INDEX,
+            body={"query": {"ids": {"values": [listing_id]}}},
+        )
+        total_hits = search_result["hits"]["total"]["value"]
+        assert total_hits == 0, (
+            f"Listing {listing_id} must be absent after REJECTED event, found {total_hits} docs"
+        )
+
+        assert counters_rejected.deleted >= 1, (
+            f"Expected deleted>=1, got {counters_rejected.deleted} "
+            f"(proves _apply_event routed INDEX+REJECTED to delete)"
+        )
+        assert counters_rejected.failures == 0
+    finally:
+        pg_conn.rollback()
+        cur.execute(
+            "DELETE FROM listing_search_outbox WHERE listing_id = %s", (listing_id,)
+        )
+        # Doc already deleted by _apply_event; _delete_os_doc is a no-op here (404-safe)
+        _delete_os_doc(os_client, listing_id)
+        _delete_test_listing(cur, listing_id, listing_row["area_key"], city_slug)
+        pg_conn.commit()
+        cur.close()
+
+
+# ===========================================================================
+# TC-15: Discover-shape BoolQuery — FTS + geo filter combined.
+# ===========================================================================
+
+
+def test_discover_fts_geo_boolquery(os_client, pg_conn):
+    """TC-15: Discover-shape BoolQuery (multi_match + geo_distance filter) returns only the nearby listing."""
+    cur = pg_conn.cursor()
+
+    udupi_lat = 13.3409
+    udupi_lon = 74.7421
+    blr_lat = 12.9716
+    blr_lon = 77.5946
+
+    # Two distinct suffixes: only Listing-A's suffix appears in query_text, so the
+    # FTS clause excludes Listing-B independently of the geo filter.
+    unique_suffix_a = uuid.uuid4().hex[:8]
+    unique_suffix_b = uuid.uuid4().hex[:8]  # different suffix — B won't match the FTS query
+
+    # Insert Listing-A at Udupi
+    listing_row_a, city_slug_a = _insert_test_listing(cur)
+    listing_id_a = listing_row_a["id"]
+    title_a = f"Seafront Villa Udupi {unique_suffix_a}"
+    cur.execute(
+        "UPDATE property_listings SET title = %s, locality = 'Udupi', latitude = %s, longitude = %s WHERE id = %s",
+        (title_a, udupi_lat, udupi_lon, listing_id_a),
+    )
+
+    # Insert Listing-B at Bangalore (separate city slug)
+    listing_row_b, city_slug_b = _insert_test_listing(cur)
+    listing_id_b = listing_row_b["id"]
+    title_b = f"Seafront Villa Bangalore {unique_suffix_b}"
+    cur.execute(
+        "UPDATE property_listings SET title = %s, locality = 'Bangalore', latitude = %s, longitude = %s WHERE id = %s",
+        (title_b, blr_lat, blr_lon, listing_id_b),
+    )
+    pg_conn.commit()
+
+    listing_row_a_upd = dict(listing_row_a)
+    listing_row_a_upd["title"] = title_a
+    listing_row_a_upd["locality"] = "Udupi"
+    listing_row_a_upd["latitude"] = udupi_lat
+    listing_row_a_upd["longitude"] = udupi_lon
+
+    listing_row_b_upd = dict(listing_row_b)
+    listing_row_b_upd["title"] = title_b
+    listing_row_b_upd["locality"] = "Bangalore"
+    listing_row_b_upd["latitude"] = blr_lat
+    listing_row_b_upd["longitude"] = blr_lon
+
+    ts_a = datetime.now(timezone.utc)
+    ts_b = ts_a + timedelta(milliseconds=1)
+
+    event_a = _make_event(
+        listing_id=listing_id_a,
+        status="LIVE",
+        event_type="LISTING_APPROVED",
+        listing_row=listing_row_a_upd,
+        city_slug=city_slug_a,
+        source_updated_at=ts_a,
+    )
+    event_b = _make_event(
+        listing_id=listing_id_b,
+        status="LIVE",
+        event_type="LISTING_APPROVED",
+        listing_row=listing_row_b_upd,
+        city_slug=city_slug_b,
+        source_updated_at=ts_b,
+    )
+
+    counters_a = PipelineCounters()
+    counters_b = PipelineCounters()
+
+    try:
+        _apply_event(os_client, _noop_producer(), event_a, TEST_INDEX, counters_a,
+                     datetime.now(timezone.utc))
+        _apply_event(os_client, _noop_producer(), event_b, TEST_INDEX, counters_b,
+                     datetime.now(timezone.utc))
+        _refresh(os_client)
+
+        assert counters_a.indexed == 1, f"Listing-A must be indexed, got {counters_a}"
+        assert counters_b.indexed == 1, f"Listing-B must be indexed, got {counters_b}"
+
+        # Discover-shape BoolQuery: FTS uses Listing-A's unique suffix — only Listing-A matches
+        # both the FTS clause (has unique_suffix_a) and the geo filter (Udupi, within 10km).
+        # Listing-B lacks unique_suffix_a so the FTS clause alone excludes it.
+        query_text = f"Seafront Villa {unique_suffix_a}"
+        hits = os_client.search(
+            index=TEST_INDEX,
+            body={
+                "query": {
+                    "bool": {
+                        "must": [{"multi_match": {
+                            "query": query_text,
+                            "type": "best_fields",
+                            "operator": "and",
+                            "fields": ["title", "locality", "description"],
+                        }}],
+                        "filter": [{"geo_distance": {
+                            "distance": "10km",
+                            "location": {"lat": udupi_lat, "lon": udupi_lon},
+                        }}],
+                    }
+                },
+                "size": 100,
+            },
+        )
+
+        hit_ids = {h["_id"] for h in hits["hits"]["hits"]}
+
+        assert listing_id_a in hit_ids, (
+            f"Listing-A (Udupi) must be in BoolQuery hits; got {hit_ids}"
+        )
+        assert listing_id_b not in hit_ids, (
+            f"Listing-B (Bangalore, ~880km away) must NOT be in BoolQuery hits; got {hit_ids}"
+        )
+    finally:
+        pg_conn.rollback()
+        _delete_os_doc(os_client, listing_id_a)
+        _delete_os_doc(os_client, listing_id_b)
+        _delete_test_listing(cur, listing_id_a, listing_row_a["area_key"], city_slug_a)
+        _delete_test_listing(cur, listing_id_b, listing_row_b["area_key"], city_slug_b)
+        pg_conn.commit()
+        cur.close()
+
+
+# ===========================================================================
+# TC-16: V83 retry schema semantics — DEAD excluded, future next_attempt_at
+#         excluded, past next_attempt_at eligible.
+#
+# Directly manipulates listing_search_outbox and queries with the same predicate
+# as ListingSearchOutboxRepository.findUnpublishedBatch (read from Java source).
+#
+# JPQL WHERE clause (from ListingSearchOutboxRepository.java):
+#   publishedAt IS NULL
+#   AND occurredAt <= :maxOccurredAt
+#   AND (status IS NULL OR (status <> 'DEAD' AND status <> 'FAILED'))
+#   AND (nextAttemptAt IS NULL OR nextAttemptAt <= :now)
+# ===========================================================================
+
+_ELIGIBILITY_SQL = """
+    SELECT id FROM listing_search_outbox
+    WHERE listing_id = %s
+      AND published_at IS NULL
+      AND occurred_at <= NOW() - INTERVAL '30 seconds'
+      AND (status IS NULL OR (status <> 'DEAD' AND status <> 'FAILED'))
+      AND (next_attempt_at IS NULL OR next_attempt_at <= NOW())
+"""
+
+
+def test_retry_schema_compatibility(os_client, pg_conn):
+    """TC-16: V83 retry schema — DEAD excluded, FAILED excluded, future next_attempt_at excluded, past eligible."""
+    cur = pg_conn.cursor()
+    listing_row, city_slug = _insert_test_listing(cur)
+    listing_id = listing_row["id"]
+    pg_conn.commit()
+
+    event_id = str(uuid.uuid4())
+    payload = json.dumps({
+        "listing_id": listing_id,
+        "event_type": "LISTING_APPROVED",
+        "operation": "INDEX",
+        "status": "LIVE",
+    })
+
+    # Insert base row: occurred_at 60s ago (ensures occurred_at <= NOW() - 30s),
+    # published_at=NULL, status=NULL, retry_count=0, next_attempt_at=NULL
+    cur.execute(
+        """
+        INSERT INTO listing_search_outbox
+          (event_id, listing_id, event_type, operation, status,
+           occurred_at, source_updated_at, payload, published_at, retry_count, next_attempt_at)
+        VALUES
+          (%s, %s, 'LISTING_APPROVED', 'INDEX', NULL,
+           NOW() - INTERVAL '60 seconds', NOW() - INTERVAL '60 seconds',
+           %s::jsonb, NULL, 0, NULL)
+        """,
+        (event_id, listing_id, payload),
+    )
+    pg_conn.commit()
+
+    try:
+        # --- State 1: status=NULL, next_attempt_at=NULL → eligible ---
+        cur.execute(_ELIGIBILITY_SQL, (listing_id,))
+        rows = cur.fetchall()
+        assert len(rows) == 1, (
+            f"State 1 (status=NULL, next_attempt_at=NULL): expected 1 eligible row, got {len(rows)}"
+        )
+
+        # --- State 2: status='DEAD' → NOT eligible ---
+        cur.execute(
+            "UPDATE listing_search_outbox SET status = 'DEAD' WHERE event_id = %s",
+            (event_id,),
+        )
+        pg_conn.commit()
+        cur.execute(_ELIGIBILITY_SQL, (listing_id,))
+        rows = cur.fetchall()
+        assert len(rows) == 0, (
+            f"State 2 (status=DEAD): expected 0 eligible rows, got {len(rows)}"
+        )
+
+        # --- State 3: status='FAILED' → NOT eligible ---
+        cur.execute(
+            "UPDATE listing_search_outbox SET status = 'FAILED' WHERE event_id = %s",
+            (event_id,),
+        )
+        pg_conn.commit()
+        cur.execute(_ELIGIBILITY_SQL, (listing_id,))
+        rows = cur.fetchall()
+        assert len(rows) == 0, (
+            f"State 3 (status=FAILED): expected 0 eligible rows, got {len(rows)}"
+        )
+
+        # --- State 4: status=NULL, next_attempt_at=FUTURE → NOT eligible ---
+        cur.execute(
+            "UPDATE listing_search_outbox SET status = NULL, "
+            "next_attempt_at = NOW() + INTERVAL '60 seconds' WHERE event_id = %s",
+            (event_id,),
+        )
+        pg_conn.commit()
+        cur.execute(_ELIGIBILITY_SQL, (listing_id,))
+        rows = cur.fetchall()
+        assert len(rows) == 0, (
+            f"State 4 (next_attempt_at=FUTURE): expected 0 eligible rows, got {len(rows)}"
+        )
+
+        # --- State 5: status=NULL, next_attempt_at=PAST → eligible ---
+        cur.execute(
+            "UPDATE listing_search_outbox SET "
+            "next_attempt_at = NOW() - INTERVAL '1 second' WHERE event_id = %s",
+            (event_id,),
+        )
+        pg_conn.commit()
+        cur.execute(_ELIGIBILITY_SQL, (listing_id,))
+        rows = cur.fetchall()
+        assert len(rows) == 1, (
+            f"State 5 (next_attempt_at=PAST): expected 1 eligible row, got {len(rows)}"
+        )
+
+    finally:
+        pg_conn.rollback()
+        cur.execute(
+            "DELETE FROM listing_search_outbox WHERE listing_id = %s", (listing_id,)
+        )
+        _delete_test_listing(cur, listing_id, listing_row["area_key"], city_slug)
+        pg_conn.commit()
+        cur.close()
