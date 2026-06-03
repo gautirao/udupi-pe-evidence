@@ -1,0 +1,32 @@
+# docker-compose.postgres-postgis.yml
+#
+# Ephemeral throwaway PostGIS container for LOCAL TEST FIXTURES ONLY.
+# DO NOT use against production data. DO NOT commit real credentials here.
+#
+# Usage:
+#   docker compose -f docker-compose.postgres-postgis.yml up -d
+#   docker compose -f docker-compose.postgres-postgis.yml down -v
+#
+# The restore-test-fixture.sh script manages the full lifecycle
+# (container start, Flyway migrate, seed, validation).
+# You do not need to run this file directly.
+
+services:
+  postgres-test:
+    image: postgis/postgis:15-3.4
+    container_name: pg-test-fixture
+    ports:
+      - "127.0.0.1:${PG_TEST_PORT:-5434}:5432"
+    environment:
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-fixture_test_only}"
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 5s
+    # No volumes: ephemeral by design — data is lost on `down -v`
+    tmpfs:
+      - /var/lib/postgresql/data
