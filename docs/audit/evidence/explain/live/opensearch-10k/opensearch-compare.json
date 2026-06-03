@@ -1,0 +1,65 @@
+{
+  "volume": "10k",
+  "seed": 42,
+  "timestamp": "2026-06-03T16:53:19.738147+00:00",
+  "fts_strategy": "type:best_fields operator:and",
+  "index_name": "listings_scale_10k",
+  "backfill": {
+    "pg_count": 10000,
+    "os_count": 10000,
+    "failure_count": 0,
+    "docs_per_sec": 6650.2,
+    "elapsed_sec": 1.5
+  },
+  "index_size_bytes": 3904564,
+  "queries": [
+    {
+      "id": "QP-1c",
+      "pattern": "geo_distance 2km",
+      "pg_count": 517,
+      "os_count": 517,
+      "count_delta": 0,
+      "delta_pct": 0.0,
+      "pg_latency_ms": 1.64,
+      "os_took_ms": 77,
+      "os_client_ms": 90.1,
+      "notes": ""
+    },
+    {
+      "id": "QP-3b",
+      "pattern": "geo_bounding_box LIMIT 1001",
+      "pg_count": 1001,
+      "os_count": 1002,
+      "count_delta": 1,
+      "delta_pct": 0.1,
+      "pg_latency_ms": 0.82,
+      "os_took_ms": 20,
+      "os_client_ms": 45.7,
+      "notes": ""
+    },
+    {
+      "id": "QP-1d",
+      "pattern": "FTS \"sea view apartment\" (best_fields AND)",
+      "pg_count": 1420,
+      "os_count": 1420,
+      "count_delta": 0,
+      "delta_pct": 0.0,
+      "pg_latency_ms": 1.1,
+      "os_took_ms": 16,
+      "os_client_ms": 27.0,
+      "notes": "operator:and per #1311"
+    },
+    {
+      "id": "QP-combo",
+      "pattern": "FTS \"sea view\" + geo_distance 5km (bool must)",
+      "pg_count": 410,
+      "os_count": 411,
+      "count_delta": 1,
+      "delta_pct": 0.2,
+      "pg_latency_ms": 1.65,
+      "os_took_ms": 7,
+      "os_client_ms": 15.1,
+      "notes": ""
+    }
+  ]
+}
