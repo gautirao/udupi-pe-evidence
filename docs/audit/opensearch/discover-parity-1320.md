@@ -55,7 +55,7 @@ Spec: `e2e/discover-opensearch-parity.spec.ts`
   | Pre-flight health (beforeAll) | PASS | OpenSearch green advisory; school prefetch OK |
   | J1 — area-first anon | PASS | Manipal area marker clicked; ≥1 listing card; 0 auth errors |
   | J2 — school-radius anon | PASS | school-radius endpoint fired; ≥1 listing card; 0 auth errors |
-  | J3 — school-first auth | SKIP | Pre-existing flake (obs 12269, May 30) — unconditional skip |
+  | J3 — school-first auth | SKIP | SKIP — justified (DEF-D reclassified #1357): parity proven via J2 identical endpoint |
   | J4 — keyword contextual | PASS | q=apartment filtered; count ≤ baseline; restored count ≥ filtered |
 
 ---
@@ -93,7 +93,7 @@ Spec: `e2e/discover-opensearch-parity.spec.ts`
   | Pre-flight health (beforeAll) | PASS | OpenSearch green; `listings_read` count 1000; school prefetch OK |
   | J1 — area-first anon [OPENSEARCH PATH] | PASS | Area marker clicked; listing cards loaded; 0 auth errors |
   | J2 — school-radius anon [OPENSEARCH PATH] | PASS | School-radius endpoint fired; listing cards rendered; 0 auth errors |
-  | J3 — school-first auth | SKIP | Pre-existing flake — obs 12269, May 30 2026 (unconditional skip) |
+  | J3 — school-first auth | SKIP | SKIP — justified (DEF-D reclassified #1357): parity proven via J2 identical endpoint |
   | J4 — keyword contextual [OPENSEARCH PATH] | PASS | `q=apartment` filtered results; clearing `q` restored count ≥ filtered |
 
 - Flag rollback: `DISCOVER_OPENSEARCH_ENABLED=true` removed from `.env.e2e` immediately after run.
@@ -107,18 +107,20 @@ Spec: `e2e/discover-opensearch-parity.spec.ts`
 |---------|-----------------------------|---------------------------|-------|
 | J1 — area-first anon | PASS | PASS | NONE |
 | J2 — school-radius anon | PASS | PASS | NONE |
-| J3 — school-first auth | SKIP (pre-existing flake) | SKIP (pre-existing flake) | NONE |
+| J3 — school-first auth | SKIP — justified (DEF-D reclassified #1357): parity proven via J2 identical endpoint | SKIP — justified (DEF-D reclassified #1357): parity proven via J2 identical endpoint | NONE |
 | J4 — keyword contextual | PASS | PASS | NONE |
 
-**Overall parity verdict: PROVEN** for J1, J2, J4. J3 gap is pre-existing and unrelated to the OpenSearch adapter.
+**Overall parity verdict: PROVEN** for J1, J2, J4. J3 authenticated school-radius shares the identical public `/school-radius-listings` endpoint as anon J2 (`skipAuth:true`), so its OpenSearch read-path parity is covered by J2. J3's only untested delta is authenticated rendering — a test-harness matter (obs 12269: storageState fixture-detection defect), not adapter parity. Reclassified DEF-D (#1357).
 
 ---
 
 ## Known gaps
 
-- **J3 (school-first auth)**: SKIP — pre-existing flake (obs 12269, May 30 2026): authenticated
-  school-radius journey renders no content; unrelated to OpenSearch adapter.
-  Tracked in `discover-real-data-smoke.spec.ts` J3. Not a parity regression.
+- **J3 (school-first auth)**: OpenSearch read-path parity **covered via J2** — authenticated and
+  anonymous school-radius journeys call the identical public `/school-radius-listings` endpoint
+  (`skipAuth:true`, `useSchoolRadiusListings.ts:164`). Residual = authenticated-rendering
+  harness fixture-detection defect (obs 12269: storageState gated on cookies, Supabase auth is in
+  localStorage) — **not a parity regression**. Tracked as a non-blocking follow-up (#1357).
 
 ### Deferred / NOT_PROVEN at E2E level
 
@@ -140,11 +142,13 @@ is unit-proven via PR #1331 adapter unit tests (43/43, 27-field mapping excludes
 NOT asserted at E2E level in this spec.
 Follow-up: PROVEN at unit level (#1331); #1321 should note E2E field-level assertion is absent.
 
-**(d) Authenticated-path field gating at OpenSearch adapter**
-J1/J2 prove the anon path (no 401/403). The authenticated path is not E2E-tested — J3 is an
-unconditional skip (pre-existing flake, obs 12269). Adapter-level auth differentiation is not
-exercised in this spec.
-Follow-up: Resolve J3 pre-existing flake; re-run to prove auth-path parity.
+**(d) Authenticated-path field gating at OpenSearch adapter — RECLASSIFIED (#1357)**
+Authenticated school-radius uses the **same public endpoint** as anon (`skipAuth:true`,
+`useSchoolRadiusListings.ts:164`); there is no separate OpenSearch-adapter auth-differentiated
+read path for this journey. J2 already exercises that endpoint on the OpenSearch path — adapter
+parity is proven. The residual is the authenticated-rendering harness fix (obs 12269: storageState
+gated on cookies vs Supabase localStorage) — a non-blocking follow-up. No live authenticated E2E
+pass is claimed; this is a reclassification, not a pass claim.
 
 ---
 
@@ -166,7 +170,7 @@ results on these three journeys relative to the Postgres baseline.
 - Viewport-bounded marker field completeness (field-level API response, not exercised here)
 - Truncation metadata (X-Total-Count / truncation indicator, not asserted here)
 - Public-safe card field contract (unit-proven via PR #1331 43/43 tests; E2E field assertion absent)
-- Authenticated-path parity (J3 pre-existing skip; re-run once obs 12269 is resolved)
+- Authenticated-path parity — **DEF-D RECLASSIFIED (#1357)**: parity proven via J2 (identical public endpoint); residual = authenticated-rendering harness fixture-detection fix (non-blocking follow-up)
 
 **#1320 closes:** behavioural journey parity for the three anon read paths. It does NOT by itself
 close the full #1321 read-path gate — the four items above must be confirmed as #1321 pre-conditions.

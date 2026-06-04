@@ -146,7 +146,7 @@ Items marked **DEFERRED** (without BLOCKING) are recommended but not hard blocke
 | **DEF-A: Marker payload field completeness (E2E)** | [discover-parity-1320.md](../audit/opensearch/discover-parity-1320.md) §Known gaps (a) | **DEFERRED — BLOCKING** |
 | **DEF-B: Truncation metadata assertion (X-Total-Count / truncation indicator)** | [discover-parity-1320.md](../audit/opensearch/discover-parity-1320.md) §Known gaps (b) | **DEFERRED — BLOCKING** |
 | **DEF-C: E2E private-field-leak prevention assertion** | Unit-proven only (PR #1331 43/43 tests); E2E field-level assertion absent | **DEFERRED — BLOCKING** |
-| **DEF-D: Authenticated-path parity / J3 coverage** | J3 unconditional skip (pre-existing flake, obs 12269, May 30 2026) | **DEFERRED — BLOCKING** |
+| **DEF-D: Authenticated-path parity / J3 coverage** | J3 adds zero incremental OpenSearch coverage — authed+anon share the public `/school-radius-listings` endpoint, parity proven by J2 (#1320, #1357). "Renders no content" = test-harness fixture-detection defect, not parity gap (#1357 follow-up). | **RESOLVED — RECLASSIFIED** |
 | 100k scale evidence | DEFERRED — local hardware limits; 50k recommended as pre-production gate | **DEFERRED** |
 | Production OpenSearch infrastructure provisioned | DEFERRED — Render / VPS / managed not yet provisioned | **DEFERRED** |
 
@@ -277,12 +277,12 @@ for the full catalogue.
 ## 9. No-Go Conditions
 
 Any of the following conditions constitutes a NO-GO for proceeding to the next rollout stage.
-DEF-A through DEF-D are individually sufficient to block Stage 3.
+DEF-A through DEF-C are individually sufficient to block Stage 3.
 
 - **DEF-A unresolved** — marker payload field completeness not asserted at E2E level (BLOCKING for Stage 3)
 - **DEF-B unresolved** — truncation metadata (`X-Total-Count` / truncation indicator) not asserted at E2E level (BLOCKING for Stage 3)
 - **DEF-C unresolved** — private-field-leak prevention unit-proven only (PR #1331 43/43 tests); E2E field-level assertion absent (BLOCKING for Stage 3)
-- **DEF-D unresolved** — authenticated-path / J3 parity not proven; J3 unconditional skip due to pre-existing flake (obs 12269, May 30 2026) (BLOCKING for Stage 3)
+- **DEF-D RESOLVED (RECLASSIFIED, #1357)** — authenticated-path school-radius parity is proven via anon J2 (identical public endpoint, `skipAuth:true`); J3 adds no incremental OpenSearch coverage. The residual authenticated-rendering harness fix (obs 12269: storageState cookies vs localStorage) is a NON-BLOCKING follow-up. (No longer a Stage-3 NO-GO.)
 - OpenSearch result counts materially diverge from Postgres (> 1% on geo/bbox queries)
 - Geo-radius or bounding-box queries return incorrect results (wrong listings, wrong count)
 - Search / filter semantics differ in user-visible ways beyond the documented QP-1d FTS semantic difference (see Section 11)
@@ -320,7 +320,7 @@ Run these checks immediately after enabling `discover.opensearch.enabled=true` i
 
 6. **DEAD event check** — confirm no rows with `status='DEAD'` have appeared in `listing_search_outbox` since cutover. Any DEAD row requires immediate investigation (permanent indexing failure).
 
-7. **J3 resolution check** — confirm the authenticated-path school-first journey (J3) has been re-run and passes after the pre-existing flake (obs 12269) is resolved. This check corresponds to DEF-D and must be complete before Stage 3 is considered fully closed.
+7. **J3 follow-up (non-blocking)** — DEF-D is resolved by reclassification (#1357): authenticated school-radius parity is proven via anon J2, which exercises the identical public `/school-radius-listings` endpoint. The residual authenticated-rendering harness fix (obs 12269: storageState gated on cookies vs Supabase localStorage) is a non-blocking follow-up and does NOT gate Stage 3.
 
 ---
 
@@ -380,8 +380,8 @@ The following are explicitly out of scope for issue #1321 and this runbook:
 | Transition | Who decides | Prerequisite |
 |---|---|---|
 | Stage 0 → Stage 1 (enable shadow mode) | Engineering decision; no user impact | Index fully built; outbox lag confirmed near-zero |
-| Stage 1 → Stage 2 (limited read enablement) | Engineering lead go/no-go review | All BLOCKING DEF items (DEF-A through DEF-D) resolved; production infrastructure provisioned; 50k scale evidence gathered |
-| Stage 2 → Stage 3 (full read cutover) | Formal engineering lead sign-off | DEF-A/B/C/D RESOLVED; Stage 2 canary stable over observation window |
+| Stage 1 → Stage 2 (limited read enablement) | Engineering lead go/no-go review | All BLOCKING DEF items (DEF-A through DEF-C) resolved; production infrastructure provisioned; 50k scale evidence gathered |
+| Stage 2 → Stage 3 (full read cutover) | Formal engineering lead sign-off | DEF-A/B/C RESOLVED; Stage 2 canary stable over observation window |
 | Rollback (any stage) | **Any on-call engineer** | No approval required — flip `discover.opensearch.enabled=false` immediately |
 
 ### Deferred blocking items and responsible issues
@@ -391,4 +391,4 @@ The following are explicitly out of scope for issue #1321 and this runbook:
 | DEF-A | Marker payload field completeness at E2E level | Add field-level assertions to parity spec; re-run against markers endpoint |
 | DEF-B | Truncation metadata (`X-Total-Count` / truncation indicator) at E2E level | Add response header assertion to parity spec |
 | DEF-C | Private-field-leak prevention at E2E level (currently unit-proven only via PR #1331 43/43 tests) | Add field-inspection step to parity spec that reads response body and asserts absence of private fields |
-| DEF-D | Authenticated-path parity (J3 — school-first auth) | Resolve pre-existing J3 flake (obs 12269, May 30 2026) in `discover-real-data-smoke.spec.ts`; re-run parity spec with J3 enabled |
+| DEF-D | ~~Authenticated-path parity (J3 — school-first auth)~~ **RECLASSIFIED (#1357)** | Parity proven via J2 — authed and anon share the public `/school-radius-listings` endpoint (`skipAuth:true`). Remaining work = harness fixture-detection fix (obs 12269: storageState cookies vs Supabase localStorage) + live re-run — non-blocking follow-up. No longer gates Stage 3. |

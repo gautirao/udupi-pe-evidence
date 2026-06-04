@@ -226,17 +226,30 @@ test.describe(`Discover OpenSearch parity [${READ_PATH}]`, () => {
   });
 
   // -------------------------------------------------------------------------
-  // J3 — school-first auth (SKIP — pre-existing flake)
-  // Skip reason: obs 12269 (May 30, 2026) — authenticated school-radius journey
-  // renders no content; unrelated to the OpenSearch adapter. Tracking in
-  // discover-real-data-smoke.spec.ts J3.
+  // J3 — school-first auth (RECLASSIFIED — DEF-D, #1357 — justified skip)
+  // Authenticated and anonymous school-radius journeys call the IDENTICAL public
+  // endpoint /api/discover/cities/{city}/school-radius-listings (skipAuth:true,
+  // src/hooks/useSchoolRadiusListings.ts:164). Anon J2 above already proves
+  // OpenSearch read-path parity for that endpoint (#1320). J3 therefore adds
+  // ZERO incremental OpenSearch coverage; its only delta is authenticated
+  // rendering. The "renders no content" symptom (obs 12269, May 30 2026) is a
+  // test-harness fixture-detection defect: storageState is gated on cookies.length>0
+  // but Supabase auth lives in localStorage (sb-*-auth-token), so the valid
+  // broker-auth.json is judged empty → never applied → request runs unauthenticated.
+  // NOT an OpenSearch/product parity gap — tracked as a non-blocking follow-up.
   // -------------------------------------------------------------------------
 
-  test('J3 — school-first auth: SKIP (pre-existing flake — obs 12269, May 30)', async () => {
+  test('J3 — school-first auth: RECLASSIFIED justified skip (DEF-D, #1357)', async () => {
     test.skip(
       true,
-      'Pre-existing flake (obs 12269, May 30 2026): authenticated school-radius renders no content; ' +
-      'unrelated to OpenSearch adapter. Tracked in discover-real-data-smoke.spec.ts J3.',
+      'RECLASSIFIED (DEF-D, #1357): authed and anon school-radius journeys call the identical ' +
+      'public /api/discover/cities/{city}/school-radius-listings endpoint (skipAuth:true); ' +
+      'OpenSearch read-path parity is already PROVEN by anon J2 (#1320). J3 adds zero ' +
+      'incremental OpenSearch coverage — its only delta is authenticated rendering. ' +
+      'The "renders no content" symptom (obs 12269) is a test-harness fixture-detection defect ' +
+      '(storageState gated on cookies, but Supabase auth is in localStorage), not an ' +
+      'OpenSearch/product parity gap. Kept as a documented justified skip; harness fix is a ' +
+      'non-blocking follow-up.',
     );
   });
 
