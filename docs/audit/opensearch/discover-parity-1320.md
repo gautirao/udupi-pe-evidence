@@ -128,19 +128,35 @@ The following items appear in the validation matrix as NOT_PROVEN. They are not 
 introduced by this spec; they represent coverage gaps that must be confirmed as #1321 pre-conditions.
 
 **(a) Viewport-bounded marker payload field completeness**
-Spec asserts marker icons render (J1 `.leaflet-marker-icon.area-marker`) but does not inspect
+~~Spec asserts marker icons render (J1 `.leaflet-marker-icon.area-marker`) but does not inspect
 the markers API response payload for field-level contract. Not asserted at E2E level.
-Follow-up: #1321 pre-condition — include markers endpoint response diff as a manual spot-check.
+Follow-up: #1321 pre-condition — include markers endpoint response diff as a manual spot-check.~~
+
+**RESOLVED — #1359**: J1 now intercepts `/api/discover/cities/{city}/listings` response and asserts
+top-level structure (`city`, `limitPerArea`, `areas`) and listing card fields (`id`, `propertyType`,
+`locality`) via `page.waitForResponse()` + JSON body inspection.
 
 **(b) Truncation metadata (total_count vs returned count)**
-Spec does not assert the `X-Total-Count` header or any truncation indicator. Not asserted at E2E level.
-Follow-up: #1321 pre-condition — out of scope for #1320.
+~~Spec does not assert the `X-Total-Count` header or any truncation indicator. Not asserted at E2E level.
+Follow-up: #1321 pre-condition — out of scope for #1320.~~
+
+**RESOLVED — #1359**: J1 asserts `limitPerArea > 0` and `areas[0].listings.length <= limitPerArea`
+(the effective truncation cap is present and applied in the area listings response). J2 asserts
+`typeof hasMore === 'boolean'` (probe pagination indicator present in school-radius response).
+Note: no `X-Total-Count` header exists on these endpoints; `limitPerArea`/`hasMore` are the
+available truncation metadata in the backend's response contract.
 
 **(c) Public-safe card fields / private-field-leak prevention**
-Spec asserts no 401/403 (access gating) but does not inspect DTO field content. Field-level mapping
+~~Spec asserts no 401/403 (access gating) but does not inspect DTO field content. Field-level mapping
 is unit-proven via PR #1331 adapter unit tests (43/43, 27-field mapping excludes private fields).
 NOT asserted at E2E level in this spec.
-Follow-up: PROVEN at unit level (#1331); #1321 should note E2E field-level assertion is absent.
+Follow-up: PROVEN at unit level (#1331); #1321 should note E2E field-level assertion is absent.~~
+
+**RESOLVED — #1359**: J1 now asserts that `Object.keys(listingCard)` does not contain any of:
+`userId`, `sellerId`, `supabaseUserId`, `sellerPhone`, `sellerEmail`, `phone`, `email`,
+`rejectionReason`, `brokerId`, `brokerName`, `brokerPhone`, `brokerEmail`. Complements existing
+unit-level proof (PR #1331 43/43 tests). Assertion fires on every E2E run (Postgres baseline and
+OpenSearch path).
 
 **(d) Authenticated-path field gating at OpenSearch adapter — RECLASSIFIED (#1357)**
 Authenticated school-radius uses the **same public endpoint** as anon (`skipAuth:true`,

@@ -143,9 +143,9 @@ Items marked **DEFERRED** (without BLOCKING) are recommended but not hard blocke
 | No private owner / broker / admin fields in OpenSearch | PR #1331 adapter (43/43 unit tests, 27-field mapping) | **PASS** |
 | No raw OpenSearch DSL accepted from clients | Architectural invariant (all queries built server-side) | **PASS** |
 | OpenSearch not exposed directly to frontend | Architectural invariant (backend-only; loopback-only in local) | **PASS** |
-| **DEF-A: Marker payload field completeness (E2E)** | [discover-parity-1320.md](../audit/opensearch/discover-parity-1320.md) §Known gaps (a) | **DEFERRED — BLOCKING** |
-| **DEF-B: Truncation metadata assertion (X-Total-Count / truncation indicator)** | [discover-parity-1320.md](../audit/opensearch/discover-parity-1320.md) §Known gaps (b) | **DEFERRED — BLOCKING** |
-| **DEF-C: E2E private-field-leak prevention assertion** | Unit-proven only (PR #1331 43/43 tests); E2E field-level assertion absent | **DEFERRED — BLOCKING** |
+| **DEF-A: Marker payload field completeness (E2E)** | PR #1359 — `e2e/discover-opensearch-parity.spec.ts` J1: asserts `city`, `limitPerArea`, `areas` present; `id`, `propertyType`, `locality` in first listing card | **RESOLVED — #1359** |
+| **DEF-B: Truncation metadata assertion (X-Total-Count / truncation indicator)** | PR #1359 — J1 asserts `limitPerArea > 0` and `listings.length <= limitPerArea`; J2 asserts `typeof hasMore === 'boolean'` | **RESOLVED — #1359** |
+| **DEF-C: E2E private-field-leak prevention assertion** | PR #1359 — J1 asserts 12 private field names absent from `Object.keys(listingCard)`: userId, sellerId, supabaseUserId, sellerPhone, sellerEmail, phone, email, rejectionReason, brokerId, brokerName, brokerPhone, brokerEmail | **RESOLVED — #1359** |
 | **DEF-D: Authenticated-path parity / J3 coverage** | J3 adds zero incremental OpenSearch coverage — authed+anon share the public `/school-radius-listings` endpoint, parity proven by J2 (#1320, #1357). "Renders no content" = test-harness fixture-detection defect, not parity gap (#1357 follow-up). | **RESOLVED — RECLASSIFIED** |
 | 100k scale evidence | DEFERRED — local hardware limits; 50k recommended as pre-production gate | **DEFERRED** |
 | Production OpenSearch infrastructure provisioned | DEFERRED — Render / VPS / managed not yet provisioned | **DEFERRED** |
@@ -179,7 +179,7 @@ response.
 - Fallback counter (`discover.search.fallback.total`) at zero under normal load
 - DEAD outbox events: zero (`discover.index.dlq.depth` = 0)
 - Outbox head age < 30 s (`discover.index.outbox.head_age.seconds`)
-- DEF-A/B/C/D still DEFERRED — do not advance to Stage 2/3 until resolved
+- DEF-D RECLASSIFIED (#1357); DEF-A/B/C RESOLVED (#1359) — all blocking DEF items are now resolved; no remaining blocking prerequisites from this list
 
 ---
 

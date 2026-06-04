@@ -167,6 +167,18 @@ test.describe(`Discover OpenSearch parity [${READ_PATH}]`, () => {
       if (r.status() === 401 || r.status() === 403) authErrors.push(r.status());
     });
 
+    // Set up response interception BEFORE page.goto — defensive placement (DEF-A/B/C).
+    // useDiscoverCityListings has enabled:areaKeys.length>0 so the endpoint only fires
+    // after a marker click (not on page load), but registering before goto is the safest
+    // Playwright pattern and eliminates any race concern.
+    const areaListingsPromise = page.waitForResponse(
+      (resp) =>
+        resp.url().includes('/api/discover/cities/') &&
+        resp.url().includes('/listings') &&
+        !resp.url().includes('school-radius'),
+      { timeout: 20_000 },
+    );
+
     await page.goto('/discover?city=udupi');
 
     // Wait for area markers rendered by the area-layer (Leaflet divIcon)
@@ -186,6 +198,59 @@ test.describe(`Discover OpenSearch parity [${READ_PATH}]`, () => {
 
     // Anon path must only use public endpoints — no auth errors
     expect(authErrors, `J1 [${READ_PATH}]: unexpected 401/403 on anon area-first journey`).toHaveLength(0);
+
+    // DEF-A / DEF-B / DEF-C: inspect listing API response payload
+    const areaListingsResponse = await areaListingsPromise;
+    const areaJson = await areaListingsResponse.json() as {
+      city: string;
+      limitPerArea: number;
+      areas: Array<{
+        areaKey: string;
+        listings: Array<Record<string, unknown>>;
+      }>;
+    };
+
+    // DEF-A: top-level response structure
+    expect(areaJson.city, `DEF-A [${READ_PATH}]: city field missing from area listings response`).toBeDefined();
+    expect(typeof areaJson.limitPerArea, `DEF-A [${READ_PATH}]: limitPerArea must be a number`).toBe('number');
+    expect(Array.isArray(areaJson.areas), `DEF-A [${READ_PATH}]: areas must be an array`).toBe(true);
+
+    // DEF-A: listing card id (non-nullable UUID primary key).
+    // cardCount >= 1 above proves at least one card rendered; firstCard must be defined.
+    const firstArea = areaJson.areas?.[0];
+    const firstCard = firstArea?.listings?.[0];
+    expect(firstCard, `DEF-A [${READ_PATH}]: areas[0].listings[0] must be present when listing card rendered`).toBeDefined();
+    if (firstCard !== undefined) {
+      expect(firstCard['id'], `DEF-A [${READ_PATH}]: listing card id must be present`).toBeDefined();
+      expect(firstCard['propertyType'], `DEF-A [${READ_PATH}]: listing card propertyType must be present`).toBeDefined();
+      expect(firstCard['locality'], `DEF-A [${READ_PATH}]: listing card locality must be present`).toBeDefined();
+    }
+
+    // DEF-B: truncation metadata — limitPerArea is the effective cap (no X-Total-Count header on this endpoint)
+    expect(areaJson.limitPerArea, `DEF-B [${READ_PATH}]: limitPerArea (truncation cap) must be > 0`).toBeGreaterThan(0);
+    if (firstArea?.listings !== undefined) {
+      expect(
+        firstArea.listings.length,
+        `DEF-B [${READ_PATH}]: listings count must not exceed limitPerArea cap`,
+      ).toBeLessThanOrEqual(areaJson.limitPerArea);
+    }
+
+    // DEF-C: no private fields in public listing response
+    if (firstCard !== undefined) {
+      const PRIVATE_FIELDS = [
+        'userId', 'sellerId', 'supabaseUserId',
+        'sellerPhone', 'sellerEmail', 'phone', 'email',
+        'rejectionReason',
+        'brokerId', 'brokerName', 'brokerPhone', 'brokerEmail',
+      ];
+      const responseKeys = Object.keys(firstCard);
+      for (const privateField of PRIVATE_FIELDS) {
+        expect(
+          responseKeys,
+          `DEF-C [${READ_PATH}]: private field '${privateField}' must not appear in public listing response`,
+        ).not.toContain(privateField);
+      }
+    }
   });
 
   // -------------------------------------------------------------------------
@@ -213,7 +278,18 @@ test.describe(`Discover OpenSearch parity [${READ_PATH}]`, () => {
     await page.goto(`/discover?city=udupi&schoolId=${encodeURIComponent(schoolId!)}&radiusKm=2`);
 
     await page.waitForSelector('[data-testid="discover-right-panel"]', { timeout: 15_000 });
-    await schoolRadiusResponsePromise;
+    const schoolRadiusResponse = await schoolRadiusResponsePromise;
+    // DEF-B: school-radius truncation metadata — hasMore is the pagination indicator
+    const srJson = await schoolRadiusResponse.json() as {
+      content: unknown[];
+      hasMore: boolean;
+      page: number;
+      size: number;
+    };
+    expect(
+      typeof srJson.hasMore,
+      `DEF-B [${READ_PATH}]: hasMore must be boolean in school-radius response`,
+    ).toBe('boolean');
     await page.waitForSelector('[data-testid="listing-card"]', { timeout: 15_000 });
 
     const cardCount = await page.locator('[data-testid="listing-card"]').count();
