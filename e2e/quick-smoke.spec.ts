@@ -283,3 +283,17 @@ test.describe('@smoke Q7 — user-authenticated', () => {
   }
   });
 });
+
+// ---------------------------------------------------------------------------
+// N3 — Unknown route renders the 404 Not Found page
+//      Auth-free: the * route is outside ProtectedRoute.
+//      Moved from nav-roles.spec.ts so it runs in the smoke gate without
+//      pulling in the auth-dependent N1/N2 tests.
+// ---------------------------------------------------------------------------
+test('N3 — unknown route renders 404 Not Found page', async ({ page }) => {
+  await page.goto('/this-route-does-not-exist-e2e-abc123');
+  await page.waitForLoadState('domcontentloaded');
+
+  await expect(page.getByText('404')).toBeVisible({ timeout: 8_000 });
+  await expect(page.getByText(/page not found/i)).toBeVisible({ timeout: 8_000 });
+});

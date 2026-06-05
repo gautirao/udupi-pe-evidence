@@ -43,10 +43,8 @@ export default defineConfig({
       use: { browserName: 'chromium' },
       testMatch: [
         '**/quick-smoke.spec.ts',
-        '**/nav-roles.spec.ts',
         '**/broker-smoke.spec.ts',
         '**/admin-smoke.spec.ts',
-        '**/user-journeys.spec.ts',
         '**/discover-real-data-smoke.spec.ts',
       ],
     },

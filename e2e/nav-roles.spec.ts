@@ -5,7 +5,9 @@
  * Covers:
  *   N1 — user role (owner): Area overview, My Saved Areas, My Listings, New Listing, My Bookings visible; no dealer/admin links
  *   N2 — admin role: Administrator label + admin nav links visible; no dealer links
- *   N3 — 404: navigating to an unknown route renders the Not Found page
+ *
+ * N3 (auth-free 404 check) lives in quick-smoke.spec.ts so it runs in the smoke gate
+ * without pulling in the auth-dependent N1/N2 tests.
  *
  * Run locally:
  *   SMOKE_USER_EMAIL=user@example.com SMOKE_USER_PASSWORD=... \
@@ -129,16 +131,4 @@ test.describe('N2 — admin-authenticated', () => {
     await expect(page.getByRole('link', { name: /^my listings$/i })).toHaveCount(0);
     await expect(page.getByRole('link', { name: /new listing/i })).toHaveCount(0);
   });
-});
-
-// ---------------------------------------------------------------------------
-// N3 — Unknown route renders the 404 Not Found page
-//      Does not require authentication (the * route is outside ProtectedRoute).
-// ---------------------------------------------------------------------------
-test('N3 — unknown route renders 404 Not Found page', async ({ page }) => {
-  await page.goto('/this-route-does-not-exist-e2e-abc123');
-  await page.waitForLoadState('domcontentloaded');
-
-  await expect(page.getByText('404')).toBeVisible({ timeout: 8_000 });
-  await expect(page.getByText(/page not found/i)).toBeVisible({ timeout: 8_000 });
 });
