@@ -248,6 +248,55 @@ NOT_PROVEN — production Kafka not deployed in this issue
 NOT_PROVEN — 100k run deferred for safety
 ```
 
+## Test suite evidence — precision rules
+
+Any test-suite row in a validation matrix MUST report all of the following fields.
+A row that omits any of these is NOT acceptable evidence.
+
+| Field | Required values / format |
+|---|---|
+| `command_executed` | Exact shell command verbatim (e.g. `mvn test -pl backend`, `npx playwright test e2e/foo.spec.ts --project=full`) |
+| `runner_or_phase` | Maven phase (`surefire` / `failsafe`), test runner (`vitest` / `playwright` / `tsc`), etc. |
+| `scope_pattern` | What classes/files ran: e.g. `*Test.java` (surefire), `*IT.java` (failsafe), `src/pages/broker`, `e2e/*.spec.ts` |
+| `branch` | Branch the command was run on |
+| `freshness` | `CURRENT_SESSION` — command was run in the current session; or `HISTORICAL` — from project memory / prior session |
+| `exit_code` | Integer exit code of the exact command, or `NOT_RUN` if the command was not executed |
+| `source_of_evidence` | `DIRECT_RUN`, `PROJECT_MEMORY`, or `PRIOR_SESSION` |
+
+**Rules:**
+
+1. `mvn test`, `mvn verify`, `npm test`, Playwright, and TypeScript checks are **different commands** and MUST be reported as **separate rows** — never combined into one row.
+2. `mvn test -pl backend` runs the Maven `test` phase (surefire, `*Test.java` unit tests only). It does **not** run `*IT.java` integration tests; those require `mvn verify` (failsafe phase). These two phases have separate exit codes and MUST NOT be conflated.
+3. A command that was **not run** in the current session MUST say `freshness = HISTORICAL` and `exit_code = NOT_RUN`. It MUST NOT imply a pass or fail for the current session.
+4. **Project memory cannot be presented as fresh evidence.** If a failure or pass is known from prior sessions (MEMORY.md, earlier PR work), it MUST be labelled `HISTORICAL` and cite the source (memory entry / prior PR number). A `HISTORICAL` row does NOT satisfy a `CURRENT_SESSION` evidence requirement.
+5. Pre-existing failures on `main` (unrelated to the current PR) MUST be labelled `HISTORICAL / NOT_RUN_THIS_SESSION` and MUST name the source (e.g. `MEMORY.md`, `main` branch run from PR #XYZ).
+6. No validation row may combine a fresh command result with historical failure evidence from a different command (e.g. `mvn test` exit 0 paired with `mvn verify` failure evidence in the same row — these are two different commands and must be two rows).
+
+**Acceptable test suite baseline example:**
+
+| command_executed | runner_or_phase | scope_pattern | branch | freshness | exit_code | source_of_evidence |
+|---|---|---|---|---|---|---|
+| `mvn test -pl backend` | surefire | `*Test.java` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
+| `mvn verify -pl backend` | failsafe + surefire | `*IT.java` + `*Test.java` | feat/my-branch | NOT_RUN | NOT_RUN | — |
+| `npx playwright test e2e/foo.spec.ts --project=full` | playwright/chromium | `e2e/foo.spec.ts` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
+| `npx tsc --noEmit` | tsc | all `*.ts` / `*.tsx` | feat/my-branch | CURRENT_SESSION | 0 | DIRECT_RUN |
+
+**NOT acceptable:**
+
+```text
+Evidence: mvn test passed, integration failures pre-existing (project memory)
+Exit code: 0
+```
+_(Mixes a direct-run result with historical memory in one row — violates rule 6.)_
+
+```text
+Evidence: mvn test exit 0
+Limitations: mvn test exits 1 due to pre-existing IT failures
+```
+_(States exit 0 and exit 1 for what appears to be "the same command" but is actually two different Maven phases; must be two separate rows — violates rules 1 and 2.)_
+
+---
+
 ## Token-efficiency constraints
 
 The matrix must be useful but compact — never a verbose ritual:

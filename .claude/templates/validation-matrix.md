@@ -42,6 +42,17 @@ APPROVE / REQUEST_CHANGES
 |---|---|---|
 | <AC1 short text> | <command + exit code / file:line / report citation> | PASS / NOT_PROVEN |
 
+## Test suite baseline
+
+<!-- Required for any PR that runs tests. One row per command/runner/phase.
+     freshness: CURRENT_SESSION (run this session) or HISTORICAL (project memory / prior session).
+     If a command was not run, write NOT_RUN for both exit_code and freshness.
+     Never combine mvn test and mvn verify evidence in one row — they are different phases. -->
+
+| command_executed | runner_or_phase | scope_pattern | branch | freshness | exit_code | source_of_evidence |
+|---|---|---|---|---|---|---|
+| `<command>` | surefire / failsafe / vitest / playwright / tsc | `<pattern>` | `<branch>` | CURRENT_SESSION / HISTORICAL | `<N>` / NOT_RUN | DIRECT_RUN / PROJECT_MEMORY / PRIOR_SESSION |
+
 ## Not proven / deferred
 
 | Item | Reason | Follow-up |
@@ -101,6 +112,17 @@ APPROVE / REQUEST_CHANGES
 | Claim | Source of truth | Evidence | Status |
 |---|---|---|---|
 | <claim> | <report/ADR/code/metric ref> | <evidence> | VERIFIED / NOT_PROVEN |
+
+## Test suite baseline
+
+<!-- Required for any PR that runs tests. One row per command/runner/phase.
+     freshness: CURRENT_SESSION (run this session) or HISTORICAL (project memory / prior session).
+     If a command was not run, write NOT_RUN for both exit_code and freshness.
+     Never combine mvn test and mvn verify evidence in one row — they are different phases. -->
+
+| command_executed | runner_or_phase | scope_pattern | branch | freshness | exit_code | source_of_evidence |
+|---|---|---|---|---|---|---|
+| `<command>` | surefire / failsafe / vitest / playwright / tsc | `<pattern>` | `<branch>` | CURRENT_SESSION / HISTORICAL | `<N>` / NOT_RUN | DIRECT_RUN / PROJECT_MEMORY / PRIOR_SESSION |
 
 ## Not proven / deferred
 
