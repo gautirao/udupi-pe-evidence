@@ -128,6 +128,19 @@ next = "proceed_to_pr"      # proceed_to_pr | fix_before_pr | user_decision
 - **BLOCKED** — app cannot start, login/test data unavailable, local environment unavailable, or the reproduction URL cannot be reached. Report the blocker; ask for a user decision only if the team cannot resolve it.
 - **NEEDS_USER_DECISION** — only for true product ambiguity, not implementation uncertainty.
 
+#### CODE_VERIFIED — definition and validity rules
+
+`CODE_VERIFIED` is a verification **method**, not a verdict — it means the AC was confirmed from source code and/or unit tests without running the browser.
+
+`verdict = "PASS"` with `method = "CODE_VERIFIED"` is valid **only when all three hold:**
+1. The AC is purely static/deterministic — no runtime observation needed (e.g. "does field X exist in source?", "is section Y excluded by a boolean gate?").
+2. Passing unit tests directly assert the relevant code path (not just "tests pass overall").
+3. `[notes].advisory` is prefixed `INCOMPLETE_BROWSER_VERIFICATION:` listing which ACs were code-only and why.
+
+`verdict = "PASS"` with `method = "CODE_VERIFIED"` is **NOT valid** when any AC requires runtime observation: form submission, network request, server response, auth-gated UI, or any behaviour that only manifests in a running browser.
+
+When CODE_VERIFIED cannot produce a valid PASS, report `verdict = "BLOCKED"`, `method = "CODE_VERIFIED"`, and state the exact auth/env blocker in `[notes].blocker`.
+
 ### Evidence quality rules (CRITICAL)
 
 **A test/check may only be reported as PASS if evidence shows the intended check actually executed.**
@@ -143,15 +156,59 @@ next = "proceed_to_pr"      # proceed_to_pr | fix_before_pr | user_decision
 **Evidence must include:**
 ```toml
 [evidence_chain]
-automated_test_command = "npx playwright test spec.ts --headed"
+automated_test_command = "npx playwright test spec.ts --headed"   # exact command run; NOT invented
 automated_test_exit_code = 0 | "ERR_CONNECTION_REFUSED" | "timeout" | ...
 automated_test_executed = true | false
 manual_verification = true | false
 manual_verification_notes = "user verified at URL X"
 server_preflight_check = "PASS" | "FAIL" | "NOT_RUN"
+env_file = ".env.e2e"           # REQUIRED: exact env file loaded (e.g. .env.e2e); must be repo-grounded
+command_executed = "bash scripts/run-e2e-local.sh e2e/spec.ts"  # REQUIRED: exact shell command; must exist in repo
+artefact_path = "playwright-report/index.html | screenshots/step1.png | N/A — BLOCKED"
+                                # REQUIRED: path to screenshot, trace, video, or HTML report;
+                                #           "N/A" only if verdict is BLOCKED, with reason
+spec_or_script_path = "e2e/smoke/broker-listing.spec.ts"
+                                # REQUIRED: repo-relative path to spec/script run;
+                                #           must exist in repo (ls-verified); "N/A — BLOCKED" if not run
+target_url = "http://localhost:5174/broker/listings/new"
+                                # REQUIRED: exact URL opened in browser;
+                                #           "N/A — CODE_VERIFIED" only if no browser was launched
+pass_fail_output = "5 passed, 0 failed"
+                                # REQUIRED: actual test output or observation caption; NOT invented;
+                                #           copy from terminal or screenshot caption
+skip_reason = ""                # REQUIRED when any AC was not checked; blank if all ACs were checked
 ```
 
 If automated test did not execute (exit != 0), report verdict based on what DID run (manual verification, unit tests, or INCONCLUSIVE).
+
+**All `[evidence_chain]` fields are mandatory.** A `product-verification.toml` that omits any field, or that sets any field to an invented/unverified value, is rejected — treat the same as a missing evidence artefact (WORKDONE_REVIEW must not be submitted until corrected).
+
+**Advisory wording rule:** When any AC was not verified by actually running the browser, `[notes].advisory` MUST be prefixed with `INCOMPLETE_BROWSER_VERIFICATION:` followed by the reason (e.g. `"auth-gated route; no test credentials"`). Phrases such as "All ACs verified" are prohibited unless the browser was launched and the journey was driven for each AC claimed as PASS.
+
+### Anti-fabrication rules (CRITICAL)
+
+Never invent file paths, env var names, commands, URLs, test accounts, or credentials. Fabrication invalidates the gate.
+
+**Forbidden fabrications — do NOT use these (named to prevent recurrence):**
+- `VITE_TEST_EMAIL`, `VITE_TEST_PASSWORD` — these env vars do not exist in this repo
+- `.env.local` cited as an E2E credentials file — the real file is `.env.e2e`, loaded by `playwright.config.ts`
+- test accounts not confirmed present in `.env.e2e` (e.g. "dealer@example.com", "admin@test.com")
+- Playwright spec paths not found under `e2e/` (e.g. "e2e/agri.spec.ts" when no such file exists)
+- CLI commands not present in the repo
+
+**Repo-grounded defaults (verified):**
+
+| Resource | Correct value |
+|---|---|
+| E2E credentials file | `.env.e2e` (NOT `.env.local`) |
+| E2E runner | `bash scripts/run-e2e-local.sh <spec>` |
+| Frontend dev server | `npm run dev` → `http://localhost:5174` |
+| Playwright config | `playwright.config.ts` (loads `.env.e2e` at line ~10) |
+| Backend health | `http://localhost:8085/health` (HTTP 401 when live) |
+
+Before citing any path, env var, or command not in the table above, verify it exists: `ls <path>` or `grep -r "VAR_NAME" . --include="*.ts" --include="*.env*"`. If you cannot verify it, do NOT cite it — report `BLOCKED` with reason `"unable to verify env/credentials"`.
+
+**Negative gate rule:** If any `[evidence_chain]` field is found to contain a fabricated value — a path that doesn't exist, an env var not in the repo, a command that was not actually run — Phase 7A is retroactively FAILED. WORKDONE_REVIEW must not be accepted; the verification must be re-run from scratch with verified evidence.
 
 ### When this gate may be skipped
 
