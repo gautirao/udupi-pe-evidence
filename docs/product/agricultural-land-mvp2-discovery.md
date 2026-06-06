@@ -3,13 +3,13 @@
 **Status:** Draft
 **Last updated:** 2026-06-06
 **Owner:** Product / Engineering
-**Milestone:** `M29 — Agricultural Land Discovery (MVP2)`
-**Depends on:** `M28 — Agricultural Land Listing Creation (MVP1)` (polygon persistence)
+**Milestone:** `MVP2 — Agricultural Land Discovery` (GitHub milestone #31)
+**Depends on:** `MVP1 — Agricultural Land Listing Creation` (#30) — polygon persistence
 **Related:** `docs/product/agricultural-land-mvp1-listing-creation.md`, `docs/MVP_SPEC.md`, `docs/DISCOVER_FIGMA_AUDIT_FRESH_2026_05_09.md`, `docs/adr/0001-postgis-adoption.md`
 
 > This is a product spec, not an implementation. It defines scope, journey, map display
 > strategy, UX states, risks and open questions for MVP2. Implementation is tracked by the
-> issues in milestone **M29**.
+> issues in milestone **MVP2 — Agricultural Land Discovery**.
 
 ## 1. Product goal
 
@@ -125,7 +125,7 @@ residential/school search, using **area search**, **agriculture-only counts**,
 > However, MVP2 can still ship the agriculture journey, agriculture-only counts/clusters,
 > and a **fallback point/marker display** for agriculture listings without geometry.
 
-## 13. Issue map (milestone M29)
+## 13. Issue map (milestone: MVP2 — Agricultural Land Discovery, #31)
 
 | # | Issue | Primary labels |
 |---|---|---|

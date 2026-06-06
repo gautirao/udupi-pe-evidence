@@ -3,12 +3,12 @@
 **Status:** Draft
 **Last updated:** 2026-06-06
 **Owner:** Product / Engineering
-**Milestone:** `M28 — Agricultural Land Listing Creation (MVP1)`
+**Milestone:** `MVP1 — Agricultural Land Listing Creation` (GitHub milestone #30)
 **Related:** `docs/product/agricultural-land-mvp2-discovery.md` (MVP2 — Discovery), `docs/MVP_SPEC.md`, `docs/adr/0001-postgis-adoption.md`, `docs/LISTING_STATE_TRANSITIONS.md`
 
 > This is a product spec, not an implementation. It defines scope, journey, data, UX
 > states, risks and open questions for MVP1. Implementation is tracked by the issues
-> in milestone **M28**.
+> in milestone **MVP1 — Agricultural Land Listing Creation**.
 
 ---
 
@@ -135,7 +135,7 @@ MVP2 surfaces the same disclaimer in the buyer panel.
 4. Does the approximate-area calc run on submit, on save, or on render?
 5. Coordinate precision: `DrawControl` currently rounds to 4 dp (~11 m) — acceptable for MVP1?
 
-## 13. Issue map (milestone M28)
+## 13. Issue map (milestone: MVP1 — Agricultural Land Listing Creation, #30)
 
 | # | Issue | Primary labels |
 |---|---|---|
