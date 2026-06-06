@@ -72,7 +72,14 @@ public record ListingResponse(
          * unchanged — {@code imageCount} + {@code firstImageUrl} remain the source of
          * truth for list views.
          */
-        List<ListingImageDTO> images
+        List<ListingImageDTO> images,
+        // Agricultural land fields (nullable for non-agri listings)
+        String waterSource,
+        String soilType,
+        String roadAccess,
+        String cultivationStatus,
+        String ownershipType,
+        String surveyNumber
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

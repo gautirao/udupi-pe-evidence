@@ -217,6 +217,26 @@ public class Listing {
     @Column(name = "lock_in_months")
     private Integer lockInMonths;
 
+    // --- Agricultural land fields ---
+
+    @Column(name = "water_source", length = 64)
+    private String waterSource;
+
+    @Column(name = "soil_type", length = 64)
+    private String soilType;
+
+    @Column(name = "road_access", length = 64)
+    private String roadAccess;
+
+    @Column(name = "cultivation_status", length = 64)
+    private String cultivationStatus;
+
+    @Column(name = "ownership_type", length = 64)
+    private String ownershipType;
+
+    @Column(name = "survey_number", length = 64)
+    private String surveyNumber;
+
     // --- Trust tier and ranking (RE-142 / Phase 3.1) ---
 
     /**
@@ -991,6 +1011,56 @@ public class Listing {
 
     public void setLockInMonths(Integer lockInMonths) {
         this.lockInMonths = lockInMonths;
+    }
+
+    // --- Agricultural land getters/setters ---
+
+    public String getWaterSource() {
+        return waterSource;
+    }
+
+    public void setWaterSource(String waterSource) {
+        this.waterSource = waterSource;
+    }
+
+    public String getSoilType() {
+        return soilType;
+    }
+
+    public void setSoilType(String soilType) {
+        this.soilType = soilType;
+    }
+
+    public String getRoadAccess() {
+        return roadAccess;
+    }
+
+    public void setRoadAccess(String roadAccess) {
+        this.roadAccess = roadAccess;
+    }
+
+    public String getCultivationStatus() {
+        return cultivationStatus;
+    }
+
+    public void setCultivationStatus(String cultivationStatus) {
+        this.cultivationStatus = cultivationStatus;
+    }
+
+    public String getOwnershipType() {
+        return ownershipType;
+    }
+
+    public void setOwnershipType(String ownershipType) {
+        this.ownershipType = ownershipType;
+    }
+
+    public String getSurveyNumber() {
+        return surveyNumber;
+    }
+
+    public void setSurveyNumber(String surveyNumber) {
+        this.surveyNumber = surveyNumber;
     }
 
     // --- Soft delete getter/setter ---

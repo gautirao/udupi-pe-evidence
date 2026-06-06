@@ -652,6 +652,60 @@ class ListingCrudServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(ListingStatus.ARCHIVED.toDbValue());
     }
 
+    // ===== Agricultural land fields =====
+
+    @Test
+    void createDraft_agriculturalFields_persistedCorrectly() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "agricultural_land", "Farm Plot", "Udupi",
+                new BigDecimal("2000000"), "Rich red soil plot",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer",
+                "Borewell", "Red laterite", "Tar road", "Cultivated", "Freehold", "SRV/123/456");
+
+        assertThat(draft.getWaterSource()).isEqualTo("Borewell");
+        assertThat(draft.getSoilType()).isEqualTo("Red laterite");
+        assertThat(draft.getRoadAccess()).isEqualTo("Tar road");
+        assertThat(draft.getCultivationStatus()).isEqualTo("Cultivated");
+        assertThat(draft.getOwnershipType()).isEqualTo("Freehold");
+        assertThat(draft.getSurveyNumber()).isEqualTo("SRV/123/456");
+    }
+
+    @Test
+    void updateListing_agriculturalFields_updatedCorrectly() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("agricultural_land");
+        existing.setSoilType("Black soil");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null,
+                null, null, null, null,
+                null, null, null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null,
+                null, "Red laterite", null, null, null, "SRV/789");
+
+        assertThat(result.getSoilType()).isEqualTo("Red laterite");
+        assertThat(result.getSurveyNumber()).isEqualTo("SRV/789");
+        // Unchanged fields: waterSource, roadAccess, cultivationStatus, ownershipType remain null
+        assertThat(result.getWaterSource()).isNull();
+        assertThat(result.getRoadAccess()).isNull();
+    }
+
     @Test
     void bulkDeleteListings_allArchived_returnsZeroDeleted() {
         UUID userId = UUID.randomUUID();

@@ -29,6 +29,13 @@ interface CreateListingRequest {
   monthlyRent?: number;
   securityDepositMonths?: number;
   lockInMonths?: number;
+  // Agricultural land fields
+  waterSource?: string;
+  soilType?: string;
+  roadAccess?: string;
+  cultivationStatus?: string;
+  ownershipType?: string;
+  surveyNumber?: string;
 }
 
 // Mirrors backend UpdateRequest DTO
@@ -64,6 +71,13 @@ export interface UpdateListingRequest {
   monthlyRent?: number;
   securityDepositMonths?: number;
   lockInMonths?: number;
+  // Agricultural land fields
+  waterSource?: string;
+  soilType?: string;
+  roadAccess?: string;
+  cultivationStatus?: string;
+  ownershipType?: string;
+  surveyNumber?: string;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -111,6 +125,13 @@ export interface ListingResponse {
   earnedBadgeCount: number;
   /** Area key used for locality insights — e.g. "KA|UDUPI|MANIPAL" */
   areaKey: string | null;
+  // Agricultural land fields (null for non-agri listings)
+  waterSource: string | null;
+  soilType: string | null;
+  roadAccess: string | null;
+  cultivationStatus: string | null;
+  ownershipType: string | null;
+  surveyNumber: string | null;
 }
 
 /**
@@ -317,6 +338,13 @@ export function useDuplicateListing() {
         monthlyRent: source.monthlyRent ?? undefined,
         securityDepositMonths: source.securityDepositMonths ?? undefined,
         lockInMonths: source.lockInMonths ?? undefined,
+        // Agricultural land fields — copy when duplicating an agri listing
+        waterSource: source.waterSource ?? undefined,
+        soilType: source.soilType ?? undefined,
+        roadAccess: source.roadAccess ?? undefined,
+        cultivationStatus: source.cultivationStatus ?? undefined,
+        ownershipType: source.ownershipType ?? undefined,
+        surveyNumber: source.surveyNumber ?? undefined,
       });
     },
     onSuccess: () => {

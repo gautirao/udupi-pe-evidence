@@ -81,7 +81,9 @@ public class ListingController {
                     req.furnishingStatus(), req.washrooms(), req.parkingCount(),
                     req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
                     req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
-                    sellerType);
+                    sellerType,
+                    req.waterSource(), req.soilType(), req.roadAccess(),
+                    req.cultivationStatus(), req.ownershipType(), req.surveyNumber());
 
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
                     saved.getId(), caller.userId(), sellerType);
@@ -149,7 +151,9 @@ public class ListingController {
                     req.furnishingStatus(), req.washrooms(), req.parkingCount(),
                     req.roadFrontageFt(), req.commercialUsage(), req.numberOfUnits(),
                     req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
-                    req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared());
+                    req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared(),
+                    req.waterSource(), req.soilType(), req.roadAccess(),
+                    req.cultivationStatus(), req.ownershipType(), req.surveyNumber());
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -329,7 +333,14 @@ public class ListingController {
             Integer numberOfUnits,
             Long monthlyRent,
             Integer securityDepositMonths,
-            Integer lockInMonths
+            Integer lockInMonths,
+            // Agricultural land fields
+            String waterSource,
+            String soilType,
+            String roadAccess,
+            String cultivationStatus,
+            String ownershipType,
+            String surveyNumber
     ) {}
 
     public record UpdateRequest(
@@ -369,7 +380,14 @@ public class ListingController {
             // RERA & possession fields (RE-99)
             String possessionStatus,
             java.time.LocalDate expectedPossessionDate,
-            String approvalsDeclared
+            String approvalsDeclared,
+            // Agricultural land fields
+            String waterSource,
+            String soilType,
+            String roadAccess,
+            String cultivationStatus,
+            String ownershipType,
+            String surveyNumber
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

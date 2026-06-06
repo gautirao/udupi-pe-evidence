@@ -67,6 +67,14 @@ export default function NewListing() {
   const [securityDepositMonths, setSecurityDepositMonths] = useState('');
   const [lockInMonths, setLockInMonths] = useState('');
 
+  // Agricultural land fields
+  const [waterSource, setWaterSource] = useState('');
+  const [soilType, setSoilType] = useState('');
+  const [roadAccess, setRoadAccess] = useState('');
+  const [cultivationStatus, setCultivationStatus] = useState('');
+  const [ownershipType, setOwnershipType] = useState('');
+  const [surveyNumber, setSurveyNumber] = useState('');
+
   // Guard: allow dealer, admin, and user (owner) roles
   const role = userRole as string | null;
   if (authLoading) {
@@ -135,6 +143,12 @@ export default function NewListing() {
         monthlyRent: isRent ? intOrUndef(monthlyRent) : undefined,
         securityDepositMonths: isRent ? intOrUndef(securityDepositMonths) : undefined,
         lockInMonths: isRent ? intOrUndef(lockInMonths) : undefined,
+        waterSource: waterSource.trim() || undefined,
+        soilType: soilType.trim() || undefined,
+        roadAccess: roadAccess.trim() || undefined,
+        cultivationStatus: cultivationStatus.trim() || undefined,
+        ownershipType: ownershipType.trim() || undefined,
+        surveyNumber: surveyNumber.trim() || undefined,
       },
       {
         onSuccess: (data) => {
@@ -219,12 +233,13 @@ export default function NewListing() {
               </div>
             )}
 
-            {/* Conditional: Land Area — land, commercial_land, commercial_building, warehouse */}
+            {/* Conditional: Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
             {(propertyType === 'land' || propertyType === 'commercial_land'
-              || propertyType === 'commercial_building' || propertyType === 'warehouse') && (
+              || propertyType === 'commercial_building' || propertyType === 'warehouse'
+              || propertyType === 'agricultural_land') && (
               <AreaField
                 id="landArea"
-                propertyType="land"
+                propertyType={propertyType === 'agricultural_land' ? 'agricultural_land' : 'land'}
                 initialArea={landArea}
                 initialUnit={landAreaUnit}
                 onChange={(area, unit) => {
@@ -232,6 +247,101 @@ export default function NewListing() {
                   setLandAreaUnit(unit);
                 }}
               />
+            )}
+
+            {/* Agricultural Land Fields — shown only for agricultural_land */}
+            {propertyType === 'agricultural_land' && (
+              <div className="space-y-4" data-testid="agri-fields-section">
+                <h3 className="text-sm font-medium text-foreground">Agricultural Land Details</h3>
+
+                {/* Water Source */}
+                <div className="space-y-2">
+                  <Label htmlFor="waterSource">Water Source</Label>
+                  <Select value={waterSource} onValueChange={setWaterSource}>
+                    <SelectTrigger id="waterSource">
+                      <SelectValue placeholder="Select water source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['Borewell', 'Open well', 'Canal', 'River', 'Rain-fed', 'Other'].map(opt => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Soil Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="soilType">Soil Type</Label>
+                  <Select value={soilType} onValueChange={setSoilType}>
+                    <SelectTrigger id="soilType">
+                      <SelectValue placeholder="Select soil type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['Red laterite', 'Black cotton', 'Sandy loam', 'Clay', 'Alluvial', 'Other'].map(opt => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Road Access */}
+                <div className="space-y-2">
+                  <Label htmlFor="roadAccess">Road Access</Label>
+                  <Select value={roadAccess} onValueChange={setRoadAccess}>
+                    <SelectTrigger id="roadAccess">
+                      <SelectValue placeholder="Select road access" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['Tarred road', 'Gravel road', 'Kachcha road', 'No road access', 'Other'].map(opt => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Cultivation Status */}
+                <div className="space-y-2">
+                  <Label htmlFor="cultivationStatus">Cultivation Status</Label>
+                  <Select value={cultivationStatus} onValueChange={setCultivationStatus}>
+                    <SelectTrigger id="cultivationStatus">
+                      <SelectValue placeholder="Select cultivation status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['Cultivated', 'Fallow', 'Partially cultivated', 'Uncultivated', 'Other'].map(opt => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Ownership Type */}
+                <div className="space-y-2">
+                  <Label htmlFor="ownershipType">Ownership Type</Label>
+                  <Select value={ownershipType} onValueChange={setOwnershipType}>
+                    <SelectTrigger id="ownershipType">
+                      <SelectValue placeholder="Select ownership type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['Patta', 'Survey settlement', 'Katha', 'Revenue', 'Other'].map(opt => (
+                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Survey Number */}
+                <div className="space-y-2">
+                  <Label htmlFor="surveyNumber">Survey Number</Label>
+                  <Input
+                    id="surveyNumber"
+                    type="text"
+                    maxLength={64}
+                    placeholder="e.g. 123/4A"
+                    value={surveyNumber}
+                    onChange={(e) => setSurveyNumber(e.target.value)}
+                  />
+                </div>
+              </div>
             )}
 
             {/* Conditional: Built Area — house, apartment, commercial_building, warehouse */}

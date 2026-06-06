@@ -202,6 +202,8 @@ public class ListingResponseMapper {
                 daysOnMarket, backOnMarket, lastUpdatedAt, l.getFirstPublishedAt(),
                 l.getPossessionStatus(), l.getExpectedPossessionDate(),
                 l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
-                l.getTrustTier(), l.getAreaKey(), gallery);
+                l.getTrustTier(), l.getAreaKey(), gallery,
+                l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
+                l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber());
     }
 }

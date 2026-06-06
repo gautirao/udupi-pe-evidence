@@ -1,5 +1,6 @@
 export const PROPERTY_TYPES = [
   { value: 'land', label: 'Land' },
+  { value: 'agricultural_land', label: 'Agricultural Land' },
   { value: 'apartment', label: 'Apartment' },
   { value: 'house', label: 'House' },
   { value: 'commercial', label: 'Commercial Shop/Office' },

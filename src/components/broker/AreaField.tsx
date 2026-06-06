@@ -17,7 +17,7 @@ interface AreaChip {
   unit: string;
 }
 
-type AreaPropertyType = 'land' | 'house' | 'apartment' | 'commercial';
+type AreaPropertyType = 'land' | 'house' | 'apartment' | 'commercial' | 'agricultural_land';
 
 export interface AreaFieldProps {
   id?: string;
@@ -67,6 +67,13 @@ const CHIPS: Record<AreaPropertyType, AreaChip[]> = {
     { label: '2,000 sqft', value: 2000, unit: 'sqft' },
     { label: '3,000 sqft', value: 3000, unit: 'sqft' },
   ],
+  agricultural_land: [
+    { label: '1 acre', value: 1, unit: 'acre' },
+    { label: '2 acres', value: 2, unit: 'acre' },
+    { label: '5 acres', value: 5, unit: 'acre' },
+    { label: '10 acres', value: 10, unit: 'acre' },
+    { label: '25 acres', value: 25, unit: 'acre' },
+  ],
 };
 
 // ─── Unit options per property type ─────────────────────────────────────────
@@ -95,6 +102,13 @@ const UNIT_OPTIONS: Record<AreaPropertyType, UnitOption[]> = {
     { value: 'sqft', label: 'Sq Ft' },
     { value: 'sqm', label: 'Sq M' },
   ],
+  agricultural_land: [
+    { value: 'acre', label: 'Acres' },
+    { value: 'cent', label: 'Cents' },
+    { value: 'gunta', label: 'Guntas' },
+    { value: 'sqft', label: 'Sq Ft' },
+    { value: 'sqm', label: 'Sq M' },
+  ],
 };
 
 const DEFAULT_UNIT: Record<AreaPropertyType, string> = {
@@ -102,6 +116,7 @@ const DEFAULT_UNIT: Record<AreaPropertyType, string> = {
   house: 'sqft',
   apartment: 'sqft',
   commercial: 'sqft',
+  agricultural_land: 'acre',
 };
 
 // ─── Conversion helpers ─────────────────────────────────────────────────────
@@ -164,6 +179,13 @@ function getConversionText(value: number, unit: string): string {
       }
       break;
     }
+    case 'acre': {
+      parts.push(`= ${formatIndian(Math.round(sqft))} sqft`);
+      if (value >= 1) {
+        parts.push(`${(value * 100).toFixed(0)} cents`);
+      }
+      break;
+    }
     case 'sqm': {
       parts.push(`= ${formatIndian(Math.round(sqft))} sqft`);
       parts.push(`${(sqft / 435.6).toFixed(2)} cents`);
@@ -194,7 +216,7 @@ export function AreaField({
   const conversionId = `${fieldId}-conversions`;
 
   const defaultUnit = initialUnit ?? DEFAULT_UNIT[propertyType];
-  const defaultLabel = propertyType === 'land' ? 'Land Area' : 'Built Area';
+  const defaultLabel = (propertyType === 'land' || propertyType === 'agricultural_land') ? 'Land Area' : 'Built Area';
 
   const [text, setText] = useState(initialArea != null ? String(initialArea) : '');
   const [unit, setUnit] = useState(defaultUnit);
