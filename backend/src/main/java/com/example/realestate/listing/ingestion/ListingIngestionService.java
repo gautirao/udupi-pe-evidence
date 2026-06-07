@@ -186,6 +186,7 @@ public class ListingIngestionService {
             case WAREHOUSE -> "warehouse";
             case COMMERCIAL_LAND -> "commercial_land";
             case OTHER -> "other";
+            case AGRICULTURAL_LAND -> "agricultural_land";
         };
     }
 

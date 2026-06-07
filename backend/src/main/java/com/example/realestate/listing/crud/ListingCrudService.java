@@ -6,6 +6,7 @@ import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.geometry.PolygonBoundaryValidator;
 import com.example.realestate.listing.pricing.PriceChangeLog;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.pricing.PriceParser;
@@ -60,6 +61,7 @@ public class ListingCrudService {
     private final PriceChangeLogRepository priceChangeLogRepository;
     private final BadgeInvalidationService badgeInvalidationService;
     private final SearchOutboxWriter searchOutboxWriter;
+    private final PolygonBoundaryValidator polygonBoundaryValidator;
 
     public ListingCrudService(
             ListingRepository listingRepository,
@@ -68,7 +70,8 @@ public class ListingCrudService {
             ListingDeduplicationService listingDeduplicationService,
             PriceChangeLogRepository priceChangeLogRepository,
             BadgeInvalidationService badgeInvalidationService,
-            SearchOutboxWriter searchOutboxWriter) {
+            SearchOutboxWriter searchOutboxWriter,
+            PolygonBoundaryValidator polygonBoundaryValidator) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -76,6 +79,7 @@ public class ListingCrudService {
         this.priceChangeLogRepository = priceChangeLogRepository;
         this.badgeInvalidationService = badgeInvalidationService;
         this.searchOutboxWriter = searchOutboxWriter;
+        this.polygonBoundaryValidator = polygonBoundaryValidator;
     }
 
     /**
@@ -273,7 +277,7 @@ public class ListingCrudService {
         return updateListing(listingId, userId, isAdmin,
                 propertyType, title, locality, price, description, null, null, null, null, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -294,7 +298,7 @@ public class ListingCrudService {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -313,7 +317,7 @@ public class ListingCrudService {
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
                 landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -350,7 +354,8 @@ public class ListingCrudService {
                                  String approvalsDeclared,
                                  // Agricultural land fields
                                  String waterSource, String soilType, String roadAccess,
-                                 String cultivationStatus, String ownershipType, String surveyNumber) {
+                                 String cultivationStatus, String ownershipType, String surveyNumber,
+                                 String boundaryGeoJson) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
         // Admins may edit listings in any non-archived status (including LIVE).
@@ -418,6 +423,13 @@ public class ListingCrudService {
         if (expectedPossessionDate != null) listing.setExpectedPossessionDate(expectedPossessionDate);
         if (approvalsDeclared != null) listing.setApprovalsDeclared(approvalsDeclared);
 
+        // Polygon boundary: validate before save, persist after save
+        // Resolve the effective property type for validation (use incoming type if provided, else existing)
+        String effectivePropertyType = propertyType != null ? propertyType : listing.getPropertyType();
+        if (boundaryGeoJson != null) {
+            polygonBoundaryValidator.validate(boundaryGeoJson, effectivePropertyType);
+        }
+
         // Agricultural land fields
         if (waterSource != null) listing.setWaterSource(waterSource);
         if (soilType != null) listing.setSoilType(soilType);
@@ -455,6 +467,13 @@ public class ListingCrudService {
         }
 
         Listing saved = listingRepository.save(listing);
+
+        // Persist boundary via native SQL (after JPA save, within same @Transactional scope).
+        // Mapper re-fetches boundary via findBoundaryGeoJson — no need to set @Transient field here.
+        if (boundaryGeoJson != null) {
+            listingRepository.updateBoundary(saved.getId(), boundaryGeoJson);
+        }
+
         log.info("Updated listing listingId={} by userId={}", listingId, userId);
         searchOutboxWriter.writeEvent(
                 saved.getId(),

@@ -5,6 +5,7 @@ import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingOwnershipGuard;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
+import com.example.realestate.listing.geometry.PolygonBoundaryValidator;
 import com.example.realestate.listing.pricing.PriceChangeLog;
 import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.api.BulkDeleteResult;
@@ -31,7 +32,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -61,6 +64,9 @@ class ListingCrudServiceTest {
     @Mock
     private SearchOutboxWriter searchOutboxWriter;
 
+    @Mock
+    private PolygonBoundaryValidator polygonBoundaryValidator;
+
     private ListingCrudService crudService;
 
     @BeforeEach
@@ -68,7 +74,7 @@ class ListingCrudServiceTest {
         crudService = new ListingCrudService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 listingDeduplicationService, priceChangeLogRepository,
-                badgeInvalidationService, searchOutboxWriter);
+                badgeInvalidationService, searchOutboxWriter, polygonBoundaryValidator);
     }
 
     // --- RE-83: createDraft sets dedupe hash and flags duplicates ---
@@ -697,7 +703,7 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, "Red laterite", null, null, null, "SRV/789");
+                null, "Red laterite", null, null, null, "SRV/789", null);
 
         assertThat(result.getSoilType()).isEqualTo("Red laterite");
         assertThat(result.getSurveyNumber()).isEqualTo("SRV/789");
@@ -839,5 +845,74 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, false, null);
 
         assertThat(result.getPricePaise()).isEqualTo(600_000_000L); // 6,000,000 * 100
+    }
+
+    // ===== #1366: Polygon boundary persistence =====
+
+    @Test
+    void updateListing_withBoundary_callsUpdateBoundary() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("agricultural_land");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        doNothing().when(polygonBoundaryValidator).validate(anyString(), anyString());
+
+        String validGeoJson = "{\"type\":\"Polygon\",\"coordinates\":[[[74.0,13.0],[74.1,13.0],[74.1,13.1],[74.0,13.1],[74.0,13.0]]]}";
+
+        crudService.updateListing(
+                listingId, userId, false,
+                "agricultural_land", null, null,
+                null, null,
+                null, null, null, null,
+                null, null, null, null, null, false, null,
+                null,
+                null, null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                validGeoJson);
+
+        verify(listingRepository).updateBoundary(eq(listingId), eq(validGeoJson));
+    }
+
+    @Test
+    void updateListing_nullBoundary_doesNotCallUpdateBoundary() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("house");
+
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.updateListing(
+                listingId, userId, false,
+                "house", null, null,
+                null, null,
+                null, null, null, null,
+                null, null, null, null, null, false, null,
+                null,
+                null, null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null,
+                null, null, null, null, null, null,
+                null);  // null boundary
+
+        verify(listingRepository, never()).updateBoundary(any(), any());
     }
 }

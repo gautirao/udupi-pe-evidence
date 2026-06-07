@@ -1,6 +1,7 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
 import com.example.realestate.trust.ListingVerificationDimensionRepository;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,13 +30,15 @@ class ListingResponseMapperTest {
 
     private ListingImageRepository listingImageRepository;
     private ListingVerificationDimensionRepository dimensionRepository;
+    private ListingRepository listingRepository;
     private ListingResponseMapper mapper;
 
     @BeforeEach
     void setUp() {
         listingImageRepository = mock(ListingImageRepository.class);
         dimensionRepository = mock(ListingVerificationDimensionRepository.class);
-        mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository);
+        listingRepository = mock(ListingRepository.class);
+        mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository, listingRepository);
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -42,6 +46,8 @@ class ListingResponseMapperTest {
         // Default: no earned badges
         when(dimensionRepository.countByListingIdAndBadgeState(any(), anyString())).thenReturn(0L);
         when(dimensionRepository.findAllByListingIdInAndBadgeState(anyList(), anyString())).thenReturn(List.of());
+        // Default: no boundary (single-listing path calls findBoundaryGeoJson)
+        when(listingRepository.findBoundaryGeoJson(any())).thenReturn(Optional.empty());
     }
 
     // ==================== toResponse includes rejectionReason ====================

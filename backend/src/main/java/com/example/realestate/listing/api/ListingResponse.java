@@ -79,7 +79,9 @@ public record ListingResponse(
         String roadAccess,
         String cultivationStatus,
         String ownershipType,
-        String surveyNumber
+        String surveyNumber,
+        // Polygon boundary (null for non-agri listings and list endpoints)
+        String boundary
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";

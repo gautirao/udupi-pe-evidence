@@ -153,7 +153,8 @@ public class ListingController {
                     req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
                     req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared(),
                     req.waterSource(), req.soilType(), req.roadAccess(),
-                    req.cultivationStatus(), req.ownershipType(), req.surveyNumber());
+                    req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
+                    req.boundary());
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -163,6 +164,8 @@ public class ListingController {
         } catch (ListingStatusException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("error", e.getMessage()));
+        } catch (ListingValidationException e) {
+            return ResponseEntity.unprocessableEntity().body(Map.of("errors", e.getErrors()));
         }
     }
 
@@ -387,7 +390,8 @@ public class ListingController {
             String roadAccess,
             String cultivationStatus,
             String ownershipType,
-            String surveyNumber
+            String surveyNumber,
+            String boundary
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

@@ -10,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 import com.example.realestate.listing.pricing.PriceParser;
 import com.example.realestate.listing.workflow.ActorType;
@@ -1061,6 +1062,25 @@ public class Listing {
 
     public void setSurveyNumber(String surveyNumber) {
         this.surveyNumber = surveyNumber;
+    }
+
+    // --- Polygon boundary (transient — written/read via native SQL) ---
+
+    /**
+     * GeoJSON string representation of the agricultural plot boundary.
+     * Not persisted by JPA — written via ListingRepository.updateBoundary (ST_GeomFromGeoJSON)
+     * and populated by ListingResponseMapper via ListingRepository.findBoundaryGeoJson (ST_AsGeoJSON).
+     * Only valid for property_type = 'agricultural_land'.
+     */
+    @Transient
+    private String boundaryGeoJson;
+
+    public String getBoundaryGeoJson() {
+        return boundaryGeoJson;
+    }
+
+    public void setBoundaryGeoJson(String boundaryGeoJson) {
+        this.boundaryGeoJson = boundaryGeoJson;
     }
 
     // --- Soft delete getter/setter ---

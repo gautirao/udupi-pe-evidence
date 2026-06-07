@@ -1,6 +1,7 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
 import com.example.realestate.trust.ListingVerificationDimensionRepository;
@@ -33,11 +34,14 @@ public class ListingResponseMapper {
 
     private final ListingImageRepository listingImageRepository;
     private final ListingVerificationDimensionRepository dimensionRepository;
+    private final ListingRepository listingRepository;
 
     public ListingResponseMapper(ListingImageRepository listingImageRepository,
-                                 ListingVerificationDimensionRepository dimensionRepository) {
+                                 ListingVerificationDimensionRepository dimensionRepository,
+                                 ListingRepository listingRepository) {
         this.listingImageRepository = listingImageRepository;
         this.dimensionRepository = dimensionRepository;
+        this.listingRepository = listingRepository;
     }
 
     /**
@@ -147,17 +151,22 @@ public class ListingResponseMapper {
         List<ListingImageDTO> gallery = images.stream()
                 .map(i -> new ListingImageDTO(i.getUrl(), null, i.getPosition()))
                 .toList();
-        return build(l, rejectionReason, images, earnedBadgeCount, gallery);
+        // Fetch boundary GeoJSON for single-listing path only; skip DB call for non-agri listings
+        // to avoid an unconditional round-trip on the hot single-listing detail path (#1366).
+        String boundary = "agricultural_land".equals(l.getPropertyType())
+                ? listingRepository.findBoundaryGeoJson(l.getId()).orElse(null)
+                : null;
+        return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
         // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
         // not balloon in size. List views render from firstImageUrl + imageCount (#758).
-        return build(l, rejectionReason, images, earnedBadgeCount, List.of());
+        return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images,
-                                  int earnedBadgeCount, List<ListingImageDTO> gallery) {
+                                  int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -204,6 +213,7 @@ public class ListingResponseMapper {
                 l.getApprovalsDeclared(), reraValid, earnedBadgeCount,
                 l.getTrustTier(), l.getAreaKey(), gallery,
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
-                l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber());
+                l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
+                boundary);
     }
 }

@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
@@ -439,4 +440,40 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
             nativeQuery = true)
     int bulkUpdateLocality(@Param("fromLocality") String fromLocality,
                            @Param("toLocality") String toLocality);
+
+    // ─── Boundary geometry (PostGIS native queries — no Hibernate-Spatial dep) ───
+
+    /**
+     * Persists a GeoJSON polygon as a PostGIS geography column.
+     * Must be called after JPA save() within the same transaction.
+     */
+    @Modifying
+    @Transactional
+    @Query(nativeQuery = true,
+           value = "UPDATE property_listings SET boundary = ST_GeomFromGeoJSON(:geoJson)::geography WHERE id = :id")
+    void updateBoundary(@Param("id") UUID id, @Param("geoJson") String geoJson);
+
+    /**
+     * Reads the boundary as GeoJSON string (ST_AsGeoJSON output).
+     * Returns empty Optional when boundary is NULL.
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT ST_AsGeoJSON(boundary)::text FROM property_listings WHERE id = :id")
+    Optional<String> findBoundaryGeoJson(@Param("id") UUID id);
+
+    /**
+     * Returns true if the GeoJSON polygon is geometrically valid (ST_IsValid).
+     * Requires PostGIS extension. Called by PolygonBoundaryValidator after structural checks pass.
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT ST_IsValid(ST_GeomFromGeoJSON(:geoJson)::geometry)")
+    boolean isBoundaryGeometryValid(@Param("geoJson") String geoJson);
+
+    /**
+     * Returns the area of the polygon in square metres (ST_Area on geography type).
+     * Used to enforce the 100 km² area cap.
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT ST_Area(ST_GeomFromGeoJSON(:geoJson)::geography)")
+    double computeBoundaryAreaSqm(@Param("geoJson") String geoJson);
 }
