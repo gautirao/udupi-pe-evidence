@@ -1083,6 +1083,12 @@ export default function MapDiscovery() {
     !!urlState.schoolPicking ||
     (urlState.journey === 'area-first' && !!urlState.areaKey && !!urlState.schoolId);
 
+  // MVP2 — in the agri-first journey the school controls are not part of the flow.
+  // Hide (do not disable) the "Near a school" trigger button and the NearSchoolSheet
+  // mount so a user in agri-first cannot open the school sheet (which would call
+  // setSchoolJourney and flip the journey to school-first). Single boolean gate.
+  const isAgriJourney = urlState.journey === 'agri-first';
+
   // Issue #1157 — area-first Back wrapper. Ordering is significant (DEFECT B):
   //   1. schoolId set (area-school-combined) → backToSchoolPicking: drop schoolId +
   //      radiusKm, set schoolPicking=1, AND clear local school state (mirrors
@@ -1546,19 +1552,21 @@ export default function MapDiscovery() {
             <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
           </div>
 
-          {/* Near a school — below city select */}
-          <div className="absolute top-16 right-4 z-[1000]">
-            <Button
-              size="sm"
-              variant={selectedSchool ? 'default' : 'outline'}
-              className={selectedSchool ? 'gap-1.5 shadow-sm' : 'gap-1.5 bg-card shadow-sm'}
-              onClick={() => setNearSchoolOpen(true)}
-              aria-pressed={Boolean(urlState.schoolId || selectedSchool)}
-            >
-              <GraduationCap className="h-4 w-4" />
-              Near a school
-            </Button>
-          </div>
+          {/* Near a school — below city select. Hidden in the agri-first journey (MVP2). */}
+          {!isAgriJourney && (
+            <div className="absolute top-16 right-4 z-[1000]">
+              <Button
+                size="sm"
+                variant={selectedSchool ? 'default' : 'outline'}
+                className={selectedSchool ? 'gap-1.5 shadow-sm' : 'gap-1.5 bg-card shadow-sm'}
+                onClick={() => setNearSchoolOpen(true)}
+                aria-pressed={Boolean(urlState.schoolId || selectedSchool)}
+              >
+                <GraduationCap className="h-4 w-4" />
+                Near a school
+              </Button>
+            </div>
+          )}
 
           {/* City / area listing count — bottom-right (Issue #1152) */}
           {discoverBadge.visible && discoverBadge.count != null && (
@@ -1708,17 +1716,22 @@ export default function MapDiscovery() {
           ) : null}
         />
       </div>
-      <NearSchoolSheet
-        open={nearSchoolOpen}
-        onOpenChange={setNearSchoolOpen}
-        selectedSchool={selectedSchool}
-        onSchoolSelect={wrappedHandleSchoolSelect}
-        radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
-        onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
-        boardFilter={schoolBoardFilter}
-        onBoardFilterChange={handleBoardFilterChange}
-        city={isCityValid ? city : null}
-      />
+      {/* NearSchoolSheet — not mounted in the agri-first journey (MVP2): structurally
+          prevents the sheet (which calls setSchoolJourney on select) from flipping
+          agri-first to school-first. */}
+      {!isAgriJourney && (
+        <NearSchoolSheet
+          open={nearSchoolOpen}
+          onOpenChange={setNearSchoolOpen}
+          selectedSchool={selectedSchool}
+          onSchoolSelect={wrappedHandleSchoolSelect}
+          radiusKm={filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM}
+          onRadiusChange={(km) => handleFiltersChange({ ...filters, schoolRadiusKm: km })}
+          boardFilter={schoolBoardFilter}
+          onBoardFilterChange={handleBoardFilterChange}
+          city={isCityValid ? city : null}
+        />
+      )}
     </AppLayout>
   );
 }

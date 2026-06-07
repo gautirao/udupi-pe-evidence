@@ -11,7 +11,7 @@
  *   zoom       – integer zoom level   (debounced replace)
  *
  * Journey params:
- *   journey    – active journey type: "area-first" | "school-first" (absent = no journey)
+ *   journey    – active journey type: "area-first" | "school-first" | "agri-first" (absent = no journey)
  *   groupId    – area-group slug selected for area-first journey (absent when no group)
  *
  * Filter params:
@@ -54,7 +54,7 @@ import type { DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /** Journey type — mutually exclusive modes for the right panel. Absent = no active journey. */
-export type DiscoverJourney = 'area-first' | 'school-first';
+export type DiscoverJourney = 'area-first' | 'school-first' | 'agri-first';
 
 export interface DiscoverViewport {
   lat: number;
@@ -417,7 +417,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // journey: validate against allowed values; unknown values are treated as null
   const rawJourney = urlParams.get('journey');
   const journey: DiscoverJourney | null =
-    rawJourney === 'area-first' || rawJourney === 'school-first' ? rawJourney : null;
+    rawJourney === 'area-first' || rawJourney === 'school-first' || rawJourney === 'agri-first'
+      ? rawJourney
+      : null;
 
   const groupId = urlParams.get('groupId');
 

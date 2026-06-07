@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2, Sprout } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
@@ -9,6 +9,7 @@ import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
@@ -227,6 +228,37 @@ export function DiscoverRightPanel({
       case 'guided-entry':
         return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
 
+      case 'agri-landing':
+        // MVP2 — static no-area landing for the agricultural-land journey. Renders a
+        // placeholder prompting the user to pick an area. Intentionally has NO data props
+        // and triggers NO listings/markers/counts fetch (those arrive in #1371–#1374).
+        return (
+          <>
+            <PanelHeader
+              title="Agricultural land"
+              journey="agri-first"
+              onStartOver={onStartOver}
+            />
+            <div
+              data-testid="agri-landing-panel"
+              className="flex flex-1 items-center justify-center p-8"
+            >
+              <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+                <div className="rounded-full bg-green-500/10 dark:bg-green-400/10 p-3">
+                  <Sprout
+                    className="h-8 w-8 text-green-600 dark:text-green-400"
+                    aria-hidden="true"
+                  />
+                </div>
+                <h2 className="text-base font-semibold">Search agricultural land</h2>
+                <p className="text-sm text-muted-foreground">
+                  Select an area on the map to explore farmland and agricultural plots.
+                </p>
+              </div>
+            </div>
+          </>
+        );
+
       case 'area-groups-landing':
         return (
           <AreaGroupsLandingPanel
@@ -370,6 +402,16 @@ export function DiscoverRightPanel({
             activeContextChips={activeContextChips}
           />
         );
+
+      default: {
+        // Exhaustiveness net (R6): the switch had no default, so a future
+        // DiscoverPanelContent member with no case would silently render nothing
+        // with NO tsc error. This compile-time guard forces every member to be
+        // handled — if a new member is added without a case, `panelContent` is no
+        // longer `never` here and tsc fails.
+        const _exhaustive: never = panelContent;
+        return _exhaustive;
+      }
     }
   }
 

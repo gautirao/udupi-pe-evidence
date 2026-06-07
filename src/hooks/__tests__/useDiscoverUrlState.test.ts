@@ -20,7 +20,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useDiscoverUrlState } from '../useDiscoverUrlState';
@@ -662,6 +662,14 @@ describe('useDiscoverUrlState — journey and groupId from URL', () => {
     expect(result.current[0].journey).toBe('school-first');
   });
 
+  // MVP2 AC2 — agri-first is an accepted journey value (NOT coerced to null).
+  it('reads journey=agri-first from URL (not coerced to null)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first'),
+    });
+    expect(result.current[0].journey).toBe('agri-first');
+  });
+
   it('returns null journey when param is absent', () => {
     const { result } = renderHook(() => useDiscoverUrlState(), {
       wrapper: wrapper('/discover?city=udupi'),
@@ -864,6 +872,58 @@ describe('useDiscoverUrlState — setJourney', () => {
     });
 
     expect(result.current[0].journey).toBeNull();
+  });
+
+  // MVP2 AC2/AC6 — setJourney('agri-first') writes ?journey=agri-first and
+  // round-trips (proves the coercion allow-list accepts it on read-back).
+  it('sets journey=agri-first and round-trips', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setJourney('agri-first');
+    });
+
+    expect(result.current[0].journey).toBe('agri-first');
+  });
+
+  // MVP2 AC6 — entering agri-first is a PUSH history entry, so a single browser
+  // Back returns to the pre-agri state (journey absent). Uses a history-tracking
+  // wrapper that observes the MemoryRouter location stack via useLocation.
+  it('entering agri-first is a PUSH (Back returns to no-journey)', () => {
+    const locations: string[] = [];
+    function PushWrapper({ children }: { children: React.ReactNode }) {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      function LocationProbe() {
+        const loc = useLocation();
+        locations.push(loc.search);
+        return null;
+      }
+      return React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ['/discover?city=udupi'] },
+          React.createElement(LocationProbe, null),
+          children,
+        ),
+      );
+    }
+
+    const { result } = renderHook(() => useDiscoverUrlState(), { wrapper: PushWrapper });
+
+    act(() => {
+      result.current[1].setJourney('agri-first');
+    });
+
+    // A new history entry was pushed (search changed from no-journey to agri-first),
+    // and the pre-agri entry (no journey param) is preserved in the stack — the
+    // hallmark of a PUSH (a REPLACE would discard the prior entry).
+    expect(result.current[0].journey).toBe('agri-first');
+    expect(locations.some((s) => !s.includes('journey='))).toBe(true);
+    expect(locations.some((s) => s.includes('journey=agri-first'))).toBe(true);
   });
 });
 

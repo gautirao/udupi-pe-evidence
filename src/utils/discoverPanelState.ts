@@ -20,6 +20,7 @@ import type { DiscoverUrlState } from '../hooks/useDiscoverUrlState';
 
 export type DiscoverPanelContent =
   | 'guided-entry'
+  | 'agri-landing'
   | 'area-groups-landing'
   | 'area-selection'
   | 'area-selected'
@@ -44,6 +45,13 @@ export type DiscoverPanelContent =
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
   const { journey, areaKey, schoolId, groupId, schoolPicking } = urlState;
+
+  // MVP2 — agri-first is a static no-area landing. Checked FIRST (before every other
+  // branch, including the area/school cold-load inferences below) so a stray areaKey /
+  // schoolId / groupId in the URL can never make agri fall through to another panel.
+  if (journey === 'agri-first') {
+    return 'agri-landing';
+  }
 
   if (journey === 'school-first') {
     if (areaKey && schoolId) {

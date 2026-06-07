@@ -7,6 +7,7 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 const JOURNEY_LABELS: Record<DiscoverJourney, string> = {
   'area-first': 'By area',
   'school-first': 'By school',
+  'agri-first': 'Agricultural land',
 };
 
 const JOURNEY_PILL_CLASSES: Record<DiscoverJourney, string> = {
@@ -14,6 +15,8 @@ const JOURNEY_PILL_CLASSES: Record<DiscoverJourney, string> = {
     'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
   'school-first':
     'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300',
+  'agri-first':
+    'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-300',
 };
 
 interface PanelHeaderProps {

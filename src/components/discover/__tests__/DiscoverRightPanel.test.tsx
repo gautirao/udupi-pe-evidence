@@ -44,6 +44,33 @@ describe('DiscoverRightPanel', () => {
     expect(screen.getByTestId('journey-card-school-first')).toBeInTheDocument();
   });
 
+  it('shows the static agri-landing placeholder when panelContent="agri-landing"', () => {
+    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="agri-landing" areas={[]} />);
+    // Static placeholder is present...
+    expect(screen.getByTestId('agri-landing-panel')).toBeInTheDocument();
+    expect(screen.getByText('Search agricultural land')).toBeInTheDocument();
+    expect(
+      screen.getByText(/select an area on the map to explore farmland/i),
+    ).toBeInTheDocument();
+  });
+
+  it('agri-landing renders NO listing/marker/count content (static, no fetch)', () => {
+    // Pass listing-ish props that the panel must ignore in agri-landing mode.
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-landing"
+        areas={[makeArea('k1', 'Manipal', 42)]}
+        areaListings={[{ id: 'l1' } as unknown as DiscoverCityListingItem]}
+        isLoadingListings={false}
+      />,
+    );
+    // No listing cards, no skeletons — the placeholder is purely static.
+    expect(screen.queryByTestId('listing-card')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('listing-skeleton')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('quick-select-chip')).not.toBeInTheDocument();
+  });
+
   it('does not show quick-select chips (removed in A1)', () => {
     const areas = [
       makeArea('k1', 'Manipal', 42),

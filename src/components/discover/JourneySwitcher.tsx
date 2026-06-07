@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, GraduationCap } from 'lucide-react';
+import { Building2, GraduationCap, Sprout } from 'lucide-react';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 
 interface JourneySwitcherProps {
@@ -44,6 +44,26 @@ export function JourneySwitcher({ onSelectJourney }: JourneySwitcherProps) {
             <p className="text-sm font-semibold text-foreground">Search by school area</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               Find homes near your preferred schools
+            </p>
+          </div>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        aria-label="Search agricultural land"
+        onClick={() => onSelectJourney('agri-first')}
+        className="w-full text-left rounded-xl border border-border bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/40 dark:to-green-900/30 hover:from-green-100 hover:to-green-200 dark:hover:from-green-900/50 dark:hover:to-green-800/40 p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        data-testid="journey-card-agri-first"
+      >
+        <div className="flex items-start gap-3">
+          <div className="rounded-lg bg-green-500/10 dark:bg-green-400/10 p-2 mt-0.5 shrink-0">
+            <Sprout className="h-5 w-5 text-green-600 dark:text-green-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Search Agricultural Land</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Explore farmland and agricultural plots by area
             </p>
           </div>
         </div>
