@@ -1754,6 +1754,86 @@ class ListingWorkflowServiceTest {
         verify(statusHistoryRepository, never()).save(any());
     }
 
+    // ===== #1368: agricultural_land submit-gate (mirror of ListingTransitionPolicy) =====
+    // policy is mocked here, so these exercise ListingWorkflowService's OWN
+    // validateForSubmission (the mirror file under test) via approveScrapedListing.
+
+    @Test
+    void approveScrapedListing_completeAgriculturalLand_succeeds() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("agricultural_land");
+        listing.setLandArea(BigDecimal.valueOf(5));
+        listing.setLandAreaUnit("acre");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+    }
+
+    @Test
+    void approveScrapedListing_agriculturalLandMissingLandArea_throwsListingIncomplete() {
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("agricultural_land");
+        // landArea + landAreaUnit deliberately omitted
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+
+        assertThatThrownBy(() -> workflowService.approveScrapedListing(listingId, adminId))
+                .isInstanceOf(ListingLifecycleException.class)
+                .satisfies(ex -> assertThat(((ListingLifecycleException) ex).getCode())
+                        .isEqualTo(ListingErrorCode.LISTING_INCOMPLETE));
+
+        verify(listingRepository, never()).save(any());
+    }
+
+    @Test
+    void approveScrapedListing_priorType_house_stillSubmittable() {
+        // Guard against accidental replacement of the SUBMITTABLE set: a prior
+        // type (house) must still approve through the same code path.
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId); // house
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+    }
+
+    @Test
+    void approveScrapedListing_priorType_land_stillSubmittable() {
+        // land is a prior submittable type with the same land-area rule agri now mirrors.
+        UUID listingId = UUID.randomUUID();
+        UUID adminId = UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+
+        Listing listing = createCompleteListing(listingId, ownerId);
+        listing.setPropertyType("land");
+        listing.setLandArea(BigDecimal.valueOf(5));
+        listing.setLandAreaUnit("acre");
+
+        when(listingRepository.findById(listingId)).thenReturn(java.util.Optional.of(listing));
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing result = workflowService.approveScrapedListing(listingId, adminId);
+
+        assertThat(result.getStatus()).isEqualTo(ListingStatus.LIVE.toDbValue());
+    }
+
     @Test
     void approveScrapedListing_wrongStatus_throwsPolicyException() {
         UUID listingId = UUID.randomUUID();

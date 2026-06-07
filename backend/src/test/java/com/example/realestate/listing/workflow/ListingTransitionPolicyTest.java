@@ -536,6 +536,79 @@ class ListingTransitionPolicyTest {
     }
 
     // -----------------------------------------------------------------------
+    // Submit-gate fix (#1368): agricultural_land is submittable + has a
+    // land-area completeness rule mirroring "land".
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("agricultural_land submit-gate")
+    class AgriculturalLandSubmitGate {
+
+        @Test
+        @DisplayName("SUBMITTABLE_PROPERTY_TYPES contains agricultural_land")
+        void submittableSet_containsAgriculturalLand() {
+            assertThat(ListingTransitionPolicy.SUBMITTABLE_PROPERTY_TYPES)
+                    .contains("agricultural_land");
+        }
+
+        @Test
+        @DisplayName("SUBMITTABLE_PROPERTY_TYPES still contains all 7 prior types (no accidental replacement)")
+        void submittableSet_retainsAllPriorTypes() {
+            assertThat(ListingTransitionPolicy.SUBMITTABLE_PROPERTY_TYPES)
+                    .contains("land", "house", "apartment", "commercial",
+                            "commercial_building", "warehouse", "commercial_land");
+        }
+
+        @Test
+        @DisplayName("complete agricultural_land listing passes completeness")
+        void completeAgriListing_doesNotThrow() {
+            Listing listing = completeAgriListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("agricultural_land missing landArea -> completeness error")
+        void agriMissingLandArea_throwsValidationException() {
+            Listing listing = completeAgriListing(UUID.randomUUID());
+            listing.setLandArea(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("land_area")));
+        }
+
+        @Test
+        @DisplayName("agricultural_land missing landAreaUnit -> completeness error")
+        void agriMissingLandAreaUnit_throwsValidationException() {
+            Listing listing = completeAgriListing(UUID.randomUUID());
+            listing.setLandAreaUnit(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("land_area_unit")));
+        }
+
+        private Listing completeAgriListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("agricultural_land");
+            l.setPrice(new BigDecimal("5000000"));
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            l.setLandArea(new BigDecimal("5"));
+            l.setLandAreaUnit("acre");
+            return l;
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Guard: guardFastRestore
     // -----------------------------------------------------------------------
 
