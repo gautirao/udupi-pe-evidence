@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.listing.area.AreaNormalizer;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
@@ -7,6 +8,7 @@ import com.example.realestate.listing.image.ListingImageRepository;
 import com.example.realestate.trust.ListingVerificationDimensionRepository;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
@@ -153,20 +155,32 @@ public class ListingResponseMapper {
                 .toList();
         // Fetch boundary GeoJSON for single-listing path only; skip DB call for non-agri listings
         // to avoid an unconditional round-trip on the hot single-listing detail path (#1366).
-        String boundary = "agricultural_land".equals(l.getPropertyType())
+        boolean isAgri = "agricultural_land".equals(l.getPropertyType());
+        String boundary = isAgri
                 ? listingRepository.findBoundaryGeoJson(l.getId()).orElse(null)
                 : null;
-        return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary);
+        // Derive approximate acreage from the saved boundary geography under the SAME agri +
+        // single-listing gate (#1367). Pure read: distinct from the broker-declared landArea,
+        // never reads or mutates it. ST_Area on the geography column returns m² directly.
+        BigDecimal computedAreaAcres = isAgri
+                ? AreaNormalizer.sqmToAcres(
+                        listingRepository.findBoundaryAreaSqm(l.getId())
+                                .map(BigDecimal::valueOf)
+                                .orElse(null))
+                : null;
+        return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary, computedAreaAcres);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
         // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
         // not balloon in size. List views render from firstImageUrl + imageCount (#758).
-        return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null);
+        // computedAreaAcres stays null so the hot list path takes NO extra DB call (#1367).
+        return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null, null);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images,
-                                  int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary) {
+                                  int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary,
+                                  BigDecimal computedAreaAcres) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -214,6 +228,6 @@ public class ListingResponseMapper {
                 l.getTrustTier(), l.getAreaKey(), gallery,
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
                 l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
-                boundary);
+                boundary, computedAreaAcres);
     }
 }

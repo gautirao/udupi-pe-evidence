@@ -462,6 +462,18 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
     Optional<String> findBoundaryGeoJson(@Param("id") UUID id);
 
     /**
+     * Reads the saved boundary area in square metres via ST_Area on the geography column.
+     *
+     * <p>{@code boundary} is a PostGIS {@code geography} column (see {@link #updateBoundary}),
+     * so {@code ST_Area(boundary)} returns m² directly — NO {@code ::geometry} cast (which would
+     * return degrees²). Returns empty Optional when boundary is NULL. Used by the read path to
+     * derive an approximate acreage, distinct from the broker-declared landArea (#1367).
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT ST_Area(boundary) FROM property_listings WHERE id = :id")
+    Optional<Double> findBoundaryAreaSqm(@Param("id") UUID id);
+
+    /**
      * Returns true if the GeoJSON polygon is geometrically valid (ST_IsValid).
      * Requires PostGIS extension. Called by PolygonBoundaryValidator after structural checks pass.
      */

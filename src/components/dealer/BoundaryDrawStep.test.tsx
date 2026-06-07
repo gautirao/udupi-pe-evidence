@@ -61,6 +61,9 @@ function renderStep(
     center: [number, number];
     onSave: ReturnType<typeof vi.fn>;
     onSkip: ReturnType<typeof vi.fn>;
+    declaredArea: number | null;
+    declaredUnit: string | null;
+    computedAreaAcres: number | null;
   }> = {},
 ) {
   const onSave = overrides.onSave ?? vi.fn();
@@ -71,6 +74,9 @@ function renderStep(
       center={overrides.center ?? DEFAULT_CENTER}
       onSave={onSave}
       onSkip={onSkip}
+      declaredArea={overrides.declaredArea}
+      declaredUnit={overrides.declaredUnit}
+      computedAreaAcres={overrides.computedAreaAcres}
     />,
   );
   return { ...result, onSave, onSkip };
@@ -195,6 +201,50 @@ describe('BoundaryDrawStep', () => {
   it('renders map container', () => {
     renderStep();
     expect(screen.getByTestId('map-container')).toBeInTheDocument();
+  });
+
+  // ── Declared vs boundary-derived area (issue #1367) ──────────────────────────
+
+  it('shows both declared and approx-from-boundary labels when computedAreaAcres present', () => {
+    renderStep({ declaredArea: 5, declaredUnit: 'acre', computedAreaAcres: 1.62 });
+
+    const declared = screen.getByTestId('declared-area-label');
+    expect(declared).toBeInTheDocument();
+    expect(declared).toHaveTextContent('Declared: 5 acre');
+
+    const computed = screen.getByTestId('computed-area-label');
+    expect(computed).toBeInTheDocument();
+    expect(computed).toHaveTextContent('Approx. from boundary: 1.62 acres');
+
+    // Existing disclaimer must remain intact
+    expect(screen.getByTestId('boundary-disclaimer')).toBeInTheDocument();
+  });
+
+  it('shows only declared label (no approx line) when computedAreaAcres is null', () => {
+    renderStep({ declaredArea: 3, declaredUnit: 'acre', computedAreaAcres: null });
+
+    expect(screen.getByTestId('declared-area-label')).toHaveTextContent('Declared: 3 acre');
+    expect(screen.queryByTestId('computed-area-label')).not.toBeInTheDocument();
+
+    // No undefined/NaN leakage in the comparison block
+    const comparison = screen.getByTestId('area-comparison');
+    expect(comparison).not.toHaveTextContent(/undefined/i);
+    expect(comparison).not.toHaveTextContent(/NaN/i);
+  });
+
+  it('renders "0.00 acres" when computedAreaAcres is 0 (distinct from null)', () => {
+    renderStep({ declaredArea: 2, declaredUnit: 'acre', computedAreaAcres: 0 });
+
+    const computed = screen.getByTestId('computed-area-label');
+    expect(computed).toBeInTheDocument();
+    expect(computed).toHaveTextContent('Approx. from boundary: 0.00 acres');
+  });
+
+  it('omits the area-comparison block entirely when no declared and no computed area', () => {
+    renderStep();
+    expect(screen.queryByTestId('area-comparison')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('declared-area-label')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('computed-area-label')).not.toBeInTheDocument();
   });
 
   it('clears drawn boundary when DrawControl fires onPolygonCleared', () => {

@@ -136,6 +136,12 @@ export interface ListingResponse {
   surveyNumber: string | null;
   /** Stringified GeoJSON Polygon from backend; absent/null for non-agri listings */
   boundary?: string | null;
+  /**
+   * Boundary-derived area in acres (ST_Area, 2dp) for agri listings with a saved
+   * boundary; absent/null when no boundary or non-agri. Distinct from broker-declared
+   * landArea/landAreaUnit — never auto-synced.
+   */
+  computedAreaAcres?: number | null;
 }
 
 /**

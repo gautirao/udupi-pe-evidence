@@ -135,7 +135,7 @@ class PublicListingControllerTest {
                             new ListingImageDTO("https://cdn.example.com/img-a.jpg", null, 0),
                             new ListingImageDTO("https://cdn.example.com/img-b.jpg", null, 1),
                             new ListingImageDTO("https://cdn.example.com/img-c.jpg", null, 2)),
-                    null, null, null, null, null, null, l.getBoundaryGeoJson());
+                    null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
         });
 
         // Teaser mapper — single listing

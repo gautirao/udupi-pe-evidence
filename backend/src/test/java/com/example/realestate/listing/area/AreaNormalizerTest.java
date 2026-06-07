@@ -22,6 +22,75 @@ class AreaNormalizerTest {
     private static final BigDecimal ROUND_TRIP_TOLERANCE = new BigDecimal("0.0001");
 
     @Nested
+    @DisplayName("sqmToAcres - boundary-derived acreage (#1367)")
+    class SqmToAcresTests {
+
+        @Test
+        @DisplayName("1 acre worth of m² (4046.8564224) -> 1.00")
+        void exactlyOneAcre() {
+            BigDecimal result = AreaNormalizer.sqmToAcres(new BigDecimal("4046.8564224"));
+            // expected vs actual: expected 1.00
+            assertThat(result).isEqualByComparingTo(new BigDecimal("1.00"));
+            assertThat(result.scale()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("10000 m² -> 2.47 acres (rounded HALF_UP @ 2dp)")
+        void tenThousandSqm() {
+            BigDecimal result = AreaNormalizer.sqmToAcres(new BigDecimal("10000"));
+            // 10000 / 4046.8564224 = 2.471053... -> 2.47
+            // expected vs actual: expected 2.47
+            assertThat(result).isEqualByComparingTo(new BigDecimal("2.47"));
+            assertThat(result.scale()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("10 acres worth of m² (40468.564224) -> 10.00")
+        void tenAcres() {
+            BigDecimal result = AreaNormalizer.sqmToAcres(new BigDecimal("40468.564224"));
+            // expected vs actual: expected 10.00
+            assertThat(result).isEqualByComparingTo(new BigDecimal("10.00"));
+            assertThat(result.scale()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("0 m² -> 0.00")
+        void zeroSqm() {
+            BigDecimal result = AreaNormalizer.sqmToAcres(BigDecimal.ZERO);
+            // expected vs actual: expected 0.00
+            assertThat(result).isEqualByComparingTo(new BigDecimal("0.00"));
+            assertThat(result.scale()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("HALF_UP rounding boundary: midpoint rounds up")
+        void halfUpRoundsUp() {
+            // Pick an input whose 3rd decimal of acres is exactly 5 so HALF_UP must round up.
+            // acres = sqm / 4046.8564224. Target acres = 1.005 (exact midpoint) ->
+            // sqm = 1.005 * 4046.8564224 = 4067.090704512 -> acres 1.005 -> HALF_UP -> 1.01
+            BigDecimal result = AreaNormalizer.sqmToAcres(new BigDecimal("4067.090704512"));
+            // expected vs actual: expected 1.01 (1.005 rounds UP, not down)
+            assertThat(result).isEqualByComparingTo(new BigDecimal("1.01"));
+            assertThat(result.scale()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("1.0 m² style input yields scale-2 result (1.0 -> 1.00 shape)")
+        void resultAlwaysScaleTwo() {
+            BigDecimal result = AreaNormalizer.sqmToAcres(new BigDecimal("4046.8564224"));
+            // 1.0 must be represented as scale-2 (1.00) for clean 2dp JSON
+            assertThat(result.scale()).isEqualTo(2);
+            assertThat(result.toPlainString()).isEqualTo("1.00");
+        }
+
+        @Test
+        @DisplayName("null input -> null")
+        void nullInput() {
+            assertThat(AreaNormalizer.sqmToAcres(null)).isNull();
+        }
+    }
+
+    @Nested
     @DisplayName("normalize - SQM input")
     class NormalizeSqmTests {
 

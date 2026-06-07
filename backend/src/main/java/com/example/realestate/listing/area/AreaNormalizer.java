@@ -26,6 +26,10 @@ public final class AreaNormalizer {
     private static final BigDecimal SQFT_PER_GUNTA = new BigDecimal("1089");
     // 1 acre = 43560 sq ft (exact)
     private static final BigDecimal SQFT_PER_ACRE = new BigDecimal("43560");
+    // 1 acre = 4046.8564224 sq m (exact, international acre)
+    private static final BigDecimal SQM_PER_ACRE = new BigDecimal("4046.8564224");
+    // Scale for computed (boundary-derived) acreage exposed on the read path (#1367)
+    private static final int ACRES_SCALE = 2;
 
     // Derived: sqm per cent = sqft_per_cent / sqft_per_sqm
     private static final BigDecimal SQM_PER_CENT = SQFT_PER_CENT.divide(SQFT_PER_SQM, 20, RoundingMode.HALF_UP);
@@ -128,6 +132,23 @@ public final class AreaNormalizer {
         listing.setAreaCent(normalized.areaCent());
         listing.setPricePerCentPaise(
                 computePricePerCentPaise(listing.getPricePaise(), normalized.areaCent()));
+    }
+
+    /**
+     * Converts a boundary area in square metres to acres, rounded to exactly 2 decimals (HALF_UP).
+     *
+     * <p>Pure derive-on-read helper for the boundary-derived {@code computedAreaAcres} field (#1367).
+     * Distinct from the {@link #normalize(BigDecimal, String)} enum path — does NOT touch any
+     * broker-declared area unit. Result scale is always 2 (e.g. 1.0 → 1.00).
+     *
+     * @param areaSqm the area in square metres (typically from {@code ST_Area} on a geography column)
+     * @return acreage at scale 2, or null when input is null
+     */
+    public static BigDecimal sqmToAcres(BigDecimal areaSqm) {
+        if (areaSqm == null) {
+            return null;
+        }
+        return areaSqm.divide(SQM_PER_ACRE, ACRES_SCALE, RoundingMode.HALF_UP);
     }
 
     /**

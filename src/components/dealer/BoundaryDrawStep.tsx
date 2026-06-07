@@ -15,6 +15,15 @@ interface BoundaryDrawStepProps {
   onSave: (coords: [number, number][]) => void;
   /** Called when broker skips boundary drawing (boundary remains unchanged). */
   onSkip: () => void;
+  /** Broker-declared land area (independent of the boundary; never auto-synced). */
+  declaredArea?: number | null;
+  /** Unit for the declared land area (e.g. 'acre', 'cent'). */
+  declaredUnit?: string | null;
+  /**
+   * Boundary-derived area in acres (ST_Area, 2dp) from the backend. When null/absent,
+   * the approximate line is hidden. Distinct from declaredArea — never collapsed into it.
+   */
+  computedAreaAcres?: number | null;
 }
 
 /**
@@ -34,6 +43,9 @@ export function BoundaryDrawStep({
   center,
   onSave,
   onSkip,
+  declaredArea,
+  declaredUnit,
+  computedAreaAcres,
 }: BoundaryDrawStepProps) {
   const [drawnCoords, setDrawnCoords] = useState<[number, number][]>([]);
 
@@ -80,6 +92,24 @@ export function BoundaryDrawStep({
           purchase.
         </p>
       </div>
+
+      {/* Declared vs boundary-derived area — clearly distinct, never auto-synced */}
+      {(declaredArea != null || computedAreaAcres != null) && (
+        <div className="space-y-1 text-sm" data-testid="area-comparison">
+          {declaredArea != null && (
+            <p className="text-foreground" data-testid="declared-area-label">
+              <span className="font-medium">Declared:</span> {declaredArea}
+              {declaredUnit ? ` ${declaredUnit}` : ''}
+            </p>
+          )}
+          {computedAreaAcres != null && (
+            <p className="text-muted-foreground" data-testid="computed-area-label">
+              <span className="font-medium">Approx. from boundary:</span>{' '}
+              {computedAreaAcres.toFixed(2)} acres
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Guidance / status text */}
       {!hasCoords && (

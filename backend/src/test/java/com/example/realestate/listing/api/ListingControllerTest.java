@@ -136,7 +136,7 @@ class ListingControllerTest {
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     l.getTrustTier(), l.getAreaKey(), java.util.List.of(),
-                    null, null, null, null, null, null, l.getBoundaryGeoJson());
+                    null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
         });
         // Batch variant: delegate each listing through the single-listing stub.
         when(listingResponseMapper.toResponseList(any())).thenAnswer(inv -> {

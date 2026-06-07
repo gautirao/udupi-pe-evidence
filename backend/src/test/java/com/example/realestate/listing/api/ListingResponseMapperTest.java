@@ -19,6 +19,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -48,6 +50,8 @@ class ListingResponseMapperTest {
         when(dimensionRepository.findAllByListingIdInAndBadgeState(anyList(), anyString())).thenReturn(List.of());
         // Default: no boundary (single-listing path calls findBoundaryGeoJson)
         when(listingRepository.findBoundaryGeoJson(any())).thenReturn(Optional.empty());
+        // Default: no boundary area (single-listing agri path calls findBoundaryAreaSqm)
+        when(listingRepository.findBoundaryAreaSqm(any())).thenReturn(Optional.empty());
     }
 
     // ==================== toResponse includes rejectionReason ====================
@@ -470,6 +474,81 @@ class ListingResponseMapperTest {
                 "reraNumber", "contactPhone", "createdBy");
     }
 
+    // ==================== #1367: computedAreaAcres (derive-on-read) ====================
+
+    @Test
+    void toResponse_agriWithBoundary_setsComputedAreaAcresAt2dp() {
+        Listing l = buildAgriListing("LIVE");
+        // 10000 m² -> 10000 / 4046.8564224 = 2.471... acres -> 2.47 @ 2dp
+        when(listingRepository.findBoundaryAreaSqm(l.getId()))
+                .thenReturn(Optional.of(10000.0));
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.computedAreaAcres()).isEqualByComparingTo(new BigDecimal("2.47"));
+        assertThat(response.computedAreaAcres().scale()).isEqualTo(2);
+    }
+
+    @Test
+    void toResponse_agriWithoutBoundary_computedAreaAcresIsNull() {
+        Listing l = buildAgriListing("LIVE");
+        when(listingRepository.findBoundaryAreaSqm(l.getId()))
+                .thenReturn(Optional.empty());
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.computedAreaAcres()).isNull();
+    }
+
+    @Test
+    void toResponse_nonAgri_computedAreaAcresNull_andAreaReadNeverInvoked() {
+        Listing l = buildListing("LIVE"); // propertyType = "land" (non-agri)
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.computedAreaAcres()).isNull();
+        // Hot path must take NO extra DB call for non-agri listings.
+        verify(listingRepository, never()).findBoundaryAreaSqm(any());
+    }
+
+    @Test
+    void toResponseList_batchPath_computedAreaAcresAlwaysNull() {
+        Listing agri = buildAgriListing("LIVE");
+        // Even if a boundary area exists, the batch path must not fetch or populate it.
+        when(listingRepository.findBoundaryAreaSqm(any()))
+                .thenReturn(Optional.of(10000.0));
+
+        List<ListingResponse> responses = mapper.toResponseList(List.of(agri));
+
+        assertThat(responses).hasSize(1);
+        assertThat(responses.get(0).computedAreaAcres()).isNull();
+        // List/batch path must take NO extra DB call.
+        verify(listingRepository, never()).findBoundaryAreaSqm(any());
+    }
+
+    @Test
+    void toResponse_computedAreaAcres_isDistinctFromDeclaredLandArea_andDoesNotMutateListing() {
+        Listing l = buildAgriListing("LIVE");
+        // Broker-declared landArea (independent of the boundary-derived value).
+        l.setLandArea(new BigDecimal("3.50"));
+        l.setLandAreaUnit("acre");
+        BigDecimal declaredBefore = l.getLandArea();
+        String declaredUnitBefore = l.getLandAreaUnit();
+        // 4046.8564224 m² -> exactly 1.00 acre computed; clearly != declared 3.50.
+        when(listingRepository.findBoundaryAreaSqm(l.getId()))
+                .thenReturn(Optional.of(4046.8564224));
+
+        ListingResponse response = mapper.toResponse(l);
+
+        // Declared and computed are distinct numeric fields, side by side.
+        assertThat(response.landArea()).isEqualByComparingTo(new BigDecimal("3.50"));
+        assertThat(response.computedAreaAcres()).isEqualByComparingTo(new BigDecimal("1.00"));
+        assertThat(response.computedAreaAcres()).isNotEqualByComparingTo(response.landArea());
+        // The mapper must NOT mutate the declared landArea / unit on the entity.
+        assertThat(l.getLandArea()).isEqualByComparingTo(declaredBefore);
+        assertThat(l.getLandAreaUnit()).isEqualTo(declaredUnitBefore);
+    }
+
     // ==================== Helper ====================
 
     private Listing buildListing(String status) {
@@ -482,6 +561,12 @@ class ListingResponseMapperTest {
         l.setPrice(new BigDecimal("5000000"));
         l.setCreatedAt(OffsetDateTime.now().minusDays(5));
         l.setUpdatedAt(OffsetDateTime.now().minusDays(1));
+        return l;
+    }
+
+    private Listing buildAgriListing(String status) {
+        Listing l = buildListing(status);
+        l.setPropertyType("agricultural_land");
         return l;
     }
 }

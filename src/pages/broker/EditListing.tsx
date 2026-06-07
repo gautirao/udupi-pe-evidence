@@ -1114,6 +1114,9 @@ export default function EditListing() {
                   center={[listing.latitude ?? 13.3442, listing.longitude ?? 74.7451]}
                   onSave={handleStep4Continue}
                   onSkip={handleStep4Skip}
+                  declaredArea={listing.landArea}
+                  declaredUnit={listing.landAreaUnit}
+                  computedAreaAcres={listing.computedAreaAcres}
                 />
               </CardContent>
             </Card>

@@ -81,7 +81,16 @@ public record ListingResponse(
         String ownershipType,
         String surveyNumber,
         // Polygon boundary (null for non-agri listings and list endpoints)
-        String boundary
+        String boundary,
+        /**
+         * Approximate plot area in acres, DERIVED at read time from the saved PostGIS
+         * {@code boundary} geography via {@code ST_Area(boundary) / 4046.8564224}, rounded
+         * HALF_UP to 2 decimals (#1367). Distinct from the broker-declared {@code landArea} —
+         * never reads or overwrites it. Populated ONLY on the single-listing path for
+         * agricultural_land listings with a saved boundary; null otherwise (incl. list/batch).
+         * Serialized as a JSON number, mirroring {@code landArea}.
+         */
+        BigDecimal computedAreaAcres
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";
