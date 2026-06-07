@@ -6,11 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -18,13 +20,17 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * End-to-end regression test for Phase 1 features:
  * <ul>
- *   <li>Flyway migrations V0–V10 apply cleanly on real Postgres</li>
- *   <li>{@code listing_status} enum exists with all expected values</li>
- *   <li>{@code dealer} value exists in {@code app_role} enum</li>
+ *   <li>The full Flyway migration chain (through v86) applies cleanly on real Postgres</li>
+ *   <li>{@code property_listings.status} is {@code VARCHAR(30)} guarded by the CHECK
+ *       constraint {@code chk_listing_status} — the {@code listing_status} enum was
+ *       removed by V60 (see V60 lines 209-211 for the constraint, line 225 for the
+ *       {@code DROP TYPE})</li>
+ *   <li>{@code dealer} value exists in {@code app_role} enum (unaffected by V60)</li>
  *   <li>DB default for {@code status} column produces {@code 'SCRAPED'} (ingestion compat)</li>
  *   <li>JPA entity default for {@code status} produces {@code 'SCRAPED'}</li>
  * </ul>
@@ -42,13 +48,20 @@ import static org.assertj.core.api.Assertions.assertThat;
         // Allow Hibernate to send String values into Postgres enum columns
         "spring.datasource.hikari.data-source-properties.stringtype=unspecified",
         // Include test stubs (auth schema) before real migrations
-        "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration"
+        "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration",
+        // Override to empty so V73's CREATE INDEX runs without CONCURRENTLY.
+        // CONCURRENTLY requires no-transaction mode; Flyway community does not support that pragma.
+        // A fresh test container has no concurrent readers, so non-concurrent index creation is safe.
+        "spring.flyway.placeholders.concurrently_keyword="
 })
 class Phase1RegressionIT {
 
+    // postgis/postgis:15-3.4 includes PostGIS — required for geography type (V73+).
+    // asCompatibleSubstituteFor("postgres") is required by Testcontainers for non-official images.
     @Container
     @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
+            DockerImageName.parse("postgis/postgis:15-3.4").asCompatibleSubstituteFor("postgres"));
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -59,22 +72,53 @@ class Phase1RegressionIT {
     // ===== Migration integrity =====
 
     @Test
-    @DisplayName("Flyway migrations apply cleanly — listing_status enum exists")
-    void flywayMigrationsApply_listingStatusEnumExists() {
-        Integer count = jdbcTemplate.queryForObject(
+    @DisplayName("status column is VARCHAR after V60 (listing_status enum dropped)")
+    void statusColumn_isVarcharAfterV60() {
+        // V60 dropped the enum type (line 225: DROP TYPE IF EXISTS public.listing_status)
+        // after converting the column to VARCHAR(30) (lines 67-68). The type must be absent.
+        Integer enumCount = jdbcTemplate.queryForObject(
                 "SELECT count(*) FROM pg_type WHERE typname = 'listing_status'",
                 Integer.class);
-        assertThat(count).isEqualTo(1);
+        assertThat(enumCount).isEqualTo(0);
+
+        // The status column is now plain character varying.
+        String dataType = jdbcTemplate.queryForObject(
+                "SELECT data_type FROM information_schema.columns "
+                        + "WHERE table_schema = 'public' "
+                        + "AND table_name = 'property_listings' "
+                        + "AND column_name = 'status'",
+                String.class);
+        assertThat(dataType).isEqualTo("character varying");
     }
 
     @Test
-    @DisplayName("listing_status enum has all 6 expected values (including ARCHIVED added by V35)")
-    void listingStatusEnum_hasAllValues() {
-        List<String> values = jdbcTemplate.queryForList(
-                "SELECT unnest(enum_range(NULL::listing_status))::text AS val",
-                String.class);
-        assertThat(values).containsExactly(
+    @DisplayName("chk_listing_status enforces all 6 status values")
+    void statusCheckConstraint_enforcesAllSixValues() {
+        // V60 lines 209-211 added CHECK (status IN ('DRAFT','PENDING_REVIEW','LIVE',
+        // 'REJECTED','ARCHIVED','SCRAPED')). Functionally probe each value: all 6 must
+        // insert, an unknown value must be rejected by chk_listing_status.
+        List<String> validStatuses = List.of(
                 "SCRAPED", "DRAFT", "PENDING_REVIEW", "LIVE", "REJECTED", "ARCHIVED");
+        for (String status : validStatuses) {
+            UUID id = UUID.randomUUID();
+            jdbcTemplate.update(
+                    "INSERT INTO public.property_listings (id, status, created_at, updated_at) "
+                            + "VALUES (?, ?, now(), now())",
+                    id, status);
+
+            String persisted = jdbcTemplate.queryForObject(
+                    "SELECT status FROM public.property_listings WHERE id = ?",
+                    String.class, id);
+            assertThat(persisted).as("status %s should be accepted", status).isEqualTo(status);
+        }
+
+        // A value outside the 6 must be rejected by chk_listing_status.
+        UUID bogusId = UUID.randomUUID();
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO public.property_listings (id, status, created_at, updated_at) "
+                        + "VALUES (?, 'BOGUS', now(), now())",
+                bogusId))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

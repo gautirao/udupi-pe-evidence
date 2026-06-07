@@ -12,6 +12,7 @@ import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.utility.DockerImageName;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -36,14 +37,21 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.hikari.data-source-properties.ssl=false",
         "spring.datasource.hikari.data-source-properties.sslmode=disable",
         "spring.datasource.hikari.data-source-properties.stringtype=unspecified",
-        "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration"
+        "spring.flyway.locations=classpath:db/test-stubs,classpath:db/migration",
+        // Override to empty so V73's CREATE INDEX runs without CONCURRENTLY.
+        // CONCURRENTLY requires no-transaction mode; Flyway community does not support that pragma.
+        // A fresh test container has no concurrent readers, so non-concurrent index creation is safe.
+        "spring.flyway.placeholders.concurrently_keyword="
 })
 @Import(AreaOverviewRollupJob.class)
 class AreaOverviewRollupJobIntegrationTest {
 
+    // postgis/postgis:15-3.4 includes PostGIS — required for geography type (V73+).
+    // asCompatibleSubstituteFor("postgres") is required by Testcontainers for non-official images.
     @Container
     @ServiceConnection
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:15-alpine");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(
+            DockerImageName.parse("postgis/postgis:15-3.4").asCompatibleSubstituteFor("postgres"));
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -99,21 +107,36 @@ class AreaOverviewRollupJobIntegrationTest {
     }
 
     @Test
-    @DisplayName("nearby_area_keys is null or empty when only one locality exists")
-    void nearbyAreaKeys_nullOrEmptyWithSingleLocality() {
+    @DisplayName("nearby_area_keys is populated from migration-seeded neighbouring localities")
+    void nearbyAreaKeys_populatedFromSeededLocalities() {
         seedListings();
 
         job.run();
 
-        // With only one locality in the table there are no neighbours to aggregate,
-        // so nearby_area_keys must be NULL (the ARRAY_AGG over an empty set returns NULL).
-        Integer nearbyCount = jdbcTemplate.queryForObject(
-                "SELECT array_length(nearby_area_keys, 1) "
+        // Flyway seeds the `areas` table with multiple (~33) localities, so Pass 1d
+        // (NEARBY_AREA_KEYS_SQL) finds neighbours for IN|KA|Udupi|Manipal. It ranks all
+        // other localities by squared Euclidean distance on geo_center and keeps the
+        // nearest 4 (ROW_NUMBER rn <= 4), self-excluded via a.area_key != b.area_key.
+        String sourceKey = "IN|KA|Udupi|Manipal";
+        String[] nearby = jdbcTemplate.queryForObject(
+                "SELECT nearby_area_keys "
                         + "FROM area_overview_stats WHERE area_key = ?",
-                Integer.class,
-                "IN|KA|Udupi|Manipal");
+                (rs, rowNum) -> {
+                    java.sql.Array arr = rs.getArray("nearby_area_keys");
+                    return arr == null ? null : (String[]) arr.getArray();
+                },
+                sourceKey);
 
-        assertThat(nearbyCount).isNull();
+        assertThat(nearby).isNotNull();
+        // Count is seed-dependent; 4 is the rn<=4 ceiling, not a floor.
+        assertThat(nearby.length).isBetween(1, 4);
+        // Self-exclusion: validates the a.area_key != b.area_key join condition.
+        assertThat(nearby).doesNotContain(sourceKey);
+        // Each neighbour is a distinct 4-segment locality key (3 '|' separators).
+        for (String neighbour : nearby) {
+            assertThat(neighbour).isNotEqualTo(sourceKey);
+            assertThat(neighbour.chars().filter(ch -> ch == '|').count()).isEqualTo(3L);
+        }
     }
 
     // -------------------------------------------------------------------------
