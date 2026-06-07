@@ -285,7 +285,7 @@ public class AreaOverviewRollupJob {
               trend_pct_change = CASE
                 WHEN pw.prev_count IS NULL OR pw.prev_count < 3 THEN NULL
                 ELSE ROUND(
-                  (aos.median_price_paise - pw.prev_median) * 100.0 / NULLIF(pw.prev_median, 0),
+                  ((aos.median_price_paise - pw.prev_median) * 100.0 / NULLIF(pw.prev_median, 0))::NUMERIC,
                   2
                 )
               END
@@ -500,7 +500,7 @@ public class AreaOverviewRollupJob {
               trend_pct_change = CASE
                 WHEN pw.prev_count IS NULL OR pw.prev_count < 3 THEN NULL
                 ELSE ROUND(
-                  (aos.median_price_paise - pw.prev_median) * 100.0 / NULLIF(pw.prev_median, 0),
+                  ((aos.median_price_paise - pw.prev_median) * 100.0 / NULLIF(pw.prev_median, 0))::NUMERIC,
                   2
                 )
               END
