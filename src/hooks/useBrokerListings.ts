@@ -78,6 +78,8 @@ export interface UpdateListingRequest {
   cultivationStatus?: string;
   ownershipType?: string;
   surveyNumber?: string;
+  /** Stringified GeoJSON Polygon for agricultural plot boundary; null clears; omit = no change */
+  boundary?: string | null;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -132,6 +134,8 @@ export interface ListingResponse {
   cultivationStatus: string | null;
   ownershipType: string | null;
   surveyNumber: string | null;
+  /** Stringified GeoJSON Polygon from backend; absent/null for non-agri listings */
+  boundary?: string | null;
 }
 
 /**

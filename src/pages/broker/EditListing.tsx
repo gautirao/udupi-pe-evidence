@@ -27,11 +27,13 @@ import { AreaField } from '@/components/broker/AreaField';
 import { AddressPicker } from '@/components/broker/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/broker/StepIndicator';
+import { BoundaryDrawStep } from '@/components/dealer/BoundaryDrawStep';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
 import { PROPERTY_TYPES, COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
+import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
 
 const VIDEO_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
@@ -50,7 +52,8 @@ function isInstagramUrl(url: string): boolean {
 const LOCKED_STATUSES = ['PENDING_REVIEW', 'LIVE'];
 const SUBMITTABLE_STATUSES = ['DRAFT', 'REJECTED'];
 
-const WIZARD_STEPS = ['Describe', 'Add Photos', 'Pin Location', 'Review & Submit'];
+const BASE_STEPS = ['Describe', 'Add Photos', 'Pin Location', 'Review & Submit'] as const;
+const AGRI_STEPS = ['Describe', 'Add Photos', 'Pin Location', 'Draw Boundary', 'Review & Submit'] as const;
 
 export default function EditListing() {
   const { id } = useParams<{ id: string }>();
@@ -63,18 +66,27 @@ export default function EditListing() {
   const updateListing = useUpdateListing(id ?? '');
   const submitListing = useSubmitListing(id);
 
-  // Step routing: read initial step from ?step= query param (1-based, default 1).
-  // Guard against non-numeric values (e.g. ?step=abc → NaN) and clamp to [1, 4].
-  const stepParam = searchParams.get('step');
-  const initialStep = stepParam ? (Math.max(1, Math.min(4, parseInt(stepParam, 10) || 1))) : 1;
-  const [currentStep, setCurrentStep] = useState(initialStep);
-  // When true: after saving a step, return to step 4 instead of advancing sequentially
-  const [cameFromReview, setCameFromReview] = useState(false);
-
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priceRupees, setPriceRupees] = useState<number | null>(null);
   const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
+
+  // Dynamic wizard steps: agri listings get an extra "Draw Boundary" step (step 4).
+  // NOTE: propertyType state starts as '' and is populated by the useEffect below once
+  // the listing loads. The step count may change on first render, but useState captures
+  // the initial value at mount — the clamp is re-applied in the steps array below.
+  const isAgriListing = propertyType === 'agricultural_land';
+  const WIZARD_STEPS = isAgriListing ? AGRI_STEPS : BASE_STEPS;
+  const reviewStep = WIZARD_STEPS.length; // step number of the final "Review & Submit" step
+  const boundaryStep = isAgriListing ? AGRI_STEPS.indexOf('Draw Boundary') + 1 : 0;
+
+  // Step routing: read initial step from ?step= query param (1-based, default 1).
+  // Guard against non-numeric values (e.g. ?step=abc → NaN) and clamp to [1, WIZARD_STEPS.length].
+  const stepParam = searchParams.get('step');
+  const initialStep = stepParam ? (Math.max(1, Math.min(WIZARD_STEPS.length, parseInt(stepParam, 10) || 1))) : 1;
+  const [currentStep, setCurrentStep] = useState(initialStep);
+  // When true: after saving a step, return to step 4 instead of advancing sequentially
+  const [cameFromReview, setCameFromReview] = useState(false);
   const [locality, setLocality] = useState('');
   const [landArea, setLandArea] = useState<number | null>(null);
   // Unit for land area; default 'cent' (dominant Udupi/Karnataka unit).
@@ -131,6 +143,8 @@ export default function EditListing() {
   const [cultivationStatus, setCultivationStatus] = useState('');
   const [ownershipType, setOwnershipType] = useState('');
   const [surveyNumber, setSurveyNumber] = useState('');
+  // Agricultural plot boundary — [lat, lng][] coords from DrawControl
+  const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
 
   // Images for thumbnail strip in step 4 review
   const { images: listingImages } = useListingImages(id);
@@ -173,6 +187,10 @@ export default function EditListing() {
     setCultivationStatus(listing.cultivationStatus ?? '');
     setOwnershipType(listing.ownershipType ?? '');
     setSurveyNumber(listing.surveyNumber ?? '');
+    // Pre-populate boundary coords from existing agri listing
+    if (listing.boundary) {
+      setBoundaryCoords(fromGeoJsonString(listing.boundary));
+    }
   }, [listing]);
 
   // Auth guard
@@ -258,12 +276,20 @@ export default function EditListing() {
   // Step 3 is complete when address has been confirmed
   const step3Complete = listing.addressConfirmed === true;
 
-  const steps = [
-    { label: WIZARD_STEPS[0], isComplete: step1Complete },
-    { label: WIZARD_STEPS[1], isComplete: step2Complete },
-    { label: WIZARD_STEPS[2], isComplete: step3Complete },
-    { label: WIZARD_STEPS[3], isComplete: false }, // terminal step
-  ];
+  const steps = isAgriListing
+    ? [
+        { label: WIZARD_STEPS[0], isComplete: step1Complete },
+        { label: WIZARD_STEPS[1], isComplete: step2Complete },
+        { label: WIZARD_STEPS[2], isComplete: step3Complete },
+        { label: WIZARD_STEPS[3], isComplete: false }, // Draw Boundary — not tracked as gate
+        { label: WIZARD_STEPS[4], isComplete: false }, // terminal step
+      ]
+    : [
+        { label: WIZARD_STEPS[0], isComplete: step1Complete },
+        { label: WIZARD_STEPS[1], isComplete: step2Complete },
+        { label: WIZARD_STEPS[2], isComplete: step3Complete },
+        { label: WIZARD_STEPS[3], isComplete: false }, // terminal step
+      ];
 
   const handleStepClick = (n: number) => {
     // Allow: step 1 always, any completed step, or any step before current
@@ -338,7 +364,7 @@ export default function EditListing() {
           toast({ title: 'Listing updated', description: 'Your listing has been saved.' });
           if (cameFromReview) {
             setCameFromReview(false);
-            setCurrentStep(4);
+            setCurrentStep(reviewStep);
           } else {
             setCurrentStep(2);
           }
@@ -363,7 +389,7 @@ export default function EditListing() {
         onSuccess: () => {
           if (cameFromReview) {
             setCameFromReview(false);
-            setCurrentStep(4);
+            setCurrentStep(reviewStep);
           } else {
             setCurrentStep(3);
           }
@@ -374,7 +400,28 @@ export default function EditListing() {
 
   const handleStep3Continue = () => {
     setCameFromReview(false);
-    setCurrentStep(4);
+    // For agri listings, step 4 = Draw Boundary; for others, step 4 = Review & Submit.
+    // Using isAgriListing ? 4 : reviewStep makes this safe if BASE_STEPS ever changes.
+    setCurrentStep(isAgriListing ? 4 : reviewStep);
+  };
+
+  // Step 4 handlers — only reached for agricultural_land listings
+  const handleStep4Continue = (coords: [number, number][]) => {
+    setBoundaryCoords(coords);
+    // Persist boundary to backend immediately (mirrors how step 3 saves location)
+    updateListing.mutate(
+      { boundary: toGeoJsonString(coords) },
+      {
+        onSuccess: () => {
+          setCurrentStep(reviewStep);
+        },
+      },
+    );
+  };
+
+  const handleStep4Skip = () => {
+    // Boundary remains whatever it was (may be empty); advance to review
+    setCurrentStep(reviewStep);
   };
 
   /**
@@ -1048,9 +1095,34 @@ export default function EditListing() {
           )}
         </div>
 
-        {/* ── Step 4: Review & Submit ── */}
-        {currentStep === 4 && (
-        <div data-testid="step-4-panel">
+        {/* ── Step 4: Draw Boundary (agricultural_land only) ── */}
+        {currentStep === 4 && isAgriListing && (
+          <div data-testid="step-4-panel">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Draw Plot Boundary
+                </CardTitle>
+                <CardDescription>
+                  Optionally draw the boundary of your agricultural plot on the map.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <BoundaryDrawStep
+                  initialCoords={boundaryCoords}
+                  center={[listing.latitude ?? 13.3442, listing.longitude ?? 74.7451]}
+                  onSave={handleStep4Continue}
+                  onSkip={handleStep4Skip}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* ── Step 4 (non-agri) / Step 5 (agri): Review & Submit ── */}
+        {currentStep === reviewStep && (
+        <div data-testid="step-review-panel">
 
           {/* D1 hybrid — Title/locality consistency banner (non-dismissible) */}
           {showTitleLocalityWarning && (
@@ -1179,6 +1251,48 @@ export default function EditListing() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Boundary review — shown for agri listings when a boundary has been drawn */}
+          {isAgriListing && (
+            <Card className="mb-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Plot Boundary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {boundaryCoords.length > 0 ? (
+                  <>
+                    <div
+                      className="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+                      role="note"
+                      data-testid="boundary-disclaimer-review"
+                    >
+                      <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5 text-amber-600" aria-hidden="true" />
+                      <p>
+                        The boundary drawn on the map is approximate and should be legally verified
+                        before purchase.
+                      </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Boundary saved ({boundaryCoords.length} vertices).
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No boundary drawn (optional).</p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setCameFromReview(false); setCurrentStep(boundaryStep); }}
+                  data-testid="boundary-review-edit-btn"
+                >
+                  {boundaryCoords.length > 0 ? 'Edit Boundary' : 'Draw Boundary'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           {/* POIs — shown when address is confirmed */}
           {listing.addressConfirmed ? (
