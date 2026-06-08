@@ -84,9 +84,34 @@ public class ListingResponseMapper {
         String primaryImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
                 .orElse(null);
+        // IC-3: literal-on-left null-safe check for agri gate (#1407)
+        boolean isAgri = "agricultural_land".equals(l.getPropertyType());
+        // Boundary: DB call only on agri path; null for all other property types (no N+1 on batch)
+        String boundary = isAgri
+                ? listingRepository.findBoundaryGeoJson(l.getId()).orElse(null)
+                : null;
+        // computedAreaAcres: ST_Area-derived acreage; null for non-agri + when no boundary saved
+        BigDecimal computedAreaAcres = isAgri
+                ? AreaNormalizer.sqmToAcres(
+                        listingRepository.findBoundaryAreaSqm(l.getId())
+                                .map(BigDecimal::valueOf)
+                                .orElse(null))
+                : null;
         return new ListingTeaserResponse(
                 l.getId(), primaryImageUrl, images.size(), l.getPrice(),
-                l.getPropertyType(), l.getLocality(), l.getListingPurpose());
+                l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
+                boundary,
+                isAgri ? l.getLatitude() : null,
+                isAgri ? l.getLongitude() : null,
+                isAgri ? l.getLandArea() : null,
+                isAgri ? l.getLandAreaUnit() : null,
+                computedAreaAcres,
+                isAgri ? l.getWaterSource() : null,
+                isAgri ? l.getSoilType() : null,
+                isAgri ? l.getRoadAccess() : null,
+                isAgri ? l.getCultivationStatus() : null,
+                isAgri ? l.getOwnershipType() : null,
+                isAgri ? l.getSurveyNumber() : null);
     }
 
     /**
@@ -117,7 +142,9 @@ public class ListingResponseMapper {
                         l.getPrice(),
                         l.getPropertyType(),
                         l.getLocality(),
-                        l.getListingPurpose()))
+                        l.getListingPurpose(),
+                        // IC-3: batch path — null-pass for all 12 agri fields (no DB call; N+1 guard)
+                        null, null, null, null, null, null, null, null, null, null, null, null))
                 .toList();
     }
 

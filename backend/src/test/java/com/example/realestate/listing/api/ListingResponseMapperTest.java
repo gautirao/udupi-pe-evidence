@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.listing.area.AreaNormalizer;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
@@ -434,10 +435,10 @@ class ListingResponseMapperTest {
         assertThat(response.trustTier()).isNull();
     }
 
-    // ==================== toTeaserResponse — exactly 7 fields, correct values ====================
+    // ==================== toTeaserResponse — core 7 fields populated, correct values ====================
 
     @Test
-    void toTeaserResponse_includesOnly7Fields() {
+    void toTeaserResponse_coreFieldsPopulated() {
         Listing l = buildListing("LIVE");
         l.setListingPurpose("SALE");
 
@@ -450,27 +451,32 @@ class ListingResponseMapperTest {
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // record has exactly 7 components — verify at compile time via record definition
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(7);
+        // #1407: record now has 19 components (7 base + 12 agri-only)
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(19);
     }
 
     @Test
-    void toTeaserResponse_excludesSensitiveFields() {
+    void toTeaserResponse_contractFields() {
         Listing l = buildListing("LIVE");
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // The teaser record must have exactly 7 components — no address, lat/lon, description, etc.
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(7);
+        // #1407: record now has 19 components (7 base + 12 agri-only fields)
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(19);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
-        assertThat(componentNames).containsExactly(
+        // Base 7 fields always present
+        assertThat(componentNames).contains(
                 "id", "primaryImageUrl", "imageCount", "price", "propertyType", "locality", "listingPurpose");
-        // Sensitive names must not appear
+        // 12 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
+        assertThat(componentNames).contains(
+                "boundary", "latitude", "longitude", "landArea", "landAreaUnit",
+                "computedAreaAcres", "waterSource", "soilType", "roadAccess",
+                "cultivationStatus", "ownershipType", "surveyNumber");
+        // Truly sensitive names must not appear
         assertThat(componentNames).doesNotContain(
-                "latitude", "longitude", "address", "description",
-                "sellerType", "bedrooms", "builtArea", "landArea",
+                "address", "description", "sellerType", "bedrooms", "builtArea",
                 "reraNumber", "contactPhone", "createdBy");
     }
 
@@ -547,6 +553,174 @@ class ListingResponseMapperTest {
         // The mapper must NOT mutate the declared landArea / unit on the entity.
         assertThat(l.getLandArea()).isEqualByComparingTo(declaredBefore);
         assertThat(l.getLandAreaUnit()).isEqualTo(declaredUnitBefore);
+    }
+
+    // ==================== T6: real agri teaser → all 12 D1 fields populated ====================
+
+    @Test
+    void toTeaserResponse_agri_populatesAll12D1Fields() {
+        Listing l = buildAgriListing("LIVE");
+        l.setLatitude(13.3409);
+        l.setLongitude(74.7421);
+        l.setLandArea(new BigDecimal("2.50"));
+        l.setLandAreaUnit("acres");
+        l.setWaterSource("Borewell");
+        l.setSoilType("Red laterite");
+        l.setRoadAccess("Tar road");
+        l.setCultivationStatus("Fallow");
+        l.setOwnershipType("Freehold");
+        l.setSurveyNumber("SY-101/2");
+
+        String geojson = "{\"type\":\"Polygon\",\"coordinates\":[]}";
+        double areaSqm = 4046.856; // ~1 acre
+
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId())).thenReturn(List.of());
+        when(listingRepository.findBoundaryGeoJson(l.getId())).thenReturn(Optional.of(geojson));
+        when(listingRepository.findBoundaryAreaSqm(l.getId())).thenReturn(Optional.of(areaSqm));
+
+        ListingTeaserResponse result = mapper.toTeaserResponse(l);
+
+        assertThat(result.boundary()).isEqualTo(geojson);
+        assertThat(result.latitude()).isEqualTo(13.3409);
+        assertThat(result.longitude()).isEqualTo(74.7421);
+        assertThat(result.landArea()).isEqualByComparingTo(new BigDecimal("2.50"));
+        assertThat(result.landAreaUnit()).isEqualTo("acres");
+        assertThat(result.computedAreaAcres())
+                .as("computedAreaAcres must not be null when area sqm is present")
+                .isNotNull();
+        // Verify value matches the same AreaNormalizer call the mapper uses
+        BigDecimal expected = AreaNormalizer.sqmToAcres(BigDecimal.valueOf(areaSqm));
+        assertThat(result.computedAreaAcres()).isEqualByComparingTo(expected);
+        assertThat(result.waterSource()).isEqualTo("Borewell");
+        assertThat(result.soilType()).isEqualTo("Red laterite");
+        assertThat(result.roadAccess()).isEqualTo("Tar road");
+        assertThat(result.cultivationStatus()).isEqualTo("Fallow");
+        assertThat(result.ownershipType()).isEqualTo("Freehold");
+        assertThat(result.surveyNumber()).isEqualTo("SY-101/2");
+    }
+
+    // ==================== T7: real non-agri teaser → all 12 agri fields NULL ====================
+
+    @Test
+    void toTeaserResponse_nonAgri_allAgriFieldsNull() {
+        Listing l = buildListing("LIVE"); // propertyType = "land"
+
+        // setUp() already stubs findByListingIdOrderByPositionAsc(any()) → List.of()
+        // findBoundaryGeoJson / findBoundaryAreaSqm must NOT be called — verified by T8/T9
+        ListingTeaserResponse result = mapper.toTeaserResponse(l);
+
+        assertThat(result.boundary()).isNull();
+        assertThat(result.latitude()).isNull();
+        assertThat(result.longitude()).isNull();
+        assertThat(result.landArea()).isNull();
+        assertThat(result.landAreaUnit()).isNull();
+        assertThat(result.computedAreaAcres()).isNull();
+        assertThat(result.waterSource()).isNull();
+        assertThat(result.soilType()).isNull();
+        assertThat(result.roadAccess()).isNull();
+        assertThat(result.cultivationStatus()).isNull();
+        assertThat(result.ownershipType()).isNull();
+        assertThat(result.surveyNumber()).isNull();
+    }
+
+    // ==================== T8: findBoundaryGeoJson called once for agri, never for non-agri ====================
+
+    @Test
+    void toTeaserResponse_agri_callsFindBoundaryGeoJsonExactlyOnce() {
+        Listing l = buildAgriListing("LIVE");
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId())).thenReturn(List.of());
+        when(listingRepository.findBoundaryGeoJson(l.getId())).thenReturn(Optional.empty());
+        when(listingRepository.findBoundaryAreaSqm(l.getId())).thenReturn(Optional.empty());
+
+        mapper.toTeaserResponse(l);
+
+        verify(listingRepository, org.mockito.Mockito.times(1)).findBoundaryGeoJson(l.getId());
+    }
+
+    @Test
+    void toTeaserResponse_nonAgri_neverCallsFindBoundaryGeoJson() {
+        Listing l = buildListing("LIVE"); // propertyType = "land"
+        // setUp() default stubs cover all needed calls
+
+        mapper.toTeaserResponse(l);
+
+        verify(listingRepository, never()).findBoundaryGeoJson(any());
+    }
+
+    // ==================== T9: findBoundaryAreaSqm called once for agri, never for non-agri ====================
+
+    @Test
+    void toTeaserResponse_agri_callsFindBoundaryAreaSqmExactlyOnce() {
+        Listing l = buildAgriListing("LIVE");
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(l.getId())).thenReturn(List.of());
+        when(listingRepository.findBoundaryGeoJson(l.getId())).thenReturn(Optional.empty());
+        when(listingRepository.findBoundaryAreaSqm(l.getId())).thenReturn(Optional.empty());
+
+        mapper.toTeaserResponse(l);
+
+        verify(listingRepository, org.mockito.Mockito.times(1)).findBoundaryAreaSqm(l.getId());
+    }
+
+    @Test
+    void toTeaserResponse_nonAgri_neverCallsFindBoundaryAreaSqm() {
+        Listing l = buildListing("LIVE"); // propertyType = "land"
+
+        mapper.toTeaserResponse(l);
+
+        verify(listingRepository, never()).findBoundaryAreaSqm(any());
+    }
+
+    // ==================== T10: batch toTeaserResponseList → ZERO boundary/area DB calls ====================
+
+    @Test
+    void toTeaserResponseList_neverCallsBoundaryOrAreaRepo() {
+        Listing agri = buildAgriListing("LIVE");
+        Listing house = buildListing("LIVE");
+        house.setPropertyType("house");
+
+        when(listingImageRepository.findByListingIdInOrderByListingIdAscPositionAsc(anyList()))
+                .thenReturn(List.of());
+
+        List<ListingTeaserResponse> results = mapper.toTeaserResponseList(List.of(agri, house));
+
+        verify(listingRepository, never()).findBoundaryGeoJson(any());
+        verify(listingRepository, never()).findBoundaryAreaSqm(any());
+        assertThat(results).hasSize(2);
+
+        // N+1 guard: even the agri entry must have null for all 12 agri fields on the batch path
+        ListingTeaserResponse agriResult = results.stream()
+                .filter(r -> "agricultural_land".equals(r.propertyType()))
+                .findFirst().orElseThrow();
+        assertThat(agriResult.boundary()).as("batch path must not populate boundary (N+1 guard)").isNull();
+        assertThat(agriResult.latitude()).as("batch path must not populate latitude (N+1 guard)").isNull();
+        assertThat(agriResult.computedAreaAcres())
+                .as("batch path must not populate computedAreaAcres (N+1 guard)").isNull();
+    }
+
+    // ==================== T11: null propertyType → no throw, all agri fields null ====================
+
+    @Test
+    void toTeaserResponse_nullPropertyType_doesNotThrowAndAgriFieldsNull() {
+        Listing l = new Listing();
+        UUID nullTypeId = UUID.randomUUID();
+        l.setId(nullTypeId);
+        l.setPropertyType(null);
+        l.setLocality("Udupi");
+
+        when(listingImageRepository.findByListingIdOrderByPositionAsc(nullTypeId))
+                .thenReturn(List.of());
+
+        ListingTeaserResponse result = null;
+        try {
+            result = mapper.toTeaserResponse(l);
+        } catch (Exception e) {
+            org.junit.jupiter.api.Assertions.fail("toTeaserResponse must not throw for null propertyType: " + e);
+        }
+
+        assertThat(result.boundary()).isNull();
+        assertThat(result.latitude()).isNull();
+        verify(listingRepository, never()).findBoundaryGeoJson(any());
+        verify(listingRepository, never()).findBoundaryAreaSqm(any());
     }
 
     // ==================== Helper ====================

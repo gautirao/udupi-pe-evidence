@@ -40,6 +40,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -138,21 +139,23 @@ class PublicListingControllerTest {
                     null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
         });
 
-        // Teaser mapper — single listing
+        // Teaser mapper — single listing (12 agri fields null for non-agri fixtures in setUp)
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
             return new ListingTeaserResponse(
                     l.getId(), null, 0, l.getPrice(),
-                    l.getPropertyType(), l.getLocality(), l.getListingPurpose());
+                    l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
+                    null, null, null, null, null, null, null, null, null, null, null, null);
         });
 
-        // Teaser mapper — batch
+        // Teaser mapper — batch (12 agri fields null for non-agri fixtures in setUp)
         when(listingResponseMapper.toTeaserResponseList(anyList())).thenAnswer(inv -> {
             List<Listing> listings = inv.getArgument(0);
             return listings.stream()
                     .map(l -> new ListingTeaserResponse(
                             l.getId(), null, 0, l.getPrice(),
-                            l.getPropertyType(), l.getLocality(), l.getListingPurpose()))
+                            l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
+                            null, null, null, null, null, null, null, null, null, null, null, null))
                     .toList();
         });
     }
@@ -521,6 +524,154 @@ class PublicListingControllerTest {
         String wkt = PublicListingController.toPolygonWkt(coords);
         // WKT uses lng lat order
         assertEquals("POLYGON((74.790000 13.350000, 74.800000 13.360000, 74.800000 13.340000, 74.790000 13.350000))", wkt);
+    }
+
+
+    // ==================== T1: anonymous agri listing → all 12 D1 fields present ====================
+
+    @Test
+    void getById_anonymousAgri_returnsTeaserWithAgriFields() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
+                "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
+        listing.setListingPurpose("SALE");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Mock toTeaserResponse to return a teaser with all 12 agri-only D1 fields populated
+        when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
+                new ListingTeaserResponse(
+                        LISTING_ID, "https://cdn.example.com/farm.jpg", 1,
+                        new BigDecimal("5000000"), "agricultural_land", "Udupi", "SALE",
+                        "{\"type\":\"Polygon\",\"coordinates\":[]}",
+                        13.3409, 74.7421,
+                        new BigDecimal("2.50"), "acres",
+                        new BigDecimal("2.47"),
+                        "Borewell", "Red laterite", "Tar road",
+                        "Fallow", "Freehold", "SY-101/2"));
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.propertyType").value("agricultural_land"))
+                // all 12 D1 agri fields must be present and non-null
+                .andExpect(jsonPath("$.boundary").value("{\"type\":\"Polygon\",\"coordinates\":[]}"))
+                .andExpect(jsonPath("$.latitude").value(13.3409))
+                .andExpect(jsonPath("$.longitude").value(74.7421))
+                .andExpect(jsonPath("$.landArea").value(2.50))
+                .andExpect(jsonPath("$.landAreaUnit").value("acres"))
+                .andExpect(jsonPath("$.computedAreaAcres").value(2.47))
+                .andExpect(jsonPath("$.waterSource").value("Borewell"))
+                .andExpect(jsonPath("$.soilType").value("Red laterite"))
+                .andExpect(jsonPath("$.roadAccess").value("Tar road"))
+                .andExpect(jsonPath("$.cultivationStatus").value("Fallow"))
+                .andExpect(jsonPath("$.ownershipType").value("Freehold"))
+                .andExpect(jsonPath("$.surveyNumber").value("SY-101/2"));
+    }
+
+    // ==================== T2: anonymous non-agri listing → exactly 7 fields (IC-1) ====================
+
+    @Test
+    void getById_anonymousNonAgri_returnsTeaserExactly7Fields() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        listing.setListingPurpose("SALE");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // setUp() already stubs toTeaserResponse to return 7-field teaser with 12 agri fields null
+        // @JsonInclude(NON_NULL) on the record ensures they are omitted from JSON
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.propertyType").value("house"))
+                .andExpect(jsonPath("$.locality").value("Udupi"))
+                .andExpect(jsonPath("$.listingPurpose").value("SALE"))
+                // IC-1: all 12 agri-only fields must be absent for non-agri listings
+                .andExpect(jsonPath("$.boundary").doesNotExist())
+                .andExpect(jsonPath("$.latitude").doesNotExist())
+                .andExpect(jsonPath("$.longitude").doesNotExist())
+                .andExpect(jsonPath("$.landArea").doesNotExist())
+                .andExpect(jsonPath("$.landAreaUnit").doesNotExist())
+                .andExpect(jsonPath("$.computedAreaAcres").doesNotExist())
+                .andExpect(jsonPath("$.waterSource").doesNotExist())
+                .andExpect(jsonPath("$.soilType").doesNotExist())
+                .andExpect(jsonPath("$.roadAccess").doesNotExist())
+                .andExpect(jsonPath("$.cultivationStatus").doesNotExist())
+                .andExpect(jsonPath("$.ownershipType").doesNotExist())
+                .andExpect(jsonPath("$.surveyNumber").doesNotExist());
+    }
+
+    // ==================== T3: authenticated agri caller → full ListingResponse (auth path unchanged) ====================
+
+    @Test
+    void getById_authenticated_behaviourUnchangedForAgri() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
+                "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
+        listing.setFirstPublishedAt(OffsetDateTime.now().minusDays(3));
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Populate security context — authenticated path calls toPublicResponse, not toTeaserResponse
+        var authToken = new UsernamePasswordAuthenticationToken(
+                "user@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.status").value("LIVE"))
+                // Full response has title, images[], etc.
+                .andExpect(jsonPath("$.title").value("Farm Plot"))
+                .andExpect(jsonPath("$.images").isArray());
+
+        // Assert toPublicResponse was called (not toTeaserResponse)
+        verify(listingResponseMapper).toPublicResponse(any(Listing.class));
+    }
+
+    // ==================== T4: anonymous agri → no seller PII in response ====================
+
+    @Test
+    void getById_anonymousAgri_noSellerPiiInResponse() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
+                "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
+        listing.setListingPurpose("SALE");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Return agri teaser with D1 fields but without any PII fields
+        when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
+                new ListingTeaserResponse(
+                        LISTING_ID, null, 0,
+                        new BigDecimal("5000000"), "agricultural_land", "Udupi", "SALE",
+                        "{\"type\":\"Polygon\",\"coordinates\":[]}", 13.3409, 74.7421,
+                        new BigDecimal("2.50"), "acres", new BigDecimal("2.47"),
+                        "Borewell", "Red laterite", "Tar road",
+                        "Fallow", "Freehold", "SY-101/2"));
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                // PII / internal fields must never appear in anonymous teaser response
+                .andExpect(jsonPath("$.sellerType").doesNotExist())
+                .andExpect(jsonPath("$.rejectionReason").doesNotExist())
+                .andExpect(jsonPath("$.reraNumber").doesNotExist())
+                .andExpect(jsonPath("$.contactPhone").doesNotExist())
+                .andExpect(jsonPath("$.createdBy").doesNotExist())
+                .andExpect(jsonPath("$.status").doesNotExist());
+    }
+
+    // ==================== T5: anonymous non-agri → boundary absent (IC-3) ====================
+
+    @Test
+    void getById_anonymousNonAgri_boundaryAbsent() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // setUp() stubs toTeaserResponse with all 12 agri fields null; @JsonInclude(NON_NULL) omits them
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
+                .andExpect(status().isOk())
+                // IC-3: boundary and coordinates must be absent for non-agri listings
+                .andExpect(jsonPath("$.boundary").doesNotExist())
+                .andExpect(jsonPath("$.latitude").doesNotExist())
+                .andExpect(jsonPath("$.longitude").doesNotExist());
     }
 
     // ==================== Helpers ====================
