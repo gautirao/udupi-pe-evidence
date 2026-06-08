@@ -31,23 +31,31 @@ describe('derivePanelContent — guided-entry (no journey)', () => {
   });
 });
 
-describe('derivePanelContent — agri-first journey (MVP2)', () => {
-  it('returns agri-landing when journey=agri-first and no area/school', () => {
+describe('derivePanelContent — agri-first journey (MVP2 + Issue #1371)', () => {
+  it('returns agri-landing when journey=agri-first and no areaKey', () => {
     expect(derivePanelContent(makeState({ journey: 'agri-first' }))).toBe('agri-landing');
   });
 
-  // First-branch precedence: a stray areaKey must NOT route agri to area-selected.
-  it('returns agri-landing even with a stray areaKey (first-branch precedence)', () => {
+  // Issue #1371 — area selected in agri-first journey routes to the new agri-selected state.
+  it('returns agri-selected when journey=agri-first and areaKey is present', () => {
     expect(
       derivePanelContent(
         makeState({ journey: 'agri-first', areaKey: 'IN|KA|Udupi|Manipal' }),
       ),
+    ).toBe('agri-selected');
+  });
+
+  // Stray schoolId alone (no areaKey) must NOT route agri out of agri-landing.
+  it('returns agri-landing when journey=agri-first and schoolId present but no areaKey', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'agri-first', schoolId: 'sch-1' }),
+      ),
     ).toBe('agri-landing');
   });
 
-  // First-branch precedence: a stray schoolId must NOT route agri to school-selected
-  // or area-school-combined.
-  it('returns agri-landing even with stray schoolId + areaKey (never falls through)', () => {
+  // areaKey + schoolId: areaKey wins → agri-selected (schoolId is ignored in agri journey).
+  it('returns agri-selected when journey=agri-first and both areaKey + schoolId present', () => {
     expect(
       derivePanelContent(
         makeState({
@@ -56,14 +64,23 @@ describe('derivePanelContent — agri-first journey (MVP2)', () => {
           schoolId: 'sch-1',
         }),
       ),
-    ).toBe('agri-landing');
+    ).toBe('agri-selected');
   });
 
-  // A stray groupId must NOT route agri to area-groups-landing.
-  it('returns agri-landing even with a stray groupId', () => {
+  // A stray groupId without areaKey must NOT route agri to area-groups-landing.
+  it('returns agri-landing when journey=agri-first and groupId present but no areaKey', () => {
     expect(
       derivePanelContent(makeState({ journey: 'agri-first', groupId: 'coastal-homes' })),
     ).toBe('agri-landing');
+  });
+
+  // groupId + areaKey: areaKey wins → agri-selected.
+  it('returns agri-selected when journey=agri-first, areaKey + groupId both present', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'agri-first', areaKey: 'IN|KA|Udupi|Manipal', groupId: 'coastal-homes' }),
+      ),
+    ).toBe('agri-selected');
   });
 });
 

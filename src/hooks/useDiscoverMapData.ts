@@ -3,10 +3,11 @@ import { PropertyFilters, PropertyListing, PropertyImage, clampSchoolRadiusKm } 
 import { useDiscoverListings } from '@/hooks/useDiscoverListings';
 import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
-import { useDiscoverAreas, DiscoverAreasResponse } from '@/hooks/useDiscoverAreas';
+import { useDiscoverAreas, DiscoverAreasResponse, DiscoverArea } from '@/hooks/useDiscoverAreas';
 import { useDiscoverCityListings, DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { useSchoolRadiusListings, mapSchoolRadiusCard, SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { useSchoolById, SchoolResult } from '@/hooks/useSchoolSearch';
+import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
 import { CITY_CONFIG } from '@/lib/localityUtils';
@@ -37,6 +38,14 @@ export interface UseDiscoverMapDataParams {
    * When null/undefined the backend falls back to the full city query.
    */
   bbox?: [number, number, number, number] | null;
+  /**
+   * Issue #1371 — active Discover journey from URL state. When 'agri-first',
+   * the hook makes a SEPARATE agri-scoped useDiscoverAreas call (queryKey includes
+   * 'agricultural_land' — AC10 cache-key isolation) and forces propertyType into
+   * the area-click listings fetch. The BLENDED useDiscoverAreas (AreaPoint path) is
+   * NEVER affected — AreaPoint.listingCount always reflects the blended count.
+   */
+  journey?: DiscoverJourney | null;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -51,6 +60,15 @@ export interface UseDiscoverMapDataResult {
   // Data
   discoverAreas: AreaPoint[];
   discoverAreasData: DiscoverAreasResponse | undefined;
+  /**
+   * Issue #1371 — agri-scoped area summary rows, populated only when journey='agri-first'.
+   * `listingCount` on each element is the AGRI-ONLY count (from the ?propertyType=agricultural_land
+   * backend call). `agriAcreage` is present where the backend could compute it.
+   * Undefined (and query idle) for every other journey so there is zero overhead.
+   */
+  agriAreasData: DiscoverArea[] | undefined;
+  /** True while the agri-scoped areas query is in-flight. */
+  isLoadingAgriAreas: boolean;
   listingsWithCoords: (PropertyListing & { images?: PropertyImage[] })[];
   filteredListings: (PropertyListing & { images?: PropertyImage[] })[];
   markerListings: (PropertyListing & { images?: PropertyImage[] })[];
@@ -105,6 +123,7 @@ export function useDiscoverMapData({
   markersEnabled,
   page,
   bbox,
+  journey,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -138,13 +157,34 @@ export function useDiscoverMapData({
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
+  // Blended areas — feeds AreaPoint.listingCount + map markers. NEVER filtered by propertyType.
   const { data: discoverAreasData, isLoading: areasLoading } = useDiscoverAreas(isCityValid ? city : '');
+
+  // Issue #1371 — agri-scoped area summary. Only enabled in agri-first journey.
+  // Uses a SEPARATE cache key (['discover-areas', city, 'agricultural_land']) so React Query
+  // cannot cross-serve this with the blended response (AC10).
+  const isAgriJourney = journey === 'agri-first';
+  const {
+    data: agriAreasResponseData,
+    isLoading: isLoadingAgriAreas,
+  } = useDiscoverAreas(isCityValid ? city : '', isAgriJourney ? 'agricultural_land' : undefined);
+  const agriAreasData: DiscoverArea[] | undefined = isAgriJourney
+    ? (agriAreasResponseData?.areas ?? [])
+    : undefined;
 
   // Area listing cards (right panel detail view)
   const discoverMinPrice = filters.priceMin != null ? filters.priceMin * 100 : undefined;
   const discoverMaxPrice = filters.priceMax != null ? filters.priceMax * 100 : undefined;
   const discoverBedrooms = filters.bedrooms?.length === 1 ? filters.bedrooms[0] : undefined;
-  const discoverPropertyType = filters.propertyTypes?.length === 1 ? filters.propertyTypes[0] : undefined;
+  // Issue #1371 (AC6): in agri-first journey, force propertyType='agricultural_land'
+  // for the area-click listing fetch regardless of what filters.propertyTypes contains.
+  // The non-agri derivation (single-element filter wins) is left untouched for all
+  // other journeys.
+  const discoverPropertyType = isAgriJourney
+    ? 'agricultural_land'
+    : filters.propertyTypes?.length === 1
+    ? filters.propertyTypes[0]
+    : undefined;
 
   const { data: cityListingsData, isLoading: isLoadingAreaListings } = useDiscoverCityListings({
     city,
@@ -327,6 +367,8 @@ export function useDiscoverMapData({
     isFetching,
     discoverAreas,
     discoverAreasData,
+    agriAreasData,
+    isLoadingAgriAreas,
     listingsWithCoords,
     filteredListings,
     markerListings,

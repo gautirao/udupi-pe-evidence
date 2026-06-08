@@ -8,6 +8,8 @@
  * Panel states (audit-aligned with issue #990):
  *
  *   guided-entry          — no journey selected (landing state)
+ *   agri-landing          — agri-first journey, no areaKey yet (always; stray keys ignored)
+ *   agri-selected         — agri-first journey, areaKey present (Issue #1371)
  *   area-groups-landing   — area-first journey, no areaKey yet (always; groupId optional)
  *   area-selected         — area-first journey, area selected (areaKey present)
  *   school-browse         — school-first journey, no school selected
@@ -21,6 +23,7 @@ import type { DiscoverUrlState } from '../hooks/useDiscoverUrlState';
 export type DiscoverPanelContent =
   | 'guided-entry'
   | 'agri-landing'
+  | 'agri-selected'
   | 'area-groups-landing'
   | 'area-selection'
   | 'area-selected'
@@ -46,10 +49,17 @@ export type DiscoverPanelContent =
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
   const { journey, areaKey, schoolId, groupId, schoolPicking } = urlState;
 
-  // MVP2 — agri-first is a static no-area landing. Checked FIRST (before every other
-  // branch, including the area/school cold-load inferences below) so a stray areaKey /
-  // schoolId / groupId in the URL can never make agri fall through to another panel.
+  // MVP2 — agri-first is checked FIRST (before every other branch, including the
+  // area/school cold-load inferences below) so a stray schoolId / groupId / schoolPicking
+  // in the URL can never make agri fall through to another panel.
+  //
+  // Issue #1371: when an areaKey is also present the user has selected an area on the
+  // map → route to the agri-selected detail panel. Otherwise (no areaKey) keep the
+  // static landing prompt.
   if (journey === 'agri-first') {
+    if (areaKey) {
+      return 'agri-selected';
+    }
     return 'agri-landing';
   }
 

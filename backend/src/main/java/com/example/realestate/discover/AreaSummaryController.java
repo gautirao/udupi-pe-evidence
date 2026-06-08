@@ -34,14 +34,21 @@ public class AreaSummaryController {
      * Areas with no stats yet are included with {@code listingCount90d = 0}.
      * Returns {@code {"city": "...", "areas": []}} (200 OK) when city is unknown.
      *
-     * @param city city slug (e.g. {@code udupi}, {@code mangalore}, {@code bangalore})
+     * @param city         city slug (e.g. {@code udupi}, {@code mangalore}, {@code bangalore})
+     * @param propertyType optional singular property type filter (#1371). When set to the
+     *                     literal {@code agricultural_land}, per-area listing counts are
+     *                     scoped to approved agri listings and an additive {@code agriAcreage}
+     *                     field is computed. Blank/whitespace → no filter (blended counts,
+     *                     today's behaviour). The distinct query string is the HTTP cache key;
+     *                     Cache-Control (public, max-age=120) is identical on both variants.
      */
     @GetMapping("/areas")
     public ResponseEntity<AreaSummaryResponse> getAreas(
-            @RequestParam(name = "city") String city) {
+            @RequestParam(name = "city") String city,
+            @RequestParam(name = "propertyType", required = false) String propertyType) {
 
-        log.debug("GET /api/discover/areas city={}", city);
-        AreaSummaryResponse response = areaSummaryService.getAreasByCity(city);
+        log.debug("GET /api/discover/areas city={} propertyType={}", city, propertyType);
+        AreaSummaryResponse response = areaSummaryService.getAreasByCity(city, propertyType);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic())
                 .body(response);

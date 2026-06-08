@@ -15,13 +15,20 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import org.mockito.ArgumentCaptor;
+
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -67,9 +74,9 @@ class AreaSummaryControllerTest {
                 13.35, 74.79,
                 13.30, 74.74, 13.40, 74.84,
                 5L, 400_000L, "rising", "limited",
-                3L
+                3L, null
         );
-        when(areaSummaryService.getAreasByCity("udupi"))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(area)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -85,7 +92,7 @@ class AreaSummaryControllerTest {
 
     @Test
     void getAreas_unknownCity_returnsEmptyList() throws Exception {
-        when(areaSummaryService.getAreasByCity("nowhere"))
+        when(areaSummaryService.getAreasByCity(eq("nowhere"), isNull()))
                 .thenReturn(new AreaSummaryResponse("nowhere", List.of()));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "nowhere"))
@@ -101,9 +108,9 @@ class AreaSummaryControllerTest {
                 13.34, 74.75,
                 null, null, null, null,
                 0L, null, null, "fallback",
-                0L
+                0L, null
         );
-        when(areaSummaryService.getAreasByCity("udupi"))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(zeroArea)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -120,9 +127,9 @@ class AreaSummaryControllerTest {
                 13.33, 74.74,
                 null, null, null, null,
                 2L, 350_000L, "stable", "moderate",
-                0L
+                0L, null
         );
-        when(areaSummaryService.getAreasByCity("udupi"))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(noSchoolArea)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -137,9 +144,9 @@ class AreaSummaryControllerTest {
                 13.35, 74.79,
                 13.30, 74.74, 13.40, 74.84,
                 10L, 500_000L, "rising", "high",
-                7L
+                7L, null
         );
-        when(areaSummaryService.getAreasByCity("udupi"))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of(area)));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -151,7 +158,7 @@ class AreaSummaryControllerTest {
 
     @Test
     void getAreas_responseHasCacheControlPublicMaxAge120() throws Exception {
-        when(areaSummaryService.getAreasByCity("udupi"))
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
                 .thenReturn(new AreaSummaryResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
@@ -159,5 +166,98 @@ class AreaSummaryControllerTest {
                 .andExpect(header().string("Cache-Control", containsString("max-age=120")))
                 .andExpect(header().string("Cache-Control", containsString("public")))
                 .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
+    }
+
+    // ── #1371: optional propertyType param contract ──────────────────────────
+
+    @Test
+    void getAreas_noPropertyType_callsServiceWithNullFilter() throws Exception {
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture());
+        assertThat(typeCaptor.getValue()).isNull();
+    }
+
+    @Test
+    void getAreas_agriPropertyType_passesLiteralAgriculturalLand() throws Exception {
+        AreaSummary agriArea = new AreaSummary(
+                "IN|KA|Udupi|Manipal", "Manipal",
+                13.35, 74.79,
+                null, null, null, null,
+                1L, null, null, "fallback",
+                0L, 5.0
+        );
+        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land")))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of(agriArea)));
+
+        mockMvc.perform(get("/api/discover/areas")
+                        .param("city", "udupi")
+                        .param("propertyType", "agricultural_land"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listingCount", is(1)))
+                .andExpect(jsonPath("$.areas[0].agriAcreage", is(5.0)))
+                // Distinct query string is the HTTP cache key (AC10) — same Cache-Control.
+                .andExpect(header().string("Cache-Control", containsString("max-age=120")))
+                .andExpect(header().string("Cache-Control", containsString("public")));
+
+        // Literal must reach the service verbatim — not trimmed away or renamed.
+        ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture());
+        assertThat(typeCaptor.getValue()).isEqualTo("agricultural_land");
+    }
+
+    @Test
+    void getAreas_blendedVsAgri_useDistinctServiceArgsAndDoNotCrossServe() throws Exception {
+        AreaSummary blended = new AreaSummary(
+                "IN|KA|Udupi|Manipal", "Manipal", 13.35, 74.79,
+                null, null, null, null, 9L, null, null, "high", 0L, null);
+        AreaSummary agri = new AreaSummary(
+                "IN|KA|Udupi|Manipal", "Manipal", 13.35, 74.79,
+                null, null, null, null, 1L, null, null, "fallback", 0L, 5.0);
+        when(areaSummaryService.getAreasByCity(eq("udupi"), isNull()))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of(blended)));
+        when(areaSummaryService.getAreasByCity(eq("udupi"), eq("agricultural_land")))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of(agri)));
+
+        // Blended call → blended count, no acreage.
+        mockMvc.perform(get("/api/discover/areas").param("city", "udupi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listingCount", is(9)))
+                .andExpect(jsonPath("$.areas[0].agriAcreage").doesNotExist());
+
+        // Agri call → agri count + acreage.
+        mockMvc.perform(get("/api/discover/areas")
+                        .param("city", "udupi")
+                        .param("propertyType", "agricultural_land"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.areas[0].listingCount", is(1)))
+                .andExpect(jsonPath("$.areas[0].agriAcreage", is(5.0)));
+
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), isNull());
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), eq("agricultural_land"));
+    }
+
+    @Test
+    void getAreas_whitespacePropertyType_reachesServiceForBlankHandling() throws Exception {
+        // The controller forwards the raw param; blank/whitespace → no-filter is normalised in the
+        // service (verified in the IT). Here we assert the controller threads the value through and
+        // serves with the standard Cache-Control.
+        when(areaSummaryService.getAreasByCity(eq("udupi"), any()))
+                .thenReturn(new AreaSummaryResponse("udupi", List.of()));
+
+        mockMvc.perform(get("/api/discover/areas")
+                        .param("city", "udupi")
+                        .param("propertyType", "   "))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", containsString("max-age=120")));
+
+        ArgumentCaptor<String> typeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(areaSummaryService).getAreasByCity(eq("udupi"), typeCaptor.capture());
+        assertThat(typeCaptor.getValue()).isEqualTo("   ");
     }
 }

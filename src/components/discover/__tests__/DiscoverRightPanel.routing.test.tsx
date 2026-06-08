@@ -480,3 +480,232 @@ describe('DiscoverRightPanel — area-selected content parity', () => {
     expect(screen.getByText('Trends')).toBeInTheDocument();
   });
 });
+
+// ─── Issue #1371: agri-selected panel ─────────────────────────────────────────
+
+describe('DiscoverRightPanel — agri-selected (Issue #1371)', () => {
+  const agriArea = makeArea('IN|KA|Udupi|Manipal', 'Manipal');
+
+  const makeAgriListing = (id: string): DiscoverCityListingItem => ({
+    id,
+    propertyType: 'agricultural_land',
+    locality: 'Manipal',
+    primaryImageUrl: null,
+    landArea: 2,
+    landAreaUnit: 'acre',
+  });
+
+  it('renders the agri-selected summary strip; count comes from agriAreasData (authoritative), not areaListings.length', () => {
+    // agriAreasData is the authoritative count source (backend total, not fetch-capped).
+    // Pass 2 listings but agriAreasData says 7 — rendered count must be 7, not 2.
+    const listings = [makeAgriListing('a1'), makeAgriListing('a2')];
+    const agriAreasData = [{
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.3,
+      geoCenterLon: 74.7,
+      listingCount: 7,
+      schoolCount: 3,
+    }];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={listings}
+        isLoadingListings={false}
+        agriAreasData={agriAreasData}
+      />,
+    );
+    expect(screen.getByTestId('agri-selected-summary')).toBeInTheDocument();
+    // Must show 7 (authoritative), NOT 2 (areaListings.length)
+    expect(screen.getByTestId('agri-count')).toHaveTextContent('7 agricultural listings');
+  });
+
+  it('renders agri listing cards for each agri listing', () => {
+    const listings = [makeAgriListing('a1'), makeAgriListing('a2'), makeAgriListing('a3')];
+    // agriAreasData must have non-zero listingCount — empty-state guard is agriCount===0,
+    // not areaListings.length===0. Without this, agriCount defaults to 0 and empty state fires.
+    const agriAreasData = [{
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.3,
+      geoCenterLon: 74.7,
+      listingCount: 3,
+      schoolCount: 3,
+    }];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={listings}
+        isLoadingListings={false}
+        agriAreasData={agriAreasData}
+      />,
+    );
+    expect(screen.getAllByTestId('agri-listing-card')).toHaveLength(3);
+  });
+
+  it('renders land area on listing cards when present', () => {
+    const listings = [makeAgriListing('a1')];
+    // agriAreasData must have non-zero listingCount to suppress the empty-state guard.
+    const agriAreasData = [{
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.3,
+      geoCenterLon: 74.7,
+      listingCount: 1,
+      schoolCount: 3,
+    }];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={listings}
+        isLoadingListings={false}
+        agriAreasData={agriAreasData}
+      />,
+    );
+    expect(screen.getByTestId('agri-land-area')).toHaveTextContent('2 acre');
+  });
+
+  it('shows backend agri count from agriAreasData when provided (overrides areaListings.length)', () => {
+    const agriAreasData = [
+      {
+        areaKey: 'IN|KA|Udupi|Manipal',
+        name: 'Manipal',
+        geoCenterLat: 13.35,
+        geoCenterLon: 74.79,
+        listingCount: 15,   // backend total > loaded listings
+        schoolCount: 3,
+      },
+    ];
+    const listings = [makeAgriListing('a1')]; // only 1 loaded but backend says 15
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={listings}
+        isLoadingListings={false}
+        agriAreasData={agriAreasData}
+      />,
+    );
+    // Must show backend count (15), not areaListings.length (1)
+    expect(screen.getByTestId('agri-count')).toHaveTextContent('15 agricultural listings');
+  });
+
+  it('renders optional acreage when agriAcreage is present in agriAreasData', () => {
+    const agriAreasData = [
+      {
+        areaKey: 'IN|KA|Udupi|Manipal',
+        name: 'Manipal',
+        geoCenterLat: 13.35,
+        geoCenterLon: 74.79,
+        listingCount: 5,
+        schoolCount: 3,
+        agriAcreage: 12.5,
+      },
+    ];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={[makeAgriListing('a1')]}
+        isLoadingListings={false}
+        agriAreasData={agriAreasData}
+      />,
+    );
+    expect(screen.getByTestId('agri-acreage')).toHaveTextContent('12.5 acres');
+  });
+
+  it('does NOT render acreage element when agriAcreage is absent', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={[makeAgriListing('a1')]}
+        isLoadingListings={false}
+        // no agriAreasData → agriAcreage = undefined
+      />,
+    );
+    expect(screen.queryByTestId('agri-acreage')).not.toBeInTheDocument();
+  });
+
+  it('AC8: shows zero-agri empty state when areaListings is empty and not loading', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={[]}
+        isLoadingListings={false}
+      />,
+    );
+    expect(screen.getByTestId('agri-empty-state')).toBeInTheDocument();
+    expect(screen.getByText('No agricultural listings in this area yet')).toBeInTheDocument();
+    expect(screen.getByTestId('agri-empty-start-over')).toBeInTheDocument();
+  });
+
+  it('AC8: shows loading skeletons when isLoadingListings=true', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={[]}
+        isLoadingListings={true}
+      />,
+    );
+    expect(screen.getAllByTestId('agri-listing-skeleton').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('agri-empty-state')).not.toBeInTheDocument();
+  });
+
+  it('shows loading indicator in summary strip when isLoadingListings=true', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={[]}
+        isLoadingListings={true}
+      />,
+    );
+    expect(screen.getByTestId('agri-count-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-count')).not.toBeInTheDocument();
+  });
+
+  // Regression: non-agri panels are unchanged
+  it('regression: agri-landing panel is still rendered for panelContent=agri-landing', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-landing"
+        selectedArea={null}
+        areaListings={[]}
+      />,
+    );
+    expect(screen.getByTestId('agri-landing-panel')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-selected-summary')).not.toBeInTheDocument();
+  });
+
+  it('regression: area-selected panel is not shown when panelContent=agri-selected', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-selected"
+        selectedArea={agriArea}
+        areaListings={[]}
+        isLoadingListings={false}
+      />,
+    );
+    // area-selected renders a MapPin icon + "No listings in this area yet" text
+    expect(screen.queryByText('No listings in this area yet')).not.toBeInTheDocument();
+    // agri-selected renders its own empty state
+    expect(screen.getByTestId('agri-empty-state')).toBeInTheDocument();
+  });
+});

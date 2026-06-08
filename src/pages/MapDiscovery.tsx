@@ -558,6 +558,7 @@ export default function MapDiscovery() {
     cityCenter, cityZoom, schoolById, schoolByIdError, error,
     totalElements, totalPages,
     markersTruncated, markersReturnedElements, markersTotalFilteredElements,
+    agriAreasData, isLoadingAgriAreas,
   } = useDiscoverMapData({
     city, selectedArea, filters: effectiveFilters, debouncedSearch,
     urlSchoolId: urlState.schoolId, isAuthenticated, fitTick,
@@ -588,6 +589,7 @@ export default function MapDiscovery() {
       mapZoom > AREA_LAYER_MAX_ZOOM,
     page,
     bbox: mapBbox,
+    journey: urlState.journey,
   });
 
   // Debug: expose areaListings and related data to window.__debug for Playwright tests
@@ -1641,6 +1643,8 @@ export default function MapDiscovery() {
           onBack={urlState.journey === 'school-first' ? schoolFirstOnBack : handleAreaFirstBack}
           onStartOver={handleStartOver}
           isLoadingAreas={areasLoading}
+          agriAreasData={agriAreasData}
+          isLoadingAgriAreas={isLoadingAgriAreas}
           urlAreaKey={urlState.areaKey}
           onSelectJourney={(j) => urlActions.setJourney(j)}
           areaGroups={areaGroupsData?.groups ?? []}
