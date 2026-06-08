@@ -12,6 +12,15 @@ Date: YYYY-MM-DD | Sprint: <name or standalone/quick> | Route: <agent chain>
 ---
 -->
 
+## PR #1404 — dev(seed): agricultural land listings for local Discover testing (#1403)
+Date: 2026-06-08 | Sprint: standalone/quick | Route: backend-engineer → code-reviewer (APPROVE w/ comments, 0 blocking)
+- What: opt-in local seed (scripts/db/fixtures/agricultural-listings-seed.sql) of 9 LIVE agricultural_land listings across rural Udupi areas Brahmavar(4)/Shirva(3)/Padubidri(2); 8 valid geography(Polygon,4326) boundaries + 1 NULL-boundary fallback; psql wrapper + docs/db/agricultural-seed.md; tiny compat fix to restore-test-fixture.sh (stale flyway row assertion 84→86 after V84/V85/V86)
+- Why: enable manual end-to-end testing of the agri Discover journey (counts/acreage, clusters, polygons, detail panel, fallback marker)
+- Deviations: OUT OF SCOPE — restore-test-fixture.sh row-count bump (user-permitted tiny compatibility fix); no Flyway migration, no product code, residential [E2E] seed untouched
+- Risks: NONE (local/dev data only; opt-in, not wired into the fixture runner). Verified by real PostGIS run: two-step flow passes; INSERT 0 9; 9/9 live, 8 boundary, 1 null, 0 invalid, 0 null-geog; per-area 4/3/2; idempotent; ST_AsGeoJSON→ST_Polygon
+- Cycles: engineer=1 review=1 | Findings: 4 advisory (2 applied: stale header comment, is_valid in conflict-update; 2 declined as misreads)
+---
+
 ## #848 — QA mock parity verification report
 Date: 2026-04-26 | Sprint: Discover & Trends Redesign - 2 | Route: qa-fast → issue comment
 - What: 15-row audit table (all PASS) + 17/17 E2E evidence at SHA 5025600; visual areas table; sign-off comment posted on #848

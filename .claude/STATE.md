@@ -3,7 +3,7 @@
 <!-- Claude-managed. Tracks where the session is and how to resume.
      NOT a source of project/product truth — decisions live in docs/ and .claude/ARCHITECTURE.md -->
 
-Last updated: 2026-04-30
+Last updated: 2026-06-08
 
 ## Current Position
 - Active milestone: **discover-filter-simplification** (GitHub milestone #12)
@@ -43,6 +43,7 @@ Guardrails for the milestone:
 - NONE — paused per user request before Issue 1 implementation.
 
 ## Recent Completions (last 6)
+- #1403 (dev seed: agricultural land listings for local Discover testing) → PR #1404 OPEN, READY_TO_MERGE awaiting approval (2026-06-08) [/quick]
 - #953 (URL persistence for multi-seller, status booleans, date range) → PR #961 merged (2026-04-30)
 - #952 (relocate text search to listings header + q= URL persistence) → PR #960 merged (2026-04-30)
 - #951 (move near-school search to dedicated sheet) → PR #959 merged (2026-04-30)
