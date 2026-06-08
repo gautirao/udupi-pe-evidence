@@ -9,6 +9,7 @@ import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { derivePanelContent } from '@/utils/discoverPanelState';
+import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import { computeGroupBounds } from '@/utils/discoverGroupBounds';
 import { CitySelect } from '@/components/discover/CitySelect';
 import { CityNotSupported } from '@/components/discover/CityNotSupported';
@@ -389,6 +390,15 @@ export default function MapDiscovery() {
     (listing: PropertyListingWithImages | null) => setSelectedMarkerListing(listing),
     [],
   );
+
+  // Issue #1374 — override panelContent to 'agri-detail' while an agri polygon is
+  // selected. Confined to 'agri-selected' (not 'agri-landing') so a stale
+  // selectedMarkerListing from a previous area visit cannot drive the detail panel
+  // over the landing screen. URL state (areaKey/journey) is intentionally NOT cleared.
+  const resolvedPanelContent: DiscoverPanelContent =
+    selectedMarkerListing != null && panelContent === 'agri-selected'
+      ? 'agri-detail'
+      : panelContent;
 
   // Issue #1115 — gate the school-first /api/discover/markers fetch behind an explicit
   // user action (bounded-search CTA). Default false so the query does not auto-fire on
@@ -1642,7 +1652,9 @@ export default function MapDiscovery() {
         </div>
 
         <DiscoverRightPanel
-          panelContent={panelContent}
+          panelContent={resolvedPanelContent}
+          selectedMarkerListing={selectedMarkerListing}
+          onClearAgriSelection={() => setSelectedMarkerListing(null)}
           city={city}
           journey={urlState.journey}
           activeContextChips={activeContextChips}

@@ -2,6 +2,8 @@ import React from 'react';
 import { AlertCircle, Loader2, Sprout } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
+import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
+import { AgriListingPanel } from './panels/AgriListingPanel';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
@@ -151,6 +153,17 @@ export interface DiscoverRightPanelProps {
   agriAreasData?: DiscoverArea[];
   /** True while the agri-scoped areas query is loading. */
   isLoadingAgriAreas?: boolean;
+  /**
+   * Issue #1374 — the agri polygon listing currently selected on the map.
+   * Carried from MapDiscovery.selectedMarkerListing. Only meaningful when
+   * panelContent === 'agri-detail'; undefined/null otherwise.
+   */
+  selectedMarkerListing?: PropertyListingWithImages | null;
+  /**
+   * Issue #1374 — clears the selected agri polygon listing to return to the
+   * agri-selected area panel. Must NOT mutate URL state (areaKey/journey intact).
+   */
+  onClearAgriSelection?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -201,6 +214,8 @@ export function DiscoverRightPanel({
   urlAreaKey = null,
   agriAreasData,
   isLoadingAgriAreas = false,
+  selectedMarkerListing = null,
+  onClearAgriSelection,
 }: DiscoverRightPanelProps) {
   // Issue #1064 AC3 — explicit hydration/not-found UIs replace the silent
   // GuidedEntryPanel fall-back when the URL claims an areaKey but `selectedArea`
@@ -558,6 +573,17 @@ export function DiscoverRightPanel({
           />
         );
 
+      case 'agri-detail':
+        // Issue #1374 — full detail panel for a selected agri polygon listing.
+        // selectedMarkerListing carries the lightweight marker (id, loc, boundary);
+        // AgriListingPanel fetches the full DTO by id from the public endpoint.
+        return selectedMarkerListing?.id ? (
+          <AgriListingPanel
+            listingId={selectedMarkerListing.id}
+            onBack={onClearAgriSelection ?? (() => undefined)}
+          />
+        ) : null;
+
       default: {
         // Exhaustiveness net (R6): the switch had no default, so a future
         // DiscoverPanelContent member with no case would silently render nothing
@@ -576,6 +602,7 @@ export function DiscoverRightPanel({
   const PANELS_WITH_INLINE_CHIPS = new Set<DiscoverPanelContent>([
     'area-selected',
     'agri-selected',
+    'agri-detail',
     'schools-in-area',
     'school-selected',
     'area-school-combined',

@@ -24,6 +24,7 @@ export type DiscoverPanelContent =
   | 'guided-entry'
   | 'agri-landing'
   | 'agri-selected'
+  | 'agri-detail'
   | 'area-groups-landing'
   | 'area-selection'
   | 'area-selected'
