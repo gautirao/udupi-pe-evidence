@@ -63,6 +63,7 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
         boolean boundsApplied = predicate.bboxApplied();
 
         String sql = "SELECT pl.id, pl.latitude, pl.longitude, pl.price_paise, pl.locality, pl.property_type"
+                + ", CASE WHEN pl.property_type = 'agricultural_land' THEN ST_AsGeoJSON(pl.boundary) END AS boundary_geojson"
                 + " FROM property_listings pl"
                 + " WHERE " + predicate.whereFragment()
                 + " ORDER BY pl.id"
@@ -83,7 +84,8 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
                             rs.getDouble("longitude"),
                             rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
                             rs.getString("locality"),
-                            rs.getString("property_type")
+                            rs.getString("property_type"),
+                            rs.getString("boundary_geojson")
                     ),
                     paramArray
             );
@@ -108,7 +110,7 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
             //     because it references the same pl.geog predicates (ST_MakeEnvelope && pl.geog,
             //     ST_DWithin, etc.) from the shared predicate.whereFragment().
             //   - Not truncated: all matching rows were already fetched. totalFilteredElements
-            //     equals returnedElements — no extra query issued.
+            //     equals returnedElements — no extra query needed.
             long totalFilteredElements;
             if (truncated) {
                 String countSql = "SELECT COUNT(*) FROM property_listings pl WHERE " + predicate.whereFragment();

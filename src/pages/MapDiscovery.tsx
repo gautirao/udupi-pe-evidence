@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { AppLayout } from '@/components/layout/AppLayout';
-import { PropertyMap } from '@/components/map/PropertyMap';
+import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
@@ -382,6 +382,13 @@ export default function MapDiscovery() {
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
   const [nearSchoolOpen, setNearSchoolOpen] = useState(false);
+
+  // Issue #1373 — selected agri polygon listing for right-panel stub (#1374 content).
+  const [selectedMarkerListing, setSelectedMarkerListing] = useState<PropertyListingWithImages | null>(null);
+  const handleSelectMarkerListing = useCallback(
+    (listing: PropertyListingWithImages | null) => setSelectedMarkerListing(listing),
+    [],
+  );
 
   // Issue #1115 — gate the school-first /api/discover/markers fetch behind an explicit
   // user action (bounded-search CTA). Default false so the query does not auto-fire on
@@ -1542,6 +1549,9 @@ export default function MapDiscovery() {
               cityRestoreCenter={cityCenter}
               cityRestoreZoom={cityZoom}
               isAgriMode={isAgriJourney}
+              selectedPolygonListing={selectedMarkerListing}
+              onSelectListing={handleSelectMarkerListing}
+              mapZoom={mapZoom}
             />
           )}
 

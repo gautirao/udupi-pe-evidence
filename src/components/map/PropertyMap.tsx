@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip, Polygon } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
@@ -50,6 +50,8 @@ export const SCHOOL_MARKER_FOCUS_MAX_ZOOM = 13;
 // Extended listing with images for map display
 export interface PropertyListingWithImages extends PropertyListing {
   images?: PropertyImage[];
+  /** Issue #1373 — GeoJSON Polygon string for agri listings, forwarded from DiscoverFilteredMarker via filteredMarkerToPropertyListing. */
+  boundary_geojson?: string | null;
 }
 
 // Fix default marker icons in Leaflet
@@ -271,6 +273,17 @@ interface PropertyMapProps {
    * MarkerClusterLayer is NOT rendered in agri mode.
    */
   isAgriMode?: boolean;
+  /**
+   * Issue #1373 — current map zoom level, forwarded from MapDiscovery.
+   * Used by AgriPolygonLayer to gate polygon rendering at zoom >= 16
+   * (same threshold as disableClusteringAtZoom in AgriMarkerClusterLayer).
+   */
+  mapZoom?: number;
+  /**
+   * Issue #1373 — selected agri polygon listing. Passed only to AgriPolygonLayer
+   * (not MapController) to avoid unintended flyTo panning on polygon click.
+   */
+  selectedPolygonListing?: PropertyListingWithImages | null;
 }
 
 /**
@@ -945,6 +958,80 @@ function AgriMarkerClusterLayer({
   return null;
 }
 
+/**
+ * Issue #1373 — renders saved agricultural plot boundaries as Leaflet Polygons.
+ *
+ * Only active when:
+ *   - mapZoom >= 16 (same threshold as AgriMarkerClusterLayer.disableClusteringAtZoom)
+ *   - listing.boundary_geojson is a non-null, non-empty string
+ *
+ * Coordinate transform: GeoJSON stores [longitude, latitude] pairs; Leaflet uses
+ * [latitude, longitude]. This component converts on-the-fly when building positions.
+ * The fails-without-fix unit test in PropertyMap.agriPolygon.test.tsx asserts this.
+ *
+ * Null-boundary agri listings fall back to AgriMarkerClusterLayer (no polygon here).
+ * Non-agri listings are not passed to this layer (AgriPolygonLayer only mounts in isAgriMode).
+ */
+function AgriPolygonLayer({
+  listings,
+  selectedListing,
+  onSelectListing,
+  mapZoom,
+}: {
+  listings: PropertyListingWithImages[];
+  selectedListing?: PropertyListingWithImages | null;
+  onSelectListing?: (listing: PropertyListingWithImages | null) => void;
+  mapZoom?: number;
+}) {
+  // Gate: only render at zoom >= 16
+  if (mapZoom == null || mapZoom < 16) return null;
+
+  const agriListingsWithBoundary = listings.filter(
+    (l) => l.property_type === 'agricultural_land' && l.boundary_geojson,
+  );
+
+  if (agriListingsWithBoundary.length === 0) return null;
+
+  return (
+    <>
+      {agriListingsWithBoundary.map((listing) => {
+        let positions: [number, number][] = [];
+        try {
+          // GeoJSON Polygon: { type: "Polygon", coordinates: [[[lng, lat], ...]] }
+          // Leaflet Polygon positions: [[lat, lng], ...]
+          // Transform: each [lng, lat] pair → [lat, lng]
+          const geo = JSON.parse(listing.boundary_geojson!);
+          // Guard: only handle GeoJSON Polygon type
+          if (geo.type !== 'Polygon' || !Array.isArray(geo.coordinates?.[0])) return null;
+          const ring: [number, number][] = geo.coordinates[0];
+          positions = ring.map(([lng, lat]: [number, number]) => [lat, lng]);
+        } catch {
+          return null;
+        }
+        if (positions.length < 3) return null;
+
+        const isSelected = selectedListing?.id === listing.id;
+
+        return (
+          <Polygon
+            key={listing.id}
+            positions={positions}
+            pathOptions={{
+              color: isSelected ? '#f97316' : '#65a30d',
+              fillColor: isSelected ? '#f97316' : '#65a30d',
+              fillOpacity: isSelected ? 0.35 : 0.2,
+              weight: isSelected ? 3 : 2,
+            }}
+            eventHandlers={{
+              click: () => onSelectListing?.(listing),
+            }}
+          />
+        );
+      })}
+    </>
+  );
+}
+
 const schoolMarkerIcon = L.divIcon({
   className: 'school-marker',
   html: `
@@ -1010,6 +1097,8 @@ export function PropertyMap({
   cityRestoreCenter,
   cityRestoreZoom,
   isAgriMode = false,
+  mapZoom,
+  selectedPolygonListing,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -1067,10 +1156,19 @@ export function PropertyMap({
           cityCenter={cityRestoreCenter}
           cityZoom={cityRestoreZoom}
         />
-        {isAgriMode
-          ? <AgriMarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
-          : <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
-        }
+        {isAgriMode ? (
+          <>
+            <AgriMarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+            <AgriPolygonLayer
+              listings={listings}
+              selectedListing={selectedPolygonListing}
+              onSelectListing={onSelectListing}
+              mapZoom={mapZoom}
+            />
+          </>
+        ) : (
+          <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+        )}
         {areas.length > 0 && (
           <AreaMarkerLayer
             areas={areas}

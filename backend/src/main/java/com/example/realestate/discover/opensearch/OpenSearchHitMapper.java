@@ -50,7 +50,8 @@ final class OpenSearchHitMapper {
                 lonNum.doubleValue(),
                 price != null ? price.longValue() : null,
                 locality,
-                propertyType
+                propertyType,
+                null  // boundary GeoJSON not available from OpenSearch index
         );
     }
 

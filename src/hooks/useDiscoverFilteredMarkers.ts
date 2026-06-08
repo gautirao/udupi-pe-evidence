@@ -11,6 +11,8 @@ export interface DiscoverFilteredMarker {
   locality: string | null;
   /** Issue #1372 — property type forwarded from the markers endpoint for agri cluster rendering. */
   propertyType?: string | null;
+  /** Issue #1373 — GeoJSON Polygon string for agri listings with a saved boundary. Absent for non-agri + agri-no-boundary. */
+  boundary?: string | null;
 }
 
 export interface DiscoverFilteredMarkersResponse {

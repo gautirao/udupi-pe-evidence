@@ -64,7 +64,7 @@ export function markerToPropertyListing(
 export function filteredMarkerToPropertyListing(
   m: DiscoverFilteredMarker,
   now: string,
-): PropertyListing & { images?: PropertyImage[] } {
+): PropertyListing & { images?: PropertyImage[]; boundary_geojson?: string | null } {
   return {
     id: m.id,
     latitude: m.lat,
@@ -107,6 +107,7 @@ export function filteredMarkerToPropertyListing(
     lock_in_months: null,
     seller_type: null,
     raw_post_id: null,
+    boundary_geojson: m.boundary ?? null,
   };
 }
 
