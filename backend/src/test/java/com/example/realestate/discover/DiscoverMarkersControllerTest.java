@@ -74,7 +74,7 @@ class DiscoverMarkersControllerTest {
 
     @Test
     void validCity_returns200() throws Exception {
-        DiscoverMarker marker = new DiscoverMarker("abc-id", 13.3, 74.7, 5_000_000L, "Malpe");
+        DiscoverMarker marker = new DiscoverMarker("abc-id", 13.3, 74.7, 5_000_000L, "Malpe", "apartment");
         when(service.getMarkers(any())).thenReturn(
                 new DiscoverMarkersResponse("udupi", List.of(marker), false, 1, 1L, 1000, false));
 
@@ -88,6 +88,7 @@ class DiscoverMarkersControllerTest {
                 .andExpect(jsonPath("$.markers[0].lat", is(13.3)))
                 .andExpect(jsonPath("$.markers[0].lon", is(74.7)))
                 .andExpect(jsonPath("$.markers[0].pricePaise", is(5_000_000)))
+                .andExpect(jsonPath("$.markers[0].propertyType", is("apartment")))
                 .andExpect(jsonPath("$.truncated", is(false)))
                 .andExpect(jsonPath("$.returnedElements", is(1)))
                 .andExpect(jsonPath("$.totalFilteredElements", is(1)))
@@ -126,7 +127,7 @@ class DiscoverMarkersControllerTest {
 
     @Test
     void truncatedResponse_returnsTruncatedTrue() throws Exception {
-        DiscoverMarker marker = new DiscoverMarker("abc-id", 13.3, 74.7, 5_000_000L, "Malpe");
+        DiscoverMarker marker = new DiscoverMarker("abc-id", 13.3, 74.7, 5_000_000L, "Malpe", null);
         when(service.getMarkers(any())).thenReturn(
                 new DiscoverMarkersResponse("udupi", List.of(marker), true, 1, 1500L, 1000, false));
 
@@ -144,7 +145,7 @@ class DiscoverMarkersControllerTest {
 
     @Test
     void validBbox_returns200_andBboxPassedToService() throws Exception {
-        DiscoverMarker marker = new DiscoverMarker("m1", 13.35, 74.75, null, "Malpe");
+        DiscoverMarker marker = new DiscoverMarker("m1", 13.35, 74.75, null, "Malpe", null);
         when(service.getMarkers(any())).thenReturn(
                 new DiscoverMarkersResponse("udupi", List.of(marker), false, 1, 1L, 1000, true));
 

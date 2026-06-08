@@ -42,13 +42,15 @@ final class OpenSearchHitMapper {
         }
         Number price = number(source, "price_paise");
         String locality = string(source, "locality");
+        String propertyType = string(source, "property_type");
 
         return new DiscoverMarker(
                 id,
                 latNum.doubleValue(),
                 lonNum.doubleValue(),
                 price != null ? price.longValue() : null,
-                locality
+                locality,
+                propertyType
         );
     }
 

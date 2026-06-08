@@ -62,7 +62,7 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);
         boolean boundsApplied = predicate.bboxApplied();
 
-        String sql = "SELECT pl.id, pl.latitude, pl.longitude, pl.price_paise, pl.locality"
+        String sql = "SELECT pl.id, pl.latitude, pl.longitude, pl.price_paise, pl.locality, pl.property_type"
                 + " FROM property_listings pl"
                 + " WHERE " + predicate.whereFragment()
                 + " ORDER BY pl.id"
@@ -82,7 +82,8 @@ public class DiscoverMarkersService implements DiscoverMarkersPort {
                             rs.getDouble("latitude"),
                             rs.getDouble("longitude"),
                             rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
-                            rs.getString("locality")
+                            rs.getString("locality"),
+                            rs.getString("property_type")
                     ),
                     paramArray
             );

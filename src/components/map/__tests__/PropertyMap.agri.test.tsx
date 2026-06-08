@@ -1,0 +1,216 @@
+/**
+ * Issue #1372 — AgriMarkerClusterLayer rendering tests.
+ *
+ * Confirms that:
+ *   1. isAgriMode=true renders AgriMarkerClusterLayer (agri-cluster icon) and NOT MarkerClusterLayer.
+ *   2. isAgriMode=false (default) renders MarkerClusterLayer and NOT AgriMarkerClusterLayer.
+ */
+
+// ─── Mocks (must precede imports) ────────────────────────────────────────────
+
+// Capture divIcon calls so we can distinguish agri-cluster vs custom-marker-cluster HTML.
+const capturedDivIconCalls: Array<{ html: string }> = [];
+
+// Track addLayer calls per clusterGroup so we can verify mount/unmount.
+const mockAddLayer = vi.fn();
+const mockRemoveLayer = vi.fn();
+const mockClusterGroupAddLayer = vi.fn();
+
+vi.mock('leaflet', () => {
+  return {
+    default: {
+      Icon: {
+        Default: {
+          prototype: {},
+          mergeOptions: vi.fn(),
+        },
+      },
+      divIcon: vi.fn((opts: { html: string; className?: string; iconSize?: unknown }) => {
+        capturedDivIconCalls.push({ html: opts.html ?? '' });
+        return { options: opts };
+      }),
+      marker: vi.fn(() => ({
+        on: vi.fn().mockReturnThis(),
+      })),
+      markerClusterGroup: vi.fn(() => ({
+        addLayer: mockClusterGroupAddLayer,
+        // iconCreateFunction is stored by the cluster group; we invoke it manually below
+        // where we need to inspect the generated HTML.
+      })),
+      point: vi.fn((x: number, y: number) => ({ x, y })),
+    },
+  };
+});
+
+vi.mock('react-leaflet', () => ({
+  MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TileLayer: () => null,
+  useMap: vi.fn(() => ({
+    addLayer: mockAddLayer,
+    removeLayer: mockRemoveLayer,
+    flyTo: vi.fn(),
+    fitBounds: vi.fn(),
+    getBounds: vi.fn(() => ({
+      getNorth: vi.fn(() => 14),
+      getSouth: vi.fn(() => 13),
+      getEast: vi.fn(() => 75),
+      getWest: vi.fn(() => 74),
+    })),
+    getCenter: vi.fn(() => ({ lat: 13.5, lng: 74.7 })),
+    getZoom: vi.fn(() => 12),
+    setView: vi.fn().mockReturnThis(),
+    getContainer: vi.fn(() => document.body),
+  })),
+  useMapEvents: vi.fn(() => ({
+    getBounds: vi.fn(() => ({
+      getNorth: vi.fn(() => 14),
+      getSouth: vi.fn(() => 13),
+      getEast: vi.fn(() => 75),
+      getWest: vi.fn(() => 74),
+    })),
+    getZoom: vi.fn(() => 12),
+    getContainer: vi.fn(() => document.body),
+  })),
+}));
+
+vi.mock('leaflet/dist/leaflet.css', () => ({}));
+vi.mock('leaflet.markercluster/dist/MarkerCluster.css', () => ({}));
+vi.mock('leaflet.markercluster/dist/MarkerCluster.Default.css', () => ({}));
+vi.mock('leaflet.markercluster', () => ({}));
+vi.mock('leaflet-draw', () => ({}));
+vi.mock('leaflet-draw/dist/leaflet.draw.css', () => ({}));
+
+vi.mock('@/components/map/DrawControl', () => ({
+  DrawControl: () => null,
+}));
+
+vi.mock('@/components/ui/card', () => ({
+  Card: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+// ─── Imports after mocks ──────────────────────────────────────────────────────
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render } from '@testing-library/react';
+import L from 'leaflet';
+
+// ─── Shared listing fixture ───────────────────────────────────────────────────
+const agriListing = {
+  id: 'agri-1',
+  title: 'Paddy Field',
+  property_type: 'agricultural_land' as const,
+  latitude: 13.4,
+  longitude: 74.8,
+  price: 500_000,
+  status: 'LIVE' as const,
+  locality: 'Udupi Rural',
+  created_at: '',
+  updated_at: '',
+};
+
+const houseListing = {
+  id: 'house-1',
+  title: 'Modern House',
+  property_type: 'house' as const,
+  latitude: 13.35,
+  longitude: 74.75,
+  price: 1_000_000,
+  status: 'LIVE' as const,
+  locality: 'Udupi',
+  created_at: '',
+  updated_at: '',
+};
+
+describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    mockAddLayer.mockClear();
+    mockRemoveLayer.mockClear();
+    mockClusterGroupAddLayer.mockClear();
+    vi.mocked(L.markerClusterGroup).mockClear();
+    vi.mocked(L.divIcon).mockClear();
+  });
+
+  it('agri mode: markerClusterGroup is created and added to the map for agri listings', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
+
+    // markerClusterGroup should have been called (AgriMarkerClusterLayer uses it)
+    expect(L.markerClusterGroup).toHaveBeenCalled();
+    // The cluster group should be added to the map
+    expect(mockAddLayer).toHaveBeenCalled();
+  });
+
+  it('agri mode: cluster icon HTML contains agri-cluster class and wheat emoji', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    // Capture the iconCreateFunction passed to markerClusterGroup
+    let capturedIconCreateFn: ((cluster: { getChildCount: () => number }) => unknown) | undefined;
+    vi.mocked(L.markerClusterGroup).mockImplementationOnce((opts) => {
+      if (opts?.iconCreateFunction) {
+        capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
+      }
+      return { addLayer: mockClusterGroupAddLayer } as ReturnType<typeof L.markerClusterGroup>;
+    });
+
+    render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
+
+    expect(capturedIconCreateFn).toBeDefined();
+
+    // Invoke iconCreateFunction with count=5 (small bucket)
+    capturedIconCreateFn!({ getChildCount: () => 5 });
+
+    // The most recent divIcon call should have agri-cluster HTML
+    const lastCall = capturedDivIconCalls[capturedDivIconCalls.length - 1];
+    expect(lastCall).toBeDefined();
+    expect(lastCall.html).toContain('agri-cluster');
+    expect(lastCall.html).toContain('🌾');
+    // Should NOT contain residential cluster class
+    expect(lastCall.html).not.toContain('custom-marker-cluster');
+  });
+
+  it('non-agri mode (default): cluster icon HTML contains custom-marker-cluster and NO agri-cluster', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    let capturedIconCreateFn: ((cluster: { getChildCount: () => number }) => unknown) | undefined;
+    vi.mocked(L.markerClusterGroup).mockImplementationOnce((opts) => {
+      if (opts?.iconCreateFunction) {
+        capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
+      }
+      return { addLayer: mockClusterGroupAddLayer } as ReturnType<typeof L.markerClusterGroup>;
+    });
+
+    render(<PropertyMap listings={[houseListing]} isAgriMode={false} />);
+
+    expect(capturedIconCreateFn).toBeDefined();
+    capturedIconCreateFn!({ getChildCount: () => 3 });
+
+    const lastCall = capturedDivIconCalls[capturedDivIconCalls.length - 1];
+    expect(lastCall).toBeDefined();
+    expect(lastCall.html).toContain('custom-marker-cluster');
+    expect(lastCall.html).not.toContain('agri-cluster');
+    expect(lastCall.html).not.toContain('🌾');
+  });
+
+  it('non-agri mode (isAgriMode omitted): falls back to residential MarkerClusterLayer', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    let capturedIconCreateFn: ((cluster: { getChildCount: () => number }) => unknown) | undefined;
+    vi.mocked(L.markerClusterGroup).mockImplementationOnce((opts) => {
+      if (opts?.iconCreateFunction) {
+        capturedIconCreateFn = opts.iconCreateFunction as typeof capturedIconCreateFn;
+      }
+      return { addLayer: mockClusterGroupAddLayer } as ReturnType<typeof L.markerClusterGroup>;
+    });
+
+    // No isAgriMode prop → defaults to false
+    render(<PropertyMap listings={[houseListing]} />);
+
+    expect(capturedIconCreateFn).toBeDefined();
+    capturedIconCreateFn!({ getChildCount: () => 1 });
+
+    const lastCall = capturedDivIconCalls[capturedDivIconCalls.length - 1];
+    expect(lastCall.html).not.toContain('agri-cluster');
+  });
+});

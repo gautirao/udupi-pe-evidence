@@ -149,11 +149,19 @@ export function useDiscoverMapData({
   });
 
   // ── Filtered markers (auth-only, same predicate as listings) ──────────────
+  // Issue #1371 — isAgriJourney gates both the areas call (below) and the markers call.
+  // Declared here (before first use) to keep agriFilters readable.
+  const isAgriJourney = journey === 'agri-first';
+  // Issue #1372 — in agri-first journey, force propertyTypes to ['agricultural_land']
+  // so markerListings contains only agri markers.
+  const agriFilters: typeof filters = isAgriJourney
+    ? { ...filters, propertyTypes: ['agricultural_land'] }
+    : filters;
   const {
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
     isFetching: filteredMarkersFetching,
-  } = useDiscoverFilteredMarkers(city, filters, markersEnabled, bbox, debouncedSearch?.trim() || undefined);
+  } = useDiscoverFilteredMarkers(city, agriFilters, markersEnabled, bbox, debouncedSearch?.trim() || undefined);
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);
@@ -163,7 +171,7 @@ export function useDiscoverMapData({
   // Issue #1371 — agri-scoped area summary. Only enabled in agri-first journey.
   // Uses a SEPARATE cache key (['discover-areas', city, 'agricultural_land']) so React Query
   // cannot cross-serve this with the blended response (AC10).
-  const isAgriJourney = journey === 'agri-first';
+  // isAgriJourney is declared above (before agriFilters) — reused here.
   const {
     data: agriAreasResponseData,
     isLoading: isLoadingAgriAreas,

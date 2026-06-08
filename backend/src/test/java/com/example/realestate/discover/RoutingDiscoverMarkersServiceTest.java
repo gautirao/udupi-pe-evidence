@@ -44,7 +44,7 @@ class RoutingDiscoverMarkersServiceTest {
     );
 
     private static final DiscoverMarkersResponse OS_RESPONSE = new DiscoverMarkersResponse(
-            "udupi", List.of(new DiscoverMarker("id1", 13.3, 74.7, 5000000L, "Locality")),
+            "udupi", List.of(new DiscoverMarker("id1", 13.3, 74.7, 5000000L, "Locality", null)),
             false, 1, 1L, 1000, false
     );
 

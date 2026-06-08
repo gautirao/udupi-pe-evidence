@@ -64,8 +64,10 @@ L.Icon.Default.mergeOptions({
 const UDUPI_CENTER: [number, number] = [13.3409, 74.7421];
 const DEFAULT_ZOOM = 11;
 
-// Property type configuration
-const propertyConfig: Record<PropertyType, { color: string; label: string; bgClass: string }> = {
+// Property type configuration.
+// Record<string, ...> to accommodate 'agricultural_land' which is not in the
+// PropertyType union (Issue #1372 agri cluster support).
+const propertyConfig: Record<string, { color: string; label: string; bgClass: string }> = {
   land: { color: '#22c55e', label: 'Land', bgClass: 'bg-green-500' },
   house: { color: '#ea580c', label: 'House', bgClass: 'bg-orange-500' },
   apartment: { color: '#8b5cf6', label: 'Apartment', bgClass: 'bg-violet-500' },
@@ -74,15 +76,16 @@ const propertyConfig: Record<PropertyType, { color: string; label: string; bgCla
   warehouse: { color: '#d97706', label: 'Warehouse', bgClass: 'bg-amber-600' },
   commercial_land: { color: '#0d9488', label: 'Comm. Land', bgClass: 'bg-teal-600' },
   other: { color: '#6b7280', label: 'Other', bgClass: 'bg-gray-500' },
+  agricultural_land: { color: '#65a30d', label: 'Agri Land', bgClass: 'bg-lime-600' },
 };
 
 // Module-level icon cache — avoids creating a new DivIcon object on every render.
-const iconCache = new Map<PropertyType, L.DivIcon>();
+const iconCache = new Map<string, L.DivIcon>();
 
-const createMarkerIcon = (propertyType: PropertyType): L.DivIcon => {
+const createMarkerIcon = (propertyType: string): L.DivIcon => {
   const cached = iconCache.get(propertyType);
   if (cached) return cached;
-  const { color } = propertyConfig[propertyType];
+  const { color } = propertyConfig[propertyType] ?? propertyConfig['other'];
   // Issue #1074 — include 'property-marker' class + data-testid so E2E can
   // distinguish property markers from `.school-marker` school pins.
   const icon = L.divIcon({
@@ -262,6 +265,12 @@ interface PropertyMapProps {
   cityRestoreCenter?: [number, number];
   /** City zoom for CityRestorePanner flyTo. */
   cityRestoreZoom?: number;
+  /**
+   * Issue #1372 — when true (journey=agri-first), renders agriculture markers in a
+   * separate AgriMarkerClusterLayer with agri-specific cluster icons. The residential
+   * MarkerClusterLayer is NOT rendered in agri mode.
+   */
+  isAgriMode?: boolean;
 }
 
 /**
@@ -871,6 +880,71 @@ function MarkerClusterLayer({
   return null;
 }
 
+// Issue #1372 — agriculture-specific cluster layer.
+// Identical structure to MarkerClusterLayer but uses agri-themed cluster icons
+// so agricultural land pins are visually distinct in the agri-first journey.
+function AgriMarkerClusterLayer({
+  listings,
+  onSelectListing,
+}: {
+  listings: PropertyListingWithImages[];
+  onSelectListing?: (listing: PropertyListingWithImages | null) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const clusterGroup = L.markerClusterGroup({
+      chunkedLoading: true,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      maxClusterRadius: 50,
+      disableClusteringAtZoom: 16,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        let size: 'small' | 'medium' | 'large' = 'small';
+        let sizeNum = 36;
+
+        if (count > 50) {
+          size = 'large';
+          sizeNum = 52;
+        } else if (count > 10) {
+          size = 'medium';
+          sizeNum = 44;
+        }
+
+        return L.divIcon({
+          html: `<div class="agri-cluster agri-cluster-${size}">🌾 ${count}</div>`,
+          className: '',
+          iconSize: L.point(sizeNum, sizeNum),
+        });
+      },
+    });
+
+    const validListings = listings.filter((l) => l.latitude && l.longitude);
+
+    validListings.forEach((listing) => {
+      const marker = L.marker([listing.latitude!, listing.longitude!], {
+        icon: createMarkerIcon(listing.property_type),
+      });
+
+      marker.on('click', () => {
+        onSelectListing?.(listing);
+      });
+
+      clusterGroup.addLayer(marker);
+    });
+
+    map.addLayer(clusterGroup);
+
+    return () => {
+      map.removeLayer(clusterGroup);
+    };
+  }, [listings, map, onSelectListing]);
+
+  return null;
+}
+
 const schoolMarkerIcon = L.divIcon({
   className: 'school-marker',
   html: `
@@ -935,6 +1009,7 @@ export function PropertyMap({
   cityRestoreTick,
   cityRestoreCenter,
   cityRestoreZoom,
+  isAgriMode = false,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -992,7 +1067,10 @@ export function PropertyMap({
           cityCenter={cityRestoreCenter}
           cityZoom={cityRestoreZoom}
         />
-        <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+        {isAgriMode
+          ? <AgriMarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+          : <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+        }
         {areas.length > 0 && (
           <AreaMarkerLayer
             areas={areas}

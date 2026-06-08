@@ -9,6 +9,8 @@ export interface DiscoverFilteredMarker {
   lon: number;
   pricePaise: number | null;
   locality: string | null;
+  /** Issue #1372 — property type forwarded from the markers endpoint for agri cluster rendering. */
+  propertyType?: string | null;
 }
 
 export interface DiscoverFilteredMarkersResponse {

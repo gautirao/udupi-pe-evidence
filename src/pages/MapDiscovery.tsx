@@ -581,6 +581,10 @@ export default function MapDiscovery() {
     markersEnabled:
       isAuthenticated &&
       (urlState.journey === 'area-first' ||
+        // Issue #1372 — agri-first journey must also enable markers so AgriMarkerClusterLayer
+        // receives data. Without this, useDiscoverFilteredMarkers is never enabled in
+        // agri-first mode and the cluster layer renders empty.
+        urlState.journey === 'agri-first' ||
         (urlState.journey === 'school-first' &&
           !!urlState.schoolId &&
           filters.schoolLat != null &&
@@ -1537,6 +1541,7 @@ export default function MapDiscovery() {
               cityRestoreTick={cityRestoreTick}
               cityRestoreCenter={cityCenter}
               cityRestoreZoom={cityZoom}
+              isAgriMode={isAgriJourney}
             />
           )}
 

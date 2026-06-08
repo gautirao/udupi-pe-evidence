@@ -69,7 +69,7 @@ export function filteredMarkerToPropertyListing(
     id: m.id,
     latitude: m.lat,
     longitude: m.lon,
-    property_type: 'other' as PropertyType,
+    property_type: (m.propertyType ?? 'other') as PropertyType,
     price: m.pricePaise != null ? Math.round(m.pricePaise / 100) : null,
     price_unit: null,
     title: null,
