@@ -21,6 +21,7 @@ import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
+import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
@@ -386,6 +387,22 @@ export default function MapDiscovery() {
     data: regionalAreaGroupsData,
     isLoading: isLoadingRegionalAreaGroups,
   } = useRegionalAreaGroups(urlState.city);
+
+  // Issue #1410 (B3) — derive areaKeys from the selected regional group and fetch
+  // agri map listings. Hook is disabled when no group is selected (selectedGroupAreaKeys=[]).
+  const selectedGroup = urlState.selectedGroup;
+  const selectedGroupData = selectedGroup
+    ? (regionalAreaGroupsData?.groups ?? []).find(
+        g =>
+          g.directionKey === selectedGroup.directionKey &&
+          g.distanceBandKey === selectedGroup.distanceBandKey,
+      ) ?? null
+    : null;
+  const selectedGroupAreaKeys = selectedGroupData?.areaKeys ?? [];
+  const { data: agriMapListingsData } = useAgriMapListings(
+    urlState.city,
+    selectedGroupAreaKeys,
+  );
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -1326,6 +1343,35 @@ export default function MapDiscovery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlState.groupId, urlState.areaKey, areasLoading, discoverAreas, areaGroupsData]);
 
+  // Issue #1410 (B3) — viewport-fit when agri group listings arrive.
+  // Uses a state variable fed into PropertyMap's focusBounds so it's consistent with how
+  // all other fitBounds effects work in this page (no direct mapRef access).
+  const [agriGroupFocusBounds, setAgriGroupFocusBounds] = useState<[[number, number], [number, number]] | null>(null);
+
+  useEffect(() => {
+    if (!selectedGroup || !agriMapListingsData?.listings.length) {
+      setAgriGroupFocusBounds(null);
+      return;
+    }
+    // Filter out listings with null/undefined lat/lon before spreading into Math.min/max.
+    // AgriMapListingItem declares latitude/longitude as number, but the server can return null
+    // when the DB column is null; Math.min/max(undefined) = NaN which corrupts Leaflet fitBounds.
+    const validListings = agriMapListingsData.listings.filter(
+      l => l.latitude != null && l.longitude != null
+    );
+    if (!validListings.length) {
+      setAgriGroupFocusBounds(null);
+      return;
+    }
+    const lats = validListings.map(l => l.latitude as number);
+    const lons = validListings.map(l => l.longitude as number);
+    setAgriGroupFocusBounds([
+      [Math.min(...lats), Math.min(...lons)],
+      [Math.max(...lats), Math.max(...lons)],
+    ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGroup?.directionKey, selectedGroup?.distanceBandKey, agriMapListingsData]);
+
   // Issue #1115 — wrap handleSchoolSelect (from useDiscoverPageState, forbidden to edit)
   // so that selecting a school via MapFilters or NearSchoolSheet also resets the
   // bounded-search gate. useDiscoverPageState.ts is not modified; reset is composed here
@@ -1509,7 +1555,8 @@ export default function MapDiscovery() {
                 // No area selected: show markers only if authenticated
                 return isAuthenticated ? markerListings : [];
               })()}
-              focusBounds={activeFocusBounds}
+              focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
+              agriGroupListings={selectedGroup ? (agriMapListingsData?.listings ?? null) : null}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
               onPolygonCleared={handlePolygonCleared}

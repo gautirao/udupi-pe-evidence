@@ -69,6 +69,8 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/discover/area-groups").permitAll()
                         // Public regional area groups endpoint — no auth required (#1408)
                         .requestMatchers(HttpMethod.GET, "/api/discover/regional-area-groups").permitAll()
+                        // Public agri map listings endpoint — no auth required (#1410)
+                        .requestMatchers(HttpMethod.GET, "/api/discover/agri-map-listings").permitAll()
                         // Public Trends endpoints — no auth required (#771)
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         .anyRequest().authenticated()

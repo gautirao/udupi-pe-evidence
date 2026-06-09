@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/card';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
+import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 
 /**
  * Maximum zoom at which the area-overview marker layer remains visible.
@@ -284,6 +285,69 @@ interface PropertyMapProps {
    * (not MapController) to avoid unintended flyTo panning on polygon click.
    */
   selectedPolygonListing?: PropertyListingWithImages | null;
+  /**
+   * Issue #1410 — group-filtered agri listings from the public endpoint.
+   * When non-null, overrides `listings` for AgriMarkerClusterLayer + AgriPolygonLayer.
+   * When null/undefined, falls back to the existing `listings` prop (no regression).
+   */
+  agriGroupListings?: AgriMapListingItem[] | null;
+}
+
+/**
+ * Issue #1410 — adapter from the lean public AgriMapListingItem shape to the full
+ * PropertyListingWithImages shape required by AgriMarkerClusterLayer + AgriPolygonLayer.
+ * Items missing lat/lon are filtered out to prevent Leaflet errors.
+ * All non-agri fields that are not available from the public endpoint are set to null.
+ */
+function adaptAgriMapListingsToMarkers(
+  items: AgriMapListingItem[],
+): PropertyListingWithImages[] {
+  return items
+    .filter(item => item.latitude != null && item.longitude != null)
+    .map(
+      (item): PropertyListingWithImages => ({
+        // Required PropertyListing fields
+        id: item.id,
+        // PropertyType cast: the public endpoint returns 'agricultural_land' string
+        property_type: item.propertyType as PropertyType,
+        title: null,
+        locality: item.locality ?? null,
+        price: item.pricePaise != null ? item.pricePaise / 100 : null,
+        price_unit: null,
+        land_area: item.landArea ?? null,
+        land_area_unit: item.landAreaUnit ?? null,
+        built_area: null,
+        built_area_unit: null,
+        bedrooms: null,
+        bathrooms: null,
+        contact_info: null,
+        contact_phone: null,
+        description: null,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        confidence_score: null,
+        language_detected: null,
+        price_per_cent_paise: null,
+        is_valid: true,
+        // status/is_duplicate are not in AgriMapListingItem (server excludes them).
+        // Set to expected LIVE/false so downstream consumers that inspect these fields
+        // don't misbehave. The endpoint guarantees LIVE-only rows; is_duplicate=false
+        // is likewise guaranteed by the service WHERE clause.
+        is_duplicate: false,
+        status: 'LIVE',
+        // These are required string fields on PropertyListing — public endpoint does not
+        // supply them; empty string satisfies the type without fabricating data.
+        created_at: '',
+        updated_at: '',
+        raw_post_id: null,
+        listing_purpose: 'sale',
+        // Optional extended fields
+        areaKey: item.areaKey,
+        // PropertyListingWithImages extension
+        images: [],
+        boundary_geojson: item.boundaryGeoJson ?? null,
+      }),
+    );
 }
 
 /**
@@ -1099,10 +1163,23 @@ export function PropertyMap({
   isAgriMode = false,
   mapZoom,
   selectedPolygonListing,
+  agriGroupListings,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
   }, [listings]);
+
+  // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
+  // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
+  // An empty array is intentional (0 markers for the selected group = correct behaviour).
+  // When null/undefined (no group selected), falls back to `listings` (no regression).
+  const agriLayerListings: PropertyListingWithImages[] = useMemo(
+    () =>
+      isAgriMode && agriGroupListings != null
+        ? adaptAgriMapListingsToMarkers(agriGroupListings)
+        : listings,
+    [isAgriMode, agriGroupListings, listings],
+  );
 
   // Derive the selected school ID for SchoolMarkerLayer focus mode.
   const selectedSchoolId = selectedSchool?.id ?? null;
@@ -1158,9 +1235,11 @@ export function PropertyMap({
         />
         {isAgriMode ? (
           <>
-            <AgriMarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+            {/* Issue #1410: agriLayerListings = adaptAgriMapListingsToMarkers(agriGroupListings)
+                when a regional group is selected; falls back to listings prop otherwise. */}
+            <AgriMarkerClusterLayer listings={agriLayerListings} onSelectListing={onSelectListing} />
             <AgriPolygonLayer
-              listings={listings}
+              listings={agriLayerListings}
               selectedListing={selectedPolygonListing}
               onSelectListing={onSelectListing}
               mapZoom={mapZoom}
