@@ -1,152 +1,238 @@
-# Agricultural Listings Seed
+# Agricultural Listings Seed — Developer Guide
 
 ## Overview
 
-`scripts/db/fixtures/agricultural-listings-seed.sql` is a local-only, opt-in add-on seed that inserts synthetic agricultural land listings into the local test fixture database. It exists to support local Discover development and manual testing of the agriculture discovery journey (clusters, polygon rendering, detail panel, fallback markers).
+Test/dev/local data only. Provides 21 LIVE agricultural land listings across
+multiple regional directions and all 4 distance bands for validating the #1408
+regional classification model. DO NOT run against production.
 
-This seed is intentionally **not** wired into `restore-test-fixture.sh`. Keeping it opt-in ensures the `[E2E]` residential fixture used by automated tests remains deterministic and unaffected.
+## Quick Start
+
+### 1. Restore fixture database
+
+```bash
+cd scripts/db
+./restore-test-fixture.sh
+```
+
+Ports: 5434 (primary) / 5435 (replica).
+Applies migrations through V87 (regional classification schema).
+
+### 2. Run residential seed (recommended first)
+
+```bash
+psql "postgresql://postgres:postgres@localhost:5434/postgres" \
+  -f fixtures/discover-smoke-seed.sql
+```
+
+### 3. Run agricultural seed
+
+```bash
+psql "postgresql://postgres:postgres@localhost:5434/postgres" \
+  -f fixtures/agricultural-listings-seed.sql
+```
+
+Expected output: `NOTICE:  Seed assertions passed: 21 LIVE [AGRI] listings total (19 with boundary, 2 without), Brahmavar=4, Shirva=3, Padubidri=2, ...`
+
+### 4. Run #1408 regional classification backfill
+
+Start the Spring backend pointed at the fixture DB with the backfill flag enabled:
+
+```bash
+SPRING_APPLICATION_JSON='{"app":{"regional-classification":{"backfill-enabled":true}}}' \
+  ./mvnw -pl backend spring-boot:run \
+  -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:postgresql://localhost:5434/postgres"
+```
+
+Or equivalently (application.properties override):
+
+```
+app.regional-classification.backfill-enabled=true
+spring.datasource.url=jdbc:postgresql://localhost:5434/postgres
+```
+
+The backfill runs on startup via `RegionalClassificationBackfillRunner` (ApplicationRunner).
+Expected log: `RegionalClassificationBackfill: complete upserted=15 errors=0` (15 = 12 V71 Udupi areas + 3 synthetic test areas).
+
+### 5. Verify (quick SQL check)
+
+```sql
+-- Non-empty regional groups for Udupi
+SELECT direction_key, distance_band_key, COUNT(pl.id) AS listing_count
+FROM regional_area_classifications rac
+JOIN property_listings pl
+  ON pl.area_key = rac.area_key
+  AND pl.status = 'LIVE'
+  AND pl.property_type = 'agricultural_land'
+WHERE rac.city_key = 'udupi'
+GROUP BY rac.direction_key, rac.distance_band_key
+ORDER BY rac.distance_band_key, rac.direction_key;
+-- Expected: 7 rows
+```
 
 ---
 
-## What It Creates
+## Seed Coverage
 
-### Areas seeded (from V71 — already present after migrations)
+### Udupi regional groups (after backfill)
 
-| Area | `area_key` |
-|---|---|
-| Brahmavar | `IN\|KA\|Udupi\|Brahmavar` |
-| Shirva | `IN\|KA\|Udupi\|Shirva` |
-| Padubidri | `IN\|KA\|Udupi\|Padubidri` |
+| Direction | Band   | Area               | Listings | Boundary |
+|-----------|--------|--------------------|----------|----------|
+| N         | 0–10   | Brahmavar          | 4        | 3+1null  |
+| E         | 0–10   | Manipal            | 2        | 2        |
+| W         | 0–10   | Malpe              | 2        | 2        |
+| S         | 10–25  | Shirva + Padubidri | 5        | 5        |
+| N         | 25–50  | NorthMidTest *     | 2        | 1+1null  |
+| S         | 25–50  | SouthFarTest *     | 2        | 2        |
+| E         | 50+    | EastFarTest *      | 2        | 2        |
 
-### Listings
+`*` = synthetic test-only area (inserted by this seed, not a V71 area)
 
-| Area | Count | Total acreage | Boundary polygons | No boundary |
-|---|---|---|---|---|
-| Brahmavar | 4 | 18.5 ac | 3 | 1 (fallback marker test) |
-| Shirva | 3 | 12.0 ac | 3 | 0 |
-| Padubidri | 2 | 17.0 ac | 2 | 0 |
-| **Total** | **9** | **47.5 ac** | **8** | **1** |
+**Total: 21 agri listings, 19 with boundary polygon, 2 with NULL boundary (one near/0-10, one far/25-50).**
 
-All listings: `status=LIVE`, `property_type=agricultural_land`, `is_valid=true`, `is_duplicate=false`, title prefixed `[AGRI]`.
+### Kundapur regional groups (after backfill)
 
-The single no-boundary row (`a6210001-0000-0000-0000-000000000004`, Brahmavar, 2.0 ac) tests the fallback-to-marker rendering path in the Discover map.
+| Direction | Band  | Area      | Listings |
+|-----------|-------|-----------|----------|
+| NW        | 0–10  | Kundapura | 2        |
 
 ---
 
-## How to Run
+## City-Relative Classification Demo
 
-### Step 1 — bring up the fixture DB (if not already running)
+The #1408 backfill classifies each area relative to its own city's geographic centre.
 
-```bash
-bash scripts/db/restore-test-fixture.sh
-```
+**Live evidence (after backfill):**
 
-This starts a PostGIS container on port 5434 (default), applies all Flyway migrations, and loads the residential `[E2E]` seed.
+| area_key                  | city_key | direction | band | distance_km |
+|---------------------------|----------|-----------|------|-------------|
+| IN\|KA\|Udupi\|Brahmavar  | udupi    | N         | 0_10 | 9.8         |
+| IN\|KA\|Udupi\|Kundapura  | kundapur | NW        | 0_10 | 0.5         |
 
-### Step 2 — apply the agricultural seed
+This demonstrates that each city has its own independent classification — the same framework applied to each city's centre independently.
 
-```bash
-bash scripts/db/seed-agricultural-listings.sh
-```
+**As-shipped limitation (documented):** The same physical area can have a different classification relative to different cities. Brahmavar (13.4286°N, 74.7540°E) is:
 
-#### Raw psql one-liner (equivalent)
+- **N / 0_10** relative to Udupi (13.3409°N, 74.7421°E) — 9.8 km north
+- **S / 10_25** relative to Kundapur (13.6218°N, 74.6943°E) — 22.4 km south
 
-```bash
-PGPASSWORD=fixture_test_only psql \
-  -h localhost -p 5434 -U postgres -d postgres \
-  -v ON_ERROR_STOP=1 \
-  -f scripts/db/fixtures/agricultural-listings-seed.sql
-```
+The #1408 backfill filters areas strictly by `city_id` (city membership), so Brahmavar (city_id=udupi) is only classified under city_key='udupi', not under 'kundapur'. This is a correct design choice (each area belongs to one city for discover purposes). The mathematical Brahmavar-vs-Kundapur value above is documented here for context. If a future issue requires cross-city area classification, that is a new feature outside the scope of #1408 or #1411.
 
-To use a non-default port or password:
+---
 
-```bash
-PG_TEST_PORT=5435 PG_TEST_PASSWORD=mypassword bash scripts/db/seed-agricultural-listings.sh
-```
+## Synthetic Test Areas
+
+Three test-only areas are inserted by this seed (NOT a Flyway migration):
+
+| area_key                        | centroid lat | centroid lon | expected direction | expected band |
+|---------------------------------|--------------|--------------|--------------------|---------------|
+| IN\|KA\|Udupi\|NorthMidTest     | 13.6112      | 74.7421      | N                  | 25_50         |
+| IN\|KA\|Udupi\|SouthFarTest     | 13.0706      | 74.7421      | S                  | 25_50         |
+| IN\|KA\|Udupi\|EastFarTest      | 13.3409      | 75.2516      | E                  | 50_up         |
+
+These exist in `public.areas` with city_id = udupi after running this seed. They are identifiable by their `[TEST]` name suffix. They are required because V71 supplies no Udupi-city areas beyond 20.6 km from the Udupi centre (all 12 V71 Udupi areas are in the 0_10 or 10_25 bands).
 
 ---
 
 ## Idempotency
 
-The seed uses `ON CONFLICT (id) DO UPDATE` on all listing rows, so it is fully safe to re-run. Key columns (status, area_key, boundary, land_area, agri attributes) are refreshed on each run. The broker-ensure DO-block uses `ON CONFLICT DO NOTHING` / `DO UPDATE` so it is also safe whether run standalone or after the residential seed.
+Running the seed script twice is safe:
+
+- Area rows: `ON CONFLICT (area_key) DO UPDATE` — centroid edits propagate
+- Listing rows: `ON CONFLICT (id) DO UPDATE` — all fields refreshed to seed values
+- No duplicate listings or area rows are created
+
+Running the backfill twice is also safe:
+
+- `ON CONFLICT (city_key, area_key) DO UPDATE` in `RegionalClassificationBackfillService`
+- Same geometry → same classification → stable values
 
 ---
 
-## Reset / Re-run
+## Manual Discover Test Steps
 
-Re-running `seed-agricultural-listings.sh` is safe — it is a no-op for rows that already exist with matching values, and updates any rows where values differ.
+After running seed + backfill + starting the backend:
 
-For a full fixture reset (drop all data and reapply from scratch):
+1. **Verify regional groups endpoint:**
+   ```
+   GET http://localhost:8080/api/discover/regional-area-groups?city=udupi&propertyType=agricultural_land
+   ```
+   Expected: JSON with 7 non-empty groups covering N/E/W/S across all 4 bands.
 
-```bash
-bash scripts/db/restore-test-fixture.sh
-bash scripts/db/seed-agricultural-listings.sh
-```
+2. **Verify Kundapur groups:**
+   ```
+   GET http://localhost:8080/api/discover/regional-area-groups?city=kundapur&propertyType=agricultural_land
+   ```
+   Expected: JSON with >= 1 group (NW/0_10, Kundapura).
 
-To remove only the agricultural seed rows without resetting the residential data:
+3. **Open Discover in browser** (http://localhost:5173/discover?city=udupi) after starting the frontend dev server. Area groups should appear with agri listings.
+
+---
+
+## OpenSearch Compatibility Note
+
+This seed data is **compatible** with a future OpenSearch index. The seeded listings follow the same schema as residential listings and will be ingested if an OpenSearch rebuild (`scripts/opensearch_rebuild.py`) is run against the fixture DB. No OpenSearch changes are made by this issue — OpenSearch implementation is out of scope.
+
+---
+
+## Verification SQL
+
+Run these after `restore-test-fixture.sh` + seed + backfill:
 
 ```sql
-DELETE FROM property_listings WHERE title LIKE '[AGRI]%';
-```
-
----
-
-## Manual Discover Test Flow
-
-1. Start the backend and frontend locally.
-2. Navigate to **Discover** and search for or select **Agricultural Land** as the property type.
-3. Select **Brahmavar** — expect: 4 agri listings, total area ≈18.5 ac, 🌾 cluster on map.
-4. Select **Shirva** — expect: 3 agri listings, total area ≈12.0 ac, 🌾 cluster on map.
-5. Select **Padubidri** — expect: 2 agri listings, total area ≈17.0 ac, 🌾 cluster on map.
-6. Zoom in to level ≥16 — saved boundary polygons should render on the map for the 8 rows that have a boundary.
-7. Click a polygon — the agri detail panel should open showing title, acreage, attributes, and the boundary disclaimer.
-8. Confirm the single no-boundary Brahmavar plot (2-Acre Cultivated Plot) still appears as a fallback marker / cluster point (no polygon rendered, no boundary disclaimer).
-
----
-
-## Verification Queries
-
-Run these against the local fixture DB to confirm the seed applied correctly. All expect the numbers documented above.
-
-```sql
--- Total agricultural_land rows
-SELECT COUNT(*) FROM property_listings WHERE property_type = 'agricultural_land';
-
--- LIVE rows only
+-- (a) Total agri count
 SELECT COUNT(*) FROM property_listings
-  WHERE property_type = 'agricultural_land' AND status = 'LIVE';
+WHERE status='LIVE' AND title LIKE '[AGRI]%' AND property_type='agricultural_land';
+-- Expected: 21
 
--- Rows WITH a boundary polygon
+-- (b) Per-area counts
+SELECT area_key, COUNT(*) FROM property_listings
+WHERE status='LIVE' AND title LIKE '[AGRI]%' AND property_type='agricultural_land'
+GROUP BY area_key ORDER BY area_key;
+-- Expected: 9 rows with Brahmavar=4, EastFarTest=2, Kundapura=2, Malpe=2, Manipal=2,
+--           NorthMidTest=2, Padubidri=2, Shirva=3, SouthFarTest=2
+
+-- (c) Boundary coverage
+SELECT COUNT(*) FILTER (WHERE boundary IS NOT NULL) AS with_boundary,
+       COUNT(*) FILTER (WHERE boundary IS NULL) AS without_boundary
+FROM property_listings WHERE status='LIVE' AND title LIKE '[AGRI]%' AND property_type='agricultural_land';
+-- Expected: with_boundary=19, without_boundary=2
+
+-- (d) Invalid boundary = 0
 SELECT COUNT(*) FROM property_listings
-  WHERE property_type = 'agricultural_land' AND boundary IS NOT NULL;
+WHERE title LIKE '[AGRI]%' AND status='LIVE'
+  AND boundary IS NOT NULL AND NOT ST_IsValid(boundary::geometry);
+-- Expected: 0
 
--- Rows WITHOUT a boundary polygon (expect 1 — the fallback marker test row)
-SELECT COUNT(*) FROM property_listings
-  WHERE property_type = 'agricultural_land' AND boundary IS NULL;
+-- (e) NULL geog = 0
+SELECT COUNT(*) FROM property_listings WHERE title LIKE '[AGRI]%' AND status='LIVE' AND geog IS NULL;
+-- Expected: 0
 
--- Invalid boundary geometries — expect 0 rows
-SELECT id, title FROM property_listings
-  WHERE property_type = 'agricultural_land'
-    AND boundary IS NOT NULL
-    AND NOT ST_IsValid(boundary::geometry);
+-- (f) Classification rows per city (after backfill)
+SELECT city_key, COUNT(*) FROM regional_area_classifications GROUP BY city_key ORDER BY city_key;
+-- Expected: kundapur >= 3, udupi >= 15
 
--- Per-area breakdown (AreaSummaryService predicate)
-SELECT area_key, COUNT(*)
-  FROM property_listings
-  WHERE status = 'LIVE'
-    AND archived_at IS NULL
-    AND is_duplicate = false
-    AND LOWER(property_type::text) = 'agricultural_land'
-  GROUP BY area_key
-  ORDER BY area_key;
-```
+-- (g) All bands and directions covered (udupi)
+SELECT DISTINCT distance_band_key FROM regional_area_classifications WHERE city_key='udupi' ORDER BY 1;
+SELECT DISTINCT direction_key FROM regional_area_classifications WHERE city_key='udupi' ORDER BY 1;
+-- Expected bands: 0_10, 10_25, 25_50, 50_up
+-- Expected directions (at minimum): E, N, S, W
 
-Expected output from the last query:
+-- (h) City-relative proof + synthetic area classification
+SELECT area_key, city_key, direction_key, distance_band_key, round(distance_km::numeric,1) AS dist_km
+FROM regional_area_classifications
+WHERE area_key IN (
+  'IN|KA|Udupi|Brahmavar','IN|KA|Udupi|Kundapura',
+  'IN|KA|Udupi|NorthMidTest','IN|KA|Udupi|SouthFarTest','IN|KA|Udupi|EastFarTest'
+) ORDER BY area_key;
+-- Expected:
+--   Brahmavar:     city_key='udupi',     N,  0_10,  9.8
+--   EastFarTest:   city_key='udupi',     E,  50_up, 55.1
+--   Kundapura:     city_key='kundapur',  NW, 0_10,  0.5
+--   NorthMidTest:  city_key='udupi',     N,  25_50, 30.1
+--   SouthFarTest:  city_key='udupi',     S,  25_50, 30.1
 
-```
-          area_key          | count
-----------------------------+-------
- IN|KA|Udupi|Brahmavar      |     4
- IN|KA|Udupi|Padubidri      |     2
- IN|KA|Udupi|Shirva         |     3
+-- (i) Idempotency (run seed twice, run backfill twice, then check stable counts)
+SELECT COUNT(*) FROM property_listings WHERE title LIKE '[AGRI]%' AND status='LIVE';  -- 21
+SELECT COUNT(*) FROM regional_area_classifications;  -- same as after first run
 ```
