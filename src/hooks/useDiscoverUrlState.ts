@@ -9,6 +9,7 @@
  *   lat        – map center latitude  (5 dp, debounced replace)
  *   lon        – map center longitude (5 dp, debounced replace)
  *   zoom       – integer zoom level   (debounced replace)
+ *   group      – agri-first regional group as "DIRECTION:BAND" (e.g. "N:10_25"); absent when none
  *
  * Journey params:
  *   journey    – active journey type: "area-first" | "school-first" | "agri-first" (absent = no journey)
@@ -107,6 +108,12 @@ export interface DiscoverUrlState {
    * Matches the bom/ntm/rera/rtm presence-flag read style (`=== '1' ? true : undefined`).
    */
   schoolPicking?: boolean;
+  /**
+   * Selected agri-first regional group (Issue #1409).
+   * Parsed from URL `group` param as "DIRECTION:BAND" (e.g. "N:10_25").
+   * Null when absent or invalid.
+   */
+  selectedGroup: { directionKey: string; distanceBandKey: string } | null;
 }
 
 export interface DiscoverUrlActions {
@@ -208,6 +215,13 @@ export interface DiscoverUrlActions {
    * state (selectedSchool + filters.schoolLat/Lon/RadiusKm) is cleared by the caller.
    */
   backToSchoolPicking: () => void;
+  /**
+   * Select or clear the agri-first regional group (Issue #1409).
+   * Writes `group=DIRECTION:BAND` to URL (e.g. "N:10_25"). Null removes the param.
+   * Does NOT delete areaKey — B2 allows group selection independently of area selection.
+   * PUSH — group selection is a navigational choice.
+   */
+  selectRegionalGroup: (group: { directionKey: string; distanceBandKey: string } | null) => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
@@ -423,6 +437,19 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
 
   const groupId = urlParams.get('groupId');
 
+  // Issue #1409 — agri-first regional group. Validated via regex so malformed values
+  // (e.g. "NORTH:100" or "N:50_PLUS") are rejected and produce null.
+  // CRITICAL: backend uses '50_up' (lower-case), NOT '50_PLUS'.
+  const rawGroup = urlParams.get('group');
+  const GROUP_REGEX = /^(N|NE|E|SE|S|SW|W|NW):(0_10|10_25|25_50|50_up)$/;
+  const selectedGroup =
+    rawGroup && GROUP_REGEX.test(rawGroup)
+      ? {
+          directionKey: rawGroup.split(':')[0],
+          distanceBandKey: rawGroup.split(':')[1],
+        }
+      : null;
+
   // Issue #1157 — transient area-first school-picking marker. Same presence-flag
   // read style as the bom/ntm/rera/rtm filter flags above.
   const schoolPicking = urlParams.get('schoolPicking') === '1' ? true : undefined;
@@ -438,6 +465,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     journey,
     groupId,
     schoolPicking,
+    selectedGroup,
   };
 
   // ─── Actions ─────────────────────────────────────────────────────────────
@@ -665,6 +693,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           // Clear journey context — new city starts fresh
           next.delete('journey');
           next.delete('groupId');
+          next.delete('group'); // Issue #1409 — clear agri-first regional group on city switch
           next.delete('areaKey');
           // Clear viewport — new city has its own default zoom/center
           next.delete('lat');
@@ -797,6 +826,25 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  const selectRegionalGroup = useCallback(
+    (group: { directionKey: string; distanceBandKey: string } | null) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (group) {
+            next.set('group', `${group.directionKey}:${group.distanceBandKey}`);
+          } else {
+            next.delete('group');
+          }
+          // Do NOT delete areaKey — B2 allows group selection independently of area selection.
+          return next;
+        },
+        { replace: false }, // PUSH — group selection is a navigational choice
+      );
+    },
+    [setUrlParams],
+  );
+
   const setBoardFilters = useCallback(
     (boards: string[]) => {
       setUrlParams(
@@ -878,7 +926,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         const next = new URLSearchParams();
         const cityVal = prev.get('city');
         if (cityVal) next.set('city', cityVal);
-        // Journey, groupId, areaKey, schoolId, radiusKm, board, category, q, viewport,
+        // Journey, groupId, group, areaKey, schoolId, radiusKm, board, category, q, viewport,
         // and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/
         // rtm/from/to) are intentionally omitted — nothing survives Start Over except city.
         return next;
@@ -948,6 +996,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setJourney,
     setSchoolJourney,
     selectGroup,
+    selectRegionalGroup,
     setBoardFilters,
     setCategoryFilters,
     startOver,

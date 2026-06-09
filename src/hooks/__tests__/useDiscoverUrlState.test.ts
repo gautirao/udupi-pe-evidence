@@ -1657,3 +1657,161 @@ describe('useDiscoverUrlState — backToSchoolPicking (Issue #1157 rev-5 DEFECT 
     expect(state.viewport).toEqual({ lat: 13.3409, lon: 74.7421, zoom: 14 });
   });
 });
+
+// ─── Issue #1409 — selectedGroup read + selectRegionalGroup action ────────────
+
+describe('useDiscoverUrlState — selectedGroup read from URL', () => {
+  it('reads ?group=N:10_25 → { directionKey: N, distanceBandKey: 10_25 }', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+    });
+    expect(result.current[0].selectedGroup).toEqual({ directionKey: 'N', distanceBandKey: '10_25' });
+  });
+
+  it('reads ?group=N:50_up → { directionKey: N, distanceBandKey: 50_up } (critical — not 50_PLUS)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&group=N:50_up'),
+    });
+    expect(result.current[0].selectedGroup).toEqual({ directionKey: 'N', distanceBandKey: '50_up' });
+  });
+
+  it('reads all valid distance bands correctly', () => {
+    for (const band of ['0_10', '10_25', '25_50', '50_up']) {
+      const { result } = renderHook(() => useDiscoverUrlState(), {
+        wrapper: wrapper(`/discover?city=udupi&group=SE:${band}`),
+      });
+      expect(result.current[0].selectedGroup).toEqual({ directionKey: 'SE', distanceBandKey: band });
+    }
+  });
+
+  it('rejects ?group=N:50_PLUS → null (regex rejects upper-case alias)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&group=N:50_PLUS'),
+    });
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('rejects ?group=NORTH:100 → null (invalid direction and band)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&group=NORTH:100'),
+    });
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('returns null when group param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first'),
+    });
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('rejects malformed group param (no colon)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&group=N10_25'),
+    });
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('accepts all 8 direction keys', () => {
+    for (const dir of ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']) {
+      const { result } = renderHook(() => useDiscoverUrlState(), {
+        wrapper: wrapper(`/discover?city=udupi&group=${dir}:0_10`),
+      });
+      expect(result.current[0].selectedGroup?.directionKey).toBe(dir);
+    }
+  });
+});
+
+describe('useDiscoverUrlState — selectRegionalGroup action', () => {
+  it('sets group=N:0_10 in URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].selectRegionalGroup({ directionKey: 'N', distanceBandKey: '0_10' });
+    });
+
+    expect(result.current[0].selectedGroup).toEqual({ directionKey: 'N', distanceBandKey: '0_10' });
+  });
+
+  it('does NOT delete areaKey when setting a regional group (critical — B2 allows independent selection)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].selectRegionalGroup({ directionKey: 'N', distanceBandKey: '10_25' });
+    });
+
+    // areaKey must be preserved
+    expect(result.current[0].areaKey).toBe('IN|KA|Udupi|Manipal');
+    expect(result.current[0].selectedGroup).toEqual({ directionKey: 'N', distanceBandKey: '10_25' });
+  });
+
+  it('removes group param when null is passed', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+    });
+
+    act(() => {
+      result.current[1].selectRegionalGroup(null);
+    });
+
+    expect(result.current[0].selectedGroup).toBeNull();
+  });
+
+  it('regression guard: selectGroup (area-first) still clears areaKey', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+
+    act(() => {
+      result.current[1].selectGroup('some-group-id');
+    });
+
+    // selectGroup must clear areaKey (unchanged by this PR)
+    expect(result.current[0].areaKey).toBeNull();
+    expect(result.current[0].groupId).toBe('some-group-id');
+  });
+
+  // ── Advisory-fix coverage (code-reviewer finding) ─────────────────────────
+
+  it('changeCity clears group param (advisory fix: stale agri-first group on city switch)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+    });
+
+    expect(result.current[0].selectedGroup).toEqual({
+      directionKey: 'N',
+      distanceBandKey: '10_25',
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    // City switch must clear the regional group (group belongs to the old city's bands)
+    expect(result.current[0].selectedGroup).toBeNull();
+    expect(result.current[0].city).toBe('kundapur');
+  });
+
+  it('startOver clears group param (advisory test: verify implicit exclusion)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+    });
+
+    expect(result.current[0].selectedGroup).toEqual({
+      directionKey: 'N',
+      distanceBandKey: '10_25',
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    // startOver builds a fresh URLSearchParams → group is not preserved
+    expect(result.current[0].selectedGroup).toBeNull();
+    expect(result.current[0].city).toBe('udupi'); // city is preserved by startOver
+  });
+});

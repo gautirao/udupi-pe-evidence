@@ -11,12 +11,14 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { RegionalAreaGroup } from '@/hooks/useRegionalAreaGroups';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
+import { AgriRegionalGroupsPanel } from './panels/AgriRegionalGroupsPanel';
 import {
   SchoolBrowsePanel,
   SchoolsInAreaPanel,
@@ -66,6 +68,14 @@ export interface DiscoverRightPanelProps {
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
   onSelectAreaKey?: (areaKey: string) => void;
+  /** Issue #1409 — agri-first regional groups for the agri-landing panel. */
+  regionalGroups?: RegionalAreaGroup[];
+  /** True while regional groups are loading. */
+  isLoadingRegionalGroups?: boolean;
+  /** The currently selected agri-first regional group (from URL state). */
+  selectedGroup?: { directionKey: string; distanceBandKey: string } | null;
+  /** Called when the user selects or clears a regional group. */
+  onSelectRegionalGroup?: (g: { directionKey: string; distanceBandKey: string } | null) => void;
   /** Called when the user selects a school from the school-browse panel. */
   onSelectSchool?: (schoolId: string) => void;
   /**
@@ -192,6 +202,10 @@ export function DiscoverRightPanel({
   groupId = null,
   discoverAreas = [],
   onSelectAreaKey,
+  regionalGroups = [],
+  isLoadingRegionalGroups = false,
+  selectedGroup = null,
+  onSelectRegionalGroup,
   onSelectSchool,
   onAddSchool,
   activeContextChips,
@@ -259,9 +273,9 @@ export function DiscoverRightPanel({
         return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
 
       case 'agri-landing':
-        // MVP2 — static no-area landing for the agricultural-land journey. Renders a
-        // placeholder prompting the user to pick an area. Intentionally has NO data props
-        // and triggers NO listings/markers/counts fetch (those arrive in #1371–#1374).
+        // Issue #1409 (B2) — agri-first landing now shows precomputed regional groups
+        // (direction × distance bands) so the user can filter by broad geography before
+        // selecting a specific area on the map.
         return (
           <>
             <PanelHeader
@@ -269,23 +283,15 @@ export function DiscoverRightPanel({
               journey="agri-first"
               onStartOver={onStartOver}
             />
-            <div
-              data-testid="agri-landing-panel"
-              className="flex flex-1 items-center justify-center p-8"
-            >
-              <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-                <div className="rounded-full bg-green-500/10 dark:bg-green-400/10 p-3">
-                  <Sprout
-                    className="h-8 w-8 text-green-600 dark:text-green-400"
-                    aria-hidden="true"
-                  />
-                </div>
-                <h2 className="text-base font-semibold">Search agricultural land</h2>
-                <p className="text-sm text-muted-foreground">
-                  Select an area on the map to explore farmland and agricultural plots.
-                </p>
-              </div>
-            </div>
+            <AgriRegionalGroupsPanel
+              city={city ?? ''}
+              groups={regionalGroups ?? []}
+              isLoading={isLoadingRegionalGroups ?? false}
+              selectedGroup={selectedGroup ?? null}
+              onSelectGroup={onSelectRegionalGroup ?? (() => {})}
+              discoverAreas={discoverAreas}
+              onSelectAreaKey={onSelectAreaKey}
+            />
           </>
         );
 

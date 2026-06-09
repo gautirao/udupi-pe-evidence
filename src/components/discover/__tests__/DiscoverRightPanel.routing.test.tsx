@@ -378,6 +378,7 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
       radiusKm: null,
       viewport: null,
       filters: {},
+      selectedGroup: null,
     });
     expect(panelContent).toBe('area-groups-landing');
   });

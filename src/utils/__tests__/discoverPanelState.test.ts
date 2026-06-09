@@ -15,6 +15,7 @@ function makeState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlState 
     q: '',
     journey: null,
     groupId: null,
+    selectedGroup: null,
     ...overrides,
   };
 }

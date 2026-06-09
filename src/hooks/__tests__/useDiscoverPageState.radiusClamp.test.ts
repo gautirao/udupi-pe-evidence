@@ -19,6 +19,7 @@ function makeUrlState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlSta
     q: '',
     journey: null,
     groupId: null,
+    selectedGroup: null,
     ...overrides,
   };
 }
@@ -39,6 +40,7 @@ function makeUrlActions(): DiscoverUrlActions {
     setSearchQuery: vi.fn(),
     setJourney: vi.fn(),
     selectGroup: vi.fn(),
+    selectRegionalGroup: vi.fn(),
     setBoardFilters: vi.fn(),
     setCategoryFilters: vi.fn(),
     clearAreaContext: vi.fn(),

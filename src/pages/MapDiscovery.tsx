@@ -20,6 +20,7 @@ import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
+import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
@@ -379,6 +380,12 @@ export default function MapDiscovery() {
     data: areaGroupsData,
     isLoading: isLoadingAreaGroups,
   } = useAreaGroups(urlState.city);
+
+  // Issue #1409 (B2) — precomputed regional groups for the agri-first landing panel.
+  const {
+    data: regionalAreaGroupsData,
+    isLoading: isLoadingRegionalAreaGroups,
+  } = useRegionalAreaGroups(urlState.city);
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -1681,6 +1688,11 @@ export default function MapDiscovery() {
           // the groupId matches no loaded group. Prop wiring only — no routing change.
           groupId={urlState.groupId ?? null}
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
+          // Issue #1409 (B2) — agri-first regional groups
+          regionalGroups={regionalAreaGroupsData?.groups ?? []}
+          isLoadingRegionalGroups={isLoadingRegionalAreaGroups}
+          selectedGroup={urlState.selectedGroup ?? null}
+          onSelectRegionalGroup={(g) => urlActions.selectRegionalGroup(g)}
           discoverAreas={discoverAreas}
           onSelectAreaKey={(areaKey) => {
             // Issue #1067 R2 — right-panel area-card click must trigger map flyTo
