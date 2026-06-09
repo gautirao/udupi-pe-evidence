@@ -60,6 +60,9 @@ app:
     resend-api-key: ${RESEND_API_KEY:disabled}
     from-address: ${RESEND_FROM_ADDRESS:alerts@udupi-properties.com}
 
+  regional-classification:
+    backfill-enabled: false  # Set to true on a single deployment to populate regional_area_classifications
+
 management:
   endpoints:
     web:
