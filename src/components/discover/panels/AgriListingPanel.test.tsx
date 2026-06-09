@@ -1,17 +1,19 @@
 /**
- * AgriListingPanel — Issue #1374
+ * AgriListingPanel — Issue #1405 (peek demote)
  *
  * AC1: Loading state renders skeleton (no crash).
- * AC2: Error state renders user-friendly message.
- * AC3a: All fields populated → all rows in DOM.
+ * AC2: Error state renders user-friendly message + back button + retry.
+ * AC3a: Populated state shows compact peek fields: locality, land area, price (when present).
  * AC3b: All agri fields null → no crash, no blank rows.
- * AC3c: Price + computedAreaAcres present → price-per-acre row visible.
- * AC3d: Price absent → price-per-acre row absent.
- * AC3e: computedAreaAcres absent → price-per-acre + Approx. area rows absent.
- * AC4: boundary non-empty string → disclaimer visible.
- * AC5: boundary null → disclaimer absent.
- * AC6: boundary empty string "" → disclaimer absent.
- * AC7: Back button click → onBack() called once.
+ * AC7: Back button click → onBack() called once (populated state).
+ * AC7b: Back button click → onBack() called once (error state).
+ * AC_CTA: "View full details" CTA is present and calls onNavigate when clicked.
+ *
+ * NOT TESTED HERE (re-homed):
+ * - AgriSpecRows field rows (water source, soil type, road access, cultivation,
+ *   ownership, survey) → coverage in /listing/:id component tests (#1406 tests)
+ * - boundary-disclaimer coverage re-homed to /listing/:id (#1406 tests)
+ * - price-per-acre → not shown in peek; coverage in AgriSpecRows tests
  */
 
 import React from 'react';
@@ -37,10 +39,14 @@ function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderPanel(listingId = 'listing-1', onBack = vi.fn()) {
+function renderPanel(
+  listingId = 'listing-1',
+  onBack = vi.fn(),
+  onNavigate = vi.fn(),
+) {
   return render(
     <QueryClientProvider client={makeQC()}>
-      <AgriListingPanel listingId={listingId} onBack={onBack} />
+      <AgriListingPanel listingId={listingId} onBack={onBack} onNavigate={onNavigate} />
     </QueryClientProvider>,
   );
 }
@@ -134,8 +140,8 @@ describe('AgriListingPanel', () => {
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
-  // AC3a — All fields populated
-  it('AC3a: all populated fields appear in the panel', () => {
+  // AC3a — Compact peek fields visible when populated
+  it('AC3a: populated state shows locality, land area, and price in peek panel', () => {
     mockUseAgriListingDetail.mockReturnValue({
       data: fullListing,
       isLoading: false,
@@ -145,15 +151,14 @@ describe('AgriListingPanel', () => {
 
     renderPanel();
     expect(screen.getByTestId('agri-detail-panel')).toBeInTheDocument();
+    // Title in header
+    expect(screen.getByTestId('agri-detail-title')).toHaveTextContent('River-facing paddy field');
+    // Locality row
     expect(screen.getByText('Shirva')).toBeInTheDocument();
-    expect(screen.getByText('SY 12/3A')).toBeInTheDocument();
-    expect(screen.getByText('2.5 acres')).toBeInTheDocument();
-    expect(screen.getByText(/≈ 2.48 acres/)).toBeInTheDocument();
-    expect(screen.getByText('Well')).toBeInTheDocument();
-    expect(screen.getByText('Red laterite')).toBeInTheDocument();
-    expect(screen.getByText('Tar road')).toBeInTheDocument();
-    expect(screen.getByText('Currently cultivated')).toBeInTheDocument();
-    expect(screen.getByText('Freehold')).toBeInTheDocument();
+    // Land area row
+    expect(screen.getByText(/2\.5\s*acres/i)).toBeInTheDocument();
+    // Price row (price=5000000 > 0)
+    expect(screen.getByText(/₹/)).toBeInTheDocument();
   });
 
   // AC3b — All agri fields null → no crash, no blank rows
@@ -161,16 +166,9 @@ describe('AgriListingPanel', () => {
     const nullListing = {
       ...fullListing,
       locality: null,
-      surveyNumber: null,
       landArea: null,
       landAreaUnit: null,
-      computedAreaAcres: null,
       price: null,
-      waterSource: null,
-      soilType: null,
-      roadAccess: null,
-      cultivationStatus: null,
-      ownershipType: null,
       boundary: null,
     };
     mockUseAgriListingDetail.mockReturnValue({
@@ -182,95 +180,10 @@ describe('AgriListingPanel', () => {
 
     renderPanel();
     expect(screen.getByTestId('agri-detail-panel')).toBeInTheDocument();
-    // No label rows should contain blank values — confirm specific labels absent
+    // No label rows with blank values
     expect(screen.queryByText('Locality')).not.toBeInTheDocument();
-    expect(screen.queryByText('Survey number')).not.toBeInTheDocument();
-    expect(screen.queryByText('Price per acre')).not.toBeInTheDocument();
-  });
-
-  // AC3c — Price + computedAreaAcres both present → price-per-acre visible
-  it('AC3c: shows price-per-acre when price and computedAreaAcres are both positive', () => {
-    mockUseAgriListingDetail.mockReturnValue({
-      data: fullListing,
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-
-    renderPanel();
-    // price=5000000, computedAreaAcres=2.48 → ~2016129/acre
-    expect(screen.getByText('Price per acre')).toBeInTheDocument();
-  });
-
-  // AC3d — Price absent → price-per-acre row absent
-  it('AC3d: omits price-per-acre row when price is null', () => {
-    mockUseAgriListingDetail.mockReturnValue({
-      data: { ...fullListing, price: null },
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-
-    renderPanel();
-    expect(screen.queryByText('Price per acre')).not.toBeInTheDocument();
-    // Price row itself is also absent
+    expect(screen.queryByText('Land area')).not.toBeInTheDocument();
     expect(screen.queryByText('Price')).not.toBeInTheDocument();
-  });
-
-  // AC3e — computedAreaAcres absent → price-per-acre + Approx. area rows absent
-  it('AC3e: omits price-per-acre and Approx. area rows when computedAreaAcres is null', () => {
-    mockUseAgriListingDetail.mockReturnValue({
-      data: { ...fullListing, computedAreaAcres: null },
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-
-    renderPanel();
-    expect(screen.queryByText('Price per acre')).not.toBeInTheDocument();
-    expect(screen.queryByText('Approx. area')).not.toBeInTheDocument();
-  });
-
-  // AC4 — boundary non-empty string → disclaimer visible
-  it('AC4: shows boundary disclaimer when boundary is a non-empty string', () => {
-    mockUseAgriListingDetail.mockReturnValue({
-      data: fullListing,
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-
-    renderPanel();
-    expect(screen.getByTestId('agri-boundary-disclaimer')).toBeInTheDocument();
-    expect(
-      screen.getByText(/The boundary drawn on the map is approximate/i),
-    ).toBeInTheDocument();
-  });
-
-  // AC5 — boundary null → disclaimer absent
-  it('AC5: hides boundary disclaimer when boundary is null', () => {
-    mockUseAgriListingDetail.mockReturnValue({
-      data: { ...fullListing, boundary: null },
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-
-    renderPanel();
-    expect(screen.queryByTestId('agri-boundary-disclaimer')).not.toBeInTheDocument();
-  });
-
-  // AC6 — boundary empty string "" → disclaimer absent
-  it('AC6: hides boundary disclaimer when boundary is an empty string', () => {
-    mockUseAgriListingDetail.mockReturnValue({
-      data: { ...fullListing, boundary: '' },
-      isLoading: false,
-      isError: false,
-      refetch: vi.fn(),
-    });
-
-    renderPanel();
-    expect(screen.queryByTestId('agri-boundary-disclaimer')).not.toBeInTheDocument();
   });
 
   // AC7 — Back button → onBack() called (populated state)
@@ -303,17 +216,20 @@ describe('AgriListingPanel', () => {
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 
-  // AC3f — price === 0 → price row absent, price-per-acre absent
-  it('AC3f: omits price and price-per-acre rows when price is 0', () => {
+  // AC_CTA — "View full details" CTA present and calls onNavigate
+  it('AC_CTA: "View full details" CTA button is present and calls onNavigate when clicked', () => {
+    const onNavigate = vi.fn();
     mockUseAgriListingDetail.mockReturnValue({
-      data: { ...fullListing, price: 0 },
+      data: fullListing,
       isLoading: false,
       isError: false,
       refetch: vi.fn(),
     });
 
-    renderPanel();
-    expect(screen.queryByText('Price')).not.toBeInTheDocument();
-    expect(screen.queryByText('Price per acre')).not.toBeInTheDocument();
+    renderPanel('listing-1', vi.fn(), onNavigate);
+    const cta = screen.getByTestId('agri-view-full-details-cta');
+    expect(cta).toBeInTheDocument();
+    fireEvent.click(cta);
+    expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 });

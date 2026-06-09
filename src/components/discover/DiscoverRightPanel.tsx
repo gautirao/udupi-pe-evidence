@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Loader2, Sprout } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -217,6 +218,8 @@ export function DiscoverRightPanel({
   selectedMarkerListing = null,
   onClearAgriSelection,
 }: DiscoverRightPanelProps) {
+  const navigate = useNavigate();
+
   // Issue #1064 AC3 — explicit hydration/not-found UIs replace the silent
   // GuidedEntryPanel fall-back when the URL claims an areaKey but `selectedArea`
   // has not (yet) resolved. We render two small inline JSX blocks shared by the
@@ -402,7 +405,16 @@ export function DiscoverRightPanel({
                     <div
                       key={listing.id}
                       data-testid="agri-listing-card"
-                      className="p-4"
+                      className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => navigate(`/listing/${listing.id}`)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigate(`/listing/${listing.id}`);
+                        }
+                      }}
                     >
                       <p className="text-sm font-medium text-foreground truncate">
                         {listing.title ?? listing.locality ?? listing.id}
@@ -574,13 +586,17 @@ export function DiscoverRightPanel({
         );
 
       case 'agri-detail':
-        // Issue #1374 — full detail panel for a selected agri polygon listing.
-        // selectedMarkerListing carries the lightweight marker (id, loc, boundary);
-        // AgriListingPanel fetches the full DTO by id from the public endpoint.
+        // Issue #1374 (demoted to peek in #1405) — lightweight peek for a selected agri polygon.
+        // selectedMarkerListing carries the marker (id, loc, boundary);
+        // AgriListingPanel fetches compact DTO by id from the public endpoint.
+        // onNavigate pushes to /listing/:id for full detail (AgriSpecRows + boundary map).
+        // Back from /listing/:id restores /discover URL; transient polygon highlight
+        // not restored (acceptable — React state not URL state).
         return selectedMarkerListing?.id ? (
           <AgriListingPanel
             listingId={selectedMarkerListing.id}
             onBack={onClearAgriSelection ?? (() => undefined)}
+            onNavigate={() => navigate(`/listing/${selectedMarkerListing.id}`)}
           />
         ) : null;
 

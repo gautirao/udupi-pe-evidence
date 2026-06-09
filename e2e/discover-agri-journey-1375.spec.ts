@@ -12,7 +12,9 @@
  *   AC5  — agri-listings-list + agri-listing-card present; agri-land-area when landArea present
  *   AC6  — .agri-cluster present at zoom 12–15; markers API fired with propertyTypes=agricultural_land
  *   AC7  — .leaflet-overlay-pane path renders at zoom >= 16
- *   AC8  — agri-detail-panel with agri-detail-title + agri-boundary-disclaimer (boundary present)
+ *   AC8  — agri polygon click → agri-detail-panel peek (compact: title, locality, area) + "View full details" CTA → navigates to /listing/:id (#1405)
+ *   AC6  — browser Back from /listing/:id restores agri-first Discover context (journey + city + areaKey preserved, #1405)
+ *   AC8b — agri-listing-card click → navigates directly to /listing/:id (residential parity, #1405)
  *   AC9  — school controls absent in agri-first mode
  *   AC10 — residential area-first journey unaffected: .custom-marker-cluster present, no .agri-cluster
  *   AC11 — MANDATORY regression guard: markers API MUST fire for agri-first + auth + zoom>12 + area selected
@@ -520,10 +522,10 @@ test.describe('@integration-ui 1375 — Agriculture Discover journey (Phase 7A)'
     },
   );
 
-  // ── TEST 5 — AC8: Agri detail panel ──────────────────────────────────────
+  // ── TEST 5 — AC8 (#1405): Agri polygon click → peek + "View full details" CTA ──
 
   test(
-    'AC8: clicking agri polygon opens agri-detail-panel with title and boundary disclaimer',
+    'AC8: clicking agri polygon opens agri-detail-panel peek with compact fields and "View full details" CTA',
     async ({ page }) => {
       await stubCommonRoutes(page);
 
@@ -565,18 +567,113 @@ test.describe('@integration-ui 1375 — Agriculture Discover journey (Phase 7A)'
       // Click the polygon — triggers onSelectListing → setSelectedMarkerListing → resolvedPanelContent='agri-detail'
       await overlayPath.click({ force: true });
 
-      // AC8: detail panel opens (panelContent switches agri-selected → agri-detail)
+      // AC8: peek panel opens (panelContent switches agri-selected → agri-detail)
       await expect(page.locator('[data-testid="agri-detail-panel"]')).toBeVisible({ timeout: 12_000 });
 
       // AC8: title rendered from AGRI_LISTING_DETAIL_FIXTURE.title
       await expect(page.locator('[data-testid="agri-detail-title"]')).toBeVisible({ timeout: 8_000 });
       await expect(page.locator('[data-testid="agri-detail-title"]')).toContainText('Agricultural Plot in Manipal');
 
-      // AC8: boundary disclaimer visible (fixture has boundary string)
-      await expect(page.locator('[data-testid="agri-boundary-disclaimer"]')).toBeVisible({ timeout: 5_000 });
-
-      // AC8: at least one field row rendered — locality "Manipal" from AGRI_LISTING_DETAIL_FIXTURE
+      // AC8: compact field — locality "Manipal" visible in peek
       await expect(page.locator('[data-testid="agri-detail-panel"]')).toContainText('Manipal');
+
+      // AC8: compact field — land area visible in peek (AGRI_LISTING_DETAIL_FIXTURE.landArea=2.5)
+      await expect(page.locator('[data-testid="agri-detail-panel"]')).toContainText('2.5');
+
+      // AC8: "View full details" CTA present (boundary-disclaimer covered by /listing/:id E2E in #1406)
+      const cta = page.locator('[data-testid="agri-view-full-details-cta"]');
+      await expect(cta).toBeVisible({ timeout: 5_000 });
+
+      // AC8: CTA click → navigates to /listing/:id
+      await cta.click();
+      await page.waitForURL(/\/listing\/agri-with-boundary-001/, { timeout: 10_000 });
+    },
+  );
+
+  // ── TEST 5b — AC8b (#1405): agri-listing-card click navigates to /listing/:id ──
+
+  test(
+    'AC8b: clicking agri-listing-card in agri-selected panel navigates to /listing/:id',
+    async ({ page }) => {
+      await stubCommonRoutes(page);
+
+      // Override areas with agri fixture and city-listings to populate cards
+      await page.route('**/api/discover/areas**', (r) => fulfillJson(r, 200, AGRI_AREAS_FIXTURE));
+      await page.route('**/api/discover/cities/*/listings**', (r) =>
+        fulfillJson(r, 200, AGRI_CITY_LISTINGS_FIXTURE),
+      );
+
+      await page.goto(`/discover?journey=agri-first&city=${CITY}`);
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 });
+
+      const authed = await ensureAuthenticated(page);
+      if (!authed) {
+        test.skip(true, 'Authentication unavailable (storageState expired + no smoke creds)');
+        return;
+      }
+
+      // Navigate with area pre-selected — agri-listing-cards render without needing markers
+      await navigateAgriAndZoom(page, AGRI_MARKERS, ZOOM_IN_CLICKS_CLUSTERS);
+
+      // Wait for at least one agri-listing-card
+      const firstCard = page.locator('[data-testid="agri-listing-card"]').first();
+      await expect(firstCard).toBeVisible({ timeout: 10_000 });
+
+      // AC8b: clicking a card navigates to /listing/:id
+      await firstCard.click();
+      await page.waitForURL(/\/listing\//, { timeout: 10_000 });
+    },
+  );
+
+  // ── TEST 5c — AC6 (#1405): browser Back from /listing/:id restores agri-first context ──
+
+  test(
+    'AC6: browser Back from /listing/:id restores agri-first Discover context (journey + city + areaKey preserved)',
+    async ({ page }) => {
+      await stubCommonRoutes(page);
+
+      // Override areas with agri fixture and city-listings to populate cards
+      await page.route('**/api/discover/areas**', (r) => fulfillJson(r, 200, AGRI_AREAS_FIXTURE));
+      await page.route('**/api/discover/cities/*/listings**', (r) =>
+        fulfillJson(r, 200, AGRI_CITY_LISTINGS_FIXTURE),
+      );
+
+      // Navigate with full agri-first context including areaKey so panel + cards render
+      await page.goto(
+        `http://localhost:5174/discover?journey=agri-first&city=${CITY}&areaKey=${ENCODED_AREA_KEY}`,
+      );
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 10_000 });
+
+      const authed = await ensureAuthenticated(page);
+      if (!authed) {
+        throw new Error(
+          'AC6 BLOCKED: Authentication unavailable (storageState expired + no smoke creds) — cannot verify agri-first Back restoration without auth (markersEnabled requires isAuthenticated)',
+        );
+      }
+
+      // Wait for agri-listing-card to be visible (populated by AGRI_CITY_LISTINGS_FIXTURE)
+      const firstCard = page.locator('[data-testid="agri-listing-card"]').first();
+      await expect(firstCard).toBeVisible({ timeout: 10_000 });
+
+      // Click card → navigate to /listing/:id
+      await firstCard.click();
+      await page.waitForURL(/\/listing\//, { timeout: 10_000 });
+
+      // AC6: browser Back → /discover URL restored with full agri-first context
+      await page.goBack();
+      await page.waitForURL(/\/discover/, { timeout: 10_000 });
+
+      const restoredUrl = page.url();
+      expect(restoredUrl).toContain('journey=agri-first');
+      expect(restoredUrl).toContain('city=udupi');
+      expect(restoredUrl).toContain('areaKey=');
+      expect(restoredUrl).not.toContain('journey=area-first');
+      expect(restoredUrl).not.toContain('journey=school-first');
+
+      // Map must still be alive after Back
+      await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 5_000 });
     },
   );
 

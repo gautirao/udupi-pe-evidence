@@ -1,12 +1,12 @@
 /**
- * AgriListingPanel — Issue #1374 (refactored #1406)
+ * AgriListingPanel — Issue #1374 (demoted to peek in #1405)
  *
- * Renders full agriculture listing details when an agri polygon is selected on
- * the Discover map (agri-first journey). Fetches the full DTO from the public
- * endpoint GET /api/public/listings/{id} via useAgriListingDetail.
+ * Lightweight peek panel shown when an agri polygon is selected on the
+ * Discover map (agri-first journey). Shows compact fields only:
+ * title/locality, land area, price (if present).
  *
- * Field rendering delegated to shared AgriSpecRows (Issue #1406).
- * Panel retains: title, back button, loading/error states, locality row (panel-specific).
+ * Full detail (AgriSpecRows, boundary disclaimer) lives at /listing/:id (#1406).
+ * "View full details" CTA navigates there via the onNavigate callback.
  */
 
 import React from 'react';
@@ -14,14 +14,14 @@ import { AlertCircle, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgriListingDetail } from '@/hooks/useAgriListingDetail';
-import { AgriSpecRows } from '@/components/listing/AgriSpecRows';
 
 interface AgriListingPanelProps {
   listingId: string;
   onBack: () => void;
+  onNavigate: () => void;
 }
 
-export function AgriListingPanel({ listingId, onBack }: AgriListingPanelProps) {
+export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingPanelProps) {
   const { data, isLoading, isError, refetch } = useAgriListingDetail(listingId);
 
   // ── Loading ──────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ export function AgriListingPanel({ listingId, onBack }: AgriListingPanelProps) {
         </div>
         {/* Skeleton rows */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {[0, 1, 2, 3, 4].map((i) => (
+          {[0, 1, 2].map((i) => (
             <div key={i} className="flex justify-between">
               <Skeleton className="h-4 w-24" />
               <Skeleton className="h-4 w-32" />
@@ -79,22 +79,8 @@ export function AgriListingPanel({ listingId, onBack }: AgriListingPanelProps) {
     );
   }
 
-  // ── Populated ────────────────────────────────────────────────────
-  const {
-    locality,
-    surveyNumber,
-    landArea,
-    landAreaUnit,
-    computedAreaAcres,
-    price,
-    waterSource,
-    soilType,
-    roadAccess,
-    cultivationStatus,
-    ownershipType,
-    boundary,
-  } = data;
-
+  // ── Populated (peek) ─────────────────────────────────────────────
+  const { locality, landArea, landAreaUnit, price } = data;
   const title = data.title ?? locality ?? 'Agricultural plot';
 
   return (
@@ -121,28 +107,41 @@ export function AgriListingPanel({ listingId, onBack }: AgriListingPanelProps) {
         </h2>
       </div>
 
-      {/* Detail rows */}
+      {/* Compact peek rows */}
       <div className="flex-1 overflow-y-auto px-4 py-2">
-        {/* Locality row: panel-specific (detail page shows locality in header) */}
         {locality && (
           <div className="flex justify-between items-start gap-2 py-2 border-b border-border">
             <span className="text-sm text-muted-foreground shrink-0">Locality</span>
             <span className="text-sm text-foreground text-right">{locality}</span>
           </div>
         )}
-        <AgriSpecRows
-          surveyNumber={surveyNumber}
-          landArea={landArea}
-          landAreaUnit={landAreaUnit}
-          computedAreaAcres={computedAreaAcres}
-          price={price}
-          waterSource={waterSource}
-          soilType={soilType}
-          roadAccess={roadAccess}
-          cultivationStatus={cultivationStatus}
-          ownershipType={ownershipType}
-          boundary={boundary}
-        />
+        {landArea != null && landAreaUnit && (
+          <div className="flex justify-between items-start gap-2 py-2 border-b border-border">
+            <span className="text-sm text-muted-foreground shrink-0">Land area</span>
+            <span className="text-sm text-foreground text-right">
+              {landArea} {landAreaUnit}
+            </span>
+          </div>
+        )}
+        {price != null && price > 0 && (
+          <div className="flex justify-between items-start gap-2 py-2 border-b border-border">
+            <span className="text-sm text-muted-foreground shrink-0">Price</span>
+            <span className="text-sm text-foreground text-right">
+              ₹{price.toLocaleString('en-IN')}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* View full details CTA */}
+      <div className="px-4 py-3 border-t border-border shrink-0">
+        <Button
+          className="w-full"
+          onClick={onNavigate}
+          data-testid="agri-view-full-details-cta"
+        >
+          View full details
+        </Button>
       </div>
     </div>
   );
