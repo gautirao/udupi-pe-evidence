@@ -13,6 +13,7 @@
  *   AC6  — .agri-cluster present at zoom 12–15; markers API fired with propertyTypes=agricultural_land
  *   AC7  — .leaflet-overlay-pane path renders at zoom >= 16
  *   AC8  — agri polygon click → agri-detail-panel peek (compact: title, locality, area) + "View full details" CTA → navigates to /listing/:id (#1405)
+ *          UPDATED (#1412): peek panel shows COMPACT fields only; full spec (AgriSpecRows) is on /listing/:id.
  *   AC6  — browser Back from /listing/:id restores agri-first Discover context (journey + city + areaKey preserved, #1405)
  *   AC8b — agri-listing-card click → navigates directly to /listing/:id (residential parity, #1405)
  *   AC9  — school controls absent in agri-first mode
@@ -522,10 +523,13 @@ test.describe('@integration-ui 1375 — Agriculture Discover journey (Phase 7A)'
     },
   );
 
-  // ── TEST 5 — AC8 (#1405): Agri polygon click → peek + "View full details" CTA ──
+  // ── TEST 5 — AC8 (#1405, verified #1412): Agri polygon click → peek + CTA → /listing/:id ──
+  // NOTE (#1412 update): agri-detail-panel is the COMPACT peek panel (title, locality, area only).
+  // Full AgriSpecRows (survey number, water source, soil type, etc.) live on /listing/:id — NOT in-panel.
+  // This test asserts the peek → CTA → navigate flow; it does NOT (and must NOT) assert full spec rows here.
 
   test(
-    'AC8: clicking agri polygon opens agri-detail-panel peek with compact fields and "View full details" CTA',
+    'AC8: clicking agri polygon opens agri-detail-panel peek with compact fields and "View full details" CTA; CTA navigates to /listing/:id (full detail NOT in-panel)',
     async ({ page }) => {
       await stubCommonRoutes(page);
 
