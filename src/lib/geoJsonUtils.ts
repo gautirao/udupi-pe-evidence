@@ -60,6 +60,10 @@ export function fromGeoJsonString(
   if (!boundaryStr) return [];
   try {
     const parsed = JSON.parse(boundaryStr) as GeoJsonPolygon;
+    // AC8: only proceed for Polygon type — Point, LineString etc. return []
+    if (!parsed || typeof parsed !== 'object' || parsed.type !== 'Polygon') {
+      return [];
+    }
     const ring: number[][] = parsed.coordinates[0];
     if (!Array.isArray(ring) || ring.length < 4) return [];
     // Drop the closing duplicate (last point equals first)

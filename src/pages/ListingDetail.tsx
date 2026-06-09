@@ -21,15 +21,16 @@ import { ListingDetailMainContent } from '@/components/listing/ListingDetailMain
 import { ListingDetailSidebar } from '@/components/listing/ListingDetailSidebar';
 import { TakeOfflineButton, ReopenForEditingButton } from '@/components/listing/ListingPreviewActions';
 
-const propertyConfig: Record<PropertyType, { label: string; badgeClass: string }> = {
-  land:                { label: 'Land',           badgeClass: 'bg-green-100 text-green-800 border-0' },
-  house:               { label: 'House',          badgeClass: 'bg-blue-100 text-blue-800 border-0' },
-  apartment:           { label: 'Apartment',      badgeClass: 'bg-violet-100 text-violet-800 border-0' },
-  commercial:          { label: 'Commercial',     badgeClass: 'bg-orange-100 text-orange-800 border-0' },
-  commercial_building: { label: 'Comm. Building', badgeClass: 'bg-blue-100 text-blue-800 border-0' },
-  warehouse:           { label: 'Warehouse',      badgeClass: 'bg-amber-100 text-amber-800 border-0' },
-  commercial_land:     { label: 'Comm. Land',     badgeClass: 'bg-teal-100 text-teal-800 border-0' },
-  other:               { label: 'Other',          badgeClass: 'bg-gray-100 text-gray-600 border-0' },
+const propertyConfig: Record<string, { label: string; badgeClass: string }> = {
+  land:                { label: 'Land',              badgeClass: 'bg-green-100 text-green-800 border-0' },
+  house:               { label: 'House',             badgeClass: 'bg-blue-100 text-blue-800 border-0' },
+  apartment:           { label: 'Apartment',         badgeClass: 'bg-violet-100 text-violet-800 border-0' },
+  commercial:          { label: 'Commercial',        badgeClass: 'bg-orange-100 text-orange-800 border-0' },
+  commercial_building: { label: 'Comm. Building',    badgeClass: 'bg-blue-100 text-blue-800 border-0' },
+  warehouse:           { label: 'Warehouse',         badgeClass: 'bg-amber-100 text-amber-800 border-0' },
+  commercial_land:     { label: 'Comm. Land',        badgeClass: 'bg-teal-100 text-teal-800 border-0' },
+  agricultural_land:   { label: 'Agricultural Land', badgeClass: 'bg-lime-100 text-lime-800 border-0' },
+  other:               { label: 'Other',             badgeClass: 'bg-gray-100 text-gray-600 border-0' },
 };
 
 /** Shape returned by GET /api/public/listings/:id. Extends camelCase backend DTO. */
@@ -53,6 +54,17 @@ export interface PublicListingDetail extends ListingResponse {
   approvalsDeclared?: string | null;
   reraValid?: boolean;
   areaKey?: string | null;           // e.g. "KA|UDUPI|MANIPAL"
+  // Agricultural land fields (added by #1407 / PR #1413)
+  boundary?: string | null;
+  computedAreaAcres?: number | null;
+  waterSource?: string | null;
+  soilType?: string | null;
+  roadAccess?: string | null;
+  cultivationStatus?: string | null;
+  ownershipType?: string | null;
+  surveyNumber?: string | null;
+  landArea?: number | null;
+  landAreaUnit?: string | null;
 }
 
 function useListingById(id: string | undefined, isPreview: boolean, userId?: string) {
@@ -138,7 +150,7 @@ export default function ListingDetail() {
     );
   }
 
-  const { label, badgeClass } = propertyConfig[listing.propertyType as PropertyType] ?? propertyConfig['other'];
+  const { label, badgeClass } = propertyConfig[listing.propertyType] ?? propertyConfig['other'];
 
   // Anonymous teaser returns only primaryImageUrl + imageCount (no images[]).
   // Synthesize a 1-item gallery so the first photo renders.

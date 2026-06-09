@@ -11,6 +11,8 @@ import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 import { NearbySchoolsCard } from '@/components/listing/NearbySchoolsCard';
 import { TrustBadgeCard, DIMENSION_LABELS } from '@/components/listing/TrustBadgeCard';
 import { ListingSpecsGrid } from '@/components/listing/ListingSpecsGrid';
+import { AgriSpecRows } from '@/components/listing/AgriSpecRows';
+import { ListingDetailBoundaryMap } from '@/components/listing/ListingDetailBoundaryMap';
 import { formatPrice, formatRelativeDate } from '@/lib/formatters';
 import { formatListingId } from '@/lib/listing-id';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
@@ -128,6 +130,37 @@ export function ListingDetailMainContent({
 
       {/* Property specs grid */}
       <ListingSpecsGrid listing={listing} />
+
+      {/* Agricultural land specs + boundary map (additive — non-agri types unaffected) */}
+      {listing.propertyType === 'agricultural_land' && (
+        <>
+          <AgriSpecRows
+            surveyNumber={listing.surveyNumber}
+            landArea={listing.landArea}
+            landAreaUnit={listing.landAreaUnit}
+            computedAreaAcres={listing.computedAreaAcres}
+            price={listing.price}
+            waterSource={listing.waterSource}
+            soilType={listing.soilType}
+            roadAccess={listing.roadAccess}
+            cultivationStatus={listing.cultivationStatus}
+            ownershipType={listing.ownershipType}
+            boundary={listing.boundary}
+          />
+          {listing.latitude != null && listing.longitude != null && (
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">
+                Plot Location &amp; Boundary
+              </h3>
+              <ListingDetailBoundaryMap
+                boundary={listing.boundary}
+                lat={listing.latitude}
+                lng={listing.longitude}
+              />
+            </div>
+          )}
+        </>
+      )}
 
       {/* Description */}
       {listing.description && (

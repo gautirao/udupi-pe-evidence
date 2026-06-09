@@ -90,6 +90,17 @@ describe('fromGeoJsonString', () => {
     // Should have 3 points, not 4 (no closing duplicate)
     expect(back).toHaveLength(3);
   });
+
+  // AC8 — non-Polygon GeoJSON types must return []
+  it('returns [] for non-Polygon GeoJSON (Point)', () => {
+    const point = JSON.stringify({ type: 'Point', coordinates: [74.8, 13.2] });
+    expect(fromGeoJsonString(point)).toEqual([]);
+  });
+
+  it('returns [] for non-Polygon GeoJSON (LineString)', () => {
+    const line = JSON.stringify({ type: 'LineString', coordinates: [[74.8, 13.2], [74.9, 13.3]] });
+    expect(fromGeoJsonString(line)).toEqual([]);
+  });
 });
 
 describe('isValidPolygon', () => {
