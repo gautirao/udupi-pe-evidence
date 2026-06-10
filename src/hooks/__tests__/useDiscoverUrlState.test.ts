@@ -2157,3 +2157,95 @@ describe('useDiscoverUrlState — changeCity clears region and maxKm', () => {
     expect(result.current[0].selectedMaxKm).toBeNull();
   });
 });
+
+// ─── Issue #1430: selectedListing / setSelectedListing / clearSelectedListing ──
+
+describe('useDiscoverUrlState — selectedListing (Issue #1430)', () => {
+  it('cold-load restore: listing=<uuid> in URL → selectedListing populated', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&listing=abc-123-uuid',
+      ),
+    });
+    expect(result.current[0].selectedListing).toBe('abc-123-uuid');
+  });
+
+  it('cold-load restore: no listing= param → selectedListing is null', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=N&maxKm=25'),
+    });
+    expect(result.current[0].selectedListing).toBeNull();
+  });
+
+  it('cold-load restore: empty listing= param → selectedListing is null', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=N&maxKm=25&listing='),
+    });
+    expect(result.current[0].selectedListing).toBeNull();
+  });
+
+  it('setSelectedListing writes listing=<uuid> to URL (PUSH, replace:false)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=N&maxKm=25'),
+    });
+
+    act(() => {
+      result.current[1].setSelectedListing('listing-uuid-999');
+    });
+
+    expect(result.current[0].selectedListing).toBe('listing-uuid-999');
+  });
+
+  it('clearSelectedListing removes listing= only, preserves region= and maxKm= (REPLACE)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&listing=listing-uuid-999',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearSelectedListing();
+    });
+
+    // listing removed
+    expect(result.current[0].selectedListing).toBeNull();
+    // region + maxKm preserved
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(25);
+  });
+
+  it('clearRegionAndMaxKm removes region= AND maxKm= AND listing= atomically', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&listing=listing-uuid-999',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+    expect(result.current[0].selectedListing).toBeNull();
+  });
+
+  it('startOver() removes listing= along with all other journey params', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&listing=listing-uuid-999',
+      ),
+    });
+
+    act(() => {
+      result.current[1].startOver();
+    });
+
+    expect(result.current[0].selectedListing).toBeNull();
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+    expect(result.current[0].journey).toBeNull();
+    // city survives startOver
+    expect(result.current[0].city).toBe('udupi');
+  });
+});

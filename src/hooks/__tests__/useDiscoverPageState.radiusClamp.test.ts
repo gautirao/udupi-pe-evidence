@@ -45,6 +45,9 @@ function makeUrlActions(): DiscoverUrlActions {
     setRegion: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: vi.fn(),
+    // Issue #1430 — agri-group listing peek actions.
+    setSelectedListing: vi.fn(),
+    clearSelectedListing: vi.fn(),
     setBoardFilters: vi.fn(),
     setCategoryFilters: vi.fn(),
     clearAreaContext: vi.fn(),
@@ -64,6 +67,8 @@ const mockSchool: SchoolResult = {
   boardType: null,
   latitude: 13.35,
   longitude: 74.79,
+  address: 'Manipal, Udupi District, Karnataka',
+  distanceKm: 0,
 };
 
 describe('useDiscoverPageState — school radius clamping (issue #1220)', () => {

@@ -20,6 +20,7 @@ import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
+import { AgriGroupListingPeek } from './panels/AgriGroupListingPeek';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
@@ -346,6 +347,30 @@ export interface DiscoverRightPanelProps {
   onRetryAgriGroupListings?: () => void;
   /** Clears the selected regional group (sets it to null in URL state). */
   onClearRegionalGroup?: () => void;
+  // ── Agri-group-peek panel (Issue #1430) ──────────────────────────────────
+  /**
+   * The AgriMapListingItem for the currently selected listing in the agri-group context.
+   * Provides synchronous first-paint data (locality, landArea, pricePaise) without
+   * waiting for the detail fetch. Only meaningful when panelContent === 'agri-group-peek'.
+   */
+  selectedGroupListingItem?: AgriMapListingItem | null;
+  /**
+   * Called when the user closes the agri-group listing peek panel.
+   * Should call urlActions.clearSelectedListing() (REPLACE semantics).
+   */
+  onCloseGroupPeek?: () => void;
+  /**
+   * Called when the user clicks "View full details" in the peek panel.
+   * Should navigate to /listing/:id.
+   */
+  onViewGroupListingDetails?: (id: string) => void;
+  /**
+   * Called when the user selects a listing from AgriGroupSelectedPanel.
+   * Issue #1430: replaces the previous navigate('/listing/:id') with setSelectedListing(id)
+   * so a URL-driven peek opens instead of a full-page navigation.
+   * Falls back to no-op when undefined (safe for tests / storybook usage).
+   */
+  onSelectAgriGroupListing?: (id: string) => void;
 }
 
 export function DiscoverRightPanel({
@@ -411,6 +436,10 @@ export function DiscoverRightPanel({
   agriGroupLabel = null,
   onRetryAgriGroupListings,
   onClearRegionalGroup,
+  selectedGroupListingItem = null,
+  onCloseGroupPeek,
+  onViewGroupListingDetails,
+  onSelectAgriGroupListing,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -630,6 +659,20 @@ export function DiscoverRightPanel({
         );
       }
 
+      case 'agri-group-peek':
+        // Issue #1430 — Level-2 listing peek within the agri-group context.
+        // selectedGroupListingItem provides synchronous first-paint data (no spinner).
+        // Full detail (images, description) is lazy-loaded inside AgriGroupListingPeek.
+        if (!selectedGroupListingItem) return null;
+        return (
+          <AgriGroupListingPeek
+            listingId={selectedGroupListingItem.id}
+            firstPaintData={selectedGroupListingItem}
+            onClose={onCloseGroupPeek ?? (() => {})}
+            onViewDetails={onViewGroupListingDetails ?? (() => {})}
+          />
+        );
+
       case 'agri-group-selected':
         // Issue #1425 — agri-first journey with a regional group selected but no
         // specific areaKey yet. Shows agri map listings for all areas in the group.
@@ -648,7 +691,10 @@ export function DiscoverRightPanel({
               isError={isAgriGroupListingsError}
               onRetry={onRetryAgriGroupListings ?? (() => {})}
               onClear={onClearRegionalGroup ?? (() => {})}
-              onSelectListing={(id) => navigate(`/listing/${id}`)}
+              // Issue #1430: listing selection opens the URL-driven peek panel (not
+              // a full-page navigation). onSelectAgriGroupListing falls back to navigate
+              // for compatibility when the prop is not provided (e.g. older tests).
+              onSelectListing={onSelectAgriGroupListing ?? ((id) => navigate(`/listing/${id}`))}
             />
           </>
         );
@@ -831,6 +877,7 @@ export function DiscoverRightPanel({
     'area-selected',
     'agri-selected',
     'agri-group-selected',
+    'agri-group-peek',
     'agri-detail',
     'schools-in-area',
     'school-selected',

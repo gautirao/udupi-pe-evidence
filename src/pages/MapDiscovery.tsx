@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -363,6 +364,7 @@ export function hasActiveAnonPropertyFilter(filters: {
 }
 
 export default function MapDiscovery() {
+  const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
   const [urlState, urlActions] = useDiscoverUrlState();
@@ -415,6 +417,17 @@ export default function MapDiscovery() {
       ? `${selectedCorridorData.groupName} · ${selectedTierData.distanceLabel}`
       : selectedCorridorData.groupName
     : null;
+
+  // Issue #1430 — derive the AgriMapListingItem for the selected listing peek.
+  // Finds the matching item from the already-loaded agri map listings.
+  // Returns null when selectedListing is absent or not found (safe fallback).
+  const selectedGroupListingItem = useMemo(
+    () =>
+      urlState.selectedListing && agriMapListingsData?.listings
+        ? (agriMapListingsData.listings.find((l) => l.id === urlState.selectedListing) ?? null)
+        : null,
+    [urlState.selectedListing, agriMapListingsData?.listings],
+  );
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -1819,6 +1832,11 @@ export default function MapDiscovery() {
           // Issue #1115 — bounded-search CTA wiring.
           onBoundedSearch={isAuthenticated ? handleBoundedSearch : undefined}
           boundedSearchTriggered={boundedSearchTriggered}
+          // Issue #1430 — agri-group listing peek wiring.
+          onSelectAgriGroupListing={(id) => urlActions.setSelectedListing(id)}
+          selectedGroupListingItem={selectedGroupListingItem}
+          onCloseGroupPeek={() => urlActions.clearSelectedListing()}
+          onViewGroupListingDetails={(id) => navigate(`/listing/${id}`)}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

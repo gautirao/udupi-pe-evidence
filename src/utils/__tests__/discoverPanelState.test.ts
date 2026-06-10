@@ -318,6 +318,89 @@ describe('derivePanelContent — groupId deep-link inference (issue #1154)', () 
   });
 });
 
+// ─── Issue #1430: agri-group-peek routing ─────────────────────────────────────
+
+describe('derivePanelContent — agri-group-peek (Issue #1430)', () => {
+  // Core: region + maxKm + listing (no areaKey) → agri-group-peek
+  it('agri-first + region + maxKm + listing (no areaKey) → agri-group-peek', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedRegion: 'N',
+          selectedMaxKm: 25,
+          selectedListing: 'listing-uuid-abc',
+        }),
+      ),
+    ).toBe('agri-group-peek');
+  });
+
+  // Regression: region + maxKm, NO listing → agri-group-selected (unchanged)
+  it('agri-first + region + maxKm + NO listing → agri-group-selected (unchanged)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedRegion: 'N',
+          selectedMaxKm: 25,
+          selectedListing: null,
+        }),
+      ),
+    ).toBe('agri-group-selected');
+  });
+
+  // areaKey always wins over listing (areaKey → agri-selected, listing ignored)
+  it('agri-first + areaKey + region + maxKm + listing → agri-selected (areaKey wins)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          selectedRegion: 'N',
+          selectedMaxKm: 25,
+          selectedListing: 'listing-uuid-abc',
+        }),
+      ),
+    ).toBe('agri-selected');
+  });
+
+  // listing without region+maxKm → agri-landing (listing is ignored without context)
+  it('agri-first + NO region + NO maxKm + listing → agri-landing (listing ignored)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedListing: 'listing-uuid-abc',
+        }),
+      ),
+    ).toBe('agri-landing');
+  });
+
+  // Non-agri journey: listing param is ignored for area-first
+  it('non-agri journey (area-first) + listing → correct non-agri panel (listing ignored)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'area-first',
+          selectedListing: 'listing-uuid-abc',
+        }),
+      ),
+    ).toBe('area-groups-landing');
+  });
+
+  // Non-agri journey: listing param is ignored for school-first
+  it('non-agri journey (school-first) + listing → school-browse (listing ignored)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'school-first',
+          selectedListing: 'listing-uuid-abc',
+        }),
+      ),
+    ).toBe('school-browse');
+  });
+});
+
 // ─── Issue #1157: area-first "add a school in this area" sub-step ──────────────
 
 describe('area-first school-picking sub-step (Issue #1157)', () => {

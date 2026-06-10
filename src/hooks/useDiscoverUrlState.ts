@@ -133,6 +133,13 @@ export interface DiscoverUrlState {
    * Will be removed once all consumers migrate to selectedRegion/selectedMaxKm.
    */
   selectedGroup: { directionKey: string; distanceBandKey: string } | null;
+  /**
+   * Selected agri-group listing id for the Level-2 peek panel (Issue #1430).
+   * Parsed from URL `listing` param (UUID string). Null when absent or empty.
+   * Only meaningful when selectedRegion + selectedMaxKm are also set (agri-group context).
+   * Optional to allow partial construction in tests/callers.
+   */
+  selectedListing?: string | null;
 }
 
 export interface DiscoverUrlActions {
@@ -258,6 +265,17 @@ export interface DiscoverUrlActions {
    * Removes both params in a single PUSH. Returns to agri-landing.
    */
   clearRegionAndMaxKm: () => void;
+  /**
+   * Select an agri-group listing for the Level-2 peek panel (Issue #1430).
+   * Writes `listing=<uuid>` to URL. PUSH — peek is a navigational destination (browser Back works).
+   */
+  setSelectedListing: (id: string) => void;
+  /**
+   * Close the agri-group listing peek panel (Issue #1430).
+   * Removes `listing=` only; preserves region, maxKm, journey, city, and all other params.
+   * REPLACE — closing is not a new destination (Back should not re-open the peek).
+   */
+  clearSelectedListing: () => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
@@ -511,6 +529,10 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // read style as the bom/ntm/rera/rtm filter flags above.
   const schoolPicking = urlParams.get('schoolPicking') === '1' ? true : undefined;
 
+  // Issue #1430 — agri-group listing peek. UUID string from `listing` URL param.
+  const rawListing = urlParams.get('listing');
+  const selectedListing: string | null = rawListing && rawListing.length > 0 ? rawListing : null;
+
   const state: DiscoverUrlState = {
     city,
     areaKey,
@@ -525,6 +547,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectedGroup,
     selectedRegion,
     selectedMaxKm,
+    selectedListing,
   };
 
   // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
@@ -1106,9 +1129,44 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         const next = new URLSearchParams(prev);
         next.delete('region');
         next.delete('maxKm');
+        // Issue #1430 — atomically remove any open listing peek when clearing the corridor.
+        // A listing peek is only meaningful within a region+maxKm context; clearing the
+        // corridor makes the peek unreachable and must not leave a stale `listing=` in the URL.
+        next.delete('listing');
         return next;
       },
       { replace: false }, // PUSH — clearing is a navigational step (Back restores)
+    );
+  }, [setUrlParams]);
+
+  // ─── Issue #1430: Agri-group listing peek ────────────────────────────────────
+
+  const setSelectedListing = useCallback(
+    (id: string) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (id) {
+            next.set('listing', id);
+          } else {
+            next.delete('listing');
+          }
+          return next;
+        },
+        { replace: false }, // PUSH — peek is a navigational destination; browser Back closes it
+      );
+    },
+    [setUrlParams],
+  );
+
+  const clearSelectedListing = useCallback(() => {
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('listing');
+        return next;
+      },
+      { replace: true }, // REPLACE — closing is not a new destination
     );
   }, [setUrlParams]);
 
@@ -1158,6 +1216,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setRegion,
     setMaxKm,
     clearRegionAndMaxKm,
+    setSelectedListing,
+    clearSelectedListing,
   };
 
   return [state, actions];
