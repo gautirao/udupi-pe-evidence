@@ -86,14 +86,17 @@ class RegionalAreaGroupsControllerTest {
                 .andExpect(status().isOk());
     }
 
-    // ── AC2: group shape — label + areaKeys + listingCount + agriAcreage ─────
+    // ── AC2: corridor group shape — directionCode + groupName + availableMaxDistances
 
     @Test
-    void getRegionalAreaGroups_returnsGroupShape() throws Exception {
-        RegionalAreaGroup group = new RegionalAreaGroup(
-                "North of Udupi · 25–50 km", "N", "25_50", 5L, 12.3,
-                List.of("IN|KA|Udupi|Kundapur", "IN|KA|Udupi|Koteshwara")
+    void getRegionalAreaGroups_returnsCorridorGroupShape() throws Exception {
+        AvailableMaxDistance tier = new AvailableMaxDistance(
+                10, "Within 10 km",
+                List.of("0_10"),
+                5L, 12.3,
+                List.of("IN|KA|Udupi|Brahmavar")
         );
+        CorridorGroup group = new CorridorGroup("N", "N towards Brahmavar", List.of(tier));
         when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
                 .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of(group)));
 
@@ -103,32 +106,55 @@ class RegionalAreaGroupsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.city", is("udupi")))
                 .andExpect(jsonPath("$.groups", hasSize(1)))
-                .andExpect(jsonPath("$.groups[0].label", is("North of Udupi · 25–50 km")))
-                .andExpect(jsonPath("$.groups[0].directionKey", is("N")))
-                .andExpect(jsonPath("$.groups[0].distanceBandKey", is("25_50")))
-                .andExpect(jsonPath("$.groups[0].listingCount", is(5)))
-                .andExpect(jsonPath("$.groups[0].agriAcreage", is(12.3)))
-                .andExpect(jsonPath("$.groups[0].areaKeys", hasSize(2)))
-                .andExpect(jsonPath("$.groups[0].areaKeys[0]", is("IN|KA|Udupi|Kundapur")));
+                .andExpect(jsonPath("$.groups[0].directionCode", is("N")))
+                .andExpect(jsonPath("$.groups[0].groupName", is("N towards Brahmavar")))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances", hasSize(1)))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].maxKm", is(10)))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].distanceLabel", is("Within 10 km")))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].includedBandCodes[0]", is("0_10")))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].listingCount", is(5)))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].agriAcreage", is(12.3)))
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].areaKeys[0]", is("IN|KA|Udupi|Brahmavar")));
     }
 
-    // ── AC7: two cities — results scoped to the requested city ───────────────
+    // ── AC3: null agriAcreage omitted from JSON (@JsonInclude NON_NULL) ────────
+
+    @Test
+    void getRegionalAreaGroups_nullAcreage_omittedFromJson() throws Exception {
+        AvailableMaxDistance tier = new AvailableMaxDistance(
+                10, "Within 10 km", List.of("0_10"), 1L, null, // agriAcreage = null
+                List.of("IN|KA|Udupi|Area1")
+        );
+        CorridorGroup group = new CorridorGroup("N", "N corridor", List.of(tier));
+        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
+                .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of(group)));
+
+        mockMvc.perform(get("/api/discover/regional-area-groups")
+                        .param("city", "udupi")
+                        .param("propertyType", "agricultural_land"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groups[0].availableMaxDistances[0].agriAcreage").doesNotExist());
+    }
+
+    // ── AC4: two cities — results scoped to the requested city ──────────────
 
     @Test
     void getRegionalAreaGroups_twoCities_scopedToRequestedCity() throws Exception {
-        RegionalAreaGroup udupiGroup = new RegionalAreaGroup(
-                "North of Udupi · 10–25 km", "N", "10_25", 2L, null,
+        AvailableMaxDistance udupiTier = new AvailableMaxDistance(
+                25, "Up to 25 km", List.of("0_10", "10_25"), 2L, null,
                 List.of("IN|KA|Udupi|Area1")
         );
-        RegionalAreaGroup bangaloreGroup = new RegionalAreaGroup(
-                "East of Bangalore · Within 10 km", "E", "0_10", 4L, 5.5,
+        AvailableMaxDistance bangaloreTier = new AvailableMaxDistance(
+                10, "Within 10 km", List.of("0_10"), 4L, 5.5,
                 List.of("IN|KA|Bengaluru|Whitefield")
         );
 
         when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
-                .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of(udupiGroup)));
+                .thenReturn(new RegionalAreaGroupsResponse("udupi",
+                        List.of(new CorridorGroup("N", "N towards Brahmavar", List.of(udupiTier)))));
         when(regionalAreaGroupsService.getRegionalGroups("bangalore", "agricultural_land"))
-                .thenReturn(new RegionalAreaGroupsResponse("bangalore", List.of(bangaloreGroup)));
+                .thenReturn(new RegionalAreaGroupsResponse("bangalore",
+                        List.of(new CorridorGroup("E", "E corridor", List.of(bangaloreTier)))));
 
         // Udupi request
         mockMvc.perform(get("/api/discover/regional-area-groups")
@@ -136,7 +162,8 @@ class RegionalAreaGroupsControllerTest {
                         .param("propertyType", "agricultural_land"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.city", is("udupi")))
-                .andExpect(jsonPath("$.groups[0].label", is("North of Udupi · 10–25 km")));
+                .andExpect(jsonPath("$.groups[0].directionCode", is("N")))
+                .andExpect(jsonPath("$.groups[0].groupName", is("N towards Brahmavar")));
 
         // Bangalore request
         mockMvc.perform(get("/api/discover/regional-area-groups")
@@ -144,10 +171,10 @@ class RegionalAreaGroupsControllerTest {
                         .param("propertyType", "agricultural_land"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.city", is("bangalore")))
-                .andExpect(jsonPath("$.groups[0].label", is("East of Bangalore · Within 10 km")));
+                .andExpect(jsonPath("$.groups[0].directionCode", is("E")));
     }
 
-    // ── AC8: Cache-Control: public, max-age=120 ───────────────────────────────
+    // ── AC5: Cache-Control: public, max-age=120 ───────────────────────────────
 
     @Test
     void getRegionalAreaGroups_responseHasCacheControlPublicMaxAge120() throws Exception {
@@ -164,25 +191,7 @@ class RegionalAreaGroupsControllerTest {
                 .andExpect(header().string("Cache-Control", not(containsString("no-store"))));
     }
 
-    // ── null agriAcreage omitted from JSON (@JsonInclude NON_NULL) ────────────
-
-    @Test
-    void getRegionalAreaGroups_nullAcreage_omittedFromJson() throws Exception {
-        RegionalAreaGroup group = new RegionalAreaGroup(
-                "North of Udupi · 10–25 km", "N", "10_25", 1L, null, // agriAcreage = null
-                List.of("IN|KA|Udupi|Area1")
-        );
-        when(regionalAreaGroupsService.getRegionalGroups("udupi", "agricultural_land"))
-                .thenReturn(new RegionalAreaGroupsResponse("udupi", List.of(group)));
-
-        mockMvc.perform(get("/api/discover/regional-area-groups")
-                        .param("city", "udupi")
-                        .param("propertyType", "agricultural_land"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.groups[0].agriAcreage").doesNotExist());
-    }
-
-    // ── missing required params → 400 ────────────────────────────────────────
+    // ── AC6: missing required params → 400 ────────────────────────────────────
 
     @Test
     void getRegionalAreaGroups_missingCityParam_returns400() throws Exception {
@@ -198,7 +207,7 @@ class RegionalAreaGroupsControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
-    // ── empty groups array for unknown city ───────────────────────────────────
+    // ── AC7: empty groups array for unknown city ──────────────────────────────
 
     @Test
     void getRegionalAreaGroups_unknownCity_returnsEmptyGroups() throws Exception {

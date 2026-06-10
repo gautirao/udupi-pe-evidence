@@ -4,6 +4,7 @@ import com.example.realestate.listing.area.AreaNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcOperations;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,25 +12,35 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Computes regional area groups for a given city and property type.
+ * Computes regional corridor groups (corridor-first cumulative) for a given city and property type.
  *
- * <p>Design:
+ * <p>Design (post #1435 refactor):
  * <ul>
  *   <li>Single SQL join: regional_area_classifications ⋈ regional_directions
  *       ⋈ regional_distance_bands ⋈ live agri listing aggregates per area_key.</li>
+ *   <li>A second SQL loads city_regional_direction_labels for human-readable group names.</li>
  *   <li>Listing counts and acreage are computed LIVE at request time — they are
  *       NOT read from the classification table (which stores only geometry data).</li>
- *   <li>Groups with zero live listings are omitted from the response.</li>
- *   <li>Ordering: band sort_order ASC, then direction sort_order ASC.</li>
- *   <li>Label composed at request time, e.g. "North of Udupi · 10–25 km".</li>
+ *   <li>Groups with zero live listings across all tiers are omitted from the response.</li>
+ *   <li>Within each direction, 4 cumulative tiers are built:
+ *     <ul>
+ *       <li>maxKm=10:  bands [0_10]</li>
+ *       <li>maxKm=25:  bands [0_10, 10_25]</li>
+ *       <li>maxKm=50:  bands [0_10, 10_25, 25_50]</li>
+ *       <li>maxKm=100: bands [0_10, 10_25, 25_50, 50_up]</li>
+ *     </ul>
+ *     Tiers with zero cumulative listings are omitted.</li>
+ *   <li>Ordering: sort_order from labels table ASC; fallback to natural compass order.</li>
  * </ul>
  *
  * <p>NOTE: This endpoint has no dependency on /api/discover/markers or OpenSearch.
- * It reads from Postgres only (regional_area_classifications + property_listings).
+ * It reads from Postgres only (regional_area_classifications + property_listings +
+ * city_regional_direction_labels).
  * If OpenSearch is later added as a listing source, this service must be updated
  * independently — it intentionally does NOT route through RoutingDiscoverListingsService.
  *
@@ -40,6 +51,20 @@ public class RegionalAreaGroupsService {
 
     private static final Logger log = LoggerFactory.getLogger(RegionalAreaGroupsService.class);
 
+    // Natural compass order for fallback sorting when a direction has no label row.
+    private static final List<String> COMPASS_ORDER =
+            List.of("N", "NE", "E", "SE", "S", "SW", "W", "NW");
+
+    // Cumulative tier definitions: ordered closest-to-furthest.
+    private record TierDef(int maxKm, String label, List<String> bands) {}
+
+    private static final List<TierDef> TIER_DEFS = List.of(
+            new TierDef(10,  "Within 10 km",  List.of("0_10")),
+            new TierDef(25,  "Up to 25 km",   List.of("0_10", "10_25")),
+            new TierDef(50,  "Up to 50 km",   List.of("0_10", "10_25", "25_50")),
+            new TierDef(100, "Up to 100 km",  List.of("0_10", "10_25", "25_50", "50_up"))
+    );
+
     private final JdbcOperations jdbcOperations;
 
     public RegionalAreaGroupsService(JdbcOperations jdbcOperations) {
@@ -47,11 +72,11 @@ public class RegionalAreaGroupsService {
     }
 
     /**
-     * Returns regional area groups for the given city and property type.
+     * Returns regional corridor groups for the given city and property type.
      *
      * @param city         city slug (normalised to lowercase)
      * @param propertyType property type filter (e.g. "agricultural_land")
-     * @return response with ordered groups (only groups with ≥ 1 live listing)
+     * @return response with ordered corridor groups (only groups with &gt;= 1 live listing)
      */
     @Transactional(readOnly = true)
     public RegionalAreaGroupsResponse getRegionalGroups(String city, String propertyType) {
@@ -62,19 +87,14 @@ public class RegionalAreaGroupsService {
         // ── Step 1: fetch classification rows joined with band/direction metadata
         //    and live agri listing counts per area_key.
         //    Only rows where listing_count > 0 are returned (HAVING clause).
-        //    Ordering: band sort_order ASC, direction sort_order ASC.
-        // Bound args for REGIONAL_GROUPS_SQL: [propertyType, city_key]
-        // propertyType feeds the LOWER(?) in the listing subquery; city_key feeds WHERE rac.city_key = ?
+        //    Bound args: [propertyType, city_key]
         List<ClassificationRow> rows = jdbcOperations.query(
                 REGIONAL_GROUPS_SQL,
                 (rs, rowNum) -> new ClassificationRow(
                         rs.getString("area_key"),
                         rs.getString("direction_key"),
-                        rs.getString("direction_label"),
                         rs.getInt("direction_sort_order"),
                         rs.getString("band_key"),
-                        rs.getString("band_label"),
-                        rs.getInt("band_sort_order"),
                         rs.getLong("listing_count")
                 ),
                 normalizedType, normalizedCity
@@ -103,51 +123,97 @@ public class RegionalAreaGroupsService {
                 normalizedType, normalizedCity
         );
 
-        // ── Step 3: fold rows into groups keyed by (band_key, direction_key).
-        //    LinkedHashMap preserves the SQL ORDER BY (band sort_order, direction sort_order).
-        Map<String, GroupAccumulator> accumulators = new LinkedHashMap<>();
+        // ── Step 3: load direction labels from city_regional_direction_labels.
+        //    Returns Map<directionCode, LabelEntry(groupName, sortOrder)>.
+        //    Bound arg: [city_key].
+        Map<String, LabelEntry> labelsMap = new LinkedHashMap<>();
+        jdbcOperations.query(LABELS_SQL,
+                (RowCallbackHandler) rs -> labelsMap.put(
+                        rs.getString("direction_code"),
+                        new LabelEntry(rs.getString("group_name"), rs.getInt("sort_order"))
+                ),
+                normalizedCity
+        );
+
+        // ── Step 4: index classification rows by direction -> band -> area rows.
+        //    direction_sort_order from REGIONAL_GROUPS_SQL (regional_directions.sort_order)
+        //    is preserved as a fallback ordering field.
+        Map<String, DirectionAccumulator> dirAccumulators = new LinkedHashMap<>();
         for (ClassificationRow row : rows) {
-            String groupKey = row.bandKey() + "|" + row.directionKey();
-            GroupAccumulator acc = accumulators.computeIfAbsent(groupKey,
-                    k -> new GroupAccumulator(
-                            row.directionKey(), row.directionLabel(), row.directionSortOrder(),
-                            row.bandKey(), row.bandLabel(), row.bandSortOrder()
-                    )
-            );
-            acc.addArea(row.areaKey(), row.listingCount(),
-                    parseableByArea.getOrDefault(row.areaKey(), List.of()));
+            dirAccumulators
+                    .computeIfAbsent(row.directionKey(),
+                            k -> new DirectionAccumulator(row.directionKey(), row.directionSortOrder()))
+                    .addRow(row.bandKey(), row.areaKey(), row.listingCount(),
+                            parseableByArea.getOrDefault(row.areaKey(), List.of()));
         }
 
-        // ── Step 4: compose DTOs.
-        List<RegionalAreaGroup> groups = new ArrayList<>(accumulators.size());
-        for (GroupAccumulator acc : accumulators.values()) {
-            if (acc.totalListingCount() == 0) continue; // belt-and-suspenders (HAVING already filters)
-            String label = composeLabel(acc.directionLabel(), normalizedCity, acc.bandLabel());
-            Double acreage = acc.totalAcreage();
-            groups.add(new RegionalAreaGroup(
-                    label,
-                    acc.directionKey(),
-                    acc.bandKey(),
-                    acc.totalListingCount(),
-                    acreage,
-                    List.copyOf(acc.areaKeys())
-            ));
+        // ── Step 5: for each direction build cumulative tiers; compose CorridorGroup.
+        List<CorridorGroup> corridors = new ArrayList<>(dirAccumulators.size());
+        for (DirectionAccumulator dirAcc : dirAccumulators.values()) {
+            List<AvailableMaxDistance> tiers = buildCumulativeTiers(dirAcc);
+
+            if (tiers.isEmpty()) continue; // direction has no live listings in any tier
+
+            String dirCode = dirAcc.directionKey();
+            LabelEntry labelEntry = labelsMap.get(dirCode);
+            String groupName = labelEntry != null ? labelEntry.groupName() : dirCode + " corridor";
+            corridors.add(new CorridorGroup(dirCode, groupName, List.copyOf(tiers)));
         }
 
-        log.debug("getRegionalGroups city={} returned {} groups", normalizedCity, groups.size());
-        return new RegionalAreaGroupsResponse(normalizedCity, List.copyOf(groups));
+        // ── Step 6: sort corridors by label sort_order if available, else compass order.
+        corridors.sort((a, b) -> {
+            LabelEntry la = labelsMap.get(a.directionCode());
+            LabelEntry lb = labelsMap.get(b.directionCode());
+            if (la != null && lb != null) return Integer.compare(la.sortOrder(), lb.sortOrder());
+            if (la != null) return -1;
+            if (lb != null) return 1;
+            // both unlabeled: natural compass order
+            int ia = COMPASS_ORDER.indexOf(a.directionCode());
+            int ib = COMPASS_ORDER.indexOf(b.directionCode());
+            if (ia < 0) ia = Integer.MAX_VALUE;
+            if (ib < 0) ib = Integer.MAX_VALUE;
+            return Integer.compare(ia, ib);
+        });
+
+        log.debug("getRegionalGroups city={} returned {} corridors", normalizedCity, corridors.size());
+        return new RegionalAreaGroupsResponse(normalizedCity, List.copyOf(corridors));
     }
 
-    // ── Label composition ─────────────────────────────────────────────────────
+    // ── Tier construction ─────────────────────────────────────────────────────
 
-    /**
-     * Composes a human-readable group label.
-     * Example: directionLabel="North", city="udupi", bandLabel="10–25 km"
-     *          → "North of Udupi · 10–25 km"
-     */
-    static String composeLabel(String directionLabel, String citySlug, String bandLabel) {
-        String cityDisplay = Character.toUpperCase(citySlug.charAt(0)) + citySlug.substring(1);
-        return directionLabel + " of " + cityDisplay + " · " + bandLabel;
+    private static List<AvailableMaxDistance> buildCumulativeTiers(DirectionAccumulator dirAcc) {
+        Map<String, BandData> bands = dirAcc.bands();
+        List<AvailableMaxDistance> tiers = new ArrayList<>(TIER_DEFS.size());
+        for (TierDef tier : TIER_DEFS) {
+            long cumCount = 0;
+            List<BigDecimal> cumAcres = new ArrayList<>();
+            boolean anyAcreage = false;
+            LinkedHashSet<String> cumAreaKeys = new LinkedHashSet<>();
+
+            for (String bandCode : tier.bands()) {
+                BandData band = bands.get(bandCode);
+                if (band == null) continue;
+                cumCount += band.listingCount();
+                if (!band.acreage().isEmpty()) {
+                    cumAcres.addAll(band.acreage());
+                    anyAcreage = true;
+                }
+                cumAreaKeys.addAll(band.areaKeys());
+            }
+
+            if (cumCount == 0) continue; // suppress empty tier
+
+            Double acreage = anyAcreage ? sumParseableAcres(cumAcres) : null;
+            tiers.add(new AvailableMaxDistance(
+                    tier.maxKm(),
+                    tier.label(),
+                    List.copyOf(tier.bands()),
+                    cumCount,
+                    acreage,
+                    List.copyOf(cumAreaKeys)
+            ));
+        }
+        return tiers;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -166,53 +232,57 @@ public class RegionalAreaGroupsService {
     private record ClassificationRow(
             String areaKey,
             String directionKey,
-            String directionLabel,
             int directionSortOrder,
             String bandKey,
-            String bandLabel,
-            int bandSortOrder,
             long listingCount
     ) {}
 
-    private static final class GroupAccumulator {
+    private record LabelEntry(String groupName, int sortOrder) {}
+
+    private record BandData(long listingCount, List<BigDecimal> acreage, List<String> areaKeys) {}
+
+    private static final class DirectionAccumulator {
         private final String directionKey;
-        private final String directionLabel;
         private final int directionSortOrder;
-        private final String bandKey;
-        private final String bandLabel;
-        private final int bandSortOrder;
-        private final List<String> areaKeys = new ArrayList<>();
-        private long totalListingCount = 0;
-        private final List<BigDecimal> allAcres = new ArrayList<>();
+        // band_key -> accumulated data for that band
+        private final Map<String, MutableBandData> bandMap = new LinkedHashMap<>();
 
-        GroupAccumulator(String directionKey, String directionLabel, int directionSortOrder,
-                         String bandKey, String bandLabel, int bandSortOrder) {
+        DirectionAccumulator(String directionKey, int directionSortOrder) {
             this.directionKey = directionKey;
-            this.directionLabel = directionLabel;
             this.directionSortOrder = directionSortOrder;
-            this.bandKey = bandKey;
-            this.bandLabel = bandLabel;
-            this.bandSortOrder = bandSortOrder;
         }
 
-        void addArea(String areaKey, long listingCount, List<BigDecimal> parsedAcres) {
-            areaKeys.add(areaKey);
-            totalListingCount += listingCount;
-            allAcres.addAll(parsedAcres);
+        void addRow(String bandKey, String areaKey, long listingCount, List<BigDecimal> acres) {
+            bandMap.computeIfAbsent(bandKey, k -> new MutableBandData())
+                    .add(areaKey, listingCount, acres);
         }
 
-        String directionKey()       { return directionKey; }
-        String directionLabel()     { return directionLabel; }
-        int directionSortOrder()    { return directionSortOrder; }
-        String bandKey()            { return bandKey; }
-        String bandLabel()          { return bandLabel; }
-        int bandSortOrder()         { return bandSortOrder; }
-        List<String> areaKeys()     { return areaKeys; }
-        long totalListingCount()    { return totalListingCount; }
+        String directionKey() { return directionKey; }
 
-        /** Returns sum of parseable acreage, or null if no parseable rows. */
-        Double totalAcreage() {
-            return sumParseableAcres(allAcres);
+        /** Returns an immutable snapshot of band_key -> BandData. */
+        Map<String, BandData> bands() {
+            Map<String, BandData> result = new LinkedHashMap<>();
+            for (Map.Entry<String, MutableBandData> e : bandMap.entrySet()) {
+                MutableBandData m = e.getValue();
+                result.put(e.getKey(), new BandData(
+                        m.listingCount,
+                        List.copyOf(m.acreage),
+                        List.copyOf(m.areaKeys)
+                ));
+            }
+            return result;
+        }
+
+        private static final class MutableBandData {
+            long listingCount = 0;
+            final List<BigDecimal> acreage = new ArrayList<>();
+            final List<String> areaKeys = new ArrayList<>();
+
+            void add(String areaKey, long count, List<BigDecimal> acres) {
+                areaKeys.add(areaKey);
+                listingCount += count;
+                acreage.addAll(acres);
+            }
         }
     }
 
@@ -222,7 +292,7 @@ public class RegionalAreaGroupsService {
      * Single join: regional_area_classifications ⋈ regional_directions
      *             ⋈ regional_distance_bands ⋈ live agri listing aggregates.
      *
-     * <p>Only areas with ≥ 1 live listing are returned (WHERE listing_count > 0 via subquery).
+     * <p>Only areas with >= 1 live listing are returned (WHERE listing_count > 0 via subquery).
      * Bound args: [propertyType (for LOWER in subquery), city_key].
      *
      * <p>Live-listing guards mirror AreaSummaryService exactly:
@@ -233,11 +303,8 @@ public class RegionalAreaGroupsService {
             SELECT
                 rac.area_key,
                 rac.direction_key,
-                rd.label      AS direction_label,
                 rd.sort_order AS direction_sort_order,
                 rac.distance_band_key AS band_key,
-                rdb.label     AS band_label,
-                rdb.sort_order AS band_sort_order,
                 COALESCE(agg.listing_count, 0) AS listing_count
             FROM regional_area_classifications rac
             JOIN regional_directions rd
@@ -256,7 +323,7 @@ public class RegionalAreaGroupsService {
             ) agg ON agg.area_key = rac.area_key
             WHERE rac.city_key = ?
               AND COALESCE(agg.listing_count, 0) > 0
-            ORDER BY rdb.sort_order ASC, rd.sort_order ASC
+            ORDER BY rd.sort_order ASC, rdb.sort_order ASC
             """;
 
     /**
@@ -277,4 +344,14 @@ public class RegionalAreaGroupsService {
               AND c.slug = ?
               AND array_length(string_to_array(pl.area_key, '|'), 1) = 4
             """;
+
+    /**
+     * Loads direction labels from city_regional_direction_labels.
+     * Returns rows ordered by sort_order ASC so the map insertion order matches
+     * desired display order.
+     * Bound arg: [city_key].
+     */
+    private static final String LABELS_SQL =
+            "SELECT direction_code, group_name, sort_order FROM city_regional_direction_labels " +
+            "WHERE city_key = ? ORDER BY sort_order ASC";
 }

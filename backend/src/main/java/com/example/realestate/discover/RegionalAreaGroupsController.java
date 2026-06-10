@@ -17,7 +17,8 @@ import java.util.concurrent.TimeUnit;
  * <p>GET /api/discover/regional-area-groups?city={citySlug}&propertyType={propertyType}
  *
  * <p>Typical use: propertyType=agricultural_land.
- * Returns groups ordered by distance band then direction, with live listing counts.
+ * Returns corridor groups ordered by direction label sort_order (ascending),
+ * each with cumulative distance tiers.
  */
 @RestController
 @RequestMapping("/api/discover")
