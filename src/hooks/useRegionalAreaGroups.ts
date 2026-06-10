@@ -1,108 +1,162 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
-// ─── Frontend Types ───────────────────────────────────────────────────────────
+// ─── Frontend Types (cumulative corridor model, Issue #1429) ──────────────────
 
-export interface RegionalAreaGroup {
-  label: string;
-  directionKey: string;
-  /** One of: '0_10' | '10_25' | '25_50' | '50_up' */
-  distanceBandKey: string;
+export interface CumulativeDistanceTier {
+  maxKm: 10 | 25 | 50 | 100;
+  distanceLabel: string;
+  includedBandCodes: string[];
   listingCount: number;
-  /** Null when the backend omits the field (@JsonInclude NON_NULL). */
-  agriAcreage: number | null;
+  /** Undefined when absent from JSON (backend @JsonInclude NON_NULL). NOT null. */
+  agriAcreage?: number;
   areaKeys: string[];
 }
 
+export interface CorridorGroupData {
+  directionCode: string;
+  groupName: string;
+  availableMaxDistances: CumulativeDistanceTier[];
+}
+
 export interface RegionalAreaGroupsData {
-  city: string;
-  groups: RegionalAreaGroup[];
+  groups: CorridorGroupData[];
+  isLoading: boolean;
+  error: Error | null;
+}
+
+/**
+ * @deprecated The discrete distance-band model (directionKey + distanceBandKey) has been
+ * replaced by the cumulative corridor model (CorridorGroupData + CumulativeDistanceTier).
+ * This type is retained for backward compatibility with AgriRegionalGroupsPanel and its tests.
+ * Will be removed once those consumers are migrated.
+ */
+export interface RegionalAreaGroup {
+  /** Human-readable label, e.g. "North — 10–25 km" */
+  label: string;
+  /** Direction code, e.g. "N", "NW" */
+  directionKey: string;
+  /** Distance band code, e.g. "10_25", "50_up" */
+  distanceBandKey: string;
+  listingCount: number;
+  /** Null when absent from API response */
+  agriAcreage?: number | null;
+  areaKeys: string[];
 }
 
 // ─── Backend DTO Types ────────────────────────────────────────────────────────
 
-interface RegionalAreaGroupDTO {
-  label?: string;
-  directionKey?: string;
-  distanceBandKey?: string;
+interface AvailableMaxDistanceDTO {
+  maxKm?: unknown;
+  distanceLabel?: string;
+  includedBandCodes?: string[] | null;
   listingCount?: number;
   agriAcreage?: number | null;
   areaKeys?: string[] | null;
 }
 
-interface RegionalAreaGroupsDTOResponse {
+interface CorridorGroupDTO {
+  directionCode?: string;
+  groupName?: string;
+  availableMaxDistances?: AvailableMaxDistanceDTO[] | null;
+}
+
+interface CorridorGroupsDTOResponse {
   city?: string;
-  groups?: RegionalAreaGroupDTO[] | null;
+  groups?: CorridorGroupDTO[] | null;
 }
 
 // ─── Query key ────────────────────────────────────────────────────────────────
 
 export const REGIONAL_AREA_GROUPS_QUERY_KEY_BASE = ['regional-area-groups'] as const;
 
+const VALID_MAX_KM = new Set([10, 25, 50, 100]);
+
 // ─── Mapper: Backend DTO → Frontend Type ────────────────────────────────────────
 
 /**
- * Normalize backend API response to frontend RegionalAreaGroup shape.
- * Rows missing a label are skipped (label is the only display field).
- * agriAcreage defaults to null when absent (backend uses @JsonInclude NON_NULL).
+ * Normalize backend API CorridorGroup DTO response to frontend CorridorGroupData shape.
+ * Tiers with unknown maxKm values are skipped.
+ * agriAcreage is mapped to undefined (not null) when absent from JSON.
  */
 export function normalizeRegionalAreaGroupsResponse(
-  dto: RegionalAreaGroupsDTOResponse,
-  city: string,
-): RegionalAreaGroupsData {
+  dto: CorridorGroupsDTOResponse,
+  _city: string,
+): Pick<RegionalAreaGroupsData, 'groups'> {
   if (!dto?.groups || !Array.isArray(dto.groups)) {
-    return { city, groups: [] };
+    return { groups: [] };
   }
 
-  return {
-    city: typeof dto.city === 'string' ? dto.city : city,
-    groups: dto.groups
-      .map((item): RegionalAreaGroup | null => {
-        const label = typeof item.label === 'string' ? item.label : null;
-        // label is the only user-visible display field — skip rows without it
-        if (!label) return null;
+  const groups: CorridorGroupData[] = dto.groups
+    .map((item): CorridorGroupData | null => {
+      const directionCode = typeof item.directionCode === 'string' ? item.directionCode : '';
+      const groupName = typeof item.groupName === 'string' ? item.groupName : '';
+      // Skip corridors with no usable identity
+      if (!directionCode && !groupName) return null;
 
-        const directionKey = typeof item.directionKey === 'string' ? item.directionKey : '';
-        const distanceBandKey =
-          typeof item.distanceBandKey === 'string' ? item.distanceBandKey : '';
-        const listingCount =
-          typeof item.listingCount === 'number' ? item.listingCount : 0;
-        // Backend omits agriAcreage when null; treat absence as null
-        const agriAcreage =
-          typeof item.agriAcreage === 'number' ? item.agriAcreage : null;
-        const areaKeys = Array.isArray(item.areaKeys) ? item.areaKeys : [];
+      const rawTiers = Array.isArray(item.availableMaxDistances) ? item.availableMaxDistances : [];
+      const availableMaxDistances: CumulativeDistanceTier[] = rawTiers
+        .map((tier): CumulativeDistanceTier | null => {
+          const maxKm = typeof tier.maxKm === 'number' ? tier.maxKm : null;
+          // Skip tiers with unknown maxKm
+          if (maxKm === null || !VALID_MAX_KM.has(maxKm)) return null;
 
-        return { label, directionKey, distanceBandKey, listingCount, agriAcreage, areaKeys };
-      })
-      .filter((g): g is RegionalAreaGroup => g !== null),
-  };
+          const distanceLabel = typeof tier.distanceLabel === 'string' ? tier.distanceLabel : '';
+          const includedBandCodes = Array.isArray(tier.includedBandCodes) ? tier.includedBandCodes : [];
+          const listingCount = typeof tier.listingCount === 'number' ? tier.listingCount : 0;
+          // agriAcreage: undefined if absent or null (NOT null — spec requires undefined)
+          const agriAcreage = typeof tier.agriAcreage === 'number' ? tier.agriAcreage : undefined;
+          const areaKeys = Array.isArray(tier.areaKeys) ? tier.areaKeys : [];
+
+          return {
+            maxKm: maxKm as 10 | 25 | 50 | 100,
+            distanceLabel,
+            includedBandCodes,
+            listingCount,
+            agriAcreage,
+            areaKeys,
+          };
+        })
+        .filter((t): t is CumulativeDistanceTier => t !== null);
+
+      return { directionCode, groupName, availableMaxDistances };
+    })
+    .filter((g): g is CorridorGroupData => g !== null);
+
+  return { groups };
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
- * Fetch regional area groups for a city + agricultural_land property type
+ * Fetch corridor groups for a city + agricultural_land property type
  * from GET /api/discover/regional-area-groups?city=...&propertyType=agricultural_land
  *
- * Groups are precomputed direction×distance bands — static per city+type.
- * Returns { city, groups: [] } on any fetch failure so callers degrade gracefully.
+ * Returns cumulative corridor data — each corridor has availableMaxDistances[]
+ * ordered by maxKm ascending. Returns { groups: [], isLoading, error } structure.
  */
-export function useRegionalAreaGroups(city: string) {
-  return useQuery<RegionalAreaGroupsData>({
+export function useRegionalAreaGroups(city: string): RegionalAreaGroupsData {
+  const { data, isLoading, error } = useQuery<Pick<RegionalAreaGroupsData, 'groups'>>({
     queryKey: [...REGIONAL_AREA_GROUPS_QUERY_KEY_BASE, city, 'agricultural_land'],
     queryFn: async () => {
       try {
-        const rawResponse = await api.get<RegionalAreaGroupsDTOResponse>(
+        const rawResponse = await api.get<CorridorGroupsDTOResponse>(
           `/api/discover/regional-area-groups?city=${encodeURIComponent(city)}&propertyType=agricultural_land`,
           { skipAuth: true },
         );
         return normalizeRegionalAreaGroupsResponse(rawResponse, city);
       } catch {
         // On any network/API error return empty groups so the panel degrades gracefully.
-        return { city, groups: [] };
+        return { groups: [] };
       }
     },
     enabled: city.length > 0,
     staleTime: 60_000,
   });
+
+  return {
+    groups: data?.groups ?? [],
+    isLoading,
+    error: error as Error | null,
+  };
 }

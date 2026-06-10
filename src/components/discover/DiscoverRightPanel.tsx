@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, Loader2, Sprout } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Loader2, Sprout } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { AgriListingPanel } from './panels/AgriListingPanel';
@@ -11,16 +12,162 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
-import type { RegionalAreaGroup } from '@/hooks/useRegionalAreaGroups';
+import type { CorridorGroupData, CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
-import { AgriRegionalGroupsPanel } from './panels/AgriRegionalGroupsPanel';
 import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+
+// ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
+
+interface CorridorLandingPanelProps {
+  corridorGroups: CorridorGroupData[];
+  isLoading: boolean;
+  selectedRegion: string | null;
+  selectedMaxKm: 10 | 25 | 50 | 100 | null;
+  onSetRegion: (dir: string) => void;
+  onSetMaxKm: (km: 10 | 25 | 50 | 100) => void;
+  onClearRegionAndMaxKm: () => void;
+  discoverAreas?: DiscoverArea[];
+  onSelectAreaKey?: (areaKey: string) => void;
+}
+
+function CorridorLandingPanel({
+  corridorGroups,
+  isLoading,
+  selectedRegion,
+  selectedMaxKm,
+  onSetRegion,
+  onSetMaxKm,
+  onClearRegionAndMaxKm,
+}: CorridorLandingPanelProps) {
+  // ── Loading state ──
+  if (isLoading) {
+    return (
+      <div
+        data-testid="corridor-landing-loading"
+        className="flex flex-col gap-3 p-4"
+        aria-busy="true"
+        aria-label="Loading corridor groups"
+      >
+        <div className="flex items-center gap-2 text-sm text-muted-foreground pb-1">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          <span>Loading corridors…</span>
+        </div>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="rounded-lg border border-border p-4 space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Level 2: corridor selected — show distance chips ──
+  if (selectedRegion !== null) {
+    const corridor = corridorGroups.find((g) => g.directionCode === selectedRegion);
+    const tiers: CumulativeDistanceTier[] = corridor?.availableMaxDistances ?? [];
+    // Sort by maxKm ascending
+    const sortedTiers = [...tiers].sort((a, b) => a.maxKm - b.maxKm);
+
+    return (
+      <div data-testid="corridor-distance-chips" className="flex flex-col gap-3 p-4">
+        {/* Back / clear button */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex items-center gap-1 px-0 text-muted-foreground hover:text-foreground"
+            onClick={onClearRegionAndMaxKm}
+            aria-label="Back to corridor list"
+            data-testid="corridor-back-btn"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            <span className="text-sm">{corridor?.groupName ?? selectedRegion}</span>
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">Select a distance range:</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Distance tiers">
+          {sortedTiers.map((tier) => {
+            const isSelected = selectedMaxKm === tier.maxKm;
+            return (
+              <button
+                key={tier.maxKm}
+                type="button"
+                data-testid={`distance-chip-${tier.maxKm}`}
+                onClick={() => onSetMaxKm(tier.maxKm)}
+                aria-pressed={isSelected}
+                className={[
+                  'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  isSelected
+                    ? 'border-green-500 bg-green-500 text-white'
+                    : 'border-border bg-card text-foreground hover:bg-muted/50',
+                ].join(' ')}
+              >
+                {tier.distanceLabel}
+              </button>
+            );
+          })}
+        </div>
+        {tiers.length === 0 && (
+          <p className="text-sm text-muted-foreground">No distance tiers available for this corridor.</p>
+        )}
+      </div>
+    );
+  }
+
+  // ── Level 1: no corridor selected — show corridor cards ──
+  if (corridorGroups.length === 0) {
+    return (
+      <div
+        data-testid="corridor-landing-empty"
+        className="flex flex-col items-center justify-center py-12 px-4 text-center"
+      >
+        <Sprout className="h-8 w-8 text-muted-foreground/40 mb-3" aria-hidden="true" />
+        <p className="text-sm font-medium text-foreground mb-1">No corridors found</p>
+        <p className="text-xs text-muted-foreground">Try selecting a different city.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="corridor-landing-list"
+      className="flex flex-col gap-2 p-4"
+      aria-label="Agricultural corridors"
+    >
+      <p className="text-xs text-muted-foreground pb-1">Select a corridor to explore:</p>
+      {corridorGroups.map((corridor) => (
+        <button
+          key={corridor.directionCode}
+          type="button"
+          data-testid="corridor-card"
+          onClick={() => onSetRegion(corridor.directionCode)}
+          className="w-full rounded-lg border border-border bg-card hover:bg-muted/50 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={`Select corridor ${corridor.groupName}`}
+        >
+          <span
+            data-testid="corridor-group-name"
+            className="text-sm font-medium text-foreground block"
+          >
+            {corridor.groupName}
+          </span>
+          {corridor.availableMaxDistances.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              Up to {corridor.availableMaxDistances
+                .reduce((max, t) => Math.max(max, t.maxKm), 0)} km
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
 import {
   SchoolBrowsePanel,
   SchoolsInAreaPanel,
@@ -70,14 +217,23 @@ export interface DiscoverRightPanelProps {
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
   onSelectAreaKey?: (areaKey: string) => void;
-  /** Issue #1409 — agri-first regional groups for the agri-landing panel. */
-  regionalGroups?: RegionalAreaGroup[];
-  /** True while regional groups are loading. */
+  /**
+   * Issue #1429 — corridor groups for the agri-landing panel (cumulative model).
+   * Replaces the old flat regionalGroups[] (discrete distanceBandKey model).
+   */
+  corridorGroups?: CorridorGroupData[];
+  /** True while corridor groups are loading. */
   isLoadingRegionalGroups?: boolean;
-  /** The currently selected agri-first regional group (from URL state). */
-  selectedGroup?: { directionKey: string; distanceBandKey: string } | null;
-  /** Called when the user selects or clears a regional group. */
-  onSelectRegionalGroup?: (g: { directionKey: string; distanceBandKey: string } | null) => void;
+  /** Selected corridor direction (from URL region= param). Null when none. */
+  selectedRegion?: string | null;
+  /** Selected cumulative distance tier (from URL maxKm= param). Null when none. */
+  selectedMaxKm?: 10 | 25 | 50 | 100 | null;
+  /** Called when the user selects a corridor direction. */
+  onSetRegion?: (dir: string) => void;
+  /** Called when the user selects a cumulative distance tier. */
+  onSetMaxKm?: (km: 10 | 25 | 50 | 100) => void;
+  /** Called when the user clears both corridor + distance selection. */
+  onClearRegionAndMaxKm?: () => void;
   /** Called when the user selects a school from the school-browse panel. */
   onSelectSchool?: (schoolId: string) => void;
   /**
@@ -217,10 +373,13 @@ export function DiscoverRightPanel({
   groupId = null,
   discoverAreas = [],
   onSelectAreaKey,
-  regionalGroups = [],
+  corridorGroups = [],
   isLoadingRegionalGroups = false,
-  selectedGroup = null,
-  onSelectRegionalGroup,
+  selectedRegion = null,
+  selectedMaxKm = null,
+  onSetRegion,
+  onSetMaxKm,
+  onClearRegionAndMaxKm,
   onSelectSchool,
   onAddSchool,
   activeContextChips,
@@ -294,9 +453,10 @@ export function DiscoverRightPanel({
         return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
 
       case 'agri-landing':
-        // Issue #1409 (B2) — agri-first landing now shows precomputed regional groups
-        // (direction × distance bands) so the user can filter by broad geography before
-        // selecting a specific area on the map.
+        // Issue #1429 — corridor-first two-level UX.
+        // Level 1 (no region selected): show corridor cards (groupName as primary label).
+        // Level 2 (region set, no maxKm): show cumulative distance chips for that corridor.
+        // The panel never renders raw DIR:BAND codes as primary text.
         return (
           <>
             <PanelHeader
@@ -304,12 +464,14 @@ export function DiscoverRightPanel({
               journey="agri-first"
               onStartOver={onStartOver}
             />
-            <AgriRegionalGroupsPanel
-              city={city ?? ''}
-              groups={regionalGroups ?? []}
-              isLoading={isLoadingRegionalGroups ?? false}
-              selectedGroup={selectedGroup ?? null}
-              onSelectGroup={onSelectRegionalGroup ?? (() => {})}
+            <CorridorLandingPanel
+              corridorGroups={corridorGroups}
+              isLoading={isLoadingRegionalGroups}
+              selectedRegion={selectedRegion}
+              selectedMaxKm={selectedMaxKm}
+              onSetRegion={onSetRegion ?? (() => {})}
+              onSetMaxKm={onSetMaxKm ?? (() => {})}
+              onClearRegionAndMaxKm={onClearRegionAndMaxKm ?? (() => {})}
               discoverAreas={discoverAreas}
               onSelectAreaKey={onSelectAreaKey}
             />

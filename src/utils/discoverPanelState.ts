@@ -50,7 +50,7 @@ export type DiscoverPanelContent =
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
-  const { journey, areaKey, schoolId, groupId, schoolPicking, selectedGroup } = urlState;
+  const { journey, areaKey, schoolId, groupId, schoolPicking, selectedGroup, selectedRegion, selectedMaxKm } = urlState;
 
   // MVP2 — agri-first is checked FIRST (before every other branch, including the
   // area/school cold-load inferences below) so a stray schoolId / groupId / schoolPicking
@@ -60,13 +60,22 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   // map → route to the agri-selected detail panel. Otherwise (no areaKey) keep the
   // static landing prompt.
   //
-  // Issue #1425: when a regional group is selected (selectedGroup non-null) but no
-  // specific areaKey yet, route to agri-group-selected (the group drill-down panel).
-  // areaKey always wins over selectedGroup — user has selected a specific area.
+  // Issue #1429: when BOTH region AND maxKm are set (two-level corridor selection),
+  // route to agri-group-selected (corridor + distance tier chosen).
+  // When only region is set (corridor selected, no distance), stay on agri-landing
+  // so the user can pick a distance tier.
+  // Issue #1425 (legacy selectedGroup): also routes to agri-group-selected for backward compat.
+  // areaKey always wins — user has selected a specific area.
   if (journey === 'agri-first') {
     if (areaKey) {
       return 'agri-selected';
     }
+    // Issue #1429: both region + maxKm set → agri-group-selected
+    // (optional fields — undefined treated as null/not-set)
+    if (selectedRegion != null && selectedMaxKm != null) {
+      return 'agri-group-selected';
+    }
+    // Issue #1425 legacy: selectedGroup set → agri-group-selected
     if (selectedGroup) {
       return 'agri-group-selected';
     }

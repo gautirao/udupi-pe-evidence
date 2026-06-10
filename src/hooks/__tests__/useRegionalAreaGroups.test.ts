@@ -1,15 +1,15 @@
 /**
- * Unit tests for useRegionalAreaGroups
+ * Unit tests for useRegionalAreaGroups (Issue #1429 — cumulative corridor model)
  *
  * Covers:
- * - normalizeRegionalAreaGroupsResponse: all fields mapped correctly
- * - normalizeRegionalAreaGroupsResponse: agriAcreage=null when absent
- * - normalizeRegionalAreaGroupsResponse: rows without label are skipped
+ * - normalizeRegionalAreaGroupsResponse: corridors with tiers mapped correctly
+ * - normalizeRegionalAreaGroupsResponse: agriAcreage → undefined (not null) when absent
+ * - normalizeRegionalAreaGroupsResponse: tiers with unknown maxKm are skipped
  * - normalizeRegionalAreaGroupsResponse: areaKeys defaults to []
- * - normalizeRegionalAreaGroupsResponse: distanceBandKey '50_up' round-trips correctly
+ * - normalizeRegionalAreaGroupsResponse: 50_up band code round-trips in includedBandCodes
  * - Hook: query key is ['regional-area-groups', city, 'agricultural_land']
  * - Hook: enabled=false when city is empty
- * - Hook: error → { city, groups: [] } (no throw)
+ * - Hook: error → { groups: [], isLoading: false, error }
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -20,7 +20,8 @@ import {
   normalizeRegionalAreaGroupsResponse,
   useRegionalAreaGroups,
   REGIONAL_AREA_GROUPS_QUERY_KEY_BASE,
-  type RegionalAreaGroup,
+  type CorridorGroupData,
+  type CumulativeDistanceTier,
 } from '../useRegionalAreaGroups';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -46,110 +47,159 @@ function makeWrapper() {
 // ─── normalizeRegionalAreaGroupsResponse tests ─────────────────────────────
 
 describe('normalizeRegionalAreaGroupsResponse', () => {
-  it('maps all fields correctly for a complete DTO row', () => {
+  it('maps a corridor with tiers correctly', () => {
     const dto = {
       city: 'udupi',
       groups: [
         {
-          label: 'North of Udupi · 10–25 km',
-          directionKey: 'N',
-          distanceBandKey: '10_25',
-          listingCount: 7,
-          agriAcreage: 125.5,
-          areaKeys: ['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2'],
+          directionCode: 'N',
+          groupName: 'N towards Brahmavar',
+          availableMaxDistances: [
+            {
+              maxKm: 10,
+              distanceLabel: 'Within 10 km',
+              includedBandCodes: ['0_10'],
+              listingCount: 3,
+              agriAcreage: 45.5,
+              areaKeys: ['IN|KA|Udupi|Area1'],
+            },
+            {
+              maxKm: 25,
+              distanceLabel: 'Up to 25 km',
+              includedBandCodes: ['0_10', '10_25'],
+              listingCount: 7,
+              areaKeys: ['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2'],
+            },
+          ],
         },
       ],
     };
 
     const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
 
-    expect(result.city).toBe('udupi');
     expect(result.groups).toHaveLength(1);
-    expect(result.groups[0]).toEqual<RegionalAreaGroup>({
-      label: 'North of Udupi · 10–25 km',
-      directionKey: 'N',
-      distanceBandKey: '10_25',
-      listingCount: 7,
-      agriAcreage: 125.5,
-      areaKeys: ['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2'],
-    });
+    const corridor = result.groups[0];
+    expect(corridor.directionCode).toBe('N');
+    expect(corridor.groupName).toBe('N towards Brahmavar');
+    expect(corridor.availableMaxDistances).toHaveLength(2);
+
+    const tier1 = corridor.availableMaxDistances[0];
+    expect(tier1.maxKm).toBe(10);
+    expect(tier1.distanceLabel).toBe('Within 10 km');
+    expect(tier1.includedBandCodes).toEqual(['0_10']);
+    expect(tier1.listingCount).toBe(3);
+    expect(tier1.agriAcreage).toBe(45.5);
+    expect(tier1.areaKeys).toEqual(['IN|KA|Udupi|Area1']);
+
+    const tier2 = corridor.availableMaxDistances[1];
+    expect(tier2.maxKm).toBe(25);
+    expect(tier2.agriAcreage).toBeUndefined(); // absent from JSON
+    expect(tier2.includedBandCodes).toEqual(['0_10', '10_25']);
   });
 
-  it('maps agriAcreage to null when the backend omits the field', () => {
+  it('maps agriAcreage to undefined (not null) when absent from JSON', () => {
     const dto = {
-      city: 'udupi',
       groups: [
         {
-          label: 'South of Udupi · 0–10 km',
-          directionKey: 'S',
-          distanceBandKey: '0_10',
-          listingCount: 3,
-          // agriAcreage intentionally absent (backend @JsonInclude NON_NULL)
-          areaKeys: ['IN|KA|Udupi|SouthArea'],
+          directionCode: 'S',
+          groupName: 'S corridor',
+          availableMaxDistances: [
+            {
+              maxKm: 10,
+              distanceLabel: 'Within 10 km',
+              includedBandCodes: ['0_10'],
+              listingCount: 2,
+              // agriAcreage intentionally absent
+              areaKeys: [],
+            },
+          ],
         },
       ],
     };
 
     const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
-    expect(result.groups[0].agriAcreage).toBeNull();
+    expect(result.groups[0].availableMaxDistances[0].agriAcreage).toBeUndefined();
   });
 
-  it('maps agriAcreage to null when explicitly null', () => {
+  it('maps agriAcreage to undefined when explicitly null', () => {
     const dto = {
-      city: 'udupi',
-      groups: [{ label: 'East · 25–50 km', directionKey: 'E', distanceBandKey: '25_50', listingCount: 0, agriAcreage: null, areaKeys: [] }],
-    };
-    const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
-    expect(result.groups[0].agriAcreage).toBeNull();
-  });
-
-  it('handles distanceBandKey of 50_up correctly (not 50_PLUS)', () => {
-    const dto = {
-      city: 'udupi',
       groups: [
         {
-          label: 'North of Udupi · 50+ km',
-          directionKey: 'N',
-          distanceBandKey: '50_up',
-          listingCount: 2,
-          areaKeys: ['IN|KA|Udupi|FarNorth'],
+          directionCode: 'E',
+          groupName: 'E corridor',
+          availableMaxDistances: [
+            { maxKm: 25, distanceLabel: 'Up to 25 km', includedBandCodes: ['0_10', '10_25'], listingCount: 0, agriAcreage: null, areaKeys: [] },
+          ],
         },
       ],
     };
-
     const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
-    expect(result.groups[0].distanceBandKey).toBe('50_up');
+    expect(result.groups[0].availableMaxDistances[0].agriAcreage).toBeUndefined();
   });
 
-  it('skips rows without a label', () => {
+  it('skips tiers with unknown maxKm values (e.g. 75)', () => {
     const dto = {
-      city: 'udupi',
       groups: [
-        { directionKey: 'N', distanceBandKey: '0_10', listingCount: 5, areaKeys: [] }, // no label
-        { label: 'Has Label', directionKey: 'S', distanceBandKey: '0_10', listingCount: 1, areaKeys: [] },
+        {
+          directionCode: 'W',
+          groupName: 'W corridor',
+          availableMaxDistances: [
+            { maxKm: 10, distanceLabel: 'Within 10 km', includedBandCodes: ['0_10'], listingCount: 1, areaKeys: [] },
+            { maxKm: 75, distanceLabel: 'Custom 75 km', includedBandCodes: ['0_10'], listingCount: 2, areaKeys: [] }, // unknown — skip
+            { maxKm: 50, distanceLabel: 'Up to 50 km', includedBandCodes: ['0_10', '10_25', '25_50'], listingCount: 4, areaKeys: [] },
+          ],
+        },
       ],
     };
-
     const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
-    expect(result.groups).toHaveLength(1);
-    expect(result.groups[0].label).toBe('Has Label');
+    expect(result.groups[0].availableMaxDistances).toHaveLength(2);
+    expect(result.groups[0].availableMaxDistances.map(t => t.maxKm)).toEqual([10, 50]);
   });
 
-  it('defaults areaKeys to empty array when absent or null', () => {
+  it('handles 50_up in includedBandCodes correctly (canonical band code)', () => {
     const dto = {
       groups: [
-        { label: 'No Keys', directionKey: 'W', distanceBandKey: '10_25', listingCount: 0 },
-        { label: 'Null Keys', directionKey: 'E', distanceBandKey: '10_25', listingCount: 0, areaKeys: null },
+        {
+          directionCode: 'N',
+          groupName: 'N towards Brahmavar',
+          availableMaxDistances: [
+            {
+              maxKm: 100,
+              distanceLabel: 'Up to 100 km',
+              includedBandCodes: ['0_10', '10_25', '25_50', '50_up'],
+              listingCount: 10,
+              areaKeys: [],
+            },
+          ],
+        },
       ],
     };
-
     const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
-    expect(result.groups[0].areaKeys).toEqual([]);
-    expect(result.groups[1].areaKeys).toEqual([]);
+    const tier = result.groups[0].availableMaxDistances[0];
+    expect(tier.includedBandCodes).toContain('50_up');
+    expect(tier.includedBandCodes).not.toContain('50_PLUS');
+  });
+
+  it('defaults areaKeys to [] when absent or null', () => {
+    const dto = {
+      groups: [
+        {
+          directionCode: 'NE',
+          groupName: 'NE corridor',
+          availableMaxDistances: [
+            { maxKm: 10, distanceLabel: 'Within 10 km', includedBandCodes: [], listingCount: 0 }, // no areaKeys
+            { maxKm: 25, distanceLabel: 'Up to 25 km', includedBandCodes: [], listingCount: 0, areaKeys: null }, // null areaKeys
+          ],
+        },
+      ],
+    };
+    const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
+    expect(result.groups[0].availableMaxDistances[0].areaKeys).toEqual([]);
+    expect(result.groups[0].availableMaxDistances[1].areaKeys).toEqual([]);
   });
 
   it('returns empty groups when input groups is null', () => {
-    const result = normalizeRegionalAreaGroupsResponse({ city: 'udupi', groups: null }, 'udupi');
+    const result = normalizeRegionalAreaGroupsResponse({ groups: null } as any, 'udupi');
     expect(result.groups).toEqual([]);
   });
 
@@ -158,9 +208,18 @@ describe('normalizeRegionalAreaGroupsResponse', () => {
     expect(result.groups).toEqual([]);
   });
 
-  it('uses city fallback from second arg when dto.city is missing', () => {
-    const result = normalizeRegionalAreaGroupsResponse({ groups: [] }, 'kundapur');
-    expect(result.city).toBe('kundapur');
+  it('handles empty availableMaxDistances array', () => {
+    const dto = {
+      groups: [
+        {
+          directionCode: 'SW',
+          groupName: 'SW corridor',
+          availableMaxDistances: [],
+        },
+      ],
+    };
+    const result = normalizeRegionalAreaGroupsResponse(dto, 'udupi');
+    expect(result.groups[0].availableMaxDistances).toEqual([]);
   });
 });
 
@@ -178,9 +237,8 @@ describe('useRegionalAreaGroups', () => {
       wrapper: makeWrapper(),
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    // Verify the api.get call used the correct URL
     expect(mockApiGet).toHaveBeenCalledWith(
       '/api/discover/regional-area-groups?city=udupi&propertyType=agricultural_land',
       { skipAuth: true },
@@ -195,24 +253,23 @@ describe('useRegionalAreaGroups', () => {
     expect(mockApiGet).not.toHaveBeenCalled();
   });
 
-  it('returns normalized data on success', async () => {
+  it('returns normalized corridor data on success', async () => {
     mockApiGet.mockResolvedValueOnce({
       city: 'udupi',
       groups: [
         {
-          label: 'North of Udupi · 10–25 km',
-          directionKey: 'N',
-          distanceBandKey: '10_25',
-          listingCount: 4,
-          agriAcreage: 88.0,
-          areaKeys: ['area1'],
-        },
-        {
-          label: 'North of Udupi · 50+ km',
-          directionKey: 'N',
-          distanceBandKey: '50_up',
-          listingCount: 1,
-          areaKeys: [],
+          directionCode: 'N',
+          groupName: 'N towards Brahmavar',
+          availableMaxDistances: [
+            {
+              maxKm: 10,
+              distanceLabel: 'Within 10 km',
+              includedBandCodes: ['0_10'],
+              listingCount: 4,
+              agriAcreage: 88.0,
+              areaKeys: ['area1'],
+            },
+          ],
         },
       ],
     });
@@ -221,25 +278,25 @@ describe('useRegionalAreaGroups', () => {
       wrapper: makeWrapper(),
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.data?.groups).toHaveLength(2);
-    expect(result.current.data?.groups[0].label).toBe('North of Udupi · 10–25 km');
-    expect(result.current.data?.groups[0].agriAcreage).toBe(88.0);
-    expect(result.current.data?.groups[1].distanceBandKey).toBe('50_up');
-    expect(result.current.data?.groups[1].agriAcreage).toBeNull();
+    expect(result.current.groups).toHaveLength(1);
+    expect(result.current.groups[0].directionCode).toBe('N');
+    expect(result.current.groups[0].groupName).toBe('N towards Brahmavar');
+    expect(result.current.groups[0].availableMaxDistances[0].agriAcreage).toBe(88.0);
+    expect(result.current.error).toBeNull();
   });
 
-  it('returns { city, groups: [] } on API error without throwing', async () => {
+  it('returns { groups: [], isLoading: false } on API error without throwing', async () => {
     mockApiGet.mockRejectedValueOnce(new Error('Network error'));
 
     const { result } = renderHook(() => useRegionalAreaGroups('udupi'), {
       wrapper: makeWrapper(),
     });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.data).toEqual({ city: 'udupi', groups: [] });
+    expect(result.current.groups).toEqual([]);
   });
 
   it('query key base constant is correct', () => {

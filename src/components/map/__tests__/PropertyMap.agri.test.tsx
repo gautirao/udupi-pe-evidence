@@ -45,6 +45,12 @@ vi.mock('leaflet', () => {
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
+  Polygon: vi.fn(({ pathOptions }: { pathOptions?: { interactive?: boolean } }) => (
+    <div
+      data-testid="mock-sector-polygon"
+      data-interactive={String(pathOptions?.interactive)}
+    />
+  )),
   useMap: vi.fn(() => ({
     addLayer: mockAddLayer,
     removeLayer: mockRemoveLayer,
@@ -91,7 +97,7 @@ vi.mock('@/components/ui/card', () => ({
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import L from 'leaflet';
 
 // ─── Shared listing fixture ───────────────────────────────────────────────────
@@ -212,5 +218,41 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
 
     const lastCall = capturedDivIconCalls[capturedDivIconCalls.length - 1];
     expect(lastCall.html).not.toContain('agri-cluster');
+  });
+});
+
+// ─── AC4: SectorOverlay conditional render guard (Issue #1429) ───────────────
+
+describe('PropertyMap — SectorOverlay conditional render (Issue #1429 AC4)', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+    mockAddLayer.mockClear();
+    mockRemoveLayer.mockClear();
+    mockClusterGroupAddLayer.mockClear();
+  });
+
+  it('Test A: sectorOverlay=null (default) renders no Polygon', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(<PropertyMap listings={[agriListing]} isAgriMode={true} />);
+
+    // No sectorOverlay prop → SectorOverlay is not mounted → no mock-sector-polygon
+    expect(screen.queryByTestId('mock-sector-polygon')).not.toBeInTheDocument();
+  });
+
+  it('Test B: sectorOverlay set → Polygon is rendered', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    render(
+      <PropertyMap
+        listings={[agriListing]}
+        isAgriMode={true}
+        cityCenter={[13.34, 74.74]}
+        sectorOverlay={{ directionCode: 'NW', maxKm: 50 }}
+      />,
+    );
+
+    // SectorOverlay is mounted → it renders the mocked Polygon
+    expect(screen.getByTestId('mock-sector-polygon')).toBeInTheDocument();
   });
 });

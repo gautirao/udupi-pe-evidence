@@ -46,12 +46,10 @@ describe('DiscoverRightPanel', () => {
 
   it('shows the static agri-landing placeholder when panelContent="agri-landing"', () => {
     renderPanel(<DiscoverRightPanel {...baseProps} panelContent="agri-landing" areas={[]} />);
-    // Static placeholder is present...
-    expect(screen.getByTestId('agri-landing-panel')).toBeInTheDocument();
-    expect(screen.getByText('Search agricultural land')).toBeInTheDocument();
-    expect(
-      screen.getByText(/select an area on the map to explore farmland/i),
-    ).toBeInTheDocument();
+    // CorridorLandingPanel renders corridor-landing-empty when corridorGroups is empty (default).
+    expect(screen.getByTestId('corridor-landing-empty')).toBeInTheDocument();
+    // PanelHeader title is always present for agri-landing (h2 to avoid journey-pill duplicate).
+    expect(screen.getByRole('heading', { name: 'Agricultural land' })).toBeInTheDocument();
   });
 
   it('agri-landing renders NO listing/marker/count content (static, no fetch)', () => {

@@ -1,16 +1,15 @@
 /**
  * Regression test for Issue #1409 Fix 1 — DiscoverRightPanel agri-landing crash.
  *
- * Before the fix: the four props regionalGroups, isLoadingRegionalGroups,
- * selectedGroup, onSelectRegionalGroup were declared in the interface and consumed
- * in the 'agri-landing' render branch, but were NOT included in the function
- * parameter destructuring. Rendering with panelContent="agri-landing" threw:
- *   ReferenceError: regionalGroups is not defined
- * which crashed the whole panel into the ErrorBoundary.
+ * UPDATED for Issue #1429 — corridor-first cumulative-distance model.
+ * The agri-landing panel now uses CorridorLandingPanel (not AgriRegionalGroupsPanel).
+ * Props renamed: regionalGroups[] → corridorGroups[], callbacks updated.
  *
- * After the fix: all four props are destructured; this test verifies the panel
- * renders normally and the regional group rows appear (or the empty state when
- * no groups are provided).
+ * Before the fix: the four props regionalGroups, isLoadingRegionalGroups,
+ * selectedGroup, onSelectRegionalGroup were not destructured from the function
+ * parameters, causing a ReferenceError crash.
+ *
+ * After Issue #1429: agri-landing renders CorridorLandingPanel with corridorGroups[].
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -19,9 +18,34 @@ import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
-import type { RegionalAreaGroup } from '@/hooks/useRegionalAreaGroups';
+import type { CorridorGroupData } from '@/hooks/useRegionalAreaGroups';
 
-// ─── Mocks ────────────────────────────────────────────────────────────────────
+// ─── Hoisted mocks ───────────────────────────────────────────────────────────
+
+const mockApiGet = vi.hoisted(() => vi.fn());
+
+vi.mock('@/lib/api', () => ({
+  api: { get: mockApiGet },
+  ApiError: class extends Error {},
+}));
+
+// Prevent "supabaseUrl is required" crash from transitive usePropertyListings import
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) },
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
+    channel: vi.fn().mockReturnValue({
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn(),
+    }),
+    removeChannel: vi.fn(),
+  },
+}));
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -30,23 +54,40 @@ vi.mock('react-router-dom', async () => {
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const SAMPLE_GROUP: RegionalAreaGroup = {
-  label: 'North — 10–25 km',
-  directionKey: 'N',
-  distanceBandKey: '10_25',
-  listingCount: 7,
-  agriAcreage: 12.4,
-  areaKeys: ['IN|KA|Udupi|Hebri', 'IN|KA|Udupi|Karkala'],
+const SAMPLE_CORRIDOR: CorridorGroupData = {
+  directionCode: 'N',
+  groupName: 'N towards Brahmavar',
+  availableMaxDistances: [
+    {
+      maxKm: 10,
+      distanceLabel: 'Within 10 km',
+      includedBandCodes: ['0_10'],
+      listingCount: 3,
+      agriAcreage: 45.5,
+      areaKeys: ['IN|KA|Udupi|Area1'],
+    },
+    {
+      maxKm: 25,
+      distanceLabel: 'Up to 25 km',
+      includedBandCodes: ['0_10', '10_25'],
+      listingCount: 7,
+      areaKeys: ['IN|KA|Udupi|Area1', 'IN|KA|Udupi|Area2'],
+    },
+  ],
 };
 
 function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderLanding(props: {
-  regionalGroups?: RegionalAreaGroup[];
+interface RenderProps {
+  corridorGroups?: CorridorGroupData[];
   isLoadingRegionalGroups?: boolean;
-}) {
+  selectedRegion?: string | null;
+  selectedMaxKm?: 10 | 25 | 50 | 100 | null;
+}
+
+function renderLanding(props: RenderProps = {}) {
   return render(
     <MemoryRouter>
       <QueryClientProvider client={makeQueryClient()}>
@@ -57,6 +98,11 @@ function renderLanding(props: {
           onStartOver={vi.fn()}
           onSelectJourney={vi.fn()}
           journey="agri-first"
+          onSetRegion={vi.fn()}
+          onSetMaxKm={vi.fn()}
+          onClearRegionAndMaxKm={vi.fn()}
+          selectedRegion={props.selectedRegion ?? null}
+          selectedMaxKm={props.selectedMaxKm ?? null}
           {...props}
         />
       </QueryClientProvider>
@@ -70,38 +116,58 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('DiscoverRightPanel agri-landing — Fix 1 regression (Issue #1409)', () => {
-  it('renders regional group rows when regionalGroups has entries (would crash before fix)', () => {
-    // This test FAILED before Fix 1 with:
-    //   ReferenceError: regionalGroups is not defined
-    // because the props were not destructured from the function parameters.
-    renderLanding({ regionalGroups: [SAMPLE_GROUP] });
+describe('DiscoverRightPanel agri-landing — corridor-first UX (Issue #1429)', () => {
+  it('renders corridor cards when corridorGroups has entries', () => {
+    renderLanding({ corridorGroups: [SAMPLE_CORRIDOR] });
 
-    // The panel container and at least one row must be present.
-    expect(screen.getByTestId('agri-regional-groups')).toBeInTheDocument();
-    expect(screen.getAllByTestId('agri-regional-group-row')).toHaveLength(1);
-    expect(screen.getByTestId('agri-regional-group-label')).toHaveTextContent(
-      'North — 10–25 km',
+    // Level 1: corridor cards list
+    expect(screen.getByTestId('corridor-landing-list')).toBeInTheDocument();
+    expect(screen.getAllByTestId('corridor-card')).toHaveLength(1);
+    expect(screen.getByTestId('corridor-group-name')).toHaveTextContent(
+      'N towards Brahmavar',
     );
   });
 
-  it('renders empty fallback when regionalGroups is empty (would crash before fix)', () => {
-    // Same crash would occur — the fix ensures groups=[] reaches AgriRegionalGroupsPanel
-    // and the empty-state branch renders.
-    renderLanding({ regionalGroups: [] });
+  it('renders empty state when corridorGroups is empty (no crash)', () => {
+    renderLanding({ corridorGroups: [] });
 
-    expect(screen.getByTestId('agri-regional-groups-empty')).toBeInTheDocument();
-    expect(
-      screen.getByText(/No regional groupings found/i),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('corridor-landing-empty')).toBeInTheDocument();
+    expect(screen.getByText(/No corridors found/i)).toBeInTheDocument();
   });
 
   it('renders loading skeleton when isLoadingRegionalGroups is true', () => {
-    renderLanding({ regionalGroups: [], isLoadingRegionalGroups: true });
+    renderLanding({ corridorGroups: [], isLoadingRegionalGroups: true });
 
-    expect(screen.getByTestId('agri-regional-groups-loading')).toBeInTheDocument();
-    // Neither groups list nor empty state should appear while loading
-    expect(screen.queryByTestId('agri-regional-groups')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('agri-regional-groups-empty')).not.toBeInTheDocument();
+    expect(screen.getByTestId('corridor-landing-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-list')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-empty')).not.toBeInTheDocument();
+  });
+
+  it('renders distance chips when selectedRegion is set (Level 2)', () => {
+    renderLanding({
+      corridorGroups: [SAMPLE_CORRIDOR],
+      selectedRegion: 'N',
+      selectedMaxKm: null,
+    });
+
+    expect(screen.getByTestId('corridor-distance-chips')).toBeInTheDocument();
+    // Back button should be present
+    expect(screen.getByTestId('corridor-back-btn')).toBeInTheDocument();
+    // Distance chips for each tier
+    expect(screen.getByTestId('distance-chip-10')).toBeInTheDocument();
+    expect(screen.getByTestId('distance-chip-25')).toBeInTheDocument();
+  });
+
+  it('highlights selected distance chip with aria-pressed=true', () => {
+    renderLanding({
+      corridorGroups: [SAMPLE_CORRIDOR],
+      selectedRegion: 'N',
+      selectedMaxKm: 25,
+    });
+
+    const chip25 = screen.getByTestId('distance-chip-25');
+    expect(chip25).toHaveAttribute('aria-pressed', 'true');
+    const chip10 = screen.getByTestId('distance-chip-10');
+    expect(chip10).toHaveAttribute('aria-pressed', 'false');
   });
 });

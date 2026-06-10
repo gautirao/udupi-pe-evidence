@@ -382,23 +382,25 @@ export default function MapDiscovery() {
     isLoading: isLoadingAreaGroups,
   } = useAreaGroups(urlState.city);
 
-  // Issue #1409 (B2) — precomputed regional groups for the agri-first landing panel.
+  // Issue #1429 (B2) — precomputed corridor groups for the agri-first landing panel.
+  // useRegionalAreaGroups returns { groups, isLoading, error } directly (no .data wrapper).
   const {
-    data: regionalAreaGroupsData,
+    groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
   } = useRegionalAreaGroups(urlState.city);
 
-  // Issue #1410 (B3) — derive areaKeys from the selected regional group and fetch
-  // agri map listings. Hook is disabled when no group is selected (selectedGroupAreaKeys=[]).
-  const selectedGroup = urlState.selectedGroup;
-  const selectedGroupData = selectedGroup
-    ? (regionalAreaGroupsData?.groups ?? []).find(
-        g =>
-          g.directionKey === selectedGroup.directionKey &&
-          g.distanceBandKey === selectedGroup.distanceBandKey,
-      ) ?? null
+  // Issue #1429 — derive areaKeys from the selected corridor + distance tier to fetch
+  // agri map listings. Hook is disabled when selectedRegion + selectedMaxKm are not both set.
+  // Look up the corridor by selectedRegion, then find the tier by selectedMaxKm.
+  const selectedRegion = urlState.selectedRegion ?? null;
+  const selectedMaxKm = urlState.selectedMaxKm ?? null;
+  const selectedCorridorData = selectedRegion
+    ? corridorGroups.find((g) => g.directionCode === selectedRegion) ?? null
     : null;
-  const selectedGroupAreaKeys = selectedGroupData?.areaKeys ?? [];
+  const selectedTierData = selectedCorridorData && selectedMaxKm != null
+    ? selectedCorridorData.availableMaxDistances.find((t) => t.maxKm === selectedMaxKm) ?? null
+    : null;
+  const selectedGroupAreaKeys = selectedTierData?.areaKeys ?? [];
   const {
     data: agriMapListingsData,
     isLoading: isLoadingAgriGroupListings,
@@ -406,8 +408,13 @@ export default function MapDiscovery() {
     refetch: refetchAgriGroupListings,
   } = useAgriMapListings(urlState.city, selectedGroupAreaKeys);
 
-  // Issue #1425 — group label for the agri-group-selected panel header chip.
-  const agriGroupLabel = selectedGroupData?.label ?? null;
+  // Issue #1429 — corridor + distance tier label for the agri-group-selected panel header chip.
+  // Show "groupName · distanceLabel" when both are selected; fall back to just groupName.
+  const agriGroupLabel = selectedCorridorData
+    ? selectedTierData
+      ? `${selectedCorridorData.groupName} · ${selectedTierData.distanceLabel}`
+      : selectedCorridorData.groupName
+    : null;
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -1354,7 +1361,8 @@ export default function MapDiscovery() {
   const [agriGroupFocusBounds, setAgriGroupFocusBounds] = useState<[[number, number], [number, number]] | null>(null);
 
   useEffect(() => {
-    if (!selectedGroup || !agriMapListingsData?.listings.length) {
+    // Issue #1429 — use selectedRegion + selectedMaxKm (corridor-first model)
+    if ((!selectedRegion || selectedMaxKm == null) || !agriMapListingsData?.listings.length) {
       setAgriGroupFocusBounds(null);
       return;
     }
@@ -1375,7 +1383,7 @@ export default function MapDiscovery() {
       [Math.max(...lats), Math.max(...lons)],
     ]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedGroup?.directionKey, selectedGroup?.distanceBandKey, agriMapListingsData]);
+  }, [selectedRegion, selectedMaxKm, agriMapListingsData]);
 
   // Issue #1115 — wrap handleSchoolSelect (from useDiscoverPageState, forbidden to edit)
   // so that selecting a school via MapFilters or NearSchoolSheet also resets the
@@ -1561,7 +1569,7 @@ export default function MapDiscovery() {
                 return isAuthenticated ? markerListings : [];
               })()}
               focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
-              agriGroupListings={selectedGroup ? (agriMapListingsData?.listings ?? null) : null}
+              agriGroupListings={(selectedRegion && selectedMaxKm != null) ? (agriMapListingsData?.listings ?? null) : null}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
               onPolygonCleared={handlePolygonCleared}
@@ -1621,6 +1629,16 @@ export default function MapDiscovery() {
               selectedPolygonListing={selectedMarkerListing}
               onSelectListing={handleSelectMarkerListing}
               mapZoom={mapZoom}
+              // Issue #1429 — sector overlay: only shown when both region + maxKm are set
+              // and journey is agri-first. PropertyMap gates on sectorOverlay presence.
+              sectorOverlay={
+                isAgriJourney && selectedRegion && selectedMaxKm != null
+                  ? {
+                      directionCode: selectedRegion,
+                      maxKm: selectedMaxKm,
+                    }
+                  : null
+              }
             />
           )}
 
@@ -1740,18 +1758,21 @@ export default function MapDiscovery() {
           // the groupId matches no loaded group. Prop wiring only — no routing change.
           groupId={urlState.groupId ?? null}
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
-          // Issue #1409 (B2) — agri-first regional groups
-          regionalGroups={regionalAreaGroupsData?.groups ?? []}
+          // Issue #1429 — agri-first corridor groups (cumulative corridor model)
+          corridorGroups={corridorGroups}
           isLoadingRegionalGroups={isLoadingRegionalAreaGroups}
-          selectedGroup={urlState.selectedGroup ?? null}
-          onSelectRegionalGroup={(g) => urlActions.selectRegionalGroup(g)}
+          selectedRegion={selectedRegion}
+          selectedMaxKm={selectedMaxKm}
+          onSetRegion={(dir) => urlActions.setRegion(dir)}
+          onSetMaxKm={(km) => urlActions.setMaxKm(km)}
+          onClearRegionAndMaxKm={() => urlActions.clearRegionAndMaxKm()}
           // Issue #1425 — agri-group-selected panel data
           agriGroupListings={agriMapListingsData?.listings ?? null}
           isLoadingAgriGroupListings={isLoadingAgriGroupListings}
           isAgriGroupListingsError={isAgriGroupListingsError}
           agriGroupLabel={agriGroupLabel}
           onRetryAgriGroupListings={refetchAgriGroupListings}
-          onClearRegionalGroup={() => urlActions.selectRegionalGroup(null)}
+          onClearRegionalGroup={() => urlActions.clearRegionAndMaxKm()}
           discoverAreas={discoverAreas}
           onSelectAreaKey={(areaKey) => {
             // Issue #1067 R2 — right-panel area-card click must trigger map flyTo

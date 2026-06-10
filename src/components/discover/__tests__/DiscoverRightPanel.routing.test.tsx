@@ -18,6 +18,24 @@ const { mockSetSchoolJourney } = vi.hoisted(() => ({
   mockSetSchoolJourney: vi.fn(),
 }));
 
+// Prevent "supabaseUrl is required" crash from transitive usePropertyListings import
+vi.mock('@/integrations/supabase/client', () => ({
+  supabase: {
+    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) },
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    }),
+    channel: vi.fn().mockReturnValue({
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn(),
+    }),
+    removeChannel: vi.fn(),
+  },
+}));
+
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
@@ -604,8 +622,8 @@ describe('DiscoverRightPanel — agri-group-selected (Issue #1425)', () => {
         areaListings={[]}
       />,
     );
-    // No regionalGroups passed → AgriRegionalGroupsPanel renders its empty state
-    expect(screen.getByTestId('agri-regional-groups-empty')).toBeInTheDocument();
+    // No corridorGroups passed → CorridorLandingPanel renders its empty state
+    expect(screen.getByTestId('corridor-landing-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('agri-group-selected-panel')).not.toBeInTheDocument();
   });
 });
@@ -818,8 +836,8 @@ describe('DiscoverRightPanel — agri-selected (Issue #1371)', () => {
         areaListings={[]}
       />,
     );
-    // No regionalGroups passed → AgriRegionalGroupsPanel renders its empty state
-    expect(screen.getByTestId('agri-regional-groups-empty')).toBeInTheDocument();
+    // No corridorGroups passed → CorridorLandingPanel renders its empty state
+    expect(screen.getByTestId('corridor-landing-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('agri-selected-summary')).not.toBeInTheDocument();
   });
 

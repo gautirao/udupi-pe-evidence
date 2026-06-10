@@ -9,7 +9,12 @@
  *   lat        – map center latitude  (5 dp, debounced replace)
  *   lon        – map center longitude (5 dp, debounced replace)
  *   zoom       – integer zoom level   (debounced replace)
- *   group      – agri-first regional group as "DIRECTION:BAND" (e.g. "N:10_25"); absent when none
+ *   region     – agri-first corridor direction (e.g. "N", "NW"); absent when none selected
+ *   maxKm      – selected cumulative distance tier (10|25|50|100); absent until user picks
+ *
+ * DEPRECATED (OD-1 Option A):
+ *   group      – legacy "DIRECTION:BAND" format; cold-loaded URLs are migrated to region=DIR
+ *                (band is dropped, maxKm is NOT inferred) via history.replace on first render
  *
  * Journey params:
  *   journey    – active journey type: "area-first" | "school-first" | "agri-first" (absent = no journey)
@@ -109,9 +114,23 @@ export interface DiscoverUrlState {
    */
   schoolPicking?: boolean;
   /**
-   * Selected agri-first regional group (Issue #1409).
-   * Parsed from URL `group` param as "DIRECTION:BAND" (e.g. "N:10_25").
-   * Null when absent or invalid.
+   * Selected agri-first corridor direction (Issue #1429).
+   * Parsed from URL `region` param (e.g. "NW"). Null when absent or invalid.
+   * Optional to allow partial construction in tests/callers.
+   */
+  selectedRegion?: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW' | null;
+  /**
+   * Selected cumulative distance tier in km (Issue #1429).
+   * Parsed from URL `maxKm` param. Null when absent or invalid.
+   * Only meaningful when selectedRegion is also set.
+   * Optional to allow partial construction in tests/callers.
+   */
+  selectedMaxKm?: 10 | 25 | 50 | 100 | null;
+  /**
+   * @deprecated Use selectedRegion + selectedMaxKm instead.
+   * Kept for backward compatibility with discoverPanelState + panels that
+   * still reference the old `group` param shape.
+   * Will be removed once all consumers migrate to selectedRegion/selectedMaxKm.
    */
   selectedGroup: { directionKey: string; distanceBandKey: string } | null;
 }
@@ -220,8 +239,25 @@ export interface DiscoverUrlActions {
    * Writes `group=DIRECTION:BAND` to URL (e.g. "N:10_25"). Null removes the param.
    * Does NOT delete areaKey — B2 allows group selection independently of area selection.
    * PUSH — group selection is a navigational choice.
+   * @deprecated Use setRegion + setMaxKm instead (Issue #1429 corridor-first model).
    */
   selectRegionalGroup: (group: { directionKey: string; distanceBandKey: string } | null) => void;
+  /**
+   * Set the agri-first corridor direction (Issue #1429).
+   * Writes `region=DIR` to URL (e.g. "region=NW"). PUSH.
+   * Does NOT set maxKm — the user must pick a distance tier separately.
+   */
+  setRegion: (dir: string) => void;
+  /**
+   * Set the cumulative distance tier (Issue #1429).
+   * Writes `maxKm=N` to URL. PUSH. Region must already be set.
+   */
+  setMaxKm: (km: 10 | 25 | 50 | 100) => void;
+  /**
+   * Clear both region + maxKm atomically (Issue #1429).
+   * Removes both params in a single PUSH. Returns to agri-landing.
+   */
+  clearRegionAndMaxKm: () => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
@@ -248,6 +284,9 @@ export interface DiscoverUrlActions {
 
 const DEBOUNCE_MS = 300;
 const LAT_LON_PRECISION = 5;
+
+const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
+const VALID_MAX_KM = new Set([10, 25, 50, 100]);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -437,16 +476,34 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
 
   const groupId = urlParams.get('groupId');
 
-  // Issue #1409 — agri-first regional group. Validated via regex so malformed values
-  // (e.g. "NORTH:100" or "N:50_PLUS") are rejected and produce null.
-  // CRITICAL: backend uses '50_up' (lower-case), NOT '50_PLUS'.
-  const rawGroup = urlParams.get('group');
+  // Issue #1429 — corridor-first cumulative model. New URL params: region=DIR, maxKm=N.
+  type DirectionCode = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
+  const rawRegion = urlParams.get('region');
+  // `as DirectionCode` is safe: VALID_DIRECTIONS contains exactly the 8 direction literals.
+  const selectedRegion: DirectionCode | null =
+    rawRegion && VALID_DIRECTIONS.has(rawRegion) ? (rawRegion as DirectionCode) : null;
+
+  const rawMaxKm = urlParams.get('maxKm');
+  const parsedMaxKm = rawMaxKm ? parseInt(rawMaxKm, 10) : null;
+  const selectedMaxKm: 10 | 25 | 50 | 100 | null =
+    parsedMaxKm !== null && VALID_MAX_KM.has(parsedMaxKm)
+      ? (parsedMaxKm as 10 | 25 | 50 | 100)
+      : null;
+
+  // OD-1 OPTION A — legacy cold-load migration: group=DIR:BAND → region=DIR (band dropped).
+  // Runs synchronously on mount whenever the `group` param is present in the URL.
+  // Uses useEffect to fire after render — replaces history entry (no push) and strips
+  // the `group` param. maxKm is intentionally NOT inferred (Option B is forbidden).
+  const rawGroupLegacy = urlParams.get('group');
   const GROUP_REGEX = /^(N|NE|E|SE|S|SW|W|NW):(0_10|10_25|25_50|50_up)$/;
+
+  // Synchronous-read: derive selectedGroup from the legacy `group` param for
+  // backward-compat with discoverPanelState and any existing panels.
   const selectedGroup =
-    rawGroup && GROUP_REGEX.test(rawGroup)
+    rawGroupLegacy && GROUP_REGEX.test(rawGroupLegacy)
       ? {
-          directionKey: rawGroup.split(':')[0],
-          distanceBandKey: rawGroup.split(':')[1],
+          directionKey: rawGroupLegacy.split(':')[0],
+          distanceBandKey: rawGroupLegacy.split(':')[1],
         }
       : null;
 
@@ -466,7 +523,44 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     groupId,
     schoolPicking,
     selectedGroup,
+    selectedRegion,
+    selectedMaxKm,
   };
+
+  // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
+  // On initial URL parse: if the `group` param is present, replace history with
+  // region=DIR only (band is dropped, maxKm is NOT inferred — Option B is forbidden).
+  // console.warn is intentional to aid debugging of stale shared URLs.
+  useEffect(() => {
+    const groupParam = urlParams.get('group');
+    if (!groupParam) return;
+
+    const parts = groupParam.split(':');
+    const directionCode = parts[0];
+
+    if (VALID_DIRECTIONS.has(directionCode)) {
+      console.warn(
+        '[DEPRECATED] group=DIR:BAND URL param is deprecated. Use region=DIR&maxKm=N instead. Migrating to region=%s (band dropped, maxKm not inferred).',
+        directionCode,
+      );
+    }
+
+    // Always remove `group` on migration regardless of whether the direction is valid
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('group');
+        if (VALID_DIRECTIONS.has(directionCode)) {
+          next.set('region', directionCode);
+          // maxKm intentionally NOT set (OD-1 Option A — band → maxKm mapping is forbidden)
+        }
+        return next;
+      },
+      { replace: true }, // REPLACE — migration must not create a phantom history entry
+    );
+    // Only run on mount (urlParams identity changes each render, so dep array is empty).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
@@ -694,6 +788,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           next.delete('journey');
           next.delete('groupId');
           next.delete('group'); // Issue #1409 — clear agri-first regional group on city switch
+          next.delete('region'); // Issue #1429 — clear corridor on city switch
+          next.delete('maxKm'); // Issue #1429 — clear distance tier on city switch
           next.delete('areaKey');
           // Clear viewport — new city has its own default zoom/center
           next.delete('lat');
@@ -962,6 +1058,60 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     );
   }, [setUrlParams]);
 
+  // ─── Issue #1429: Corridor-first cumulative model ────────────────────────────
+
+  const setRegion = useCallback(
+    (dir: string) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (VALID_DIRECTIONS.has(dir)) {
+            next.set('region', dir);
+          } else {
+            // Silently discard invalid directions
+            next.delete('region');
+          }
+          // Clear maxKm when changing corridor
+          next.delete('maxKm');
+          return next;
+        },
+        { replace: false }, // PUSH — corridor selection is a navigational choice
+      );
+    },
+    [setUrlParams],
+  );
+
+  const setMaxKm = useCallback(
+    (km: 10 | 25 | 50 | 100) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (VALID_MAX_KM.has(km)) {
+            next.set('maxKm', String(km));
+          } else {
+            // Silently discard unknown values
+            next.delete('maxKm');
+          }
+          return next;
+        },
+        { replace: false }, // PUSH — distance tier is a navigational choice
+      );
+    },
+    [setUrlParams],
+  );
+
+  const clearRegionAndMaxKm = useCallback(() => {
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('region');
+        next.delete('maxKm');
+        return next;
+      },
+      { replace: false }, // PUSH — clearing is a navigational step (Back restores)
+    );
+  }, [setUrlParams]);
+
   const backToSchoolPicking = useCallback(() => {
     // Issue #1157 rev-5 DEFECT B — Back from area-school-combined to schools-in-area.
     // Drop the selected school (schoolId + radiusKm) and re-arm the schoolPicking
@@ -1005,6 +1155,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     enterSchoolPicking,
     clearSchoolPicking,
     backToSchoolPicking,
+    setRegion,
+    setMaxKm,
+    clearRegionAndMaxKm,
   };
 
   return [state, actions];

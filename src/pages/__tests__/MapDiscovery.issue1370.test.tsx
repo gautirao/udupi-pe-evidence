@@ -106,6 +106,10 @@ vi.mock('@/hooks/useAreaGroups', () => ({
   useAreaGroups: vi.fn(() => ({ data: { groups: [] }, isLoading: false })),
 }));
 
+vi.mock('@/hooks/useRegionalAreaGroups', () => ({
+  useRegionalAreaGroups: vi.fn(() => ({ groups: [], isLoading: false, error: null })),
+}));
+
 vi.mock('react-leaflet', () => ({
   MapContainer: () => null,
   TileLayer: () => null,
@@ -148,8 +152,9 @@ describe('Issue #1370 — agri-first hides school controls', () => {
   it('AC4: agri-first journey does NOT render the "Near a school" button', async () => {
     renderAt('/discover?city=udupi&journey=agri-first');
 
-    // The static agri-landing panel renders (proves we are in the agri journey).
-    await screen.findByTestId('agri-landing-panel');
+    // CorridorLandingPanel renders (proves we are in the agri journey).
+    // No corridorGroups are mocked so the empty state renders.
+    await screen.findByTestId('corridor-landing-empty');
 
     // School controls are hidden (absent), not merely disabled.
     expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();

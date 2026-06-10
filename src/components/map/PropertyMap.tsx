@@ -16,6 +16,7 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import { SectorOverlay } from '@/components/map/SectorOverlay';
 
 /**
  * Maximum zoom at which the area-overview marker layer remains visible.
@@ -291,6 +292,16 @@ interface PropertyMapProps {
    * When null/undefined, falls back to the existing `listings` prop (no regression).
    */
   agriGroupListings?: AgriMapListingItem[] | null;
+  /**
+   * Issue #1429 — corridor sector overlay for agri corridor-first discovery.
+   * When set, renders a non-interactive wedge polygon anchored at cityCenter
+   * showing the selected corridor + distance tier.
+   * Only shown for agricultural_land property type (caller must gate on this).
+   */
+  sectorOverlay?: {
+    directionCode: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
+    maxKm: 10 | 25 | 50 | 100;
+  } | null;
 }
 
 /**
@@ -1164,6 +1175,7 @@ export function PropertyMap({
   mapZoom,
   selectedPolygonListing,
   agriGroupListings,
+  sectorOverlay = null,
 }: PropertyMapProps) {
   const listingsWithCoords = useMemo(() => {
     return listings.filter((listing) => listing.latitude && listing.longitude);
@@ -1275,6 +1287,16 @@ export function PropertyMap({
             polygon={polygon}
             onPolygonDrawn={onPolygonDrawn}
             onPolygonCleared={onPolygonCleared}
+          />
+        )}
+        {/* Issue #1429 — sector overlay for agri corridor-first discovery.
+            Rendered before school circle (below markers in z-order via overlayPane). */}
+        {sectorOverlay && (
+          <SectorOverlay
+            centerLat={cityCenter?.[0] ?? UDUPI_CENTER[0]}
+            centerLon={cityCenter?.[1] ?? UDUPI_CENTER[1]}
+            directionCode={sectorOverlay.directionCode}
+            maxKm={sectorOverlay.maxKm}
           />
         )}
         {schoolCircle && (
