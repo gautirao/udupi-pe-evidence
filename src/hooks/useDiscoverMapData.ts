@@ -309,7 +309,7 @@ export function useDiscoverMapData({
       }))
       .filter((l) => l.lat != null && l.lon != null)
       .map((l) => ({ ...l, lat: l.lat as number, lon: l.lon as number }));
-    return withCoords.map((l) => cityListingToPropertyListing(l as any, now));
+    return withCoords.map((l) => cityListingToPropertyListing(l as DiscoverCityListingItem & { lat: number; lon: number }, now));
   }, [selectedArea, areaListings]);
 
   // ── Derived: topLocalities from aggregate response ────────────────────────

@@ -176,7 +176,7 @@ describe('normalizeAreaGroupResponse', () => {
 
   it('returns empty groups when input groups is not an array', () => {
     const backendResponse = {
-      groups: {} as any,
+      groups: {} as unknown as Parameters<typeof normalizeAreaGroupResponse>[0]['groups'],
     };
 
     const result = normalizeAreaGroupResponse(backendResponse);
@@ -184,7 +184,7 @@ describe('normalizeAreaGroupResponse', () => {
   });
 
   it('returns empty groups when input is undefined', () => {
-    const result = normalizeAreaGroupResponse(undefined as any);
+    const result = normalizeAreaGroupResponse(undefined as unknown as Parameters<typeof normalizeAreaGroupResponse>[0]);
     expect(result.groups).toEqual([]);
   });
 

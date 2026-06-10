@@ -116,7 +116,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await page.locator('[data-testid="quick-chip-2-bhk"]').click();
 
     await page.waitForURL(/beds=2/, { timeout: 5_000 });
-    let url = page.url();
+    const url = page.url();
     expect(url).toContain('type=apartment');
     expect(url).toContain('beds=2');
 
@@ -155,7 +155,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await page.locator('[data-testid="quick-chip-apartment"]').click();
     await page.waitForURL(/type=apartment/, { timeout: 5_000 });
 
-    let url = page.url();
+    const url = page.url();
     expect(url).toContain('type=apartment');
 
     // Click add school CTA
@@ -174,7 +174,7 @@ test.describe('@integration-ui Discover: Area-Selected Panel + Quick Filters', (
     await page.locator('[data-testid="quick-chip-apartment"]').click();
     await page.waitForURL(/type=apartment/, { timeout: 5_000 });
 
-    let url = page.url();
+    const url = page.url();
     expect(url).toContain('type=apartment');
 
     // Switch city (click city selector dropdown if available)

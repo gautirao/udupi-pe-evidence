@@ -194,8 +194,8 @@ function AC11IntegrationWrapper({
     }
     if (url.includes('propertyType=agricultural_land')) {
       // agri-scoped areas call — resolved based on outer scope (test sets it)
-      return (AC11IntegrationWrapper as any)._agriResponse
-        ? Promise.resolve((AC11IntegrationWrapper as any)._agriResponse)
+      return (AC11IntegrationWrapper as typeof AC11IntegrationWrapper & { _agriResponse?: unknown })._agriResponse
+        ? Promise.resolve((AC11IntegrationWrapper as typeof AC11IntegrationWrapper & { _agriResponse?: unknown })._agriResponse)
         : Promise.resolve(AGRI_AREAS_RESPONSE_WITH_ACREAGE);
     }
     return Promise.resolve(BLENDED_AREAS_RESPONSE);
@@ -238,7 +238,7 @@ function renderAC11(
   agriResponse: typeof AGRI_AREAS_RESPONSE_WITH_ACREAGE,
   cityListingsResponse = CITY_LISTINGS_RESPONSE_TWO_ITEMS,
 ) {
-  (AC11IntegrationWrapper as any)._agriResponse = agriResponse;
+  (AC11IntegrationWrapper as typeof AC11IntegrationWrapper & { _agriResponse?: unknown })._agriResponse = agriResponse;
   const qc = makeQueryClient();
   return render(
     <MemoryRouter>

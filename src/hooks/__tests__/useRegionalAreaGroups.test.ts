@@ -199,12 +199,12 @@ describe('normalizeRegionalAreaGroupsResponse', () => {
   });
 
   it('returns empty groups when input groups is null', () => {
-    const result = normalizeRegionalAreaGroupsResponse({ groups: null } as any, 'udupi');
+    const result = normalizeRegionalAreaGroupsResponse({ groups: null } as unknown as Parameters<typeof normalizeRegionalAreaGroupsResponse>[0], 'udupi');
     expect(result.groups).toEqual([]);
   });
 
   it('returns empty groups when input groups is missing', () => {
-    const result = normalizeRegionalAreaGroupsResponse({} as any, 'udupi');
+    const result = normalizeRegionalAreaGroupsResponse({} as unknown as Parameters<typeof normalizeRegionalAreaGroupsResponse>[0], 'udupi');
     expect(result.groups).toEqual([]);
   });
 

@@ -651,8 +651,8 @@ export default function MapDiscovery() {
 
   // Debug: expose areaListings and related data to window.__debug for Playwright tests
   useEffect(() => {
-    (window as any).__debug = {
-      ...(window as any).__debug,
+    (window as Window & { __debug?: Record<string, unknown> }).__debug = {
+      ...(window as Window & { __debug?: Record<string, unknown> }).__debug,
       propertyMapListings: {
         areaListings,
         areaMarkerListings,
@@ -1404,25 +1404,9 @@ export default function MapDiscovery() {
     setBoundedSearchTriggered(true);
   }, [setBoundedSearchTriggered]);
 
-  if (!isCityValid) return <CityNotSupported city={city} />;
-
-  const trendsHref = selectedArea
-    ? `/trends?city=${city}&areaKey=${encodeURIComponent(selectedArea.areaKey)}`
-    : undefined;
-
-  const filtersContent = (
-    <MapFilters
-      filters={filters} onFiltersChange={handleFiltersChange}
-      selectedSchool={selectedSchool} onSchoolSelect={wrappedHandleSchoolSelect}
-      schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
-      city={city}
-      trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
-      isFetching={isFetching}
-    />
-  );
-
   // activeContextChips is memoised so its identity only changes when a relevant
   // dimension actually changes — prevents unnecessary re-renders of DiscoverRightPanel.
+  // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const activeContextChips = useMemo(
     () => (
       <ActiveContextChips
@@ -1480,7 +1464,8 @@ export default function MapDiscovery() {
     [selectedArea, selectedSchool, urlState.radiusKm, urlState.q, urlState.filters.boardFilters, urlState.filters.categoryFilters, filters, urlActions, handleAreaBack],
   );
 
-  // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render
+  // Memoize initialCenter to prevent URLViewportController effect re-runs on every parent render.
+  // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const memoizedInitialCenter = useMemo(
     () => urlState.viewport ? [urlState.viewport.lat, urlState.viewport.lon] as [number, number] : undefined,
     [urlState.viewport?.lat, urlState.viewport?.lon],
@@ -1490,10 +1475,28 @@ export default function MapDiscovery() {
   // Re-derived from discoverAreas at render time (not captured at click time) so the
   // panner always has fresh coords. If discoverAreas hasn't loaded yet, the panner
   // receives null values and skips the restore (no crash).
+  // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const areaRestoreArea = useMemo(() => {
     if (!urlState.areaKey) return null;
     return discoverAreas.find((a) => a.areaKey === urlState.areaKey) ?? null;
   }, [urlState.areaKey, discoverAreas]);
+
+  if (!isCityValid) return <CityNotSupported city={city} />;
+
+  const trendsHref = selectedArea
+    ? `/trends?city=${city}&areaKey=${encodeURIComponent(selectedArea.areaKey)}`
+    : undefined;
+
+  const filtersContent = (
+    <MapFilters
+      filters={filters} onFiltersChange={handleFiltersChange}
+      selectedSchool={selectedSchool} onSchoolSelect={wrappedHandleSchoolSelect}
+      schoolBoardFilter={schoolBoardFilter} onSchoolBoardFilterChange={handleBoardFilterChange}
+      city={city}
+      trendsAreaKeys={selectedArea ? [selectedArea.areaKey] : trendsAreaKeys}
+      isFetching={isFetching}
+    />
+  );
 
   // Issue #1160 GAP 2 — city coords for CityRestorePanner.
   // cityCenter and cityZoom from useDiscoverMapData are the canonical city-level viewport.

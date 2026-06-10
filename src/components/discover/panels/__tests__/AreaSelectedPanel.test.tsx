@@ -38,7 +38,7 @@ describe('AreaSelectedPanel', () => {
 
     render(
       <BrowserRouter>
-        <AreaSelectedPanel {...defaultProps} {...(props as any)} />
+        <AreaSelectedPanel {...defaultProps} {...props} />
       </BrowserRouter>,
     );
   };
