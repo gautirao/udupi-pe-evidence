@@ -47,8 +47,15 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     clearAreaContext: vi.fn(),
     clearSchoolContext: vi.fn(),
     startOver: vi.fn(),
+    // Issue #1429 — corridor-first cumulative-distance actions.
+    setRegion: vi.fn(),
+    setMaxKm: vi.fn(),
+    clearRegionAndMaxKm: vi.fn(),
     ...overrides,
-  };
+    // Cast: the Partial<DiscoverUrlActions> spread widens each property to
+    // `fn | Mock<Procedure>`, which is not assignable to the exact action
+    // signatures (pre-existing #1433 baseline shape). Assert the concrete type.
+  } as DiscoverUrlActions;
 }
 
 // ─── Tests ────────────────────────────────────────────────────
