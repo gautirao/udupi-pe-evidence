@@ -8,6 +8,8 @@
 
 > Scope guard for every issue below: **frontend-only.** No backend, DTO, Flyway, Supabase, or OpenSearch changes. Cross-city geometric classification (#1419) is **out of scope**.
 
+> **⚠️ REFINEMENT (v2.1 — corridor-first cumulative-distance, 2026-06-10).** §2 (v2-map-A / #1429) below is **superseded by §8**. The product model is now **corridor-first** (direction names first, e.g. "N towards Brahmavar") with **cumulative** distance ("up to N km"), not discrete bands. The backend label table + cumulative API is tracked as **#1435** (B6); the `region`/`maxKm` URL contract + corridor UX + sector overlay stay in **#1429** (**frontend-only**, which **depends on #1435**). The **geometry** sub-bullets in §2 (geodesic `destinationPoint`, 45° sector, 100 km cap, non-interactive `<Polygon>`) remain valid and are reused by §8. Read §8 as the authoritative spec for the **#1435 (backend) + #1429 (frontend)** map-sector track. Internal classification identity (`directionCode`+`bandCode`) and the canonical band code **`50_up`** are unchanged.
+
 ---
 
 ## 0. Grounding (verified against the codebase)
@@ -17,7 +19,7 @@
 | City centroid | Frontend `CITY_CONFIG` (`src/lib/localityUtils.ts:11-16`): udupi `[13.3409, 74.7421]`, kundapur, mangalore, bangalore. Numerically **identical** to backend `cities.geo_center_lat/lon` (`V71`) used for classification. | Overlay anchors frontend-side; lands on the same origin the backend classified against. **No backend needed.** |
 | Direction classification | 45° bins centred on the cardinal bearing (`RegionalGeo.directionKey`): N=0°, NE=45°, E=90°, SE=135°, S=180°, SW=225°, W=270°, NW=315°; N wraps 337.5°→22.5°. | Visual sector should be **45°**, not 30°, to avoid shown-vs-filtered mismatch. |
 | Distance bands | `0_10`, `10_25`, `25_50`, **`50_up`** (lower-inclusive km). | Use `50_up` literally; `50_PLUS` would fail `GROUP_REGEX`. |
-| URL state | `?journey=agri-first&group=N:10_25` — `group` is **PUSH**, validated by `GROUP_REGEX` (`useDiscoverUrlState.ts:444`); viewport `lat/lon/zoom` is REPLACE. | Overlay is a pure function of an existing URL param; Back/Forward already correct. |
+| URL state | `?journey=agri-first&group=N:10_25` — `group` is **PUSH**, validated by `GROUP_REGEX = /^(N\|NE\|E\|SE\|S\|SW\|W\|NW):(0_10\|10_25\|25_50\|50_up)$/` (`useDiscoverUrlState.ts:444`); viewport `lat/lon/zoom` is REPLACE. **v2.1 (§8):** `group=DIR:BAND` is replaced by **`region=<DIR>&maxKm=<10\|25\|50\|100>`** (both PUSH) for cumulative semantics — discrete `BAND` cannot express "up to N km". | Overlay is a pure function of existing URL params; Back/Forward already correct. |
 | School circle precedent | react-leaflet `<Circle>` (`PropertyMap.tsx:1280-1302`): dashed, `fillOpacity 0.08`. | Mirror this style for the sector `<Polygon>`. |
 | Geo helpers | No turf.js. Only `haversineKm` (`src/lib/geo.ts`). No bearing/destination helper. | Add a small geodesic helper; do not add a dependency. School-circle's planar degree-offset distorts at 50–100 km — do not reuse it. |
 | Agri map data | `AgriMapListingItem` = id, areaKey, latitude, longitude, propertyType, locality, boundaryGeoJson, landArea, computedAreaAcres, **pricePaise**. **No images, no video indicator.** | Listing-summary peek media must lazy-load from the existing public listing detail endpoint, not the map payload. |
@@ -209,3 +211,49 @@ Execute **only after explicit user approval**. No GitHub writes have been made.
 3. **`listing=<uuid>` URL param (v2-map-B)** — confirm adding a new param vs overloading the existing agri-detail mechanism. Default proposal: add `listing` (PUSH).
 4. **Centroid source of truth** — keep `CITY_CONFIG` (matches backend today) vs expose `geo_center_lat/lon` on the regional-groups DTO for guaranteed parity. Default proposal: keep `CITY_CONFIG` now; file a low-priority parity follow-up.
 5. **Direction-only mode** — deferred to the direction-first-landing work; not in A/B/C. Confirm that deferral.
+
+---
+
+## 8. Corridor-first cumulative-distance refinement (v2.1) — authoritative for #1435 (backend) + #1429 (frontend)
+
+> Supersedes §2 except the geometry mechanics, which are reused. Confirmed against code: band code is **`50_up`** (not `50_PLUS`) — `GROUP_REGEX` (`useDiscoverUrlState.ts:444`) accepts only `0_10|10_25|25_50|50_up`; the current DTO (`RegionalAreaGroup`, `src/hooks/useRegionalAreaGroups.ts`) returns one row per `direction×band` with a composed `label`. `CITY_CONFIG` udupi `[13.3409, 74.7421]` (`src/lib/localityUtils.ts:11`).
+
+### 8.1 Product model
+- **Corridor-first:** regional groups render as **direction names first** — e.g. "N towards Brahmavar", "NW corridor" — ordered by a `sort_order`. Never show `NW:25_50`-style internal values as primary text.
+- **Cumulative distance:** selecting a corridor reveals chips *Within 10 km / Up to 25 km / Up to 50 km / Up to 100 km*. Meaning is "land in this direction **up to** this distance", i.e. a cumulative union of bands — **not** discrete "25–50 km only".
+
+### 8.2 Cumulative ↔ band mapping (single source)
+| Chip `maxKm` | `distanceLabel` | `includedBandCodes` (cumulative) | sector outer radius |
+|---|---|---|---|
+| 10 | Within 10 km | `[0_10]` | 10 km |
+| 25 | Up to 25 km | `[0_10,10_25]` | 25 km |
+| 50 | Up to 50 km | `[0_10,10_25,25_50]` | 50 km |
+| 100 | Up to 100 km | `[0_10,10_25,25_50,50_up]` | **100 km cap** (unbounded treatment) |
+
+### 8.3 Backend — #1435 (B6), prerequisite for #1429
+- New table **`city_regional_direction_labels`** (`city_key`, `direction_code`, `group_name`, `sort_order`, `created_at`, `updated_at`; unique on city_key+direction_code). Additive Flyway migration; **no** change to #1408 classification tables.
+- Geo-verified seed for #1411 cities (see §8.5).
+- Regional-groups API reshaped to corridor-first cumulative: per direction → `directionCode`, `groupName` (from table; neutral `"<DIR> corridor"` fallback), `availableMaxDistances[]` of `{maxKm, distanceLabel, includedBandCodes, listingCount, agriAcreage, areaKeys}` where counts/acreage/areaKeys are **cumulative unions** (monotonic). Backend may aggregate from discrete bands internally; the public API exposes cumulative choices. No PII, no OpenSearch, no #1419.
+
+### 8.4 Frontend — #1429 (frontend-only; depends on #1435)
+- **URL contract:** `region=<directionCode>` + `maxKm=<10|25|50|100>` (both PUSH). `group=DIR:BAND` (shipped #1425) is deprecated. **Do not silently** map `group=NW:25_50`→"up to 50 km". Default migration: cold-load legacy `group` canonicalises via REPLACE to `region=DIR` only (band dropped); alternative non-silent band→upper-km redirect documented in the issue. Final call at PLAN_REVIEW.
+- **Overlay renders only when both `region` and `maxKm` are set** (no direction-only overlay). Geometry per §2: geodesic `destinationPoint` in `src/lib/geo.ts`, 45° span (N wraps), outer radius = `maxKm`, `maxKm=100` capped at 100 km, non-interactive react-leaflet `<Polygon>` below the marker pane, styled like the school `<Circle>`. No turf.js; no planar degree-offset.
+- Clearing `region`/`maxKm` removes the overlay and restores the agri regional landing. Residential/school journeys unaffected.
+
+### 8.5 Geography realism (mandatory before naming/seeding)
+Labels are user-facing and must be believable on a real map. **Verify each label's target by bearing from the city centroid → 8-way bucket before seeding** (re-verify against actual seeded area centroids at implementation; the table below uses approximate public coords as a first-pass screen).
+
+Udupi (`[13.3409, 74.7421]`):
+
+| dir | proposed label | target | bearing | bucket | dist | verdict |
+|---|---|---|---|---|---|---|
+| N | N towards Brahmavar | Brahmavar | 3.1° | N | 9.8 km | ✅ |
+| NE | NE towards Hiriadka | Hiriadka | 48.3° | NE | 13.2 km | ✅ |
+| E | E towards Manipal | Manipal | 79.4° | E | 4.9 km | ✅ |
+| SE | SE towards Karkala | Karkala | 117.0° | SE | 30.6 km | ✅ |
+| S | S towards Padubidri | Padubidri | 172.0° | S | 23.3 km | ✅ |
+| SW | SW corridor | — (Arabian Sea) | — | — | — | ⚠️ neutral |
+| W | W towards Malpe | Malpe | 282.9° | W | 4.2 km | ✅ |
+| NW | NW corridor | — (Arabian Sea) | — | — | — | ⚠️ neutral |
+
+**❌ "NW towards Mangalore" is wrong:** Mangalore (`12.9141, 74.8560`) bears **165.4° = due SOUTH** (~49 km), not NW. Coastal reality: from Udupi, W is Malpe (~4 km) and **SW/NW are open sea** → neutral `"<DIR> corridor"` labels (or unseeded). Landward arc is N→NE→E→SE→S. Every seeded row must ship with a (city, direction, label, target, city centroid, target centroid, bearing, bucket) verification row + a test/SQL assertion that bucket == direction_code.
