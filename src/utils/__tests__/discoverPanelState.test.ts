@@ -85,6 +85,59 @@ describe('derivePanelContent — agri-first journey (MVP2 + Issue #1371)', () =>
   });
 });
 
+// ─── Issue #1425: agri-group-selected routing ─────────────────────────────────
+
+describe('derivePanelContent — agri-group-selected (Issue #1425)', () => {
+  const group = { directionKey: 'N', distanceBandKey: '10_25' };
+
+  // Core: selectedGroup set + no areaKey → agri-group-selected
+  it('returns agri-group-selected when journey=agri-first and selectedGroup is set (no areaKey)', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'agri-first', selectedGroup: group })),
+    ).toBe('agri-group-selected');
+  });
+
+  // Precedence: areaKey always wins over selectedGroup
+  it('returns agri-selected (not agri-group-selected) when both areaKey and selectedGroup present', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedGroup: group,
+          areaKey: 'IN|KA|Udupi|Manipal',
+        }),
+      ),
+    ).toBe('agri-selected');
+  });
+
+  // selectedGroup=null + no areaKey → agri-landing (unchanged)
+  it('returns agri-landing when journey=agri-first, selectedGroup=null, no areaKey', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'agri-first', selectedGroup: null })),
+    ).toBe('agri-landing');
+  });
+
+  // area-first journey is unaffected by selectedGroup
+  it('area-first journey returns area-groups-landing regardless of selectedGroup', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'area-first', selectedGroup: group })),
+    ).toBe('area-groups-landing');
+  });
+
+  // area-first + areaKey still returns area-selected even with selectedGroup
+  it('area-first + areaKey + selectedGroup → area-selected (area-first unaffected)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'area-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          selectedGroup: group,
+        }),
+      ),
+    ).toBe('area-selected');
+  });
+});
+
 describe('derivePanelContent — area-first journey', () => {
   it('returns area-groups-landing when journey=area-first and no areaKey (regardless of groupId)', () => {
     expect(derivePanelContent(makeState({ journey: 'area-first' }))).toBe('area-groups-landing');

@@ -399,10 +399,15 @@ export default function MapDiscovery() {
       ) ?? null
     : null;
   const selectedGroupAreaKeys = selectedGroupData?.areaKeys ?? [];
-  const { data: agriMapListingsData } = useAgriMapListings(
-    urlState.city,
-    selectedGroupAreaKeys,
-  );
+  const {
+    data: agriMapListingsData,
+    isLoading: isLoadingAgriGroupListings,
+    isError: isAgriGroupListingsError,
+    refetch: refetchAgriGroupListings,
+  } = useAgriMapListings(urlState.city, selectedGroupAreaKeys);
+
+  // Issue #1425 — group label for the agri-group-selected panel header chip.
+  const agriGroupLabel = selectedGroupData?.label ?? null;
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -1740,6 +1745,13 @@ export default function MapDiscovery() {
           isLoadingRegionalGroups={isLoadingRegionalAreaGroups}
           selectedGroup={urlState.selectedGroup ?? null}
           onSelectRegionalGroup={(g) => urlActions.selectRegionalGroup(g)}
+          // Issue #1425 — agri-group-selected panel data
+          agriGroupListings={agriMapListingsData?.listings ?? null}
+          isLoadingAgriGroupListings={isLoadingAgriGroupListings}
+          isAgriGroupListingsError={isAgriGroupListingsError}
+          agriGroupLabel={agriGroupLabel}
+          onRetryAgriGroupListings={refetchAgriGroupListings}
+          onClearRegionalGroup={() => urlActions.selectRegionalGroup(null)}
           discoverAreas={discoverAreas}
           onSelectAreaKey={(areaKey) => {
             // Issue #1067 R2 — right-panel area-card click must trigger map flyTo

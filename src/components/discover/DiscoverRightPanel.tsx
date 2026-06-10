@@ -19,6 +19,8 @@ import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import { AgriRegionalGroupsPanel } from './panels/AgriRegionalGroupsPanel';
+import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
+import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import {
   SchoolBrowsePanel,
   SchoolsInAreaPanel,
@@ -175,6 +177,19 @@ export interface DiscoverRightPanelProps {
    * agri-selected area panel. Must NOT mutate URL state (areaKey/journey intact).
    */
   onClearAgriSelection?: () => void;
+  // ── Agri-group-selected panel (Issue #1425) ────────────────────────────────
+  /** Listings fetched for the selected agri regional group's area keys. */
+  agriGroupListings?: AgriMapListingItem[] | null;
+  /** True while agri group listings are loading. */
+  isLoadingAgriGroupListings?: boolean;
+  /** True when the agri group listings fetch errored. */
+  isAgriGroupListingsError?: boolean;
+  /** Human-readable label for the selected regional group (e.g. "North · 10–25 km"). */
+  agriGroupLabel?: string | null;
+  /** Retry callback — calls the agri map listings query's refetch. */
+  onRetryAgriGroupListings?: () => void;
+  /** Clears the selected regional group (sets it to null in URL state). */
+  onClearRegionalGroup?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -231,6 +246,12 @@ export function DiscoverRightPanel({
   isLoadingAgriAreas = false,
   selectedMarkerListing = null,
   onClearAgriSelection,
+  agriGroupListings = null,
+  isLoadingAgriGroupListings = false,
+  isAgriGroupListingsError = false,
+  agriGroupLabel = null,
+  onRetryAgriGroupListings,
+  onClearRegionalGroup,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -447,6 +468,29 @@ export function DiscoverRightPanel({
         );
       }
 
+      case 'agri-group-selected':
+        // Issue #1425 — agri-first journey with a regional group selected but no
+        // specific areaKey yet. Shows agri map listings for all areas in the group.
+        return (
+          <>
+            <PanelHeader
+              title="Agricultural land"
+              journey="agri-first"
+              onStartOver={onStartOver}
+            />
+            <AgriGroupSelectedPanel
+              groupLabel={agriGroupLabel ?? 'Agricultural land'}
+              listings={agriGroupListings}
+              listingCount={agriGroupListings?.length ?? 0}
+              isLoading={isLoadingAgriGroupListings}
+              isError={isAgriGroupListingsError}
+              onRetry={onRetryAgriGroupListings ?? (() => {})}
+              onClear={onClearRegionalGroup ?? (() => {})}
+              onSelectListing={(id) => navigate(`/listing/${id}`)}
+            />
+          </>
+        );
+
       case 'area-groups-landing':
         return (
           <AreaGroupsLandingPanel
@@ -624,6 +668,7 @@ export function DiscoverRightPanel({
   const PANELS_WITH_INLINE_CHIPS = new Set<DiscoverPanelContent>([
     'area-selected',
     'agri-selected',
+    'agri-group-selected',
     'agri-detail',
     'schools-in-area',
     'school-selected',

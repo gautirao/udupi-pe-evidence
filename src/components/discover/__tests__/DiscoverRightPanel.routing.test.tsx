@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { DiscoverRightPanel } from '../DiscoverRightPanel';
@@ -482,6 +483,133 @@ describe('DiscoverRightPanel — area-selected content parity', () => {
   });
 });
 
+// ─── Issue #1425: agri-group-selected panel ───────────────────────────────────
+
+describe('DiscoverRightPanel — agri-group-selected (Issue #1425)', () => {
+  const makeAgriMapListing = (id: string) => ({
+    id,
+    areaKey: 'IN|KA|Udupi|Manipal',
+    latitude: 13.35,
+    longitude: 74.79,
+    propertyType: 'agricultural_land' as const,
+    locality: `Locality ${id}`,
+    landArea: 2.5,
+    landAreaUnit: 'acre',
+  });
+
+  it('renders agri-group-selected-panel testid', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-selected"
+        agriGroupLabel="North · 10–25 km"
+        agriGroupListings={[]}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={false}
+        onClearRegionalGroup={vi.fn()}
+        onRetryAgriGroupListings={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('agri-group-selected-panel')).toBeInTheDocument();
+  });
+
+  it('renders the group label in the header chip', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-selected"
+        agriGroupLabel="North · 10–25 km"
+        agriGroupListings={[]}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={false}
+        onClearRegionalGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('agri-group-selected-label')).toHaveTextContent('North · 10–25 km');
+  });
+
+  it('renders loading skeletons when isLoadingAgriGroupListings=true', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-selected"
+        agriGroupLabel="North"
+        agriGroupListings={null}
+        isLoadingAgriGroupListings={true}
+        isAgriGroupListingsError={false}
+        onClearRegionalGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByTestId('agri-group-listing-skeleton').length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
+  });
+
+  it('renders listing rows when listings are available', () => {
+    const listings = [makeAgriMapListing('g1'), makeAgriMapListing('g2')];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-selected"
+        agriGroupLabel="North"
+        agriGroupListings={listings}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={false}
+        onClearRegionalGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByTestId('agri-group-listing-row')).toHaveLength(2);
+  });
+
+  it('clicking a listing row navigates to /listing/:id', async () => {
+    const user = userEvent.setup();
+    const listings = [makeAgriMapListing('g1')];
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-selected"
+        agriGroupLabel="North"
+        agriGroupListings={listings}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={false}
+        onClearRegionalGroup={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByTestId('agri-group-listing-row'));
+    expect(mockNavigate).toHaveBeenCalledWith('/listing/g1');
+  });
+
+  it('renders error state and retry/back buttons when isAgriGroupListingsError=true', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-group-selected"
+        agriGroupLabel="North"
+        agriGroupListings={null}
+        isLoadingAgriGroupListings={false}
+        isAgriGroupListingsError={true}
+        onClearRegionalGroup={vi.fn()}
+        onRetryAgriGroupListings={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('agri-group-error-state')).toBeInTheDocument();
+    expect(screen.getByTestId('agri-group-retry-btn')).toBeInTheDocument();
+  });
+
+  it('regression: agri-landing panel still renders for panelContent=agri-landing (agri-group-selected is a separate state)', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-landing"
+        selectedArea={null}
+        areaListings={[]}
+      />,
+    );
+    // No regionalGroups passed → AgriRegionalGroupsPanel renders its empty state
+    expect(screen.getByTestId('agri-regional-groups-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-selected-panel')).not.toBeInTheDocument();
+  });
+});
+
 // ─── Issue #1371: agri-selected panel ─────────────────────────────────────────
 
 describe('DiscoverRightPanel — agri-selected (Issue #1371)', () => {
@@ -690,7 +818,8 @@ describe('DiscoverRightPanel — agri-selected (Issue #1371)', () => {
         areaListings={[]}
       />,
     );
-    expect(screen.getByTestId('agri-landing-panel')).toBeInTheDocument();
+    // No regionalGroups passed → AgriRegionalGroupsPanel renders its empty state
+    expect(screen.getByTestId('agri-regional-groups-empty')).toBeInTheDocument();
     expect(screen.queryByTestId('agri-selected-summary')).not.toBeInTheDocument();
   });
 

@@ -10,6 +10,7 @@
  *   guided-entry          — no journey selected (landing state)
  *   agri-landing          — agri-first journey, no areaKey yet (always; stray keys ignored)
  *   agri-selected         — agri-first journey, areaKey present (Issue #1371)
+ *   agri-group-selected   — agri-first journey, regional group selected, no areaKey (Issue #1425)
  *   area-groups-landing   — area-first journey, no areaKey yet (always; groupId optional)
  *   area-selected         — area-first journey, area selected (areaKey present)
  *   school-browse         — school-first journey, no school selected
@@ -24,6 +25,7 @@ export type DiscoverPanelContent =
   | 'guided-entry'
   | 'agri-landing'
   | 'agri-selected'
+  | 'agri-group-selected'
   | 'agri-detail'
   | 'area-groups-landing'
   | 'area-selection'
@@ -48,7 +50,7 @@ export type DiscoverPanelContent =
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
-  const { journey, areaKey, schoolId, groupId, schoolPicking } = urlState;
+  const { journey, areaKey, schoolId, groupId, schoolPicking, selectedGroup } = urlState;
 
   // MVP2 — agri-first is checked FIRST (before every other branch, including the
   // area/school cold-load inferences below) so a stray schoolId / groupId / schoolPicking
@@ -57,9 +59,16 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
   // Issue #1371: when an areaKey is also present the user has selected an area on the
   // map → route to the agri-selected detail panel. Otherwise (no areaKey) keep the
   // static landing prompt.
+  //
+  // Issue #1425: when a regional group is selected (selectedGroup non-null) but no
+  // specific areaKey yet, route to agri-group-selected (the group drill-down panel).
+  // areaKey always wins over selectedGroup — user has selected a specific area.
   if (journey === 'agri-first') {
     if (areaKey) {
       return 'agri-selected';
+    }
+    if (selectedGroup) {
+      return 'agri-group-selected';
     }
     return 'agri-landing';
   }
