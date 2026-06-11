@@ -3,6 +3,7 @@
 -- SYNTHETIC [AGRI] TEST DATA ONLY — DO NOT run against production.
 -- !! Add-on seed; run AFTER discover-smoke-seed.sql / restore-test-fixture.sh !!
 -- !! All data is fabricated for local Discover development and testing only !!
+-- v2 (2026-06-11): locality-specific realistic titles; ON CONFLICT now updates title/locality.
 --
 -- Requires schema through V87 (V84 agri fields, V85 boundary, V86 property_type CHECK,
 --                              V87 regional_area_classifications for the #1408 backfill).
@@ -136,7 +137,7 @@ VALUES
   -- ~0.0015 deg half-side (≈5 acres); corners vary by ±0.0002 to avoid square
   -- NW(74.7463,13.4265) SW(74.7461,13.4233) SE(74.7497,13.4235) NE(74.7499,13.4267)
   ('a6210001-0000-0000-0000-000000000001',
-   'agricultural_land', '[AGRI] 5-Acre Coconut Farm, Brahmavar', 'Brahmavar',
+   'agricultural_land', '[AGRI] 5-Acre Irrigated Coconut Farm, Brahmavar', 'Brahmavar',
    0, 13.4250, 74.7480,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    12500000,
@@ -166,7 +167,7 @@ VALUES
   -- ~0.0020 deg half-side (≈8 acres)
   -- NW(74.7578,13.4370) SW(74.7580,13.4328) SE(74.7622,13.4330) NE(74.7620,13.4372)
   ('a6210001-0000-0000-0000-000000000003',
-   'agricultural_land', '[AGRI] 8-Acre Fallow Land, Brahmavar', 'Brahmavar',
+   'agricultural_land', '[AGRI] 8-Acre Riverside Farmland, Brahmavar', 'Brahmavar',
    0, 13.4350, 74.7600,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    16000000,
@@ -178,7 +179,7 @@ VALUES
 
   -- ── Brahmavar #4: 2.0 acre, NO boundary (NULL) — fallback marker test ──────
   ('a6210001-0000-0000-0000-000000000004',
-   'agricultural_land', '[AGRI] 2-Acre Cultivated Plot, Brahmavar', 'Brahmavar',
+   'agricultural_land', '[AGRI] 2-Acre Fenced Farm Plot, Brahmavar', 'Brahmavar',
    0, 13.4220, 74.7520,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    4000000,
@@ -193,7 +194,7 @@ VALUES
   -- ~0.0013 deg half-side (≈4 acres)
   -- NW(74.7806,13.1993) SW(74.7807,13.1965) SE(74.7834,13.1967) NE(74.7833,13.1995)
   ('a6210002-0000-0000-0000-000000000001',
-   'agricultural_land', '[AGRI] 4-Acre Rice Field, Shirva', 'Shirva',
+   'agricultural_land', '[AGRI] 4-Acre Irrigated Paddy Field, Shirva', 'Shirva',
    0, 13.1980, 74.7820,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    7200000,
@@ -223,7 +224,7 @@ VALUES
   -- ~0.0007 deg half-side (≈1.5 acres)
   -- NW(74.7772,13.2107) SW(74.7773,13.2092) SE(74.7788,13.2093) NE(74.7787,13.2108)
   ('a6210002-0000-0000-0000-000000000003',
-   'agricultural_land', '[AGRI] 1.5-Acre Homestead Plot, Shirva', 'Shirva',
+   'agricultural_land', '[AGRI] 1.5-Acre Homestead Farmland, Shirva', 'Shirva',
    0, 13.2100, 74.7780,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    3750000,
@@ -253,7 +254,7 @@ VALUES
   -- ~0.0018 deg half-side (≈7 acres)
   -- NW(74.7880,13.1898) SW(74.7882,13.1860) SE(74.7918,13.1862) NE(74.7916,13.1900)
   ('a6210003-0000-0000-0000-000000000002',
-   'agricultural_land', '[AGRI] 7-Acre Cultivated Land, Padubidri', 'Padubidri',
+   'agricultural_land', '[AGRI] 7-Acre Rain-fed Farmland, Padubidri', 'Padubidri',
    0, 13.1880, 74.7900,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    17500000,
@@ -264,7 +265,9 @@ VALUES
    ST_GeogFromText('SRID=4326;POLYGON((74.7880 13.1898, 74.7882 13.1860, 74.7918 13.1862, 74.7916 13.1900, 74.7880 13.1898))'))
 
 ON CONFLICT (id) DO UPDATE
-  SET status             = 'LIVE',
+  SET title              = EXCLUDED.title,
+      locality           = EXCLUDED.locality,
+      status             = 'LIVE',
       is_valid           = true,
       area_key           = EXCLUDED.area_key,
       latitude           = EXCLUDED.latitude,
@@ -295,9 +298,9 @@ SELECT v.area_key, c.id, v.name, v.district,
        v.min_lat::DOUBLE PRECISION, v.min_lon::DOUBLE PRECISION,
        v.max_lat::DOUBLE PRECISION, v.max_lon::DOUBLE PRECISION
 FROM (VALUES
-    ('IN|KA|Udupi|NorthMidTest', 'North Mid-Range [TEST]', 'Udupi', 13.6112, 74.7421, 13.5612, 74.6921, 13.6612, 74.7921),
-    ('IN|KA|Udupi|SouthFarTest', 'South Far-Range [TEST]', 'Udupi', 13.0706, 74.7421, 13.0206, 74.6921, 13.1206, 74.7921),
-    ('IN|KA|Udupi|EastFarTest',  'East Far-Range [TEST]',  'Udupi', 13.3409, 75.2516, 13.2909, 75.2016, 13.3909, 75.3016)
+    ('IN|KA|Udupi|NorthMidTest', 'Hebri Area [TEST]',  'Udupi', 13.6112, 74.7421, 13.5612, 74.6921, 13.6612, 74.7921),
+    ('IN|KA|Udupi|SouthFarTest', 'Uchila Area [TEST]', 'Udupi', 13.0706, 74.7421, 13.0206, 74.6921, 13.1206, 74.7921),
+    ('IN|KA|Udupi|EastFarTest',  'Agumbe Area [TEST]', 'Udupi', 13.3409, 75.2516, 13.2909, 75.2016, 13.3909, 75.3016)
 ) AS v(area_key, name, district, geo_center_lat, geo_center_lon, min_lat, min_lon, max_lat, max_lon)
 JOIN public.cities c ON c.slug = 'udupi'
 ON CONFLICT (area_key) DO UPDATE SET
@@ -367,7 +370,7 @@ VALUES
   -- Center: lat 13.3500, lon 74.6970
   -- Malpe bbox: lat 13.3400–13.3700, lon 74.6900–74.7200
   ('a6210005-0000-0000-0000-000000000001',
-   'agricultural_land', '[AGRI] 5-Acre Cultivated Farm, Malpe', 'Malpe',
+   'agricultural_land', '[AGRI] 5-Acre Coastal Farmland, Malpe', 'Malpe',
    0, 13.3500, 74.6970,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    11000000,
@@ -380,7 +383,7 @@ VALUES
   -- ── Malpe #2: 3.5 acre, WITH boundary ─────────────────────────────────────
   -- Center: lat 13.3570, lon 74.7050
   ('a6210005-0000-0000-0000-000000000002',
-   'agricultural_land', '[AGRI] 3.5-Acre Fallow Plot, Malpe', 'Malpe',
+   'agricultural_land', '[AGRI] 3.5-Acre Fenced Farm Plot, Malpe', 'Malpe',
    0, 13.3570, 74.7050,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    7000000,
@@ -394,7 +397,7 @@ VALUES
   -- Center: lat 13.6100, lon 74.7400
   -- Near centroid 13.6112, 74.7421 (N / 25_50 vs Udupi)
   ('a6210006-0000-0000-0000-000000000001',
-   'agricultural_land', '[AGRI] 7-Acre Areca Plantation, North Mid-Range', 'Udupi North',
+   'agricultural_land', '[AGRI] 7-Acre Areca Plantation, Hebri', 'Hebri',
    0, 13.6100, 74.7400,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    17500000,
@@ -407,7 +410,7 @@ VALUES
   -- ── NorthMidTest #2: 4.0 acre, NO boundary (NULL) — far-band fallback test ─
   -- Center: lat 13.6150, lon 74.7450
   ('a6210006-0000-0000-0000-000000000002',
-   'agricultural_land', '[AGRI] 4-Acre Fallow Land, North Mid-Range', 'Udupi North',
+   'agricultural_land', '[AGRI] 4-Acre Dryland Farmland, Hebri', 'Hebri',
    0, 13.6150, 74.7450,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    8000000,
@@ -421,7 +424,7 @@ VALUES
   -- Center: lat 13.0700, lon 74.7400
   -- Near centroid 13.0706, 74.7421 (S / 25_50 vs Udupi)
   ('a6210007-0000-0000-0000-000000000001',
-   'agricultural_land', '[AGRI] 9-Acre Coconut Plantation, South Far-Range', 'Udupi South',
+   'agricultural_land', '[AGRI] 9-Acre Coconut Plantation, Uchila', 'Uchila',
    0, 13.0700, 74.7400,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    22500000,
@@ -434,7 +437,7 @@ VALUES
   -- ── SouthFarTest #2: 5.5 acre, WITH boundary ──────────────────────────────
   -- Center: lat 13.0750, lon 74.7450
   ('a6210007-0000-0000-0000-000000000002',
-   'agricultural_land', '[AGRI] 5.5-Acre Cultivated Land, South Far-Range', 'Udupi South',
+   'agricultural_land', '[AGRI] 5.5-Acre Irrigated Farmland, Uchila', 'Uchila',
    0, 13.0750, 74.7450,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    11000000,
@@ -448,7 +451,7 @@ VALUES
   -- Center: lat 13.3400, lon 75.2500
   -- Near centroid 13.3409, 75.2516 (E / 50_up vs Udupi, ~55 km east, inland Karnataka)
   ('a6210008-0000-0000-0000-000000000001',
-   'agricultural_land', '[AGRI] 12-Acre Cultivated Estate, East Far-Range', 'Udupi East',
+   'agricultural_land', '[AGRI] 12-Acre Dryland Estate, Agumbe', 'Agumbe',
    0, 13.3400, 75.2500,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    18000000,
@@ -461,7 +464,7 @@ VALUES
   -- ── EastFarTest #2: 8.5 acre, WITH boundary ───────────────────────────────
   -- Center: lat 13.3450, lon 75.2560
   ('a6210008-0000-0000-0000-000000000002',
-   'agricultural_land', '[AGRI] 8.5-Acre Areca Plantation, East Far-Range', 'Udupi East',
+   'agricultural_land', '[AGRI] 8.5-Acre Areca Plantation, Agumbe', 'Agumbe',
    0, 13.3450, 75.2560,
    'LIVE', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
    12750000,
@@ -499,7 +502,9 @@ VALUES
    ST_GeogFromText('SRID=4326;POLYGON((74.6907 13.6273, 74.6909 13.6246, 74.6933 13.6248, 74.6931 13.6275, 74.6907 13.6273))'))
 
 ON CONFLICT (id) DO UPDATE
-  SET status             = 'LIVE',
+  SET title              = EXCLUDED.title,
+      locality           = EXCLUDED.locality,
+      status             = 'LIVE',
       is_valid           = true,
       area_key           = EXCLUDED.area_key,
       latitude           = EXCLUDED.latitude,
