@@ -451,8 +451,8 @@ class ListingResponseMapperTest {
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // #1407: record now has 19 components (7 base + 12 agri-only)
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(19);
+        // #1452: record now has 20 components (8 base + 12 agri-only); pricePaise added
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(20);
     }
 
     @Test
@@ -461,14 +461,14 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // #1407: record now has 19 components (7 base + 12 agri-only fields)
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(19);
+        // #1452: record now has 20 components (8 base + 12 agri-only fields); pricePaise added
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(20);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
-        // Base 7 fields always present
+        // Base 8 fields always present (pricePaise added in #1452)
         assertThat(componentNames).contains(
-                "id", "primaryImageUrl", "imageCount", "price", "propertyType", "locality", "listingPurpose");
+                "id", "primaryImageUrl", "imageCount", "price", "pricePaise", "propertyType", "locality", "listingPurpose");
         // 12 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
         assertThat(componentNames).contains(
                 "boundary", "latitude", "longitude", "landArea", "landAreaUnit",
@@ -721,6 +721,56 @@ class ListingResponseMapperTest {
         assertThat(result.latitude()).isNull();
         verify(listingRepository, never()).findBoundaryGeoJson(any());
         verify(listingRepository, never()).findBoundaryAreaSqm(any());
+    }
+
+    // ==================== #1452: pricePaise single-source-of-truth ====================
+
+    @Test
+    void agriListing_pricePaise_mappedToListingResponse() {
+        // Agri seed condition: pricePaise populated, deprecated price column is null
+        Listing l = buildAgriListing("LIVE");
+        l.setPricePaise(12500000L);
+        l.setPrice(null);
+
+        ListingResponse response = mapper.toPublicResponse(l);
+
+        assertThat(response.pricePaise()).isEqualTo(12500000L);
+        // price may be null — must not throw
+        assertThat(response.price()).isNull();
+    }
+
+    @Test
+    void residentialListing_priceUnchanged_pricePaiseNull() {
+        Listing l = buildListing("LIVE");
+        l.setPrice(new BigDecimal("750000"));
+        l.setPricePaise(null);
+
+        ListingResponse response = mapper.toPublicResponse(l);
+
+        assertThat(response.price()).isEqualByComparingTo(new BigDecimal("750000"));
+        assertThat(response.pricePaise()).isNull();
+    }
+
+    @Test
+    void agriListing_bothPriceFieldsNull_degradesSafely() {
+        Listing l = buildAgriListing("LIVE");
+        l.setPrice(null);
+        l.setPricePaise(null);
+
+        ListingResponse response = mapper.toPublicResponse(l);
+
+        assertThat(response.price()).isNull();
+        assertThat(response.pricePaise()).isNull();
+    }
+
+    @Test
+    void teaserBuilder_agriListing_pricePaiseMapped() {
+        Listing l = buildAgriListing("LIVE");
+        l.setPricePaise(12500000L);
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.pricePaise()).isEqualTo(12500000L);
     }
 
     // ==================== Helper ====================

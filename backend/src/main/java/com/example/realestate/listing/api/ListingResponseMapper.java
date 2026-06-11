@@ -98,7 +98,7 @@ public class ListingResponseMapper {
                                 .orElse(null))
                 : null;
         return new ListingTeaserResponse(
-                l.getId(), primaryImageUrl, images.size(), l.getPrice(),
+                l.getId(), primaryImageUrl, images.size(), l.getPrice(), l.getPricePaise(),
                 l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                 boundary,
                 isAgri ? l.getLatitude() : null,
@@ -140,6 +140,7 @@ public class ListingResponseMapper {
                         firstImageByListing.get(l.getId()),
                         imageCountByListing.getOrDefault(l.getId(), 0L).intValue(),
                         l.getPrice(),
+                        l.getPricePaise(),
                         l.getPropertyType(),
                         l.getLocality(),
                         l.getListingPurpose(),
@@ -234,7 +235,7 @@ public class ListingResponseMapper {
         return new ListingResponse(
                 l.getId(), l.getListingNumber(), l.getDisplayId(),
                 l.getStatus(), l.getPropertyType(), l.getTitle(),
-                l.getLocality(), l.getPrice(), l.getDescription(),
+                l.getLocality(), l.getPrice(), l.getPricePaise(), l.getDescription(),
                 l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
                 l.getLandAreaUnit(), l.getBuiltAreaUnit(),
                 l.getLatitude(), l.getLongitude(),

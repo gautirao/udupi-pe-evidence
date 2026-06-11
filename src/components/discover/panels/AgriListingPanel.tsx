@@ -14,6 +14,7 @@ import { AlertCircle, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgriListingDetail } from '@/hooks/useAgriListingDetail';
+import { formatPrice } from '@/lib/formatters';
 
 interface AgriListingPanelProps {
   listingId: string;
@@ -80,8 +81,13 @@ export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingP
   }
 
   // ── Populated (peek) ─────────────────────────────────────────────
-  const { locality, landArea, landAreaUnit, price } = data;
+  const { locality, landArea, landAreaUnit, price, pricePaise } = data;
   const title = data.title ?? locality ?? 'Agricultural plot';
+
+  // Prefer pricePaise (canonical Long from BE) over deprecated price (BigDecimal rupees).
+  // Backward-compatible: falls back to price when pricePaise is absent/null.
+  const priceInRupees: number | null =
+    pricePaise != null ? Math.round(pricePaise / 100) : (price ?? null);
 
   return (
     <div
@@ -123,11 +129,11 @@ export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingP
             </span>
           </div>
         )}
-        {price != null && price > 0 && (
+        {priceInRupees != null && priceInRupees > 0 && (
           <div className="flex justify-between items-start gap-2 py-2 border-b border-border">
             <span className="text-sm text-muted-foreground shrink-0">Price</span>
-            <span className="text-sm text-foreground text-right">
-              ₹{price.toLocaleString('en-IN')}
+            <span className="text-sm text-foreground text-right" data-testid="agri-peek-price">
+              {formatPrice(priceInRupees)}
             </span>
           </div>
         )}

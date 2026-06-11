@@ -119,7 +119,7 @@ class ListingControllerTest {
             return new ListingResponse(
                     l.getId(), l.getListingNumber(), l.getDisplayId(),
                     l.getStatus(), l.getPropertyType(), l.getTitle(),
-                    l.getLocality(), l.getPrice(), l.getDescription(),
+                    l.getLocality(), l.getPrice(), l.getPricePaise(), l.getDescription(),
                     l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
                     l.getLandAreaUnit(), l.getBuiltAreaUnit(),
                     l.getLatitude(), l.getLongitude(),

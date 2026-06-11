@@ -115,7 +115,7 @@ class PublicListingControllerTest {
             return new ListingResponse(
                     l.getId(), l.getListingNumber(), l.getDisplayId(),
                     l.getStatus(), l.getPropertyType(), l.getTitle(),
-                    l.getLocality(), l.getPrice(), l.getDescription(),
+                    l.getLocality(), l.getPrice(), l.getPricePaise(), l.getDescription(),
                     l.getLandArea(), l.getBedrooms(), l.getBuiltArea(),
                     l.getLandAreaUnit(), l.getBuiltAreaUnit(),
                     l.getLatitude(), l.getLongitude(),
@@ -143,7 +143,7 @@ class PublicListingControllerTest {
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
             return new ListingTeaserResponse(
-                    l.getId(), null, 0, l.getPrice(),
+                    l.getId(), null, 0, l.getPrice(), l.getPricePaise(),
                     l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                     null, null, null, null, null, null, null, null, null, null, null, null);
         });
@@ -153,7 +153,7 @@ class PublicListingControllerTest {
             List<Listing> listings = inv.getArgument(0);
             return listings.stream()
                     .map(l -> new ListingTeaserResponse(
-                            l.getId(), null, 0, l.getPrice(),
+                            l.getId(), null, 0, l.getPrice(), l.getPricePaise(),
                             l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                             null, null, null, null, null, null, null, null, null, null, null, null))
                     .toList();
@@ -540,7 +540,7 @@ class PublicListingControllerTest {
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
                 new ListingTeaserResponse(
                         LISTING_ID, "https://cdn.example.com/farm.jpg", 1,
-                        new BigDecimal("5000000"), "agricultural_land", "Udupi", "SALE",
+                        new BigDecimal("5000000"), null /* pricePaise */, "agricultural_land", "Udupi", "SALE",
                         "{\"type\":\"Polygon\",\"coordinates\":[]}",
                         13.3409, 74.7421,
                         new BigDecimal("2.50"), "acres",
@@ -640,7 +640,7 @@ class PublicListingControllerTest {
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenReturn(
                 new ListingTeaserResponse(
                         LISTING_ID, null, 0,
-                        new BigDecimal("5000000"), "agricultural_land", "Udupi", "SALE",
+                        new BigDecimal("5000000"), null /* pricePaise */, "agricultural_land", "Udupi", "SALE",
                         "{\"type\":\"Polygon\",\"coordinates\":[]}", 13.3409, 74.7421,
                         new BigDecimal("2.50"), "acres", new BigDecimal("2.47"),
                         "Borewell", "Red laterite", "Tar road",

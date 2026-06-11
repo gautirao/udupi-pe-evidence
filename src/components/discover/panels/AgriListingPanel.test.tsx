@@ -232,4 +232,29 @@ describe('AgriListingPanel', () => {
     fireEvent.click(cta);
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
+
+  // FE-T6 — pricePaise is threaded to the peek price display (#1452)
+  // Simulates the agri seed condition: pricePaise=12500000 (₹1.25 L in paise) and
+  // deprecated price=0 (absent from agri seed). Proves pricePaise is used.
+  it('FE-T6: pricePaise=12500000 with price=0 renders ₹1.25 L price (not blank/zero)', () => {
+    mockUseAgriListingDetail.mockReturnValue({
+      data: {
+        ...fullListing,
+        pricePaise: 12_500_000, // ₹1.25 L in paise (100 paise = ₹1)
+        price: 0,               // deprecated field — 0 in agri seed
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+
+    renderPanel();
+    // Price row must be visible and show ₹1.25 L
+    const priceCell = screen.getByTestId('agri-peek-price');
+    expect(priceCell).toBeInTheDocument();
+    expect(priceCell).toHaveTextContent('₹1.25 L');
+    // Must NOT show 0 or blank
+    expect(priceCell.textContent).not.toBe('₹0');
+    expect(priceCell.textContent).not.toBe('');
+  });
 });

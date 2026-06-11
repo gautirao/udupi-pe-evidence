@@ -16,6 +16,7 @@ public record ListingResponse(
         String title,
         String locality,
         BigDecimal price,
+        Long pricePaise,
         String description,
         BigDecimal landArea,
         Integer bedrooms,

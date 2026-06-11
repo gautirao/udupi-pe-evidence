@@ -23,7 +23,8 @@ import java.util.UUID;
  * @param id                 listing UUID
  * @param primaryImageUrl    URL of the first image, or null if no images
  * @param imageCount         total number of images (including those behind auth gate)
- * @param price              listing price in rupees, or null
+ * @param price              listing price in rupees (deprecated column), or null
+ * @param pricePaise         listing price in paise (source of truth); null for rows that predate migration
  * @param propertyType       e.g. "house", "land", "apartment", "agricultural_land"
  * @param locality           locality/city name (spec label: "city")
  * @param listingPurpose     e.g. "SALE", "RENT", or null
@@ -46,6 +47,7 @@ public record ListingTeaserResponse(
         String primaryImageUrl,
         int imageCount,
         BigDecimal price,
+        Long pricePaise,
         String propertyType,
         String locality,
         String listingPurpose,

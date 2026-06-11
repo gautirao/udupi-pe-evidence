@@ -11,6 +11,13 @@
  * 8. Hides price-per-acre when price is null.
  * 9. Shows approx. area when computedAreaAcres is populated.
  * 10. Omits approx. area when computedAreaAcres is null.
+ *
+ * Issue #1452 (FE-T1..FE-T5) — pricePaise single-source-of-truth:
+ * FE-T1. price in rupees (already paise-converted upstream) renders as ₹1.25 L.
+ * FE-T2. price-per-acre derives correctly from rupee price.
+ * FE-T3. price=null → no price row rendered.
+ * FE-T4. price=0 → no price row rendered (price > 0 guard).
+ * FE-T5. Residential-style price (no agri fields) renders correctly.
  */
 
 import React from 'react';
@@ -109,5 +116,46 @@ describe('AgriSpecRows', () => {
   it('omits approx area row when computedAreaAcres is null', () => {
     render(<AgriSpecRows {...fullProps} computedAreaAcres={null} />);
     expect(screen.queryByTestId('agri-computed-area')).not.toBeInTheDocument();
+  });
+
+  // ── Issue #1452: pricePaise single-source-of-truth (FE-T1..FE-T5) ────────────
+
+  // FE-T1 — rupee-converted price (125000 = ₹1.25 L) renders correctly
+  it('FE-T1: renders ₹1.25 L when price is 125000 (paise→rupees already converted upstream)', () => {
+    render(<AgriSpecRows price={125000} />);
+    const priceCell = screen.getByTestId('agri-price');
+    expect(priceCell).toBeInTheDocument();
+    expect(priceCell).toHaveTextContent('₹1.25 L');
+  });
+
+  // FE-T2 — price-per-acre derives from rupee price (1250000 / 10 acres = 125000 → ₹1.25 L/acre)
+  it('FE-T2: price-per-acre derives correctly from rupee price and computedAreaAcres', () => {
+    render(<AgriSpecRows price={1_250_000} computedAreaAcres={10} />);
+    const perAcreCell = screen.getByTestId('agri-price-per-acre');
+    expect(perAcreCell).toBeInTheDocument();
+    // 1250000 / 10 = 125000 → ₹1.25 L/acre
+    expect(perAcreCell.textContent).toMatch(/₹1\.25 L\/acre/);
+  });
+
+  // FE-T3 — price=null → no price row, no crash
+  it('FE-T3: price null renders no price row and no crash', () => {
+    render(<AgriSpecRows price={null} />);
+    expect(screen.queryByTestId('agri-price')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agri-price-per-acre')).not.toBeInTheDocument();
+  });
+
+  // FE-T4 — price=0 → no price row (price > 0 guard)
+  it('FE-T4: price 0 renders no price row', () => {
+    render(<AgriSpecRows price={0} />);
+    expect(screen.queryByTestId('agri-price')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agri-price-per-acre')).not.toBeInTheDocument();
+  });
+
+  // FE-T5 — residential-style price display unchanged
+  it('FE-T5: residential-style price 750000 renders as ₹7.50 L', () => {
+    render(<AgriSpecRows price={750_000} />);
+    const priceCell = screen.getByTestId('agri-price');
+    expect(priceCell).toBeInTheDocument();
+    expect(priceCell).toHaveTextContent('₹7.50 L');
   });
 });

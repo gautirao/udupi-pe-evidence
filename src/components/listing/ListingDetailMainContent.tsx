@@ -139,7 +139,13 @@ export function ListingDetailMainContent({
             landArea={listing.landArea}
             landAreaUnit={listing.landAreaUnit}
             computedAreaAcres={listing.computedAreaAcres}
-            price={listing.price}
+            price={
+              // Prefer pricePaise (canonical Long from BE, #1452) over deprecated price field.
+              // Backward-compatible: falls back to listing.price when pricePaise is absent.
+              listing.pricePaise != null
+                ? Math.round(listing.pricePaise / 100)
+                : (listing.price ?? null)
+            }
             waterSource={listing.waterSource}
             soilType={listing.soilType}
             roadAccess={listing.roadAccess}

@@ -65,6 +65,12 @@ export interface PublicListingDetail extends ListingResponse {
   surveyNumber?: string | null;
   landArea?: number | null;
   landAreaUnit?: string | null;
+  /**
+   * Canonical price in paise (Long) — exposed by BE fix for #1452.
+   * Supersedes the deprecated `price` (BigDecimal rupees) field for agri listings.
+   * When non-null, convert to rupees: Math.round(pricePaise / 100).
+   */
+  pricePaise?: number | null;
 }
 
 function useListingById(id: string | undefined, isPreview: boolean, userId?: string) {
