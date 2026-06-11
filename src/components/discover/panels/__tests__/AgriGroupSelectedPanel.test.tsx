@@ -298,4 +298,54 @@ describe('AgriGroupSelectedPanel — distance chip row', () => {
     expect(screen.queryByTestId('distance-chip-10')).not.toBeInTheDocument();
     expect(screen.queryByTestId('distance-chip-25')).not.toBeInTheDocument();
   });
+
+  // ── Issue #1446: chip-switching additions ─────────────────────────────────
+
+  it('(e) AC4 rerender: chip selection tracks selectedMaxKm prop changes', () => {
+    const { rerender } = render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    // Initial: chip-25 selected, chip-50 not selected
+    expect(screen.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('distance-chip-50')).not.toHaveAttribute('aria-pressed', 'true');
+
+    // Rerender with selectedMaxKm=50
+    rerender(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={50}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    // After rerender: chip-50 selected, chip-25 no longer selected
+    expect(screen.getByTestId('distance-chip-50')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('distance-chip-25')).not.toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('(f) AC2 region preservation: chip-50 click fires onSetMaxKm with exactly 50', async () => {
+    const user = userEvent.setup();
+    const onSetMaxKm = vi.fn();
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+        onSetMaxKm={onSetMaxKm}
+      />,
+    );
+    await user.click(screen.getByTestId('distance-chip-50'));
+    expect(onSetMaxKm).toHaveBeenCalledTimes(1);
+    expect(onSetMaxKm).toHaveBeenCalledWith(50);
+    // Verify the callback was NOT called with any other value
+    expect(onSetMaxKm).not.toHaveBeenCalledWith(25);
+    expect(onSetMaxKm).not.toHaveBeenCalledWith(10);
+    expect(onSetMaxKm).not.toHaveBeenCalledWith(100);
+  });
 });

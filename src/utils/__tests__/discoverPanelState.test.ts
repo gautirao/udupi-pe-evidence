@@ -401,6 +401,60 @@ describe('derivePanelContent — agri-group-peek (Issue #1430)', () => {
   });
 });
 
+// ─── Issue #1446: agri-group-selected routing via selectedRegion + selectedMaxKm ──
+
+describe('derivePanelContent — agri-group-selected via region+maxKm (Issue #1446)', () => {
+  // a. region + maxKm + no listing → agri-group-selected
+  it('#1446-a: agri-first + selectedRegion=North + selectedMaxKm=25 + no listing → agri-group-selected', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'agri-first', selectedRegion: 'N', selectedMaxKm: 25 }),
+      ),
+    ).toBe('agri-group-selected');
+  });
+
+  // b. region + maxKm + listing → agri-group-peek (listing takes over)
+  it('#1446-b: agri-first + selectedRegion=North + selectedMaxKm=25 + listing → agri-group-peek', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedRegion: 'N',
+          selectedMaxKm: 25,
+          selectedListing: 'some-listing-uuid',
+        }),
+      ),
+    ).toBe('agri-group-peek');
+  });
+
+  // c. region + maxKm=null → does NOT route to agri-group-selected (stays at agri-landing)
+  it('#1446-c: agri-first + selectedRegion=North + selectedMaxKm=null → agri-landing (not agri-group-selected)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'agri-first', selectedRegion: 'N', selectedMaxKm: null }),
+      ),
+    ).not.toBe('agri-group-selected');
+  });
+
+  // d. residential journey: region + maxKm do not affect routing (AC8)
+  it('#1446-d: residential journey (area-first) + selectedRegion=North + selectedMaxKm=25 → NOT agri-group-selected (AC8)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', selectedRegion: 'N', selectedMaxKm: 25 }),
+      ),
+    ).not.toBe('agri-group-selected');
+  });
+
+  // e. school journey: region + maxKm do not affect routing (AC8)
+  it('#1446-e: school journey (school-first) + selectedRegion=North + selectedMaxKm=25 → NOT agri-group-selected (AC8)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'school-first', selectedRegion: 'N', selectedMaxKm: 25 }),
+      ),
+    ).not.toBe('agri-group-selected');
+  });
+});
+
 // ─── Issue #1157: area-first "add a school in this area" sub-step ──────────────
 
 describe('area-first school-picking sub-step (Issue #1157)', () => {

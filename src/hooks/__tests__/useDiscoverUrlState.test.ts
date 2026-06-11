@@ -2010,6 +2010,58 @@ describe('useDiscoverUrlState — setMaxKm action', () => {
     expect(result.current[0].selectedRegion).toBe('NW');
     expect(result.current[0].selectedMaxKm).toBe(100);
   });
+
+  // ── Issue #1446: chip-switching additions ─────────────────────────────────
+
+  it('#1446-a: setMaxKm(50) when region=North already set → maxKm=50, region preserved', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&region=N'),
+    });
+
+    act(() => {
+      result.current[1].setMaxKm(50);
+    });
+
+    expect(result.current[0].selectedMaxKm).toBe(50);
+    expect(result.current[0].selectedRegion).toBe('N');
+  });
+
+  it('#1446-b: setMaxKm with invalid value (999) → maxKm deleted (graceful degrade, not corrupt state)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&region=N'),
+    });
+
+    act(() => {
+      // First write a valid value so we know the write mechanism works
+      result.current[1].setMaxKm(25);
+    });
+    expect(result.current[0].selectedMaxKm).toBe(25);
+
+    act(() => {
+      // Now call with invalid value — implementation deletes maxKm rather than writing an invalid string
+      // Cast via unknown to satisfy the strict type signature while testing runtime guard.
+      (result.current[1].setMaxKm as (km: number) => void)(999);
+    });
+
+    // Invalid value causes deletion — maxKm is removed from URL (not corrupted with "999")
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  it('#1446-c: clearRegionAndMaxKm when region=North, maxKm=25, listing=<uuid> → all three deleted', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&listing=some-uuid-1234',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+    expect(result.current[0].selectedListing).toBeNull();
+  });
 });
 
 describe('useDiscoverUrlState — clearRegionAndMaxKm action', () => {
