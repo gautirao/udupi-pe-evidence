@@ -100,3 +100,24 @@ export function buildSectorPolygon(
   // Closed polygon: apex → outer arc → back to apex
   return [apex, ...arcVertices, apex];
 }
+
+/**
+ * Returns the tightest axis-aligned bounding box that encloses the full sector
+ * polygon computed by buildSectorPolygon. Used by map-fit logic to frame the
+ * directional cone in the viewport.
+ */
+export function getSectorBounds(
+  centerLat: number,
+  centerLon: number,
+  directionCode: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW',
+  maxKm: 10 | 25 | 50 | 100,
+): [[number, number], [number, number]] | null {
+  const polygon = buildSectorPolygon(centerLat, centerLon, directionCode, maxKm);
+  if (!polygon.length) return null;
+  const lats = polygon.map(p => p[0]);
+  const lons = polygon.map(p => p[1]);
+  return [
+    [Math.min(...lats), Math.min(...lons)],
+    [Math.max(...lats), Math.max(...lons)],
+  ];
+}

@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { destinationPoint, buildSectorPolygon, haversineKm } from '../geo';
+import { destinationPoint, buildSectorPolygon, haversineKm, getSectorBounds } from '../geo';
 
 const UDUPI_LAT = 13.3409;
 const UDUPI_LON = 74.7421;
@@ -173,5 +173,87 @@ describe('buildSectorPolygon — NE direction sanity', () => {
     // NE: lat > centroid, lon > centroid
     expect(mid[0]).toBeGreaterThan(UDUPI_LAT);
     expect(mid[1]).toBeGreaterThan(UDUPI_LON);
+  });
+});
+
+// ─── getSectorBounds ──────────────────────────────────────────────────────────
+
+describe('getSectorBounds', () => {
+  it('N at maxKm=25: bounds are non-null and centroid is within lat range', () => {
+    const bounds = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'N', 25);
+    expect(bounds).not.toBeNull();
+    const [[minLat, minLon], [maxLat, maxLon]] = bounds!;
+    // The apex is the centroid, so minLat == UDUPI_LAT; the arc extends north
+    expect(minLat).toBeLessThanOrEqual(UDUPI_LAT);
+    expect(maxLat).toBeGreaterThan(UDUPI_LAT);
+    expect(maxLat).toBeGreaterThan(minLat);
+    // centroid within lon bounds
+    expect(minLon).toBeLessThanOrEqual(UDUPI_LON);
+    expect(maxLon).toBeGreaterThanOrEqual(UDUPI_LON);
+  });
+
+  it('E at maxKm=25: bounds are non-null and centroid is within lon range', () => {
+    const bounds = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'E', 25);
+    expect(bounds).not.toBeNull();
+    const [[, minLon], [, maxLon]] = bounds!;
+    // The apex is the centroid, so minLon == UDUPI_LON; the arc extends east
+    expect(minLon).toBeLessThanOrEqual(UDUPI_LON);
+    expect(maxLon).toBeGreaterThan(UDUPI_LON);
+  });
+
+  it('S at maxKm=25: bounds are non-null and minLat is below centroid (south sector)', () => {
+    const bounds = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'S', 25);
+    expect(bounds).not.toBeNull();
+    const [[minLat]] = bounds!;
+    expect(minLat).toBeLessThan(UDUPI_LAT);
+  });
+
+  it('W at maxKm=25: bounds are non-null and maxLon is near centroid (west sector east edge)', () => {
+    const bounds = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'W', 25);
+    expect(bounds).not.toBeNull();
+    const [[, minLon], [, maxLon]] = bounds!;
+    // The west sector extends to the left of centroid; its eastmost edge is near/at centroid
+    expect(maxLon).toBeLessThan(UDUPI_LON + 0.1);
+    expect(minLon).toBeLessThan(UDUPI_LON);
+  });
+
+  it('N: bounds grow monotonically with maxKm (25 < 50 < 100 lat span)', () => {
+    const b25 = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'N', 25)!;
+    const b50 = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'N', 50)!;
+    const b100 = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'N', 100)!;
+
+    const span25 = b25[1][0] - b25[0][0];
+    const span50 = b50[1][0] - b50[0][0];
+    const span100 = b100[1][0] - b100[0][0];
+
+    expect(span50).toBeGreaterThan(span25);
+    expect(span100).toBeGreaterThan(span50);
+  });
+
+  it('getSectorBounds encloses all buildSectorPolygon vertices for N+25km', () => {
+    const polygon = buildSectorPolygon(UDUPI_LAT, UDUPI_LON, 'N', 25);
+    const bounds = getSectorBounds(UDUPI_LAT, UDUPI_LON, 'N', 25)!;
+    const [[minLat, minLon], [maxLat, maxLon]] = bounds;
+
+    for (const [lat, lon] of polygon) {
+      expect(lat).toBeGreaterThanOrEqual(minLat - 1e-9);
+      expect(lat).toBeLessThanOrEqual(maxLat + 1e-9);
+      expect(lon).toBeGreaterThanOrEqual(minLon - 1e-9);
+      expect(lon).toBeLessThanOrEqual(maxLon + 1e-9);
+    }
+  });
+
+  it('returns non-null for all 8 directions × 4 maxKm combos (32 cases)', () => {
+    const directions: Array<'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW'> = [
+      'N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW',
+    ];
+    const distances: Array<10 | 25 | 50 | 100> = [10, 25, 50, 100];
+
+    for (const dir of directions) {
+      for (const km of distances) {
+        const bounds = getSectorBounds(UDUPI_LAT, UDUPI_LON, dir, km);
+        expect(bounds, `expected non-null for dir=${dir} maxKm=${km}`).not.toBeNull();
+      }
+    }
   });
 });

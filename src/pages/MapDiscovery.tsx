@@ -27,6 +27,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { getSectorBounds } from '@/lib/geo';
 import { clampSchoolRadiusKm, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
 import { cityListingToPropertyListing } from '@/lib/discoverMappers';
 import { ApiError } from '@/lib/api';
@@ -1374,29 +1375,58 @@ export default function MapDiscovery() {
   const [agriGroupFocusBounds, setAgriGroupFocusBounds] = useState<[[number, number], [number, number]] | null>(null);
 
   useEffect(() => {
-    // Issue #1429 — use selectedRegion + selectedMaxKm (corridor-first model)
-    if ((!selectedRegion || selectedMaxKm == null) || !agriMapListingsData?.listings.length) {
+    // Issue #1429/#1447 — use selectedRegion + selectedMaxKm (corridor-first cumulative model)
+    if (!selectedRegion || selectedMaxKm == null) {
       setAgriGroupFocusBounds(null);
       return;
     }
+
+    // Issue #1447 — include sector geometry in map fit so the directional cone is
+    // always fully framed, even when listings are sparse or clustered near the centroid.
+    const sectorBounds = cityCenter
+      ? getSectorBounds(cityCenter[0], cityCenter[1], selectedRegion, selectedMaxKm)
+      : null;
+
     // Filter out listings with null/undefined lat/lon before spreading into Math.min/max.
     // AgriMapListingItem declares latitude/longitude as number, but the server can return null
     // when the DB column is null; Math.min/max(undefined) = NaN which corrupts Leaflet fitBounds.
-    const validListings = agriMapListingsData.listings.filter(
+    const validListings = (agriMapListingsData?.listings ?? []).filter(
       l => l.latitude != null && l.longitude != null
     );
-    if (!validListings.length) {
+
+    let listingBounds: [[number, number], [number, number]] | null = null;
+    if (validListings.length) {
+      const lats = validListings.map(l => l.latitude as number);
+      const lons = validListings.map(l => l.longitude as number);
+      listingBounds = [
+        [Math.min(...lats), Math.min(...lons)],
+        [Math.max(...lats), Math.max(...lons)],
+      ];
+    }
+
+    if (!sectorBounds && !listingBounds) {
       setAgriGroupFocusBounds(null);
       return;
     }
-    const lats = validListings.map(l => l.latitude as number);
-    const lons = validListings.map(l => l.longitude as number);
+
+    if (!sectorBounds) {
+      // cityCenter unavailable (unknown city slug) — fall back to listing-only bounds
+      setAgriGroupFocusBounds(listingBounds);
+      return;
+    }
+
+    if (!listingBounds) {
+      // No valid listings — frame the sector cone alone
+      setAgriGroupFocusBounds(sectorBounds);
+      return;
+    }
+
+    // Union: expand to contain both the sector geometry and visible listings
     setAgriGroupFocusBounds([
-      [Math.min(...lats), Math.min(...lons)],
-      [Math.max(...lats), Math.max(...lons)],
+      [Math.min(sectorBounds[0][0], listingBounds[0][0]), Math.min(sectorBounds[0][1], listingBounds[0][1])],
+      [Math.max(sectorBounds[1][0], listingBounds[1][0]), Math.max(sectorBounds[1][1], listingBounds[1][1])],
     ]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRegion, selectedMaxKm, agriMapListingsData]);
+  }, [selectedRegion, selectedMaxKm, agriMapListingsData, cityCenter]);
 
   // Issue #1115 — wrap handleSchoolSelect (from useDiscoverPageState, forbidden to edit)
   // so that selecting a school via MapFilters or NearSchoolSheet also resets the
