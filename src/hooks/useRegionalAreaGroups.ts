@@ -22,7 +22,9 @@ export interface CorridorGroupData {
 export interface RegionalAreaGroupsData {
   groups: CorridorGroupData[];
   isLoading: boolean;
+  isError: boolean;
   error: Error | null;
+  refetch: () => void;
 }
 
 /**
@@ -136,27 +138,25 @@ export function normalizeRegionalAreaGroupsResponse(
  * ordered by maxKm ascending. Returns { groups: [], isLoading, error } structure.
  */
 export function useRegionalAreaGroups(city: string): RegionalAreaGroupsData {
-  const { data, isLoading, error } = useQuery<Pick<RegionalAreaGroupsData, 'groups'>>({
+  const { data, isLoading, isError, error, refetch } = useQuery<Pick<RegionalAreaGroupsData, 'groups'>>({
     queryKey: [...REGIONAL_AREA_GROUPS_QUERY_KEY_BASE, city, 'agricultural_land'],
     queryFn: async () => {
-      try {
-        const rawResponse = await api.get<CorridorGroupsDTOResponse>(
-          `/api/discover/regional-area-groups?city=${encodeURIComponent(city)}&propertyType=agricultural_land`,
-          { skipAuth: true },
-        );
-        return normalizeRegionalAreaGroupsResponse(rawResponse, city);
-      } catch {
-        // On any network/API error return empty groups so the panel degrades gracefully.
-        return { groups: [] };
-      }
+      const rawResponse = await api.get<CorridorGroupsDTOResponse>(
+        `/api/discover/regional-area-groups?city=${encodeURIComponent(city)}&propertyType=agricultural_land`,
+        { skipAuth: true },
+      );
+      return normalizeRegionalAreaGroupsResponse(rawResponse, city);
     },
     enabled: city.length > 0,
     staleTime: 60_000,
+    retry: false,
   });
 
   return {
     groups: data?.groups ?? [],
     isLoading,
+    isError,
     error: error as Error | null,
+    refetch,
   };
 }

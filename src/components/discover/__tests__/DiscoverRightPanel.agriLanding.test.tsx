@@ -10,10 +10,14 @@
  * parameters, causing a ReferenceError crash.
  *
  * After Issue #1429: agri-landing renders CorridorLandingPanel with corridorGroups[].
+ *
+ * Issue #1453 — TC1–TC6 cover the new isRegionalGroupsError / onRetryRegionalGroups
+ * error+retry branch in CorridorLandingPanel.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -83,6 +87,8 @@ function makeQueryClient() {
 interface RenderProps {
   corridorGroups?: CorridorGroupData[];
   isLoadingRegionalGroups?: boolean;
+  isRegionalGroupsError?: boolean;
+  onRetryRegionalGroups?: () => void;
   selectedRegion?: string | null;
   selectedMaxKm?: 10 | 25 | 50 | 100 | null;
 }
@@ -110,10 +116,28 @@ function renderLanding(props: RenderProps = {}) {
   );
 }
 
+const NORTH_CORRIDOR: CorridorGroupData = {
+  directionCode: 'N',
+  groupName: 'North towards Kundapur',
+  availableMaxDistances: [
+    {
+      maxKm: 25,
+      distanceLabel: 'Up to 25 km',
+      includedBandCodes: ['0_25'],
+      listingCount: 5,
+      areaKeys: ['IN|KA|Udupi|North1'],
+    },
+  ],
+};
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 describe('DiscoverRightPanel agri-landing — corridor-first UX (Issue #1429)', () => {
@@ -169,5 +193,65 @@ describe('DiscoverRightPanel agri-landing — corridor-first UX (Issue #1429)', 
     expect(chip25).toHaveAttribute('aria-pressed', 'true');
     const chip10 = screen.getByTestId('distance-chip-10');
     expect(chip10).toHaveAttribute('aria-pressed', 'false');
+  });
+});
+
+// ─── Issue #1453 — Error+Retry branch (TC1–TC6) ──────────────────────────────
+
+describe('CorridorLandingPanel — fetch error + retry (Issue #1453)', () => {
+  // TC1: error with empty groups → error message + Retry visible, empty state absent
+  it('TC1: isRegionalGroupsError=true, corridorGroups=[] → error UI renders, "No corridors found" absent', () => {
+    renderLanding({ isRegionalGroupsError: true, corridorGroups: [] });
+
+    expect(screen.getByTestId('corridor-landing-error')).toBeInTheDocument();
+    expect(screen.getByTestId('corridor-landing-retry-btn')).toBeInTheDocument();
+    expect(screen.getByText(/could not load corridors/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No corridors found/i)).not.toBeInTheDocument();
+  });
+
+  // TC2: explicit isLoading=false + isError=true → same as TC1
+  it('TC2: isLoading=false, isRegionalGroupsError=true, corridorGroups=[] → error UI renders', () => {
+    renderLanding({ isLoadingRegionalGroups: false, isRegionalGroupsError: true, corridorGroups: [] });
+
+    expect(screen.getByTestId('corridor-landing-error')).toBeInTheDocument();
+    expect(screen.getByTestId('corridor-landing-retry-btn')).toBeInTheDocument();
+    expect(screen.queryByText(/No corridors found/i)).not.toBeInTheDocument();
+  });
+
+  // TC3: no error, empty groups → empty state shows, error state absent
+  it('TC3: isRegionalGroupsError=false, corridorGroups=[] → "No corridors found" renders, error absent', () => {
+    renderLanding({ isRegionalGroupsError: false, corridorGroups: [] });
+
+    expect(screen.getByTestId('corridor-landing-empty')).toBeInTheDocument();
+    expect(screen.getByText(/No corridors found/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-error')).not.toBeInTheDocument();
+  });
+
+  // TC4: Retry click calls onRetryRegionalGroups exactly once
+  it('TC4: clicking Retry calls onRetryRegionalGroups once', async () => {
+    const user = userEvent.setup();
+    const onRetry = vi.fn();
+    renderLanding({ isRegionalGroupsError: true, corridorGroups: [], onRetryRegionalGroups: onRetry });
+
+    await user.click(screen.getByTestId('corridor-landing-retry-btn'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  // TC5: no error with corridors → corridor cards render, no error state
+  it('TC5: isRegionalGroupsError=false, corridorGroups populated → corridor cards visible, no error', () => {
+    renderLanding({ isRegionalGroupsError: false, corridorGroups: [NORTH_CORRIDOR] });
+
+    expect(screen.getByTestId('corridor-landing-list')).toBeInTheDocument();
+    expect(screen.getByTestId('corridor-group-name')).toHaveTextContent('North towards Kundapur');
+    expect(screen.queryByTestId('corridor-landing-error')).not.toBeInTheDocument();
+  });
+
+  // TC6: loading → skeleton shows, neither error nor empty state
+  it('TC6: isLoading=true → loading skeleton, no error state, no empty state', () => {
+    renderLanding({ isLoadingRegionalGroups: true, corridorGroups: [], isRegionalGroupsError: false });
+
+    expect(screen.getByTestId('corridor-landing-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-error')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('corridor-landing-empty')).not.toBeInTheDocument();
   });
 });

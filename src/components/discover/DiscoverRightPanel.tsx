@@ -28,6 +28,10 @@ import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 interface CorridorLandingPanelProps {
   corridorGroups: CorridorGroupData[];
   isLoading: boolean;
+  /** True when the regional-area-groups fetch errored. Renders error+retry UI. */
+  isError?: boolean;
+  /** Called when the user clicks Retry in the error state. */
+  onRetry?: () => void;
   selectedRegion: string | null;
   selectedMaxKm: 10 | 25 | 50 | 100 | null;
   /** Called when a corridor card is clicked — sets both region and default maxKm in one PUSH. */
@@ -41,6 +45,8 @@ interface CorridorLandingPanelProps {
 function CorridorLandingPanel({
   corridorGroups,
   isLoading,
+  isError = false,
+  onRetry = () => {},
   selectedRegion,
   selectedMaxKm,
   onSetRegionWithMaxKm,
@@ -66,6 +72,31 @@ function CorridorLandingPanel({
             <Skeleton className="h-3 w-1/2" />
           </div>
         ))}
+      </div>
+    );
+  }
+
+  // ── Error state (Issue #1453) ──
+  // Must appear BEFORE selectedRegion and empty-state checks so a failed fetch
+  // never silently falls through to "No corridors found".
+  if (isError) {
+    return (
+      <div
+        data-testid="corridor-landing-error"
+        className="flex flex-col items-center justify-center py-12 px-4 gap-3 text-center"
+      >
+        <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+        <p className="text-sm text-muted-foreground">
+          Could not load corridors. Check your connection and try again.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          data-testid="corridor-landing-retry-btn"
+          onClick={onRetry}
+        >
+          Retry
+        </Button>
       </div>
     );
   }
@@ -226,6 +257,10 @@ export interface DiscoverRightPanelProps {
   corridorGroups?: CorridorGroupData[];
   /** True while corridor groups are loading. */
   isLoadingRegionalGroups?: boolean;
+  /** Issue #1453 — true when the corridor groups fetch errored. */
+  isRegionalGroupsError?: boolean;
+  /** Issue #1453 — retry callback (the regional-area-groups query's refetch). */
+  onRetryRegionalGroups?: () => void;
   /** Selected corridor direction (from URL region= param). Null when none. */
   selectedRegion?: string | null;
   /** Selected cumulative distance tier (from URL maxKm= param). Null when none. */
@@ -406,6 +441,8 @@ export function DiscoverRightPanel({
   onSelectAreaKey,
   corridorGroups = [],
   isLoadingRegionalGroups = false,
+  isRegionalGroupsError = false,
+  onRetryRegionalGroups,
   selectedRegion = null,
   selectedMaxKm = null,
   onSetRegion,
@@ -503,6 +540,8 @@ export function DiscoverRightPanel({
             <CorridorLandingPanel
               corridorGroups={corridorGroups}
               isLoading={isLoadingRegionalGroups}
+              isError={isRegionalGroupsError}
+              onRetry={onRetryRegionalGroups ?? (() => {})}
               selectedRegion={selectedRegion}
               selectedMaxKm={selectedMaxKm}
               onSetRegionWithMaxKm={onSetRegionWithMaxKm ?? (() => {})}

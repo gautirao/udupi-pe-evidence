@@ -390,6 +390,8 @@ export default function MapDiscovery() {
   const {
     groups: corridorGroups,
     isLoading: isLoadingRegionalAreaGroups,
+    isError: isRegionalAreaGroupsError,
+    refetch: refetchRegionalAreaGroups,
   } = useRegionalAreaGroups(urlState.city);
 
   // Issue #1429 — derive areaKeys from the selected corridor + distance tier to fetch
@@ -1807,6 +1809,9 @@ export default function MapDiscovery() {
           // Issue #1429 — agri-first corridor groups (cumulative corridor model)
           corridorGroups={corridorGroups}
           isLoadingRegionalGroups={isLoadingRegionalAreaGroups}
+          // Issue #1453 — surface fetch error so CorridorLandingPanel can show error+retry UI.
+          isRegionalGroupsError={isRegionalAreaGroupsError}
+          onRetryRegionalGroups={refetchRegionalAreaGroups}
           selectedRegion={selectedRegion}
           selectedMaxKm={selectedMaxKm}
           onSetRegion={(dir) => urlActions.setRegion(dir)}
