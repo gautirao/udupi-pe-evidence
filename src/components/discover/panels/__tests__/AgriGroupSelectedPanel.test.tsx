@@ -1,5 +1,5 @@
 /**
- * Tests for AgriGroupSelectedPanel (Issue #1425)
+ * Tests for AgriGroupSelectedPanel (Issue #1425, extended in #1445)
  *
  * Covers:
  * - Header chip renders group label and clear button
@@ -9,6 +9,7 @@
  * - Error state: error message + retry button + back-to-list button
  * - Listings state: rows rendered + click fires onSelectListing with correct id
  * - Aggregate count renders correct singular/plural text
+ * - Distance chip row: renders chips, aria-pressed state, click handler, empty guard
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -17,6 +18,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { AgriGroupSelectedPanel } from '../AgriGroupSelectedPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,21 @@ const makeListing = (id: string, overrides: Partial<AgriMapListingItem> = {}): A
   ...overrides,
 });
 
+const makeTier = (maxKm: 10 | 25 | 50 | 100): CumulativeDistanceTier => ({
+  maxKm,
+  distanceLabel: `Up to ${maxKm} km`,
+  includedBandCodes: [],
+  listingCount: 2,
+  areaKeys: [],
+});
+
+const ALL_TIERS: CumulativeDistanceTier[] = [
+  makeTier(10),
+  makeTier(25),
+  makeTier(50),
+  makeTier(100),
+];
+
 const noop = () => {};
 
 const baseProps = {
@@ -43,6 +60,10 @@ const baseProps = {
   onRetry: noop,
   onClear: noop,
   onSelectListing: noop,
+  // Issue #1445 — new required props; default to no-chip-row for backward compat.
+  selectedMaxKm: null,
+  availableMaxDistances: undefined,
+  onSetMaxKm: noop as (km: 10 | 25 | 50 | 100) => void,
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -199,5 +220,82 @@ describe('AgriGroupSelectedPanel — aggregate count', () => {
     expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
       '1 agri property in this region',
     );
+  });
+});
+
+// ─── Issue #1445 — Distance chip row ─────────────────────────────────────────
+
+describe('AgriGroupSelectedPanel — distance chip row', () => {
+  it('(a) renders all 4 chip buttons when availableMaxDistances is provided', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    expect(screen.getByTestId('distance-chip-10')).toBeInTheDocument();
+    expect(screen.getByTestId('distance-chip-25')).toBeInTheDocument();
+    expect(screen.getByTestId('distance-chip-50')).toBeInTheDocument();
+    expect(screen.getByTestId('distance-chip-100')).toBeInTheDocument();
+  });
+
+  it('(b) selected chip has aria-pressed=true, others do not', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    expect(screen.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('distance-chip-10')).not.toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('distance-chip-50')).not.toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('distance-chip-100')).not.toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('(c) clicking a chip calls onSetMaxKm with the correct km value', async () => {
+    const user = userEvent.setup();
+    const onSetMaxKm = vi.fn();
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+        onSetMaxKm={onSetMaxKm}
+      />,
+    );
+    await user.click(screen.getByTestId('distance-chip-50'));
+    expect(onSetMaxKm).toHaveBeenCalledTimes(1);
+    expect(onSetMaxKm).toHaveBeenCalledWith(50);
+  });
+
+  it('(d) no chip row when availableMaxDistances is undefined', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={null}
+        availableMaxDistances={undefined}
+      />,
+    );
+    expect(screen.queryByTestId('distance-chip-10')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('distance-chip-25')).not.toBeInTheDocument();
+  });
+
+  it('(d) no chip row when availableMaxDistances is empty array', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={null}
+        availableMaxDistances={[]}
+      />,
+    );
+    expect(screen.queryByTestId('distance-chip-10')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('distance-chip-25')).not.toBeInTheDocument();
   });
 });

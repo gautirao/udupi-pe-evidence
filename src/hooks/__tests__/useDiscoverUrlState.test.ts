@@ -1688,8 +1688,14 @@ describe('useDiscoverUrlState — selectedGroup read from URL (post-OD-1 migrati
     expect(result.current[0].selectedRegion).toBe('N');
   });
 
-  it('all valid distance bands migrate to selectedRegion (band is dropped, OD-1 Option A)', async () => {
+  it('all valid distance bands migrate to selectedRegion (band is dropped, OD-1 Option A + Issue #1445 canonicalisation)', async () => {
     // All 4 bands migrate the same way — band is dropped; only direction is preserved.
+    // Issue #1445: canonicalisation then sets maxKm=DEFAULT_MAX_KM=25 regardless of band.
+    //
+    // IMPORTANT: The maxKm=25 that appears here comes from DEFAULT_MAX_KM, NOT from the band.
+    // For the '10_25' band, the 25 in DEFAULT_MAX_KM=25 is coincidental — we do NOT infer
+    // maxKm from the band suffix. Option B (band→maxKm inference) remains forbidden.
+    // All 4 bands (0_10, 10_25, 25_50, 50_up) canonicalise to the SAME maxKm=25 (DEFAULT_MAX_KM).
     for (const band of ['0_10', '10_25', '25_50', '50_up']) {
       const { result } = renderHook(() => useDiscoverUrlState(), {
         wrapper: wrapperWithQuery(`/discover?city=udupi&group=SE:${band}`),
@@ -1698,7 +1704,11 @@ describe('useDiscoverUrlState — selectedGroup read from URL (post-OD-1 migrati
         expect(result.current[0].selectedGroup).toBeNull();
       });
       expect(result.current[0].selectedRegion).toBe('SE');
-      expect(result.current[0].selectedMaxKm).toBeNull(); // band NOT inferred as maxKm
+      // Canonicalisation fires after OD-1 migration; maxKm=25 from DEFAULT_MAX_KM (not from band).
+      // This is true even for '50_up' — the band value is entirely ignored.
+      await waitFor(() => {
+        expect(result.current[0].selectedMaxKm).toBe(25);
+      });
     }
   });
 
@@ -1715,7 +1725,12 @@ describe('useDiscoverUrlState — selectedGroup read from URL (post-OD-1 migrati
       expect(result.current[0].selectedGroup).toBeNull();
     });
     expect(result.current[0].selectedRegion).toBe('N');
-    expect(result.current[0].selectedMaxKm).toBeNull(); // band NOT inferred as maxKm
+    // Issue #1445: canonicalisation fires after OD-1 migration; maxKm=25 (DEFAULT_MAX_KM)
+    // is set regardless of the band. Band-to-maxKm inference is still forbidden —
+    // the 25 comes from DEFAULT_MAX_KM, not from the "50_PLUS" part.
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
   });
 
   it('rejects ?group=NORTH:100 → selectedGroup null (invalid direction + band)', async () => {
@@ -1902,11 +1917,15 @@ describe('useDiscoverUrlState — selectedMaxKm initial read from URL', () => {
     expect(result.current[0].selectedMaxKm).toBe(25);
   });
 
-  it('returns null selectedMaxKm when maxKm param is absent', () => {
+  it('canonicalises to DEFAULT_MAX_KM=25 when region=N is present but maxKm is absent (Issue #1445)', async () => {
+    // Issue #1445: cold-load URL with region but no maxKm is canonicalised to maxKm=25
+    // via a REPLACE effect so derivePanelContent returns 'agri-group-selected' immediately.
     const { result } = renderHook(() => useDiscoverUrlState(), {
       wrapper: wrapperWithQuery('/discover?city=udupi&region=N'),
     });
-    expect(result.current[0].selectedMaxKm).toBeNull();
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
   });
 
   it('rejects unknown maxKm values (e.g. 75) → null', () => {
@@ -2095,23 +2114,32 @@ describe('useDiscoverUrlState — OD-1 Option A cold-load migration', () => {
     });
   });
 
-  it('does NOT set maxKm after cold-load — band is dropped (OD-1 Option A)', async () => {
+  it('band is dropped by OD-1 — maxKm=25 comes from DEFAULT_MAX_KM not band inference (OD-1 Option A + Issue #1445)', async () => {
+    // OD-1 drops the band (25_50 is entirely ignored). Issue #1445 canonicalisation then
+    // fires and sets maxKm=DEFAULT_MAX_KM=25. The 25 comes from the constant, NOT from
+    // the "25_50" band suffix — the match is coincidental.
+    // IMPORTANT: Option B (band→maxKm inference) is still forbidden. The fact that the
+    // band happens to contain "25" does not mean we're inferring from it.
     const { result } = renderHook(() => useDiscoverUrlState(), {
       wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&group=NW:25_50'),
     });
 
     await waitFor(() => {
-      // selectedGroup migrated away, meaning effect ran
+      // selectedGroup migrated away, meaning OD-1 effect ran
       expect(result.current[0].selectedGroup).toBeNull();
     });
 
-    // maxKm must NOT be set — Option B (band→maxKm inference) is forbidden
-    expect(result.current[0].selectedMaxKm).toBeNull();
+    // Canonicalisation (Issue #1445) fires after OD-1 migration sets region=NW with no maxKm.
+    // maxKm=25 is backfilled from DEFAULT_MAX_KM (not inferred from the band).
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
   });
 
-  it('panel stays at agri-landing after cold-load (selectedRegion set, selectedMaxKm null)', async () => {
-    // When only region is set (no maxKm), discoverPanelState returns 'agri-landing'.
-    // This test verifies the URL state at the hook level (not panel routing).
+  it('panel reaches agri-group-selected after cold-load via OD-1 + canonicalisation', async () => {
+    // Issue #1445: OD-1 migration sets region=N, then canonicalisation sets maxKm=25.
+    // With both region + maxKm set, derivePanelContent returns 'agri-group-selected'
+    // (both needed). This test verifies the post-effect URL state.
     const { result } = renderHook(() => useDiscoverUrlState(), {
       wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&group=N:10_25'),
     });
@@ -2120,10 +2148,11 @@ describe('useDiscoverUrlState — OD-1 Option A cold-load migration', () => {
       expect(result.current[0].selectedGroup).toBeNull();
     });
 
-    // With only region=N and no maxKm, derivePanelContent returns 'agri-landing'
-    // (both region + maxKm needed for 'agri-group-selected').
+    // Canonicalisation sets maxKm=25; panel can now route to 'agri-group-selected'.
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
     expect(result.current[0].selectedRegion).toBe('N');
-    expect(result.current[0].selectedMaxKm).toBeNull();
   });
 
   it('removes group param even for invalid direction codes', async () => {
@@ -2247,5 +2276,204 @@ describe('useDiscoverUrlState — selectedListing (Issue #1430)', () => {
     expect(result.current[0].journey).toBeNull();
     // city survives startOver
     expect(result.current[0].city).toBe('udupi');
+  });
+});
+
+// ─── Issue #1445: setRegionWithMaxKm — atomic direction + distance ────────────
+
+describe('useDiscoverUrlState — setRegionWithMaxKm action (Issue #1445)', () => {
+  // a. Default km: setRegionWithMaxKm('N') → selectedRegion='N', selectedMaxKm=25 (default)
+  it('setRegionWithMaxKm with default km sets region=N and maxKm=25', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegionWithMaxKm('N');
+    });
+
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(25);
+  });
+
+  // b. Explicit override: setRegionWithMaxKm('N', 50) → selectedMaxKm=50
+  it('setRegionWithMaxKm with explicit km=50 sets region=N and maxKm=50', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegionWithMaxKm('N', 50);
+    });
+
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(50);
+  });
+
+  // f. Invalid direction no-op
+  it('setRegionWithMaxKm with invalid direction is a no-op', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegionWithMaxKm('INVALID');
+    });
+
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  // e. Back from region=N&maxKm=25 → both cleared (clearRegionAndMaxKm round-trip)
+  it('clearRegionAndMaxKm after setRegionWithMaxKm clears both region and maxKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegionWithMaxKm('N');
+    });
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(25);
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  // Regression: setRegion semantics must be preserved (does NOT set maxKm)
+  it('setRegion still does NOT set maxKm (regression guard)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegion('N');
+    });
+
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+});
+
+// ─── Issue #1445: Cold-load canonicalisation ──────────────────────────────────
+
+describe('useDiscoverUrlState — cold-load canonicalisation (Issue #1445)', () => {
+  // c. Cold-load ?region=NW without maxKm → REPLACE canonicalises to maxKm=25
+  it('cold-load with region=NW but no maxKm canonicalises maxKm to 25 (REPLACE)', async () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&region=NW'),
+    });
+
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
+
+    // region must be preserved
+    expect(result.current[0].selectedRegion).toBe('NW');
+  });
+
+  // d. Cold-load with no region param → no canonicalisation, maxKm stays null
+  it('cold-load with no region param does not set maxKm', async () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    // Give effects time to run
+    await waitFor(() => {
+      expect(result.current[0].selectedRegion).toBeNull();
+    });
+
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  // Cold-load with both region and maxKm — no canonicalisation needed
+  it('cold-load with region=NW and maxKm=50 does not override the existing maxKm', async () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&region=NW&maxKm=50'),
+    });
+
+    // Effects settle
+    await waitFor(() => {
+      expect(result.current[0].selectedRegion).toBe('NW');
+    });
+
+    expect(result.current[0].selectedMaxKm).toBe(50);
+  });
+
+  // g. Legacy OD-1: cold-load ?group=N:10_25 → migration runs first → then
+  //    canonicalisation fires → region=N, maxKm=25 (DEFAULT_MAX_KM)
+  it('OD-1 legacy cold-load ?group=N:10_25 → region=N and maxKm=25 after migration + canonicalisation', async () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&group=N:10_25'),
+    });
+
+    // OD-1 migration fires first (removes group, sets region=N, no maxKm)
+    await waitFor(() => {
+      expect(result.current[0].selectedGroup).toBeNull();
+    });
+
+    // Canonicalisation then fires (region set, maxKm null → backfill maxKm=25)
+    await waitFor(() => {
+      expect(result.current[0].selectedMaxKm).toBe(25);
+    });
+
+    expect(result.current[0].selectedRegion).toBe('N');
+  });
+
+  // Fix 4a: setRegionWithMaxKm + startOver clears both fields
+  it('setRegionWithMaxKm then startOver clears selectedRegion and selectedMaxKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegionWithMaxKm('N');
+    });
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(25);
+
+    act(() => {
+      result.current[1].startOver();
+    });
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  // Fix 4b: setRegionWithMaxKm + changeCity clears both fields
+  it('setRegionWithMaxKm then changeCity clears selectedRegion and selectedMaxKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first'),
+    });
+
+    act(() => {
+      result.current[1].setRegionWithMaxKm('N', 50);
+    });
+    expect(result.current[0].selectedRegion).toBe('N');
+    expect(result.current[0].selectedMaxKm).toBe(50);
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+    expect(result.current[0].city).toBe('kundapur');
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  // Fix 4c: cold-load with both region AND maxKm — canonicalisation does NOT overwrite maxKm
+  it('cold-load ?region=N&maxKm=10 → canonicalisation does NOT fire (maxKm stays 10)', async () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery('/discover?city=udupi&journey=agri-first&region=N&maxKm=10'),
+    });
+
+    // Effects settle
+    await waitFor(() => {
+      expect(result.current[0].selectedRegion).toBe('N');
+    });
+
+    // maxKm=10 must NOT be overwritten to DEFAULT_MAX_KM=25
+    expect(result.current[0].selectedMaxKm).toBe(10);
   });
 });

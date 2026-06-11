@@ -1780,6 +1780,7 @@ export default function MapDiscovery() {
           selectedRegion={selectedRegion}
           selectedMaxKm={selectedMaxKm}
           onSetRegion={(dir) => urlActions.setRegion(dir)}
+          onSetRegionWithMaxKm={(dir, km) => urlActions.setRegionWithMaxKm(dir, km)}
           onSetMaxKm={(km) => urlActions.setMaxKm(km)}
           onClearRegionAndMaxKm={() => urlActions.clearRegionAndMaxKm()}
           // Issue #1425 — agri-group-selected panel data

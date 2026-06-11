@@ -59,6 +59,7 @@ function makeDefaultActions() {
     changeCity: vi.fn(),
     selectRegionalGroup: vi.fn(),
     setRegion: vi.fn(),
+    setRegionWithMaxKm: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: mockClearRegionAndMaxKm,
     setSelectedListing: mockSetSelectedListing,

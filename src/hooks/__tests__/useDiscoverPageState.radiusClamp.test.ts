@@ -43,6 +43,7 @@ function makeUrlActions(): DiscoverUrlActions {
     selectRegionalGroup: vi.fn(),
     // Issue #1429 — corridor-first cumulative-distance actions (successors to selectRegionalGroup).
     setRegion: vi.fn(),
+    setRegionWithMaxKm: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: vi.fn(),
     // Issue #1430 — agri-group listing peek actions.

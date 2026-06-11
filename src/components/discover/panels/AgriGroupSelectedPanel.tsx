@@ -3,6 +3,7 @@ import { X, Sprout, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +16,12 @@ interface AgriGroupSelectedPanelProps {
   onRetry: () => void;
   onClear: () => void;
   onSelectListing: (id: string) => void;
+  /** Issue #1445 — selected cumulative distance tier for chip row. Null when none. */
+  selectedMaxKm: number | null;
+  /** Issue #1445 — available distance tiers for chip row. Undefined = no chip row. */
+  availableMaxDistances: CumulativeDistanceTier[] | undefined;
+  /** Issue #1445 — called when user selects a distance tier chip. */
+  onSetMaxKm: (km: 10 | 25 | 50 | 100) => void;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -43,7 +50,14 @@ export function AgriGroupSelectedPanel({
   onRetry,
   onClear,
   onSelectListing,
+  selectedMaxKm,
+  availableMaxDistances,
+  onSetMaxKm,
 }: AgriGroupSelectedPanelProps) {
+  // Sort distance tiers ascending by maxKm for consistent display order.
+  const sortedTiers = availableMaxDistances
+    ? [...availableMaxDistances].sort((a, b) => a.maxKm - b.maxKm)
+    : [];
   return (
     <div
       data-testid="agri-group-selected-panel"
@@ -68,6 +82,34 @@ export function AgriGroupSelectedPanel({
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
+
+      {/* ── Distance chips (Issue #1445) ─────────────────────────────────────── */}
+      {sortedTiers.length > 0 && (
+        <div className="px-4 py-2 border-b border-border shrink-0">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Distance tiers">
+            {sortedTiers.map((tier) => {
+              const isSelected = selectedMaxKm === tier.maxKm;
+              return (
+                <button
+                  key={tier.maxKm}
+                  type="button"
+                  data-testid={`distance-chip-${tier.maxKm}`}
+                  onClick={() => onSetMaxKm(tier.maxKm)}
+                  aria-pressed={isSelected}
+                  className={[
+                    'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    isSelected
+                      ? 'border-green-500 bg-green-500 text-white'
+                      : 'border-border bg-card text-foreground hover:bg-muted/50',
+                  ].join(' ')}
+                >
+                  {tier.distanceLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Aggregate count ──────────────────────────────────────────────────── */}
       {!isLoading && !isError && (

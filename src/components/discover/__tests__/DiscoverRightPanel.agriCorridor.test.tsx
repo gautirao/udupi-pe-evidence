@@ -109,17 +109,20 @@ interface RenderProps {
   selectedRegion?: string | null;
   selectedMaxKm?: 10 | 25 | 50 | 100 | null;
   onSetRegion?: (dir: string) => void;
+  onSetRegionWithMaxKm?: (dir: string, km?: number) => void;
   onSetMaxKm?: (km: 10 | 25 | 50 | 100) => void;
   onClearRegionAndMaxKm?: () => void;
 }
 
 function renderPanel(props: RenderProps = {}) {
   const onSetRegion = props.onSetRegion ?? vi.fn();
+  const onSetRegionWithMaxKm = props.onSetRegionWithMaxKm ?? vi.fn();
   const onSetMaxKm = props.onSetMaxKm ?? vi.fn();
   const onClearRegionAndMaxKm = props.onClearRegionAndMaxKm ?? vi.fn();
 
   return {
     onSetRegion,
+    onSetRegionWithMaxKm,
     onSetMaxKm,
     onClearRegionAndMaxKm,
     ...render(
@@ -137,6 +140,7 @@ function renderPanel(props: RenderProps = {}) {
             selectedRegion={props.selectedRegion ?? null}
             selectedMaxKm={props.selectedMaxKm ?? null}
             onSetRegion={onSetRegion}
+            onSetRegionWithMaxKm={onSetRegionWithMaxKm}
             onSetMaxKm={onSetMaxKm}
             onClearRegionAndMaxKm={onClearRegionAndMaxKm}
           />
@@ -183,17 +187,17 @@ describe('DiscoverRightPanel agri corridor — Level 1: corridor cards', () => {
     expect(screen.queryByTestId('corridor-landing-empty')).not.toBeInTheDocument();
   });
 
-  it('calls onSetRegion with directionCode when a corridor card is clicked', async () => {
+  it('calls onSetRegionWithMaxKm with directionCode when a corridor card is clicked', async () => {
     const user = userEvent.setup();
-    const onSetRegion = vi.fn();
-    renderPanel({ onSetRegion, selectedRegion: null });
+    const onSetRegionWithMaxKm = vi.fn();
+    renderPanel({ onSetRegionWithMaxKm, selectedRegion: null });
 
     const cards = screen.getAllByTestId('corridor-card');
     // Click first card (N towards Brahmavar)
     await user.click(cards[0]);
 
-    expect(onSetRegion).toHaveBeenCalledWith('N');
-    expect(onSetRegion).toHaveBeenCalledTimes(1);
+    expect(onSetRegionWithMaxKm).toHaveBeenCalledWith('N');
+    expect(onSetRegionWithMaxKm).toHaveBeenCalledTimes(1);
   });
 });
 

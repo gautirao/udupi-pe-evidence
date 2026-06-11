@@ -30,7 +30,8 @@ interface CorridorLandingPanelProps {
   isLoading: boolean;
   selectedRegion: string | null;
   selectedMaxKm: 10 | 25 | 50 | 100 | null;
-  onSetRegion: (dir: string) => void;
+  /** Called when a corridor card is clicked — sets both region and default maxKm in one PUSH. */
+  onSetRegionWithMaxKm: (dir: string, km?: number) => void;
   onSetMaxKm: (km: 10 | 25 | 50 | 100) => void;
   onClearRegionAndMaxKm: () => void;
   discoverAreas?: DiscoverArea[];
@@ -42,7 +43,7 @@ function CorridorLandingPanel({
   isLoading,
   selectedRegion,
   selectedMaxKm,
-  onSetRegion,
+  onSetRegionWithMaxKm,
   onSetMaxKm,
   onClearRegionAndMaxKm,
 }: CorridorLandingPanelProps) {
@@ -148,7 +149,7 @@ function CorridorLandingPanel({
           key={corridor.directionCode}
           type="button"
           data-testid="corridor-card"
-          onClick={() => onSetRegion(corridor.directionCode)}
+          onClick={() => onSetRegionWithMaxKm(corridor.directionCode)}
           className="w-full rounded-lg border border-border bg-card hover:bg-muted/50 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`Select corridor ${corridor.groupName}`}
         >
@@ -231,6 +232,11 @@ export interface DiscoverRightPanelProps {
   selectedMaxKm?: 10 | 25 | 50 | 100 | null;
   /** Called when the user selects a corridor direction. */
   onSetRegion?: (dir: string) => void;
+  /**
+   * Called when the user clicks a corridor card — sets both region and default maxKm atomically.
+   * Replaces the two-step setRegion + pick-distance flow (Issue #1445).
+   */
+  onSetRegionWithMaxKm?: (dir: string, km?: number) => void;
   /** Called when the user selects a cumulative distance tier. */
   onSetMaxKm?: (km: 10 | 25 | 50 | 100) => void;
   /** Called when the user clears both corridor + distance selection. */
@@ -403,6 +409,7 @@ export function DiscoverRightPanel({
   selectedRegion = null,
   selectedMaxKm = null,
   onSetRegion,
+  onSetRegionWithMaxKm,
   onSetMaxKm,
   onClearRegionAndMaxKm,
   onSelectSchool,
@@ -498,7 +505,7 @@ export function DiscoverRightPanel({
               isLoading={isLoadingRegionalGroups}
               selectedRegion={selectedRegion}
               selectedMaxKm={selectedMaxKm}
-              onSetRegion={onSetRegion ?? (() => {})}
+              onSetRegionWithMaxKm={onSetRegionWithMaxKm ?? (() => {})}
               onSetMaxKm={onSetMaxKm ?? (() => {})}
               onClearRegionAndMaxKm={onClearRegionAndMaxKm ?? (() => {})}
               discoverAreas={discoverAreas}
@@ -695,6 +702,11 @@ export function DiscoverRightPanel({
               // a full-page navigation). onSelectAgriGroupListing falls back to navigate
               // for compatibility when the prop is not provided (e.g. older tests).
               onSelectListing={onSelectAgriGroupListing ?? ((id) => navigate(`/listing/${id}`))}
+              // Issue #1445: thread distance chip props so the selected panel
+              // renders the chip row with the correct selected tier visible.
+              selectedMaxKm={selectedMaxKm ?? null}
+              availableMaxDistances={corridorGroups?.find((c) => c.directionCode === selectedRegion)?.availableMaxDistances}
+              onSetMaxKm={onSetMaxKm ?? (() => {})}
             />
           </>
         );

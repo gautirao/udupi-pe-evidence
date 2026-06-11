@@ -256,6 +256,13 @@ export interface DiscoverUrlActions {
    */
   setRegion: (dir: string) => void;
   /**
+   * Set corridor direction AND default distance tier atomically (Issue #1445).
+   * Writes `region=DIR&maxKm=km` in a SINGLE PUSH, skipping the intermediate
+   * agri-landing state where only region is set. Default km = DEFAULT_MAX_KM (25).
+   * Silently no-ops when dir is not a valid direction or km is not in VALID_MAX_KM.
+   */
+  setRegionWithMaxKm: (dir: string, km?: number) => void;
+  /**
    * Set the cumulative distance tier (Issue #1429).
    * Writes `maxKm=N` to URL. PUSH. Region must already be set.
    */
@@ -305,6 +312,7 @@ const LAT_LON_PRECISION = 5;
 
 const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
 const VALID_MAX_KM = new Set([10, 25, 50, 100]);
+export const DEFAULT_MAX_KM = 25;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -584,6 +592,47 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     // Only run on mount (urlParams identity changes each render, so dep array is empty).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ─── Issue #1445: Cold-load canonicalisation: region=DIR without maxKm ───────
+  // When a URL is loaded with region=DIR but no maxKm (e.g. a URL produced by the
+  // old setRegion-only flow or the OD-1 migration), automatically backfill
+  // maxKm=DEFAULT_MAX_KM via REPLACE so derivePanelContent returns 'agri-group-selected'.
+  //
+  // This runs only for cold-load URLs — NOT for in-session setRegion() calls (which
+  // intentionally land on agri-landing so the user can pick a distance tier). We gate
+  // via a ref that becomes true after the first fire so the effect never fires again on
+  // subsequent state changes produced by user navigation actions.
+  //
+  // For OD-1 URLs (group=DIR:BAND): the OD-1 effect fires on mount and sets region=DIR.
+  // hasLegacyGroupParam is true on that first render, so we reset the ref and return.
+  // On the next render (after OD-1 REPLACE settles), hasLegacyGroupParam becomes false,
+  // selectedRegion is now set, and the canonicalisation fires correctly.
+  //
+  // hasLegacyGroupParam is derived in render scope (not inside the effect) to avoid a
+  // stale-closure bug — including it in deps ensures the effect sees the current value.
+  const hasLegacyGroupParam = rawGroupLegacy !== null;
+  const coldLoadDoneRef = useRef(false);
+  useEffect(() => {
+    if (coldLoadDoneRef.current) return; // Only fire once per cold-load sequence
+    coldLoadDoneRef.current = true;
+    if (hasLegacyGroupParam) {
+      // OD-1 migration (group=DIR:BAND → region=DIR) is in-flight on this mount.
+      // Reset ref so the effect can fire after OD-1 settles and exposes region=DIR.
+      coldLoadDoneRef.current = false;
+      return;
+    }
+    if (selectedRegion !== null && selectedMaxKm === null) {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('maxKm', String(DEFAULT_MAX_KM));
+          return next;
+        },
+        { replace: true }, // REPLACE — canonicalisation must not create a phantom history entry
+      );
+    }
+  }, [selectedRegion, selectedMaxKm, hasLegacyGroupParam, setUrlParams]);
+  // No eslint-disable needed — all consumed values are in the deps array.
 
   // ─── Actions ─────────────────────────────────────────────────────────────
 
@@ -1104,6 +1153,24 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     [setUrlParams],
   );
 
+  const setRegionWithMaxKm = useCallback(
+    (dir: string, km: number = DEFAULT_MAX_KM) => {
+      // Silently no-op when either param is invalid
+      if (!VALID_DIRECTIONS.has(dir)) return;
+      if (!VALID_MAX_KM.has(km)) return;
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('region', dir);
+          next.set('maxKm', String(km));
+          return next;
+        },
+        { replace: false }, // PUSH — single history entry covering both region + maxKm
+      );
+    },
+    [setUrlParams],
+  );
+
   const setMaxKm = useCallback(
     (km: 10 | 25 | 50 | 100) => {
       setUrlParams(
@@ -1214,6 +1281,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     clearSchoolPicking,
     backToSchoolPicking,
     setRegion,
+    setRegionWithMaxKm,
     setMaxKm,
     clearRegionAndMaxKm,
     setSelectedListing,
