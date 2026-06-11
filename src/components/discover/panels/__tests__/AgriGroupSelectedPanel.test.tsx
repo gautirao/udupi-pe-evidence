@@ -349,3 +349,114 @@ describe('AgriGroupSelectedPanel — distance chip row', () => {
     expect(onSetMaxKm).not.toHaveBeenCalledWith(100);
   });
 });
+
+// ─── Issue #1464 — Locality grouping ─────────────────────────────────────────
+
+describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
+  it('groups listings from 2 different localities into 2 group sections', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva' }),
+      makeListing('a2', { locality: 'Hebri' }),
+      makeListing('a3', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
+    );
+    // Two locality group sections
+    expect(screen.getAllByTestId('agri-group-locality-group')).toHaveLength(2);
+  });
+
+  it('renders correct count label for each group (plural)', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva' }),
+      makeListing('a2', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns[0]).toHaveTextContent('2 agricultural properties');
+  });
+
+  it('renders correct count label for a single-item group (singular)', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={1} />,
+    );
+    const btn = screen.getByTestId('agri-group-locality-btn');
+    expect(btn).toHaveTextContent('1 agricultural property');
+  });
+
+  it('listing with null locality is grouped under its areaKey', () => {
+    const listing = makeListing('a1', { locality: null, areaKey: 'IN|KA|Udupi|Kota' });
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={[listing]} listingCount={1} />,
+    );
+    // Group header shows the areaKey
+    const btn = screen.getByTestId('agri-group-locality-btn');
+    expect(btn).toHaveTextContent('IN|KA|Udupi|Kota');
+  });
+
+  it('groups are sorted alphabetically regardless of input order', () => {
+    // Input order: Zebra then Apple then Mango — groups must appear A, M, Z
+    const listings = [
+      makeListing('a3', { locality: 'Zebra' }),
+      makeListing('a1', { locality: 'Apple' }),
+      makeListing('a2', { locality: 'Mango' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
+    );
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns[0]).toHaveTextContent('Apple');
+    expect(btns[1]).toHaveTextContent('Mango');
+    expect(btns[2]).toHaveTextContent('Zebra');
+  });
+
+  it('within-group listing rows are sorted by id ascending', async () => {
+    // Input order: z3, z1, z2 (descending by name) → rendered order must be z1, z2, z3
+    const user = userEvent.setup();
+    const onSelectListing = vi.fn();
+    const listings = [
+      makeListing('z3', { locality: 'Shirva' }),
+      makeListing('z1', { locality: 'Shirva' }),
+      makeListing('z2', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={listings}
+        listingCount={3}
+        onSelectListing={onSelectListing}
+      />,
+    );
+    // All 3 are in one group (same locality), order must be id-ascending
+    const rows = screen.getAllByTestId('agri-group-listing-row');
+    expect(rows).toHaveLength(3);
+    // Click the first row — it must correspond to z1 (lowest id lexicographically)
+    await user.click(rows[0]);
+    expect(onSelectListing).toHaveBeenCalledWith('z1');
+  });
+
+  it('clicking a locality group button calls onSelectLocality with the locality name', async () => {
+    const user = userEvent.setup();
+    const onSelectLocality = vi.fn();
+    const listings = [
+      makeListing('a1', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={listings}
+        listingCount={1}
+        onSelectLocality={onSelectLocality}
+      />,
+    );
+    const btn = screen.getByTestId('agri-group-locality-btn');
+    await user.click(btn);
+    expect(onSelectLocality).toHaveBeenCalledTimes(1);
+    expect(onSelectLocality).toHaveBeenCalledWith('Shirva');
+  });
+});

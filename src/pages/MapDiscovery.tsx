@@ -1897,6 +1897,10 @@ export default function MapDiscovery() {
           selectedGroupListingItem={selectedGroupListingItem}
           onCloseGroupPeek={() => urlActions.clearSelectedListing()}
           onViewGroupListingDetails={(id) => navigate(`/listing/${id}`)}
+          // Issue #1464 — agri-group-locality drill-down wiring.
+          selectedLocality={urlState.selectedLocality ?? null}
+          onSetLocality={(locality) => urlActions.setLocality(locality)}
+          onClearLocality={() => urlActions.clearLocality()}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

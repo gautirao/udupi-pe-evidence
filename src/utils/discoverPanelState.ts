@@ -12,6 +12,7 @@
  *   agri-selected         — agri-first journey, areaKey present (Issue #1371)
  *   agri-group-selected   — agri-first journey, regional group selected, no areaKey (Issue #1425)
  *   agri-group-peek       — agri-first journey, regional group selected + specific listing chosen (Issue #1430)
+ *   agri-group-locality   — agri-first journey, regional group selected + locality drill-down (Issue #1464)
  *   area-groups-landing   — area-first journey, no areaKey yet (always; groupId optional)
  *   area-selected         — area-first journey, area selected (areaKey present)
  *   school-browse         — school-first journey, no school selected
@@ -28,6 +29,7 @@ export type DiscoverPanelContent =
   | 'agri-selected'
   | 'agri-group-selected'
   | 'agri-group-peek'
+  | 'agri-group-locality'
   | 'agri-detail'
   | 'area-groups-landing'
   | 'area-selection'
@@ -52,7 +54,7 @@ export type DiscoverPanelContent =
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
-  const { journey, areaKey, schoolId, groupId, schoolPicking, selectedGroup, selectedRegion, selectedMaxKm, selectedListing } = urlState;
+  const { journey, areaKey, schoolId, groupId, schoolPicking, selectedGroup, selectedRegion, selectedMaxKm, selectedListing, selectedLocality } = urlState;
 
   // MVP2 — agri-first is checked FIRST (before every other branch, including the
   // area/school cold-load inferences below) so a stray schoolId / groupId / schoolPicking
@@ -73,9 +75,15 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
       return 'agri-selected';
     }
     // Issue #1430: region + maxKm + listing all set → agri-group-peek (Level-2 peek)
-    // Must come BEFORE agri-group-selected so a listing selection opens the peek panel.
+    // Must come BEFORE agri-group-locality and agri-group-selected so a listing
+    // selection opens the peek panel even when a locality is also set.
     if (selectedRegion != null && selectedMaxKm != null && selectedListing != null) {
       return 'agri-group-peek';
+    }
+    // Issue #1464: region + maxKm + locality set (no listing) → agri-group-locality drill-down.
+    // Placed AFTER peek check (listing wins) and BEFORE agri-group-selected.
+    if (selectedRegion != null && selectedMaxKm != null && selectedLocality != null) {
+      return 'agri-group-locality';
     }
     // Issue #1429: both region + maxKm set → agri-group-selected
     // (optional fields — undefined treated as null/not-set)

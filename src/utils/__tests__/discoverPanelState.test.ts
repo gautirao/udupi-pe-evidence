@@ -455,6 +455,67 @@ describe('derivePanelContent — agri-group-selected via region+maxKm (Issue #14
   });
 });
 
+// ─── Issue #1464: agri-group-locality routing ─────────────────────────────────
+
+describe('derivePanelContent — agri-group-locality (Issue #1464)', () => {
+  // Core: region + maxKm + locality (no listing) → agri-group-locality
+  it('agri-first + region + maxKm + locality (no listing) → agri-group-locality', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedRegion: 'S',
+          selectedMaxKm: 25,
+          selectedLocality: 'Shirva',
+        }),
+      ),
+    ).toBe('agri-group-locality');
+  });
+
+  // Listing wins over locality — peek takes priority
+  it('agri-first + region + maxKm + listing + locality → agri-group-peek (peek wins)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedRegion: 'S',
+          selectedMaxKm: 25,
+          selectedListing: 'some-listing-uuid',
+          selectedLocality: 'Shirva',
+        }),
+      ),
+    ).toBe('agri-group-peek');
+  });
+
+  // No locality → agri-group-selected (unchanged fallthrough)
+  it('agri-first + region + maxKm + no locality → agri-group-selected', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          selectedRegion: 'S',
+          selectedMaxKm: 25,
+        }),
+      ),
+    ).toBe('agri-group-selected');
+  });
+
+  // areaKey always wins — agri-selected is returned even when locality is set
+  it('agri-first + areaKey + region + maxKm + locality → agri-selected (areaKey wins)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'agri-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          selectedRegion: 'S',
+          selectedMaxKm: 25,
+          selectedLocality: 'Shirva',
+        }),
+      ),
+    ).toBe('agri-selected');
+  });
+});
+
 // ─── Issue #1157: area-first "add a school in this area" sub-step ──────────────
 
 describe('area-first school-picking sub-step (Issue #1157)', () => {

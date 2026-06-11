@@ -140,6 +140,13 @@ export interface DiscoverUrlState {
    * Optional to allow partial construction in tests/callers.
    */
   selectedListing?: string | null;
+  /**
+   * Selected locality name for the agri-group-locality drill-down panel (Issue #1464).
+   * Parsed from URL `locality` param (plain string). Null when absent or empty.
+   * Only meaningful when selectedRegion + selectedMaxKm are also set (agri-group context).
+   * Optional to allow partial construction in tests/callers.
+   */
+  selectedLocality?: string | null;
 }
 
 export interface DiscoverUrlActions {
@@ -284,6 +291,18 @@ export interface DiscoverUrlActions {
    */
   clearSelectedListing: () => void;
   /**
+   * Drill into a locality group within the agri-group-selected panel (Issue #1464).
+   * Writes `locality=<name>` to URL. PUSH — locality drill-down is a navigational destination
+   * so browser Back returns to the grouped view.
+   */
+  setLocality: (name: string) => void;
+  /**
+   * Close the agri-group-locality panel (Issue #1464).
+   * Removes `locality=` only; preserves region, maxKm, journey, city, and all other params.
+   * REPLACE — closing is not a new navigation destination.
+   */
+  clearLocality: () => void;
+  /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
    * together for correct panel routing. Only used when transitioning to school-first journey
@@ -309,6 +328,7 @@ export interface DiscoverUrlActions {
 
 const DEBOUNCE_MS = 300;
 const LAT_LON_PRECISION = 5;
+const PARAM_LOCALITY = 'locality';
 
 const VALID_DIRECTIONS = new Set(['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']);
 const VALID_MAX_KM = new Set([10, 25, 50, 100]);
@@ -541,6 +561,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   const rawListing = urlParams.get('listing');
   const selectedListing: string | null = rawListing && rawListing.length > 0 ? rawListing : null;
 
+  // Issue #1464 — agri-group-locality drill-down. Plain string from `locality` URL param.
+  // useSearchParams.get() returns the already-decoded value (no manual decodeURIComponent needed).
+  const rawLocality = urlParams.get(PARAM_LOCALITY);
+  const selectedLocality: string | null = rawLocality && rawLocality.length > 0 ? rawLocality : null;
+
   const state: DiscoverUrlState = {
     city,
     areaKey,
@@ -556,6 +581,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectedRegion,
     selectedMaxKm,
     selectedListing,
+    selectedLocality,
   };
 
   // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
@@ -862,6 +888,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           next.delete('group'); // Issue #1409 — clear agri-first regional group on city switch
           next.delete('region'); // Issue #1429 — clear corridor on city switch
           next.delete('maxKm'); // Issue #1429 — clear distance tier on city switch
+          next.delete(PARAM_LOCALITY); // Issue #1464 — clear locality on city switch (stale locality from old city would mismatch new city's listings)
           next.delete('areaKey');
           // Clear viewport — new city has its own default zoom/center
           next.delete('lat');
@@ -1200,6 +1227,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         // A listing peek is only meaningful within a region+maxKm context; clearing the
         // corridor makes the peek unreachable and must not leave a stale `listing=` in the URL.
         next.delete('listing');
+        // Issue #1464 — atomically remove locality drill-down when clearing the corridor.
+        // A locality selection is only meaningful within a region+maxKm context; leaving a
+        // stale `locality=` would cause derivePanelContent to route to agri-group-locality
+        // on the next region+maxKm selection instead of agri-group-selected.
+        next.delete(PARAM_LOCALITY);
         return next;
       },
       { replace: false }, // PUSH — clearing is a navigational step (Back restores)
@@ -1234,6 +1266,40 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         return next;
       },
       { replace: true }, // REPLACE — closing is not a new destination
+    );
+  }, [setUrlParams]);
+
+  // ─── Issue #1464: Agri-group-locality drill-down ─────────────────────────────
+
+  const setLocality = useCallback(
+    (name: string) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (name) {
+            // setUrlParams (URLSearchParams.set) auto-encodes the value.
+            // We pass the plain decoded string; it is percent-encoded on write
+            // and decoded back by .get() on the next render.
+            next.set(PARAM_LOCALITY, name);
+          } else {
+            next.delete(PARAM_LOCALITY);
+          }
+          return next;
+        },
+        { replace: false }, // PUSH — locality drill-down is a navigational destination; Back returns to grouped view
+      );
+    },
+    [setUrlParams],
+  );
+
+  const clearLocality = useCallback(() => {
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(PARAM_LOCALITY);
+        return next;
+      },
+      { replace: true }, // REPLACE — closing locality view is not a new destination
     );
   }, [setUrlParams]);
 
@@ -1286,6 +1352,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     clearRegionAndMaxKm,
     setSelectedListing,
     clearSelectedListing,
+    setLocality,
+    clearLocality,
   };
 
   return [state, actions];

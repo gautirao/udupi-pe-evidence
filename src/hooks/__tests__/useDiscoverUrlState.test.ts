@@ -2529,3 +2529,165 @@ describe('useDiscoverUrlState — cold-load canonicalisation (Issue #1445)', () 
     expect(result.current[0].selectedMaxKm).toBe(10);
   });
 });
+
+// ─── Issue #1464: setLocality / clearLocality ─────────────────────────────────
+
+describe('useDiscoverUrlState — setLocality / clearLocality (Issue #1464)', () => {
+  it('setLocality("Shirva") writes locality=Shirva to URL state', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=S&maxKm=25'),
+    });
+
+    act(() => {
+      result.current[1].setLocality('Shirva');
+    });
+
+    expect(result.current[0].selectedLocality).toBe('Shirva');
+  });
+
+  it('round-trip: setLocality("Coastal Udupi Area") → selectedLocality decodes back to plain string', () => {
+    // URLSearchParams.set auto-encodes spaces; .get auto-decodes. No double-encoding.
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=S&maxKm=25'),
+    });
+
+    act(() => {
+      result.current[1].setLocality('Coastal Udupi Area');
+    });
+
+    expect(result.current[0].selectedLocality).toBe('Coastal Udupi Area');
+  });
+
+  it('round-trip: setLocality("Hebri & Surrounds") → selectedLocality decodes back to plain string (special char)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=S&maxKm=25'),
+    });
+
+    act(() => {
+      result.current[1].setLocality('Hebri & Surrounds');
+    });
+
+    expect(result.current[0].selectedLocality).toBe('Hebri & Surrounds');
+  });
+
+  it('selectedLocality is null when locality param is absent from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=agri-first&region=S&maxKm=25'),
+    });
+
+    expect(result.current[0].selectedLocality).toBeNull();
+  });
+
+  it('clearLocality removes locality param only, preserves region and maxKm', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=S&maxKm=25&locality=Shirva',
+      ),
+    });
+
+    // Confirm initial state
+    expect(result.current[0].selectedLocality).toBe('Shirva');
+
+    act(() => {
+      result.current[1].clearLocality();
+    });
+
+    // locality removed
+    expect(result.current[0].selectedLocality).toBeNull();
+    // region + maxKm preserved
+    expect(result.current[0].selectedRegion).toBe('S');
+    expect(result.current[0].selectedMaxKm).toBe(25);
+  });
+});
+
+// ─── BLOCKING FIX #1464: clearRegionAndMaxKm and changeCity must clear locality ─
+//
+// Regression guard for the two BLOCKING code-review findings on this PR:
+//   1. clearRegionAndMaxKm must atomically delete locality= alongside region/maxKm/listing.
+//      Without this fix a stale locality= survives the corridor clear, and the next
+//      region+maxKm selection routes to agri-group-locality instead of agri-group-selected.
+//   2. changeCity must delete locality= alongside the other journey params it clears.
+//      Without this fix a stale locality= from the old city survives the city switch
+//      and on the new city's agri-group selection derivePanelContent routes to
+//      agri-group-locality with a locality name belonging to the wrong city.
+
+describe('useDiscoverUrlState — clearRegionAndMaxKm clears locality (BLOCKING fix #1464)', () => {
+  it('clears locality= when clearRegionAndMaxKm is called', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Shirva',
+      ),
+    });
+
+    // Confirm locality is present before the action
+    expect(result.current[0].selectedLocality).toBe('Shirva');
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+
+    // locality must be cleared atomically with region and maxKm
+    expect(result.current[0].selectedLocality).toBeNull();
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+  });
+
+  it('clears locality= AND listing= AND region= AND maxKm= all atomically', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Shirva&listing=some-uuid',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearRegionAndMaxKm();
+    });
+
+    expect(result.current[0].selectedLocality).toBeNull();
+    expect(result.current[0].selectedListing).toBeNull();
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+    // city and journey preserved
+    expect(result.current[0].city).toBe('udupi');
+    expect(result.current[0].journey).toBe('agri-first');
+  });
+});
+
+describe('useDiscoverUrlState — changeCity clears locality (BLOCKING fix #1464)', () => {
+  it('clears locality= when changeCity is called', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Shirva',
+      ),
+    });
+
+    // Confirm locality is present before the action
+    expect(result.current[0].selectedLocality).toBe('Shirva');
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    // locality from old city must be gone after switch
+    expect(result.current[0].selectedLocality).toBeNull();
+    // new city set
+    expect(result.current[0].city).toBe('kundapur');
+  });
+
+  it('clears locality together with region and maxKm on city switch', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapperWithQuery(
+        '/discover?city=udupi&journey=agri-first&region=S&maxKm=50&locality=Hebri',
+      ),
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    expect(result.current[0].selectedLocality).toBeNull();
+    expect(result.current[0].selectedRegion).toBeNull();
+    expect(result.current[0].selectedMaxKm).toBeNull();
+    expect(result.current[0].city).toBe('kundapur');
+  });
+});

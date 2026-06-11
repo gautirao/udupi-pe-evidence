@@ -22,6 +22,8 @@ interface AgriGroupSelectedPanelProps {
   availableMaxDistances: CumulativeDistanceTier[] | undefined;
   /** Issue #1445 — called when user selects a distance tier chip. */
   onSetMaxKm: (km: 10 | 25 | 50 | 100) => void;
+  /** Issue #1464 — called when user clicks a locality group to drill in. */
+  onSelectLocality?: (localityKey: string) => void;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -53,11 +55,32 @@ export function AgriGroupSelectedPanel({
   selectedMaxKm,
   availableMaxDistances,
   onSetMaxKm,
+  onSelectLocality,
 }: AgriGroupSelectedPanelProps) {
   // Sort distance tiers ascending by maxKm for consistent display order.
   const sortedTiers = availableMaxDistances
     ? [...availableMaxDistances].sort((a, b) => a.maxKm - b.maxKm)
     : [];
+
+  // Issue #1464 — group listings by locality (fallback to areaKey when locality is null).
+  // SORT 1 — group order: alphabetical (locale-aware, case-insensitive).
+  // SORT 2 — within-group listing order: stable id ascending.
+  const sortedGroups: [string, AgriMapListingItem[]][] = React.useMemo(() => {
+    if (!listings || listings.length === 0) return [];
+    const groupMap = new Map<string, AgriMapListingItem[]>();
+    for (const item of listings) {
+      const key = item.locality ?? item.areaKey;
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.push(item);
+      } else {
+        groupMap.set(key, [item]);
+      }
+    }
+    return [...groupMap.entries()].sort(([a], [b]) =>
+      a.localeCompare(b, 'en', { sensitivity: 'base' }),
+    );
+  }, [listings]);
   return (
     <div
       data-testid="agri-group-selected-panel"
@@ -183,32 +206,56 @@ export function AgriGroupSelectedPanel({
             data-testid="agri-group-listings-list"
             className="divide-y divide-border"
           >
-            {listings.map((item) => (
-              <div
-                key={item.id}
-                data-testid="agri-group-listing-row"
-                className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectListing(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectListing(item.id);
-                  }
-                }}
-              >
-                <p className="text-sm font-medium text-foreground truncate">
-                  {item.locality ?? item.areaKey ?? item.id}
-                </p>
-                {item.landArea != null && item.landAreaUnit && (
-                  <p
-                    className="text-xs text-green-700 dark:text-green-400 mt-0.5"
-                    data-testid="agri-group-land-area"
-                  >
-                    {item.landArea} {item.landAreaUnit}
-                  </p>
-                )}
+            {sortedGroups.map(([localityKey, groupListings]) => (
+              <div key={localityKey} data-testid="agri-group-locality-group">
+                {/* Locality group header — clicking drills into that town's listings */}
+                <button
+                  type="button"
+                  data-testid="agri-group-locality-btn"
+                  aria-label={`View ${localityKey} properties`}
+                  onClick={() => onSelectLocality?.(localityKey)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/30 hover:bg-muted/60 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="text-sm font-semibold text-foreground truncate">
+                    {localityKey}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                    {groupListings.length}{' '}
+                    agricultural{' '}
+                    {groupListings.length === 1 ? 'property' : 'properties'}
+                  </span>
+                </button>
+                {/* Listings within this locality group, sorted by id ascending */}
+                {[...groupListings]
+                  .sort((a, b) => a.id.localeCompare(b.id))
+                  .map((item) => (
+                    <div
+                      key={item.id}
+                      data-testid="agri-group-listing-row"
+                      className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onSelectListing(item.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectListing(item.id);
+                        }
+                      }}
+                    >
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {item.title ?? item.locality ?? item.areaKey ?? item.id}
+                      </p>
+                      {item.landArea != null && item.landAreaUnit && (
+                        <p
+                          className="text-xs text-green-700 dark:text-green-400 mt-0.5"
+                          data-testid="agri-group-land-area"
+                        >
+                          {item.landArea} {item.landAreaUnit}
+                        </p>
+                      )}
+                    </div>
+                  ))}
               </div>
             ))}
           </div>

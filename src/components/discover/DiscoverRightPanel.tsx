@@ -21,6 +21,7 @@ import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
 import { AgriGroupListingPeek } from './panels/AgriGroupListingPeek';
+import { AgriGroupLocalityPanel } from './panels/AgriGroupLocalityPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
@@ -412,6 +413,22 @@ export interface DiscoverRightPanelProps {
    * Falls back to no-op when undefined (safe for tests / storybook usage).
    */
   onSelectAgriGroupListing?: (id: string) => void;
+  // ── Agri-group-locality panel (Issue #1464) ────────────────────────────────
+  /**
+   * Currently selected locality name for the drill-down panel.
+   * Null when no locality is active.
+   */
+  selectedLocality?: string | null;
+  /**
+   * Called when the user clicks a locality group row in AgriGroupSelectedPanel.
+   * Should call urlActions.setLocality(locality) (PUSH semantics).
+   */
+  onSetLocality?: (locality: string) => void;
+  /**
+   * Called when the user closes the agri-group-locality panel.
+   * Should call urlActions.clearLocality() (REPLACE semantics).
+   */
+  onClearLocality?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -484,6 +501,9 @@ export function DiscoverRightPanel({
   onCloseGroupPeek,
   onViewGroupListingDetails,
   onSelectAgriGroupListing,
+  selectedLocality = null,
+  onSetLocality,
+  onClearLocality,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -719,6 +739,32 @@ export function DiscoverRightPanel({
           />
         );
 
+      case 'agri-group-locality': {
+        // Issue #1464 — drill-down showing listings for a single locality within
+        // the selected agri regional group. Activated when locality= is set in URL.
+        const localityListings = (agriGroupListings ?? []).filter(
+          (l) => (l.locality ?? l.areaKey) === selectedLocality,
+        );
+        return (
+          <>
+            <PanelHeader
+              title="Agricultural land"
+              journey="agri-first"
+              onStartOver={onStartOver}
+            />
+            <AgriGroupLocalityPanel
+              localityName={selectedLocality ?? ''}
+              listings={localityListings}
+              isLoading={isLoadingAgriGroupListings ?? false}
+              isError={isAgriGroupListingsError ?? false}
+              onRetry={onRetryAgriGroupListings ?? (() => {})}
+              onSelectListing={onSelectAgriGroupListing ?? ((id) => navigate(`/listing/${id}`))}
+              onClose={onClearLocality ?? (() => {})}
+            />
+          </>
+        );
+      }
+
       case 'agri-group-selected':
         // Issue #1425 — agri-first journey with a regional group selected but no
         // specific areaKey yet. Shows agri map listings for all areas in the group.
@@ -746,6 +792,8 @@ export function DiscoverRightPanel({
               selectedMaxKm={selectedMaxKm ?? null}
               availableMaxDistances={corridorGroups?.find((c) => c.directionCode === selectedRegion)?.availableMaxDistances}
               onSetMaxKm={onSetMaxKm ?? (() => {})}
+              // Issue #1464: locality drill-down
+              onSelectLocality={onSetLocality}
             />
           </>
         );
@@ -929,6 +977,7 @@ export function DiscoverRightPanel({
     'agri-selected',
     'agri-group-selected',
     'agri-group-peek',
+    'agri-group-locality',
     'agri-detail',
     'schools-in-area',
     'school-selected',
