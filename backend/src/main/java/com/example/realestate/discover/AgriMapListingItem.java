@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AgriMapListingItem(
         String id,
+        String title,
         String areaKey,
         Double latitude,
         Double longitude,

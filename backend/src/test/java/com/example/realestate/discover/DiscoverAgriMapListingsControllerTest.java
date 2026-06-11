@@ -100,7 +100,8 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_validRequest_returnsCorrectShape() throws Exception {
         AgriMapListingItem item = new AgriMapListingItem(
-                "listing-id-1", "IN|KA|Udupi|Area1",
+                "listing-id-1", "3-Acre Farmland, Kundapur",
+                "IN|KA|Udupi|Area1",
                 13.3, 74.7,
                 "agricultural_land", "Kundapur",
                 "{\"type\":\"Polygon\",\"coordinates\":[]}",
@@ -117,6 +118,7 @@ class DiscoverAgriMapListingsControllerTest {
                 .andExpect(jsonPath("$.city", is("udupi")))
                 .andExpect(jsonPath("$.listings", hasSize(1)))
                 .andExpect(jsonPath("$.listings[0].id", is("listing-id-1")))
+                .andExpect(jsonPath("$.listings[0].title", is("3-Acre Farmland, Kundapur")))
                 .andExpect(jsonPath("$.listings[0].areaKey", is("IN|KA|Udupi|Area1")))
                 .andExpect(jsonPath("$.listings[0].latitude", is(13.3)))
                 .andExpect(jsonPath("$.listings[0].longitude", is(74.7)))
@@ -131,7 +133,8 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_responseJson_containsNoPiiFields() throws Exception {
         AgriMapListingItem item = new AgriMapListingItem(
-                "id-pii-check", "IN|KA|Udupi|Area1",
+                "id-pii-check", "PII Check Farmland",
+                "IN|KA|Udupi|Area1",
                 13.3, 74.7, "agricultural_land", "TestLocality",
                 null, null, null, null, null
         );
@@ -156,6 +159,9 @@ class DiscoverAgriMapListingsControllerTest {
         assertThat(responseBody).doesNotContainIgnoringCase("internalNotes");
         // status is not included in the DTO
         assertThat(responseBody).doesNotContain("\"status\"");
+        // title IS present (public-safe listing title)
+        assertThat(responseBody).contains("\"title\"");
+        assertThat(responseBody).contains("PII Check Farmland");
     }
 
     // ── AC3: Cache-Control: public, max-age=120 ───────────────────────────────
@@ -225,11 +231,11 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_multipleAreaKeys_returnsCorrectSet() throws Exception {
         AgriMapListingItem item1 = new AgriMapListingItem(
-                "id-1", "IN|KA|Udupi|Area1", 13.3, 74.7,
+                "id-1", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Area1", null,
                 null, null, null, null);
         AgriMapListingItem item2 = new AgriMapListingItem(
-                "id-2", "IN|KA|Udupi|Area2", 13.4, 74.8,
+                "id-2", null, "IN|KA|Udupi|Area2", 13.4, 74.8,
                 "agricultural_land", "Area2", null,
                 null, null, null, null);
 
@@ -251,7 +257,8 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_nullBoundaryGeoJson_omittedFromJson() throws Exception {
         AgriMapListingItem item = new AgriMapListingItem(
-                "id-null-boundary", "IN|KA|Udupi|Area1",
+                "id-null-boundary", null,
+                "IN|KA|Udupi|Area1",
                 13.3, 74.7, "agricultural_land", "Kundapur",
                 null, // boundaryGeoJson = null
                 null, null, null, null

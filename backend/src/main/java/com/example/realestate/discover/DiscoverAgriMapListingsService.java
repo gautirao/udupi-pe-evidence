@@ -33,6 +33,7 @@ public class DiscoverAgriMapListingsService {
     static final String BASE_SQL = """
             SELECT
                 pl.id,
+                pl.title,
                 pl.area_key,
                 pl.latitude,
                 pl.longitude,
@@ -137,6 +138,7 @@ public class DiscoverAgriMapListingsService {
                 sql,
                 (rs, rowNum) -> new AgriMapListingItem(
                         rs.getString("id"),
+                        rs.getString("title"),
                         rs.getString("area_key"),
                         rs.getObject("latitude") != null ? rs.getDouble("latitude") : null,
                         rs.getObject("longitude") != null ? rs.getDouble("longitude") : null,

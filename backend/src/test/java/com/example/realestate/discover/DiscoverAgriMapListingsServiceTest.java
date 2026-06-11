@@ -46,7 +46,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void findAgriMapListings_returnsAgriListingsForCity() throws SQLException {
-        AgriMapListingItem item = agriItem("id-1", "IN|KA|Udupi|Area1", 13.3, 74.7,
+        AgriMapListingItem item = agriItem("id-1", "2.5-Acre Farm, Kundapur", "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Kundapur", "{\"type\":\"Polygon\",...}",
                 new BigDecimal("2.5"), "acres", new BigDecimal("2.5"), 5000000L);
 
@@ -185,7 +185,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void findAgriMapListings_agriListingWithBoundary_boundaryGeoJsonPopulated() throws SQLException {
-        AgriMapListingItem item = agriItem("id-2", "IN|KA|Udupi|Area1", 13.3, 74.7,
+        AgriMapListingItem item = agriItem("id-2", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Koteshwara", "{\"type\":\"Polygon\"}",
                 null, null, null, null);
 
@@ -202,7 +202,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void findAgriMapListings_listingWithoutBoundary_boundaryGeoJsonNull() throws SQLException {
-        AgriMapListingItem item = agriItem("id-3", "IN|KA|Udupi|Area1", 13.3, 74.7,
+        AgriMapListingItem item = agriItem("id-3", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Koteshwara", null, // no boundary
                 null, null, null, null);
 
@@ -221,19 +221,20 @@ class DiscoverAgriMapListingsServiceTest {
         // Verify the record has only the declared public-safe fields
         // by checking that known-safe fields exist and no PII fields exist
         AgriMapListingItem item = new AgriMapListingItem(
-                "id", "area", 1.0, 2.0, "agricultural_land", "loc",
+                "id", "Test Agri Title", "area", 1.0, 2.0, "agricultural_land", "loc",
                 "{}", new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 100L);
 
         // Safe fields present
         assertThat(item.id()).isNotNull();
+        assertThat(item.title()).isNotNull();
         assertThat(item.areaKey()).isNotNull();
         assertThat(item.latitude()).isNotNull();
         assertThat(item.longitude()).isNotNull();
         assertThat(item.propertyType()).isNotNull();
         assertThat(item.pricePaise()).isNotNull();
 
-        // Record component count — must be exactly 11 (no extra fields)
-        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(11);
+        // Record component count — must be exactly 12 (no extra fields)
+        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(12);
 
         // Verify no fields named after PII or internal fields
         var fieldNames = java.util.Arrays.stream(AgriMapListingItem.class.getRecordComponents())
@@ -249,9 +250,9 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     @SuppressWarnings("unchecked")
     void findAgriMapListings_multipleAreaKeys_returnsAllMatchingListings() throws SQLException {
-        AgriMapListingItem item1 = agriItem("id-1", "IN|KA|Udupi|Area1", 13.3, 74.7,
+        AgriMapListingItem item1 = agriItem("id-1", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Area1", null, null, null, null, null);
-        AgriMapListingItem item2 = agriItem("id-2", "IN|KA|Udupi|Area2", 13.4, 74.8,
+        AgriMapListingItem item2 = agriItem("id-2", null, "IN|KA|Udupi|Area2", 13.4, 74.8,
                 "agricultural_land", "Area2", null, null, null, null, null);
 
         stubQuery(List.of(item1, item2));
@@ -277,6 +278,7 @@ class DiscoverAgriMapListingsServiceTest {
                     for (AgriMapListingItem item : items) {
                         ResultSet rs = mock(ResultSet.class);
                         when(rs.getString("id")).thenReturn(item.id());
+                        when(rs.getString("title")).thenReturn(item.title());
                         when(rs.getString("area_key")).thenReturn(item.areaKey());
                         when(rs.getObject("latitude")).thenReturn(item.latitude());
                         if (item.latitude() != null) {
@@ -302,13 +304,13 @@ class DiscoverAgriMapListingsServiceTest {
                 });
     }
 
-    private static AgriMapListingItem agriItem(String id, String areaKey,
+    private static AgriMapListingItem agriItem(String id, String title, String areaKey,
                                                Double lat, Double lon,
                                                String propertyType, String locality,
                                                String boundaryGeoJson,
                                                BigDecimal landArea, String landAreaUnit,
                                                BigDecimal computedAcres, Long pricePaise) {
-        return new AgriMapListingItem(id, areaKey, lat, lon, propertyType, locality,
+        return new AgriMapListingItem(id, title, areaKey, lat, lon, propertyType, locality,
                 boundaryGeoJson, landArea, landAreaUnit, computedAcres, pricePaise);
     }
 
@@ -324,5 +326,34 @@ class DiscoverAgriMapListingsServiceTest {
         assertThat(DiscoverAgriMapListingsService.BASE_SQL)
                 .contains("ST_Area(pl.boundary)")
                 .doesNotContain("pl.computed_area_acres");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("BASE_SQL SELECT includes pl.title and WHERE clause preserved verbatim")
+    void baseSql_includesTitleInSelectAndPreservesWhereClause() {
+        // Asserts that title is in the SELECT list
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL)
+                .contains("pl.title");
+        // WHERE clause preservation: LIVE/archived/duplicate filters must not be removed
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL)
+                .contains("pl.status = 'LIVE'")
+                .contains("pl.archived_at IS NULL")
+                .contains("pl.is_duplicate = false");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("Row mapper reads title from ResultSet getString(\"title\")")
+    void rowMapper_mapsTitleFromResultSet() throws SQLException {
+        AgriMapListingItem item = agriItem("id-title", "5-Acre Rice Farm, Hebri", "IN|KA|Udupi|Area1",
+                13.3, 74.7, "agricultural_land", "Hebri", null, null, null, null, null);
+
+        stubQuery(List.of(item));
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty());
+
+        assertThat(resp.listings()).hasSize(1);
+        assertThat(resp.listings().get(0).title()).isEqualTo("5-Acre Rice Farm, Hebri");
     }
 }

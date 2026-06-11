@@ -321,7 +321,7 @@ function adaptAgriMapListingsToMarkers(
         id: item.id,
         // PropertyType cast: the public endpoint returns 'agricultural_land' string
         property_type: item.propertyType as PropertyType,
-        title: null,
+        title: item.title ?? null,
         locality: item.locality ?? null,
         price: item.pricePaise != null ? item.pricePaise / 100 : null,
         price_unit: null,
@@ -968,6 +968,39 @@ function MarkerClusterLayer({
   return null;
 }
 
+/**
+ * Issue #1465 — Build a safe hover-tooltip label for an agri map marker.
+ *
+ * Priority: escaped title → locality + acreage fallback → acreage only →
+ * generic. Never returns "undefined", "null", or an empty string.
+ *
+ * Exported for unit testing; not part of the public component API.
+ */
+export function buildAgriMarkerLabel(
+  title: string | null | undefined,
+  locality: string | null | undefined,
+  landArea: number | null | undefined,
+  landAreaUnit: string | null | undefined,
+): string {
+  // Title takes priority when non-blank.
+  if (title != null && title.trim() !== '') {
+    return escapeHtml(title.trim());
+  }
+
+  // Derive a human-readable acreage string when possible.
+  const hasAcreage = landArea != null && landArea > 0;
+  const unit = landAreaUnit ?? 'acres';
+  const acreageStr = hasAcreage ? `${landArea} ${escapeHtml(unit)}` : null;
+
+  const hasLocality = locality != null && locality.trim() !== '';
+  const localityStr = hasLocality ? escapeHtml(locality!.trim()) : null;
+
+  if (localityStr && acreageStr) return `${localityStr} · ${acreageStr}`;
+  if (acreageStr) return acreageStr;
+  if (localityStr) return localityStr;
+  return 'Agricultural land';
+}
+
 // Issue #1372 — agriculture-specific cluster layer.
 // Identical structure to MarkerClusterLayer but uses agri-themed cluster icons
 // so agricultural land pins are visually distinct in the agri-first journey.
@@ -1018,6 +1051,19 @@ function AgriMarkerClusterLayer({
 
       marker.on('click', () => {
         onSelectListing?.(listing);
+      });
+
+      // Issue #1465 — lightweight hover tooltip; orthogonal to click handler.
+      const tooltipLabel = buildAgriMarkerLabel(
+        listing.title,
+        listing.locality,
+        listing.land_area,
+        listing.land_area_unit,
+      );
+      marker.bindTooltip(tooltipLabel, {
+        permanent: false,
+        direction: 'top',
+        offset: [0, -20],
       });
 
       clusterGroup.addLayer(marker);

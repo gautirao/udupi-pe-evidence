@@ -16,6 +16,7 @@ export interface AgriMapListingItem {
   latitude: number;
   longitude: number;
   propertyType: string;
+  title?: string | null;
   locality?: string | null;
   boundaryGeoJson?: string | null;
   landArea?: number | null;

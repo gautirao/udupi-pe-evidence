@@ -31,6 +31,7 @@ vi.mock('leaflet', () => {
       }),
       marker: vi.fn(() => ({
         on: vi.fn().mockReturnThis(),
+        bindTooltip: vi.fn().mockReturnThis(),
       })),
       markerClusterGroup: vi.fn(() => ({
         addLayer: mockClusterGroupAddLayer,
