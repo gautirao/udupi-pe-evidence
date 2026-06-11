@@ -438,8 +438,32 @@ export default function MapDiscovery() {
 
   // Issue #1373 — selected agri polygon listing for right-panel stub (#1374 content).
   const [selectedMarkerListing, setSelectedMarkerListing] = useState<PropertyListingWithImages | null>(null);
+
+  // Issue #1466 — stable ref bundle so handleSelectMarkerListing's useCallback dep array
+  // stays empty (stable identity). urlActions changes every render; urlState.selectedRegion
+  // and journey are needed inside the callback but declared after this point in the file.
+  // The ref is mutated on every render so the callback always reads the latest values.
+  const markerListingCtxRef = useRef({ urlActions, urlState });
+  markerListingCtxRef.current = { urlActions, urlState };
+
   const handleSelectMarkerListing = useCallback(
-    (listing: PropertyListingWithImages | null) => setSelectedMarkerListing(listing),
+    (listing: PropertyListingWithImages | null) => {
+      setSelectedMarkerListing(listing);
+      // Issue #1466: In agri-group-selected context (corridor + distance tier chosen,
+      // no specific area), a marker click must write listing=<uuid> to the URL so
+      // derivePanelContent routes to 'agri-group-peek'. The agri-detail override
+      // (resolvedPanelContent below) uses local selectedMarkerListing state and only
+      // fires when panelContent==='agri-selected' (areaKey present) — no conflict here.
+      const { urlActions: actions, urlState: state } = markerListingCtxRef.current;
+      if (
+        listing != null &&
+        state.journey === 'agri-first' &&
+        state.selectedRegion != null &&
+        state.selectedMaxKm != null
+      ) {
+        actions.setSelectedListing(listing.id);
+      }
+    },
     [],
   );
 
