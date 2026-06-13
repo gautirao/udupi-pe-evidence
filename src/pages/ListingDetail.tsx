@@ -20,6 +20,7 @@ import { ListingGallery } from '@/components/listing/ListingGallery';
 import { ListingDetailMainContent } from '@/components/listing/ListingDetailMainContent';
 import { ListingDetailSidebar } from '@/components/listing/ListingDetailSidebar';
 import { TakeOfflineButton, ReopenForEditingButton } from '@/components/listing/ListingPreviewActions';
+import { AgriListingDetail } from '@/components/listing/agri/AgriListingDetail';
 
 const propertyConfig: Record<string, { label: string; badgeClass: string }> = {
   land:                { label: 'Land',              badgeClass: 'bg-green-100 text-green-800 border-0' },
@@ -157,6 +158,7 @@ export default function ListingDetail() {
   }
 
   const { label, badgeClass } = propertyConfig[listing.propertyType] ?? propertyConfig['other'];
+  const isAgri = listing.propertyType === 'agricultural_land';
 
   // Anonymous teaser returns only primaryImageUrl + imageCount (no images[]).
   // Synthesize a 1-item gallery so the first photo renders.
@@ -178,6 +180,41 @@ export default function ListingDetail() {
       toast({ title: 'Failed to copy', variant: 'destructive' });
     }
   };
+
+  if (isAgri) {
+    return (
+      <AppLayout>
+        {(isPreview || (isPreview && listing.status === 'REJECTED' && listing.rejectionReason)) && (
+          <div className="mx-auto max-w-6xl px-4 pt-6 md:px-6">
+            {isPreview && (
+              <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                <span>{PREVIEW_COPY[listing.status ?? ''] ?? 'Preview mode — this listing is not yet live. Only you can see this page.'}</span>
+              </div>
+            )}
+            {isPreview && listing.status === 'REJECTED' && listing.rejectionReason && (
+              <Alert variant="destructive" className="mb-2">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <span className="font-medium">Rejection reason: </span>{listing.rejectionReason}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+        <AgriListingDetail
+          listing={listing}
+          user={user}
+          copied={copied}
+          onShare={handleShare}
+          onOpenBookingModal={() => setBookingModalOpen(true)}
+        />
+        {user && (
+          <RequestViewingModal listingId={listing.id} open={bookingModalOpen} onClose={() => setBookingModalOpen(false)} />
+        )}
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
