@@ -68,8 +68,7 @@ export function AgriGroupSelectedPanel({
     : [];
 
   // Issue #1464 — group listings by locality (fallback to areaKey when locality is null).
-  // SORT 1 — group order: alphabetical (locale-aware, case-insensitive).
-  // SORT 2 — within-group listing order: stable id ascending.
+  // Issue #1486 — SORT 1: count descending; SORT 2: alpha tie-break (locale-aware, case-insensitive).
   const sortedGroups: [string, AgriMapListingItem[]][] = React.useMemo(() => {
     if (!listings || listings.length === 0) return [];
     const groupMap = new Map<string, AgriMapListingItem[]>();
@@ -82,9 +81,11 @@ export function AgriGroupSelectedPanel({
         groupMap.set(key, [item]);
       }
     }
-    return [...groupMap.entries()].sort(([a], [b]) =>
-      a.localeCompare(b, 'en', { sensitivity: 'base' }),
-    );
+    return [...groupMap.entries()].sort(([aKey, aListings], [bKey, bListings]) => {
+      const countDiff = bListings.length - aListings.length;
+      if (countDiff !== 0) return countDiff;
+      return aKey.localeCompare(bKey, 'en', { sensitivity: 'base' });
+    });
   }, [listings]);
   return (
     <div
@@ -214,27 +215,55 @@ export function AgriGroupSelectedPanel({
             data-testid="agri-group-listings-list"
             className="divide-y divide-border"
           >
-            {sortedGroups.map(([localityKey, groupListings]) => (
-              <div key={localityKey} data-testid="agri-group-locality-group">
-                {/* Locality group header — clicking drills into that town's listings */}
-                <button
-                  type="button"
-                  data-testid="agri-group-locality-btn"
-                  aria-label={`View ${localityKey} properties`}
-                  onClick={() => onSelectLocality?.(localityKey)}
-                  className="w-full flex items-center justify-between px-4 py-2.5 bg-muted/30 hover:bg-muted/60 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="text-sm font-semibold text-foreground truncate">
-                    {localityKey}
-                  </span>
-                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                    {groupListings.length}{' '}
-                    agricultural{' '}
-                    {groupListings.length === 1 ? 'property' : 'properties'}
-                  </span>
-                </button>
-              </div>
-            ))}
+            {sortedGroups.map(([localityKey, groupListings]) => {
+              // Issue #1486 — sum computedAreaAcres; omit line when no listing has a non-null value.
+              const acreageValues = groupListings
+                .map((l) => l.computedAreaAcres)
+                .filter((v): v is number => v != null);
+              const totalAcreage =
+                acreageValues.length > 0
+                  ? acreageValues.reduce((sum, v) => sum + v, 0)
+                  : null;
+
+              return (
+                <div key={localityKey} data-testid="agri-group-locality-group">
+                  {/* Locality group header — clicking drills into that town's listings */}
+                  <button
+                    type="button"
+                    data-testid="agri-group-locality-btn"
+                    aria-label={`View ${localityKey} properties`}
+                    onClick={() => onSelectLocality?.(localityKey)}
+                    className="w-full flex flex-col px-4 py-2.5 bg-muted/30 hover:bg-muted/60 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-sm font-semibold text-foreground truncate">
+                        {localityKey}
+                      </span>
+                      <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                        {groupListings.length}{' '}
+                        agricultural{' '}
+                        {groupListings.length === 1 ? 'property' : 'properties'}
+                      </span>
+                    </div>
+                    {totalAcreage !== null && (
+                      <span
+                        data-testid="agri-group-locality-acreage"
+                        className="text-xs text-muted-foreground mt-0.5"
+                      >
+                        {/* Round to 2dp first to absorb float accumulation (e.g. 2.0000000000000004),
+                            then check if the rounded value is a whole number. */}
+                        {(function () {
+                          const rounded = Math.round(totalAcreage * 100) / 100;
+                          return rounded % 1 === 0
+                            ? `${rounded} acres total`
+                            : `${rounded.toFixed(2)} acres total`;
+                        })()}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

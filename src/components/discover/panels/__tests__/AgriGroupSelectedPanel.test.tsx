@@ -382,20 +382,23 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
     expect(btn).toHaveTextContent('IN|KA|Udupi|Kota');
   });
 
-  it('groups are sorted alphabetically regardless of input order', () => {
-    // Input order: Zebra then Apple then Mango — groups must appear A, M, Z
+  it('count-desc primary: high-count town appears before low-count town even when alpha order differs', () => {
+    // "Apple" is alpha-first but has only 1 listing; "Zebra" has 2 — Zebra must win on count.
+    // "Mango" also has 1 listing — alpha tie-break between Apple and Mango gives Apple before Mango.
     const listings = [
-      makeListing('a3', { locality: 'Zebra' }),
+      makeListing('z1', { locality: 'Zebra' }),
+      makeListing('z2', { locality: 'Zebra' }),
       makeListing('a1', { locality: 'Apple' }),
-      makeListing('a2', { locality: 'Mango' }),
+      makeListing('m1', { locality: 'Mango' }),
     ];
     render(
-      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={4} />,
     );
     const btns = screen.getAllByTestId('agri-group-locality-btn');
-    expect(btns[0]).toHaveTextContent('Apple');
-    expect(btns[1]).toHaveTextContent('Mango');
-    expect(btns[2]).toHaveTextContent('Zebra');
+    // Zebra: 2 (count-desc wins over alpha); Apple: 1 (alpha-tie second); Mango: 1 (alpha-tie third)
+    expect(btns[0]).toHaveTextContent('Zebra');
+    expect(btns[1]).toHaveTextContent('Apple');
+    expect(btns[2]).toHaveTextContent('Mango');
   });
 
   it('single locality group shows correct count when all listings share one locality', () => {
@@ -436,6 +439,168 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
     await user.click(btn);
     expect(onSelectLocality).toHaveBeenCalledTimes(1);
     expect(onSelectLocality).toHaveBeenCalledWith('Shirva');
+  });
+});
+
+// ─── Issue #1486 — Sort by count desc + acreage line ──────────────────────────
+
+describe('AgriGroupSelectedPanel — sort count-desc + acreage (Issue #1486)', () => {
+  it('AC1: sorts towns by listing count descending', () => {
+    // Shirva: 3 listings, Hebri: 1 listing — Shirva must appear first
+    const listings = [
+      makeListing('a1', { locality: 'Hebri' }),
+      makeListing('a2', { locality: 'Shirva' }),
+      makeListing('a3', { locality: 'Shirva' }),
+      makeListing('a4', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={4} />,
+    );
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns[0]).toHaveTextContent('Shirva');
+    expect(btns[1]).toHaveTextContent('Hebri');
+  });
+
+  it('AC2: equal-count towns sorted alphabetically (locale-aware, case-insensitive)', () => {
+    // All towns have 2 listings — must sort alpha: Apple, Mango, Zebra
+    const listings = [
+      makeListing('z1', { locality: 'Zebra' }),
+      makeListing('z2', { locality: 'Zebra' }),
+      makeListing('a1', { locality: 'Apple' }),
+      makeListing('a2', { locality: 'Apple' }),
+      makeListing('m1', { locality: 'Mango' }),
+      makeListing('m2', { locality: 'Mango' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={6} />,
+    );
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns[0]).toHaveTextContent('Apple');
+    expect(btns[1]).toHaveTextContent('Mango');
+    expect(btns[2]).toHaveTextContent('Zebra');
+  });
+
+  it('AC2: count-desc takes priority over alpha (3-listing town before 1-listing town)', () => {
+    // "Aaaa" (alpha-first) has 1 listing; "Zzzz" has 3 — Zzzz must appear first
+    const listings = [
+      makeListing('a1', { locality: 'Aaaa' }),
+      makeListing('z1', { locality: 'Zzzz' }),
+      makeListing('z2', { locality: 'Zzzz' }),
+      makeListing('z3', { locality: 'Zzzz' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={4} />,
+    );
+    const btns = screen.getAllByTestId('agri-group-locality-btn');
+    expect(btns[0]).toHaveTextContent('Zzzz');
+    expect(btns[1]).toHaveTextContent('Aaaa');
+  });
+
+  it('AC4: acreage line shows sum of computedAreaAcres for a town', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 3.5 }),
+      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 1.5 }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    // Sum = 5.0 acres — integer format (no decimals)
+    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
+    expect(acreageEl).toHaveTextContent('5 acres total');
+  });
+
+  it('AC4: acreage line uses 2dp when sum is fractional', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 2.75 }),
+      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 1.0 }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
+    expect(acreageEl).toHaveTextContent('3.75 acres total');
+  });
+
+  it('AC4: acreage line omitted when all computedAreaAcres are null', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva', computedAreaAcres: null }),
+      makeListing('a2', { locality: 'Shirva', computedAreaAcres: null }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    expect(screen.queryByTestId('agri-group-locality-acreage')).not.toBeInTheDocument();
+  });
+
+  it('AC4: acreage line omitted when computedAreaAcres is absent from all listings', () => {
+    // makeListing without computedAreaAcres override — field is undefined
+    const listings = [
+      makeListing('a1', { locality: 'Shirva' }),
+      makeListing('a2', { locality: 'Shirva' }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    expect(screen.queryByTestId('agri-group-locality-acreage')).not.toBeInTheDocument();
+  });
+
+  it('AC4: acreage line shown when at least one listing has non-null computedAreaAcres (others null)', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 4.0 }),
+      makeListing('a2', { locality: 'Shirva', computedAreaAcres: null }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
+    expect(acreageEl).toHaveTextContent('4 acres total');
+  });
+
+  it('AC4 (F2): undefined computedAreaAcres (never backfilled) mixed with a non-null value — sums correctly', () => {
+    // makeListing without computedAreaAcres override leaves the field as undefined.
+    // The filter `v != null` must exclude both null and undefined, summing only the 2.0.
+    const listings = [
+      makeListing('a1', { locality: 'Shirva' }), // computedAreaAcres: undefined
+      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 2.0 }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
+    );
+    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
+    expect(acreageEl).toHaveTextContent('2 acres total');
+  });
+
+  it('AC4 (F1): float accumulation — 0.1 × 20 sums to 2.0000000000000004 in V8; must render "2 acres total" not "2.00 acres total"', () => {
+    // Confirmed in Node.js/V8:
+    //   Array.from({length:20}, () => 0.1).reduce((a,b) => a+b, 0) === 2.0000000000000004
+    // That value fails `% 1 === 0` (remainder is 4e-16) without prior rounding to 2dp.
+    const driftingListings = Array.from({ length: 20 }, (_, i) =>
+      makeListing(`drift-${i}`, { locality: 'Shirva', computedAreaAcres: 0.1 }),
+    );
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={driftingListings} listingCount={20} />,
+    );
+    const acreageEl = screen.getByTestId('agri-group-locality-acreage');
+    // Without Math.round fix: renders "2.00 acres total" (falls into toFixed branch)
+    // With fix: renders "2 acres total"
+    expect(acreageEl).toHaveTextContent('2 acres total');
+    expect(acreageEl).not.toHaveTextContent('2.00 acres total');
+  });
+
+  it('AC4: each town shows its own acreage independently', () => {
+    const listings = [
+      makeListing('a1', { locality: 'Shirva', computedAreaAcres: 5.0 }),
+      makeListing('a2', { locality: 'Shirva', computedAreaAcres: 5.0 }),
+      makeListing('b1', { locality: 'Hebri', computedAreaAcres: null }),
+    ];
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
+    );
+    // Shirva: 2 listings (appears first), Hebri: 1 listing
+    const acreageEls = screen.getAllByTestId('agri-group-locality-acreage');
+    // Only Shirva group has acreage (Hebri all-null)
+    expect(acreageEls).toHaveLength(1);
+    expect(acreageEls[0]).toHaveTextContent('10 acres total');
   });
 });
 
