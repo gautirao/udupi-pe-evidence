@@ -3,12 +3,17 @@
  *
  * Covers:
  * - Loading state: shows skeleton cards
- * - Loaded state with groups: renders group cards with correct content
+ * - Level 1 (no groupId / invalid groupId): renders group cards with correct content
+ * - Level 2 (valid resolved groupId): renders that group's area rows, not group cards
+ * - Cold-load pending (groupId set, isLoading=true): shows skeletons, no flash of cards
+ * - Level-2 area row click → onSelectArea called with canonical areaKey
+ * - Level-2 "up to all groups" → onClearGroup called
+ * - Level-2 graceful empty state when group area_keys absent from discoverAreas
  * - Empty state (no groups): renders Browse-all fallback with areas
  * - Empty state (no groups, no areas): renders no-areas message
  * - Click group card → calls onSelectGroup with group id
  * - Click Browse-all area → calls onSelectArea with areaKey
- * - Accessibility: aria-busy, aria-labels on buttons
+ * - Issue #1178 invalid / blank groupId notice preserved
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -50,7 +55,7 @@ const baseProps = {
 const renderPanel = (ui: React.ReactElement) =>
   render(<MemoryRouter>{ui}</MemoryRouter>);
 
-// ─── Tests ────────────────────────────────────────────────────
+// ─── Loading state ────────────────────────────────────────────
 
 describe('AreaGroupsLandingPanel — loading state', () => {
   it('renders skeleton cards when isLoading is true', () => {
@@ -58,7 +63,6 @@ describe('AreaGroupsLandingPanel — loading state', () => {
       <AreaGroupsLandingPanel {...baseProps} groups={[]} isLoading={true} />,
     );
     expect(screen.getByTestId('area-groups-loading')).toBeInTheDocument();
-    // No group list should be visible
     expect(screen.queryByTestId('area-groups-list')).not.toBeInTheDocument();
   });
 
@@ -69,15 +73,36 @@ describe('AreaGroupsLandingPanel — loading state', () => {
     const scrollable = container.querySelector('[aria-busy="true"]');
     expect(scrollable).toBeInTheDocument();
   });
+
+  // Issue #1483 AC2 — cold-load with a groupId set must show skeletons, not flash group cards
+  // or the invalid-group notice. The Level-2 branch is gated behind !isLoading.
+  it('AC2 cold-load: groupId set + isLoading=true → skeletons only, no group cards, no invalid notice', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[]}
+        isLoading={true}
+        groupId="south-zone"
+        fallbackAreas={[makeArea()]}
+        onSelectArea={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('area-groups-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-groups-list')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+  });
 });
 
-describe('AreaGroupsLandingPanel — loaded state with groups', () => {
+// ─── Level-1: group card list ─────────────────────────────────
+
+describe('AreaGroupsLandingPanel — Level-1 (no valid groupId) group card list', () => {
   const groups = [
     makeGroup({ id: 'south-zone', name: 'South Zone' }),
     makeGroup({ id: 'north-zone', name: 'North Zone', subtitle: 'Yelahanka, Hebbal', region_label: 'North', area_keys: ['IN|KA|Bengaluru|Yelahanka'] }),
   ];
 
-  it('renders a card for each group', () => {
+  it('renders a card for each group when no groupId is set', () => {
     renderPanel(
       <AreaGroupsLandingPanel {...baseProps} groups={groups} isLoading={false} />,
     );
@@ -85,24 +110,12 @@ describe('AreaGroupsLandingPanel — loaded state with groups', () => {
     expect(screen.getByTestId('area-group-card-north-zone')).toBeInTheDocument();
   });
 
-  it('renders group name', () => {
+  it('renders group name, subtitle and region_label', () => {
     renderPanel(
       <AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} isLoading={false} />,
     );
     expect(screen.getByText('South Zone')).toBeInTheDocument();
-  });
-
-  it('renders group subtitle when present', () => {
-    renderPanel(
-      <AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} isLoading={false} />,
-    );
     expect(screen.getByText('Koramangala, HSR, BTM')).toBeInTheDocument();
-  });
-
-  it('renders region_label when present', () => {
-    renderPanel(
-      <AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} isLoading={false} />,
-    );
     expect(screen.getByText('South')).toBeInTheDocument();
   });
 
@@ -120,13 +133,211 @@ describe('AreaGroupsLandingPanel — loaded state with groups', () => {
     expect(screen.getByTestId('area-groups-list')).toBeInTheDocument();
   });
 
-  it('does not render Browse-all when groups are present', () => {
+  it('does not render Browse-all or Level-2 when groups are present and no groupId', () => {
     renderPanel(
       <AreaGroupsLandingPanel {...baseProps} groups={[makeGroup()]} isLoading={false} />,
     );
     expect(screen.queryByText(/browse all areas/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
   });
 });
+
+// ─── Level-2: resolved groupId → area rows ───────────────────
+
+describe('AreaGroupsLandingPanel — Level-2 (valid resolved groupId) area list (Issue #1483)', () => {
+  const groupAreas = [
+    makeArea({ areaKey: 'IN|KA|Bengaluru|Koramangala', name: 'Koramangala', listingCount: 23 }),
+    makeArea({ areaKey: 'IN|KA|Bengaluru|HSR', name: 'HSR Layout', listingCount: 7 }),
+  ];
+  // A third area NOT in the group — must not appear in Level-2.
+  const allAreas = [
+    ...groupAreas,
+    makeArea({ areaKey: 'IN|KA|Bengaluru|Whitefield', name: 'Whitefield', listingCount: 50 }),
+  ];
+  const group = makeGroup({
+    id: 'south-zone',
+    name: 'South Zone',
+    area_keys: ['IN|KA|Bengaluru|Koramangala', 'IN|KA|Bengaluru|HSR'],
+  });
+
+  it('AC1 renders area rows for the resolved group, not group cards', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+      />,
+    );
+    // Level-2 container present
+    expect(screen.getByTestId('area-group-level2')).toBeInTheDocument();
+    // Area rows for the group members
+    expect(screen.getByTestId('browse-all-area-IN|KA|Bengaluru|Koramangala')).toBeInTheDocument();
+    expect(screen.getByTestId('browse-all-area-IN|KA|Bengaluru|HSR')).toBeInTheDocument();
+    // Non-member area must NOT appear
+    expect(screen.queryByTestId('browse-all-area-IN|KA|Bengaluru|Whitefield')).not.toBeInTheDocument();
+    // Group cards must NOT appear
+    expect(screen.queryByTestId('area-group-card-south-zone')).not.toBeInTheDocument();
+  });
+
+  it('AC1 area row count equals number of group area_keys present in discoverAreas', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+      />,
+    );
+    // 2 area_keys in group, 2 present in allAreas
+    const rows = screen.getAllByRole('button', { name: /Browse/ });
+    // Filter to area-row buttons (data-testid browse-all-area-*)
+    const areaRows = rows.filter((b) =>
+      b.getAttribute('data-testid')?.startsWith('browse-all-area-'),
+    );
+    expect(areaRows).toHaveLength(2);
+  });
+
+  it('renders area name and listing count in Level-2 rows', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Koramangala')).toBeInTheDocument();
+    expect(screen.getByText('23 listings')).toBeInTheDocument();
+    expect(screen.getByText('HSR Layout')).toBeInTheDocument();
+    expect(screen.getByText('7 listings')).toBeInTheDocument();
+  });
+
+  it('AC3 area-row click → onSelectArea called with canonical areaKey', async () => {
+    const onSelectArea = vi.fn();
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={onSelectArea}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('browse-all-area-IN|KA|Bengaluru|Koramangala'));
+    expect(onSelectArea).toHaveBeenCalledWith('IN|KA|Bengaluru|Koramangala');
+    expect(onSelectArea).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC5 "up to all groups" button is rendered when onClearGroup is provided', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('area-group-back-to-all')).toBeInTheDocument();
+  });
+
+  it('AC5 "up to all groups" button click → calls onClearGroup', async () => {
+    const onClearGroup = vi.fn();
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+        onClearGroup={onClearGroup}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('area-group-back-to-all'));
+    expect(onClearGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC5 "up to all groups" button is NOT rendered when onClearGroup is omitted', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+        // onClearGroup intentionally omitted
+      />,
+    );
+    expect(screen.queryByTestId('area-group-back-to-all')).not.toBeInTheDocument();
+  });
+
+  it('group name shown in the "up to all groups" back button label', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={allAreas}
+        onSelectArea={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    // Button text contains the group name
+    expect(screen.getByTestId('area-group-back-to-all')).toHaveTextContent('South Zone');
+  });
+
+  it('graceful empty state when group area_keys are absent from discoverAreas', () => {
+    // Group has two area_keys but neither appears in fallbackAreas.
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        fallbackAreas={[makeArea({ areaKey: 'IN|KA|Bengaluru|Whitefield', name: 'Whitefield' })]}
+        onSelectArea={vi.fn()}
+      />,
+    );
+    // Level-2 container is still rendered (not a crash)
+    expect(screen.getByTestId('area-group-level2')).toBeInTheDocument();
+    // BrowseAllFallback empty state
+    expect(screen.getByText('No areas found')).toBeInTheDocument();
+    // No group cards
+    expect(screen.queryByTestId('area-group-card-south-zone')).not.toBeInTheDocument();
+  });
+
+  it('Level-2 does NOT render when fallbackAreas/onSelectArea are not provided', () => {
+    // Without the discriminated union being satisfied, Level-2 cannot show area rows.
+    // Falls back to group-card list (Level-1) for the resolved groupId.
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[group]}
+        isLoading={false}
+        groupId="south-zone"
+        // fallbackAreas and onSelectArea intentionally omitted
+      />,
+    );
+    // Must NOT crash, must fall through to Level-1 group cards
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('area-groups-list')).toBeInTheDocument();
+  });
+});
+
+// ─── Level-1: click group card ───────────────────────────────
 
 describe('AreaGroupsLandingPanel — click group card → calls onSelectGroup', () => {
   it('calls onSelectGroup with group id on card click', async () => {
@@ -157,6 +368,8 @@ describe('AreaGroupsLandingPanel — click group card → calls onSelectGroup', 
     expect(onSelectGroup).toHaveBeenCalledTimes(1);
   });
 });
+
+// ─── Empty state: no groups, Browse-all fallback ─────────────
 
 describe('AreaGroupsLandingPanel — empty state (no groups, with fallback areas)', () => {
   const areas = [
@@ -236,94 +449,7 @@ describe('AreaGroupsLandingPanel — empty state (no groups, no fallback areas)'
   });
 });
 
-describe('AreaGroupsLandingPanel — group card highlight (Issue #1178)', () => {
-  const groups = [
-    makeGroup({ id: 'group-A', name: 'Group A' }),
-    makeGroup({ id: 'group-B', name: 'Group B' }),
-  ];
-
-  it('highlights the card whose id matches groupId (bg-muted + border-primary)', () => {
-    renderPanel(
-      <AreaGroupsLandingPanel
-        {...baseProps}
-        groups={groups}
-        isLoading={false}
-        groupId="group-A"
-      />,
-    );
-    const selected = screen.getByTestId('area-group-card-group-A');
-    expect(selected.className).toContain('bg-muted');
-    expect(selected.className).toContain('border-primary');
-    expect(selected).toHaveAttribute('aria-current', 'true');
-  });
-
-  it('uses baseline styling for non-matching cards (bg-card + border-border)', () => {
-    renderPanel(
-      <AreaGroupsLandingPanel
-        {...baseProps}
-        groups={groups}
-        isLoading={false}
-        groupId="group-A"
-      />,
-    );
-    const other = screen.getByTestId('area-group-card-group-B');
-    expect(other.className).toContain('bg-card');
-    expect(other.className).toContain('border-border');
-    expect(other).not.toHaveAttribute('aria-current');
-  });
-
-  it('highlights the matching card when groupId is padded but valid', () => {
-    renderPanel(
-      <AreaGroupsLandingPanel
-        {...baseProps}
-        groups={groups}
-        isLoading={false}
-        groupId="  group-A  "
-      />,
-    );
-    const selected = screen.getByTestId('area-group-card-group-A');
-    expect(selected).toHaveAttribute('aria-current', 'true');
-    expect(selected.className).toContain('bg-muted');
-    expect(selected.className).toContain('border-primary');
-    // No invalid-group notice should appear for a padded-but-valid id.
-    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
-  });
-
-  it('applies baseline styling to all cards when no groupId is set', () => {
-    renderPanel(
-      <AreaGroupsLandingPanel {...baseProps} groups={groups} isLoading={false} />,
-    );
-    const cardA = screen.getByTestId('area-group-card-group-A');
-    expect(cardA.className).toContain('bg-card');
-    expect(cardA).not.toHaveAttribute('aria-current');
-  });
-
-  it('moves the highlight when groupId prop changes', () => {
-    const { rerender } = renderPanel(
-      <AreaGroupsLandingPanel
-        {...baseProps}
-        groups={groups}
-        isLoading={false}
-        groupId="group-A"
-      />,
-    );
-    expect(screen.getByTestId('area-group-card-group-A')).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByTestId('area-group-card-group-B')).not.toHaveAttribute('aria-current');
-
-    rerender(
-      <MemoryRouter>
-        <AreaGroupsLandingPanel
-          {...baseProps}
-          groups={groups}
-          isLoading={false}
-          groupId="group-B"
-        />
-      </MemoryRouter>,
-    );
-    expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
-    expect(screen.getByTestId('area-group-card-group-B')).toHaveAttribute('aria-current', 'true');
-  });
-});
+// ─── Issue #1178: invalid / blank groupId (preserved unchanged) ──
 
 describe('AreaGroupsLandingPanel — invalid groupId message (Issue #1178)', () => {
   const groups = [
@@ -331,7 +457,7 @@ describe('AreaGroupsLandingPanel — invalid groupId message (Issue #1178)', () 
     makeGroup({ id: 'group-B', name: 'Group B' }),
   ];
 
-  it('shows a non-alarming notice when groupId matches no loaded group', () => {
+  it('AC7 shows a non-alarming notice when groupId matches no loaded group', () => {
     renderPanel(
       <AreaGroupsLandingPanel
         {...baseProps}
@@ -348,6 +474,8 @@ describe('AreaGroupsLandingPanel — invalid groupId message (Issue #1178)', () 
     // No card should be highlighted.
     expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
     expect(screen.getByTestId('area-group-card-group-B')).not.toHaveAttribute('aria-current');
+    // Must NOT show Level-2 (invalid groupId — no focusedGroup)
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
   });
 
   it('does NOT show the notice while loading (prevents flash on cold load)', () => {
@@ -377,18 +505,21 @@ describe('AreaGroupsLandingPanel — invalid groupId message (Issue #1178)', () 
   });
 
   it('does NOT show the notice when groupId matches a loaded group', () => {
+    // groupId matches → Level-2 renders, not group-cards with notice
     renderPanel(
       <AreaGroupsLandingPanel
         {...baseProps}
         groups={groups}
         isLoading={false}
         groupId="group-A"
+        fallbackAreas={[makeArea({ areaKey: 'IN|KA|Bengaluru|Koramangala' })]}
+        onSelectArea={vi.fn()}
       />,
     );
     expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
   });
 
-  it('treats a whitespace-only groupId as no selection (no notice, no highlight)', () => {
+  it('AC7 treats a whitespace-only groupId as no selection (no notice, no highlight, no Level-2)', () => {
     renderPanel(
       <AreaGroupsLandingPanel
         {...baseProps}
@@ -399,8 +530,78 @@ describe('AreaGroupsLandingPanel — invalid groupId message (Issue #1178)', () 
     );
     expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
     expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
   });
 });
+
+// ─── Issue #1178: group card highlight (now only for no-group/invalid cases) ──
+
+describe('AreaGroupsLandingPanel — group card highlight for non-matching state (Issue #1178)', () => {
+  const groups = [
+    makeGroup({ id: 'group-A', name: 'Group A', area_keys: ['IN|KA|Bengaluru|Koramangala'] }),
+    makeGroup({ id: 'group-B', name: 'Group B', area_keys: ['IN|KA|Bengaluru|HSR'] }),
+  ];
+
+  it('uses baseline styling for all cards when no groupId is set', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel {...baseProps} groups={groups} isLoading={false} />,
+    );
+    const cardA = screen.getByTestId('area-group-card-group-A');
+    expect(cardA.className).toContain('bg-card');
+    expect(cardA).not.toHaveAttribute('aria-current');
+  });
+
+  it('moves the highlight when groupId prop changes to an invalid id (falls through to group cards)', () => {
+    // groupId="group-A" but no fallbackAreas → Level-2 skipped → group cards shown
+    // In the group-card branch, focusedGroup drives the highlight.
+    // Note: when groupId is valid AND fallbackAreas are provided, Level-2 shows instead of cards.
+    // This test verifies the Level-1 highlight when fallbackAreas/onSelectArea are absent.
+    const { rerender } = renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="group-A"
+        // No fallbackAreas/onSelectArea — falls through to group-card Level-1
+      />,
+    );
+    // group-A highlighted in Level-1
+    expect(screen.getByTestId('area-group-card-group-A')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByTestId('area-group-card-group-B')).not.toHaveAttribute('aria-current');
+
+    rerender(
+      <MemoryRouter>
+        <AreaGroupsLandingPanel
+          {...baseProps}
+          groups={groups}
+          isLoading={false}
+          groupId="group-B"
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('area-group-card-group-A')).not.toHaveAttribute('aria-current');
+    expect(screen.getByTestId('area-group-card-group-B')).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('highlights the matching card when groupId is padded but valid (no fallbackAreas)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={groups}
+        isLoading={false}
+        groupId="  group-A  "
+        // No fallbackAreas — Level-1 card view
+      />,
+    );
+    const selected = screen.getByTestId('area-group-card-group-A');
+    expect(selected).toHaveAttribute('aria-current', 'true');
+    expect(selected.className).toContain('bg-muted');
+    expect(selected.className).toContain('border-primary');
+    expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Header ──────────────────────────────────────────────────
 
 describe('AreaGroupsLandingPanel — header', () => {
   it('renders "Select area" as panel header title', () => {

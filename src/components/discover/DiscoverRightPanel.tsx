@@ -250,6 +250,12 @@ export interface DiscoverRightPanelProps {
    * and an unmatched groupId shows a non-alarming notice.
    */
   groupId?: string | null;
+  /**
+   * Issue #1483 — clears the active groupId, returning from Level-2 area list
+   * back to the Level-1 group-card list. Threaded to AreaGroupsLandingPanel's
+   * onClearGroup prop.
+   */
+  onClearGroup?: () => void;
   /** All areas in the city — used as Browse-all fallback when groups is empty. */
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
@@ -457,6 +463,7 @@ export function DiscoverRightPanel({
   isLoadingAreaGroups = false,
   onSelectGroup,
   groupId = null,
+  onClearGroup,
   discoverAreas = [],
   onSelectAreaKey,
   corridorGroups = [],
@@ -802,6 +809,24 @@ export function DiscoverRightPanel({
         );
 
       case 'area-groups-landing':
+        // Satisfy the discriminated union without a conditional spread (which TypeScript
+        // cannot narrow when combined with other fixed sibling props like onClearGroup).
+        // Issue #1483: fallbackAreas/onSelectArea also power the Level-2 area list — same prop
+        // threading, no additional wiring needed.
+        if (onSelectAreaKey) {
+          return (
+            <AreaGroupsLandingPanel
+              groups={areaGroups}
+              isLoading={isLoadingAreaGroups}
+              onSelectGroup={onSelectGroup ?? (() => undefined)}
+              onStartOver={onStartOver}
+              groupId={groupId}
+              onClearGroup={onClearGroup}
+              fallbackAreas={discoverAreas}
+              onSelectArea={onSelectAreaKey}
+            />
+          );
+        }
         return (
           <AreaGroupsLandingPanel
             groups={areaGroups}
@@ -809,11 +834,7 @@ export function DiscoverRightPanel({
             onSelectGroup={onSelectGroup ?? (() => undefined)}
             onStartOver={onStartOver}
             groupId={groupId}
-            // Satisfy the discriminated union: only spread fallbackAreas + onSelectArea
-            // when onSelectAreaKey is defined, so Browse-all buttons are never silent no-ops.
-            {...(onSelectAreaKey
-              ? { fallbackAreas: discoverAreas, onSelectArea: onSelectAreaKey }
-              : {})}
+            onClearGroup={onClearGroup}
           />
         );
 

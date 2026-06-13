@@ -1857,6 +1857,8 @@ export default function MapDiscovery() {
           // the groupId matches no loaded group. Prop wiring only — no routing change.
           groupId={urlState.groupId ?? null}
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
+          // Issue #1483 — clear groupId to return from Level-2 area list to Level-1 group cards.
+          onClearGroup={() => urlActions.selectGroup(null)}
           // Issue #1429 — agri-first corridor groups (cumulative corridor model)
           corridorGroups={corridorGroups}
           isLoadingRegionalGroups={isLoadingRegionalAreaGroups}

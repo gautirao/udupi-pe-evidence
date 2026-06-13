@@ -69,6 +69,8 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | F-21 | Audit | **Two parallel data-fetching paths** — Supabase direct (map, similar) vs Spring Boot API (detail, search, broker). `PropertyListing` (snake_case) vs `ListingResponse` (camelCase). Document as ADR or plan consolidation. | Medium | 2026-03-20 |
 | F-22 | RE-164 | **`registerImage()` retry logic in `global-setup.ts` has no unit tests** — retry-on-503 path, 409-as-success, and full-exhaustion→false paths untested. Add `global-setup.test.ts` with mocked `fetch`. | Low | 2026-03-20 |
 | F-23 | RE-164 | **`delays[]` length guard in `registerImage()`** — `maxRetries` can be bumped via default param without updating `delays[]`; fallback silently uses 2000ms. Add guard or derive delays from maxRetries. | Low | 2026-03-20 |
+| F-24 | #1483 | **area-first Level-2 "up to all groups" control a11y inconsistency** — `aria-label="Back to all groups"` but visible text is the group name (`AreaGroupsLandingPanel.tsx`). Screen-reader name and visible affordance differ. Make intent consistent (product/a11y decision). | Low | 2026-06-13 |
+| F-25 | #1483 | **No DRP routing test for `area-groups-landing` without `onSelectAreaKey`** — the no-area-key branch of the if/else (`DiscoverRightPanel.tsx`) is unexercised; a regression to a silent no-op would be invisible. Add a test that Level-1 group cards still render without crashing. | Low | 2026-06-13 |
 
 ## Database
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { LayoutGrid, MapPin } from 'lucide-react';
+import { ChevronLeft, LayoutGrid, MapPin } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
@@ -23,6 +24,12 @@ export type AreaGroupsLandingPanelProps = {
    * that matches no loaded group, a non-alarming "not available" message is shown.
    */
   groupId?: string | null;
+  /**
+   * Issue #1483 — clears the active groupId, returning from Level-2 area list
+   * back to the Level-1 group-card list. Called by the "up to all groups" affordance.
+   * When omitted the affordance is not rendered (safe for contexts without group support).
+   */
+  onClearGroup?: () => void;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -142,6 +149,7 @@ export function AreaGroupsLandingPanel({
   onSelectGroup,
   onStartOver,
   groupId = null,
+  onClearGroup,
   fallbackAreas = [],
   onSelectArea,
 }: AreaGroupsLandingPanelProps) {
@@ -162,6 +170,35 @@ export function AreaGroupsLandingPanel({
   const showInvalidGroupMessage =
     !isLoading && !!activeGroupId && !focusedGroup && groups.length > 0;
 
+  // Issue #1483 — Level-2: when a valid group is resolved, build the area rows by
+  // joining focusedGroup.area_keys against the discoverAreas passed as fallbackAreas.
+  // This reuses the existing BrowseAllFallback primitive and the same
+  // fallbackAreas/onSelectArea discriminated-union contract already in this component —
+  // no new data model needed. The join is O(k·n) where k = area_keys (2–6) and
+  // n = discoverAreas (bounded by city count, typically < 100).
+  // We only enter this branch when groups have loaded (not isLoading), so cold-load
+  // shows skeletons; when the group is valid (focusedGroup != null); and when the
+  // discriminated union provides onSelectArea (the real runtime discriminant —
+  // fallbackAreas has a default of [] so it is never undefined at runtime).
+  const showLevel2 =
+    !isLoading &&
+    focusedGroup !== null &&
+    onSelectArea !== undefined;
+
+  // Build the Level-2 area list: keep only discoverAreas whose areaKey is in the group.
+  // Entries missing from discoverAreas are silently dropped; BrowseAllFallback handles
+  // the empty-list case gracefully ("No areas found").
+  //
+  // The casts below are safe: showLevel2 being true guarantees onSelectArea is defined
+  // (checked above) and focusedGroup is non-null (checked above). TypeScript cannot
+  // narrow the discriminated union through the boolean flag, so we assert explicitly
+  // rather than re-checking inline.
+  const level2Areas: DiscoverArea[] = showLevel2
+    ? (fallbackAreas as DiscoverArea[]).filter((a) =>
+        (focusedGroup as AreaGroup).area_keys.includes(a.areaKey),
+      )
+    : [];
+
   return (
     <>
       <PanelHeader
@@ -181,7 +218,35 @@ export function AreaGroupsLandingPanel({
               <GroupCardSkeleton key={i} />
             ))}
           </div>
+        ) : showLevel2 ? (
+          // ── Level 2: resolved group → show that group's area rows ──────────────
+          <div data-testid="area-group-level2" className="flex flex-col">
+            {/* "Up to all groups" back affordance */}
+            {onClearGroup && (
+              <div className="px-4 pt-3 pb-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center gap-1 px-0 text-muted-foreground hover:text-foreground"
+                  onClick={onClearGroup}
+                  aria-label="Back to all groups"
+                  data-testid="area-group-back-to-all"
+                >
+                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                  <span className="text-sm">
+                    {(focusedGroup as AreaGroup).name}
+                  </span>
+                </Button>
+              </div>
+            )}
+            {/* onSelectArea cast: safe — showLevel2 guarantees it is defined (see comment above). */}
+            <BrowseAllFallback
+              areas={level2Areas}
+              onSelectArea={onSelectArea as (areaKey: string) => void}
+            />
+          </div>
         ) : groups.length > 0 ? (
+          // ── Level 1: no resolved group (or invalid groupId) → show group cards ─
           <div className="space-y-3 p-4" data-testid="area-groups-list">
             {showInvalidGroupMessage && (
               <div
@@ -209,8 +274,9 @@ export function AreaGroupsLandingPanel({
             ))}
           </div>
         ) : (
+          // ── No groups: Browse-all fallback across all city areas ────────────────
           <BrowseAllFallback
-            areas={fallbackAreas}
+            areas={fallbackAreas as DiscoverArea[]}
             // onSelectArea is guaranteed by the discriminated union when fallbackAreas is present
             onSelectArea={onSelectArea!}
           />

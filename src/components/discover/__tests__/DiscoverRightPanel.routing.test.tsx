@@ -426,6 +426,149 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
   });
 });
 
+// ─── Issue #1483: area-first + groupId (no areaKey) → Level-2 area rows ─────
+
+describe('DiscoverRightPanel — area-first + resolved groupId → Level-2 area list (Issue #1483)', () => {
+  const resolvedGroup = {
+    id: 'south-udupi',
+    name: 'South Udupi',
+    subtitle: 'Manipal, Udupi City',
+    region_label: 'South',
+    school_count: 8,
+    area_keys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|UdupiCity'],
+  };
+  const discoverAreas = [
+    {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.35,
+      geoCenterLon: 74.79,
+      listingCount: 12,
+      schoolCount: 3,
+    },
+    {
+      areaKey: 'IN|KA|Udupi|UdupiCity',
+      name: 'Udupi City',
+      geoCenterLat: 13.34,
+      geoCenterLon: 74.75,
+      listingCount: 8,
+      schoolCount: 2,
+    },
+  ];
+
+  it('AC1 renders Level-2 area rows (not group cards) when groupId resolves to a loaded group', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={[resolvedGroup]}
+        isLoadingAreaGroups={false}
+        onSelectGroup={vi.fn()}
+        groupId="south-udupi"
+        discoverAreas={discoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    // Level-2 container
+    expect(screen.getByTestId('area-group-level2')).toBeInTheDocument();
+    // Area rows for the two group members
+    expect(screen.getByTestId('browse-all-area-IN|KA|Udupi|Manipal')).toBeInTheDocument();
+    expect(screen.getByTestId('browse-all-area-IN|KA|Udupi|UdupiCity')).toBeInTheDocument();
+    // Group card must NOT appear
+    expect(screen.queryByTestId('area-group-card-south-udupi')).not.toBeInTheDocument();
+  });
+
+  it('AC5 "up to all groups" button calls onClearGroup', async () => {
+    const onClearGroup = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={[resolvedGroup]}
+        isLoadingAreaGroups={false}
+        onSelectGroup={vi.fn()}
+        groupId="south-udupi"
+        discoverAreas={discoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={onClearGroup}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('area-group-back-to-all'));
+    expect(onClearGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC3 area row click calls onSelectAreaKey with canonical areaKey', async () => {
+    const onSelectAreaKey = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={[resolvedGroup]}
+        isLoadingAreaGroups={false}
+        onSelectGroup={vi.fn()}
+        groupId="south-udupi"
+        discoverAreas={discoverAreas}
+        onSelectAreaKey={onSelectAreaKey}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('browse-all-area-IN|KA|Udupi|Manipal'));
+    expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
+  });
+
+  it('AC2 cold-load: isLoadingAreaGroups=true shows skeletons, no Level-2 area rows', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={[]}
+        isLoadingAreaGroups={true}
+        onSelectGroup={vi.fn()}
+        groupId="south-udupi"
+        discoverAreas={discoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('area-groups-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+  });
+
+  it('AC7 invalid groupId falls back to group cards + notice', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="area-groups-landing"
+        areaGroups={[resolvedGroup]}
+        isLoadingAreaGroups={false}
+        onSelectGroup={vi.fn()}
+        groupId="no-such-group"
+        discoverAreas={discoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('area-group-invalid-message')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('area-group-card-south-udupi')).toBeInTheDocument();
+  });
+
+  it('regression: school-first journey unchanged — school-browse still renders correctly', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-browse"
+        journey="school-first"
+        onSelectSchool={vi.fn()}
+        onSelectAreaKey={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Find homes near a school')).toBeInTheDocument();
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
+  });
+});
+
 describe('DiscoverRightPanel — area-selected content parity', () => {
   const area = makeArea('k1', 'Manipal');
 
