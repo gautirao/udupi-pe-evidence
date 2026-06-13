@@ -2,8 +2,7 @@
  * AgriSpecRows — Issue #1406
  *
  * Shared presentational component for agricultural listing field rows.
- * Used by both:
- *   - Discover AgriListingPanel (right panel after polygon select)
+ * Used by:
  *   - ListingDetailMainContent (full detail page)
  *
  * Design rules:

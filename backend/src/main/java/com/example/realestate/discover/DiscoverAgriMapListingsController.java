@@ -4,6 +4,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -46,14 +49,30 @@ public class DiscoverAgriMapListingsController {
             @RequestParam List<String> areaKeys,
             @RequestParam(required = false) String bbox) {
 
-        log.debug("GET /api/discover/agri-map-listings city={} areaKeys={} bboxPresent={}",
-                city, areaKeys != null ? areaKeys.size() : 0, bbox != null);
+        // #1454: JWT-aware. Mirror PublicListingController.getById exactly — the
+        // !(auth instanceof AnonymousAuthenticationToken) guard is load-bearing; without it
+        // every caller is treated as authenticated and the anon coarsening gate silently no-ops.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isAuthenticated = auth != null
+                && auth.isAuthenticated()
+                && !(auth instanceof AnonymousAuthenticationToken);
+
+        log.debug("GET /api/discover/agri-map-listings city={} areaKeys={} bboxPresent={} authenticated={}",
+                city, areaKeys != null ? areaKeys.size() : 0, bbox != null, isAuthenticated);
 
         AgriMapListingsResponse result = service.findAgriMapListings(
-                city, areaKeys, Optional.ofNullable(bbox));
+                city, areaKeys, Optional.ofNullable(bbox), isAuthenticated);
+
+        // #1454 cache semantics: the authenticated response carries full-precision lat/lng and
+        // pricePaise — it MUST NOT be stored by a shared/CDN cache (a cached authed body could be
+        // served to an anonymous caller, defeating the coarsening). Anonymous responses are already
+        // coarsened/price-stripped, so they remain publicly cacheable for 120s.
+        CacheControl cacheControl = isAuthenticated
+                ? CacheControl.noStore()
+                : CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic();
 
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(120, TimeUnit.SECONDS).cachePublic())
+                .cacheControl(cacheControl)
                 .body(result);
     }
 }

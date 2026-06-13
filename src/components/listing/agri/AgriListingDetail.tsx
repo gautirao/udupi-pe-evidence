@@ -40,6 +40,7 @@ import {
   FileText,
   AlertTriangle,
   Info,
+  Lock,
 } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
 
@@ -368,9 +369,19 @@ function Sidebar({
     <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
       {/* Price + primary actions */}
       <div className="rounded-2xl border border-border bg-card p-5">
-        {priceDisplay && (
+        {priceDisplay ? (
           <p className="text-3xl font-bold text-foreground">{priceDisplay}</p>
-        )}
+        ) : !user ? (
+          <div
+            className={`flex items-center gap-1.5 text-sm font-medium ${GREEN_TEXT}`}
+            data-testid="agri-detail-price-signin"
+          >
+            <Lock className="h-4 w-4" aria-hidden="true" />
+            <Link to={`/auth?returnTo=/listing/${listing.id}`} className="hover:underline">
+              Sign in to view price
+            </Link>
+          </div>
+        ) : null}
         {priceSubtitle && (
           <p className="mt-1 text-sm text-muted-foreground">{priceSubtitle}</p>
         )}
@@ -509,6 +520,10 @@ export function AgriListingDetail({
   if (listing.waterSource) facts.push({ icon: <Droplets className="h-3.5 w-3.5" />, label: 'Water Source', value: listing.waterSource });
   if (listing.roadAccess) facts.push({ icon: <Route className="h-3.5 w-3.5" />, label: 'Road Access', value: listing.roadAccess });
 
+  // Anonymous users have price withheld by the backend (#1454). Show a locked
+  // price tile in the summary grid instead of silently omitting it.
+  const showPriceLocked = !user && priceDisplay === null;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 md:px-6">
       <Breadcrumb locality={listing.locality} title={title} />
@@ -556,11 +571,28 @@ export function AgriListingDetail({
               </div>
             )}
 
-            {facts.length > 0 && (
+            {(facts.length > 0 || showPriceLocked) && (
               <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 {facts.map((f) => (
                   <FactTile key={f.label} icon={f.icon} label={f.label} value={f.value} />
                 ))}
+                {showPriceLocked && (
+                  <div
+                    className="rounded-xl border border-border bg-card px-3 py-2.5"
+                    data-testid="agri-detail-price-locked-tile"
+                  >
+                    <div className="mb-1 flex items-center gap-1.5 text-muted-foreground">
+                      <IndianRupee className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span className="text-[11px] font-medium uppercase tracking-wide">Total Price</span>
+                    </div>
+                    <p className={`flex items-center gap-1 text-sm font-semibold ${GREEN_TEXT}`}>
+                      <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Link to={`/auth?returnTo=/listing/${listing.id}`} className="hover:underline">
+                        Sign in
+                      </Link>
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </SectionCard>
@@ -569,11 +601,26 @@ export function AgriListingDetail({
           <SectionCard title="Property Overview">
             <OverviewGroup
               heading="Land Details"
-              show={Boolean(landAreaDisplay || hectaresDisplay || listing.surveyNumber)}
+              show={Boolean(landAreaDisplay || hectaresDisplay || listing.surveyNumber || !user)}
             >
               <OverviewRow label="Land Area" value={landAreaDisplay} />
               <OverviewRow label="Approx. Area" value={hectaresDisplay} />
-              <OverviewRow label="Survey Number" value={listing.surveyNumber} />
+              {listing.surveyNumber ? (
+                <OverviewRow label="Survey Number" value={listing.surveyNumber} />
+              ) : !user ? (
+                <div
+                  className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0"
+                  data-testid="agri-detail-survey-signin"
+                >
+                  <span className="text-sm text-muted-foreground">Survey Number</span>
+                  <span className={`inline-flex items-center gap-1 text-sm font-medium ${GREEN_TEXT}`}>
+                    <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Link to={`/auth?returnTo=/listing/${listing.id}`} className="hover:underline">
+                      Sign in to view
+                    </Link>
+                  </span>
+                </div>
+              ) : null}
             </OverviewGroup>
 
             <OverviewGroup

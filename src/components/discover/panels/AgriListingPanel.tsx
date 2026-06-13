@@ -10,10 +10,11 @@
  */
 
 import React from 'react';
-import { AlertCircle, ChevronLeft } from 'lucide-react';
+import { AlertCircle, ChevronLeft, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgriListingDetail } from '@/hooks/useAgriListingDetail';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/lib/formatters';
 
 interface AgriListingPanelProps {
@@ -24,6 +25,8 @@ interface AgriListingPanelProps {
 
 export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingPanelProps) {
   const { data, isLoading, isError, refetch } = useAgriListingDetail(listingId);
+  const { session } = useAuth();
+  const isAuthenticated = !!session;
 
   // ── Loading ──────────────────────────────────────────────────────
   if (isLoading) {
@@ -81,13 +84,20 @@ export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingP
   }
 
   // ── Populated (peek) ─────────────────────────────────────────────
-  const { locality, landArea, landAreaUnit, price, pricePaise } = data;
+  const { locality, landArea, landAreaUnit, price, pricePaise, propertyType } = data;
   const title = data.title ?? locality ?? 'Agricultural plot';
 
   // Prefer pricePaise (canonical Long from BE) over deprecated price (BigDecimal rupees).
   // Backward-compatible: falls back to price when pricePaise is absent/null.
   const priceInRupees: number | null =
     pricePaise != null ? Math.round(pricePaise / 100) : (price ?? null);
+  const hasPrice = priceInRupees != null && priceInRupees > 0;
+
+  // Issue #1454 — anon agri visibility gating. The backend withholds price /
+  // pricePaise for anonymous agri callers. When that happens, show a "Sign in"
+  // affordance instead of silently omitting the price row.
+  const isAgri = propertyType === 'agricultural_land';
+  const showSignInForPrice = isAgri && !isAuthenticated && !hasPrice;
 
   return (
     <div
@@ -134,6 +144,18 @@ export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingP
             <span className="text-sm text-muted-foreground shrink-0">Price</span>
             <span className="text-sm text-foreground text-right" data-testid="agri-peek-price">
               {formatPrice(priceInRupees)}
+            </span>
+          </div>
+        )}
+        {showSignInForPrice && (
+          <div className="flex justify-between items-center gap-2 py-2 border-b border-border">
+            <span className="text-sm text-muted-foreground shrink-0">Price</span>
+            <span
+              className="inline-flex items-center gap-1 text-sm text-primary text-right font-medium"
+              data-testid="agri-peek-price-signin"
+            >
+              <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+              Sign in to view price
             </span>
           </div>
         )}

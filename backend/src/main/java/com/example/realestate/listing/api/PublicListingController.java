@@ -95,12 +95,29 @@ public class PublicListingController {
      * Returns 404 for unknown IDs, soft-deleted listings, or any non-LIVE status
      * (DRAFT, PENDING_REVIEW, REJECTED, ARCHIVED) — consistent with the detail endpoint.
      * Returns an empty array when no price changes have been recorded for the listing.
+     *
+     * <p>JWT-aware: anonymous callers on agricultural listings receive an empty array
+     * (200), mirroring the price/pricePaise gate applied in {@link #getById} →
+     * {@code toTeaserResponse}. This prevents the price-history endpoint from acting as a
+     * side-channel that leaks agri price data the teaser response withholds. Authenticated
+     * callers and all non-agricultural listings are unaffected.
      */
     @GetMapping("/{id}/price-history")
     public ResponseEntity<?> getPriceHistory(@PathVariable UUID id) {
         Listing listing = listingRepository.findById(id).orElse(null);
         if (listing == null || !ListingStatus.LIVE.toDbValue().equals(listing.getStatus())) {
             return notFound();
+        }
+
+        // Anonymous callers on agricultural listings receive no price-history
+        // (mirrors the price/pricePaise gate in getById → toTeaserResponse).
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isAuthenticated = auth != null
+                && auth.isAuthenticated()
+                && !(auth instanceof AnonymousAuthenticationToken);
+        boolean isAgri = "agricultural_land".equals(listing.getPropertyType());
+        if (!isAuthenticated && isAgri) {
+            return ResponseEntity.ok(List.of());
         }
 
         List<PriceChangeLog> logs = priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(id);

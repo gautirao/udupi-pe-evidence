@@ -24,9 +24,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
 const mockUseAgriListingDetail = vi.hoisted(() => vi.fn());
+const mockSession = vi.hoisted(() => ({ current: { user: { id: 'u1' } } as unknown }));
 
 vi.mock('@/hooks/useAgriListingDetail', () => ({
   useAgriListingDetail: mockUseAgriListingDetail,
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ session: mockSession.current }),
 }));
 
 // ── Component under test ──────────────────────────────────────────────────────
@@ -108,6 +113,8 @@ const fullListing = {
 describe('AgriListingPanel', () => {
   beforeEach(() => {
     mockUseAgriListingDetail.mockReset();
+    // Default to authenticated; anon gating tests override per-test.
+    mockSession.current = { user: { id: 'u1' } };
   });
 
   // AC1 — Loading state
@@ -256,5 +263,66 @@ describe('AgriListingPanel', () => {
     // Must NOT show 0 or blank
     expect(priceCell.textContent).not.toBe('₹0');
     expect(priceCell.textContent).not.toBe('');
+  });
+
+  // ── Issue #1454: anon price gating ──────────────────────────────────────────
+  describe('anon price gating (Issue #1454)', () => {
+    const anonNoPrice = { ...fullListing, price: null, pricePaise: null };
+
+    it('shows "Sign in to view price" when anon and price fields are null', () => {
+      mockSession.current = null;
+      mockUseAgriListingDetail.mockReturnValue({
+        data: anonNoPrice,
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      });
+
+      renderPanel();
+      const signin = screen.getByTestId('agri-peek-price-signin');
+      expect(signin).toBeInTheDocument();
+      expect(signin).toHaveTextContent(/sign in to view price/i);
+      expect(screen.queryByTestId('agri-peek-price')).not.toBeInTheDocument();
+    });
+
+    it('does NOT show the sign-in CTA when authenticated even if price fields are null', () => {
+      mockSession.current = { user: { id: 'u1' } };
+      mockUseAgriListingDetail.mockReturnValue({
+        data: anonNoPrice,
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      });
+
+      renderPanel();
+      expect(screen.queryByTestId('agri-peek-price-signin')).not.toBeInTheDocument();
+    });
+
+    it('does NOT show the sign-in CTA when anon but price is present (price shown instead)', () => {
+      mockSession.current = null;
+      mockUseAgriListingDetail.mockReturnValue({
+        data: fullListing, // price = 5000000
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      });
+
+      renderPanel();
+      expect(screen.queryByTestId('agri-peek-price-signin')).not.toBeInTheDocument();
+      expect(screen.getByTestId('agri-peek-price')).toBeInTheDocument();
+    });
+
+    it('does NOT show the sign-in CTA for non-agri listings', () => {
+      mockSession.current = null;
+      mockUseAgriListingDetail.mockReturnValue({
+        data: { ...anonNoPrice, propertyType: 'land' },
+        isLoading: false,
+        isError: false,
+        refetch: vi.fn(),
+      });
+
+      renderPanel();
+      expect(screen.queryByTestId('agri-peek-price-signin')).not.toBeInTheDocument();
+    });
   });
 });

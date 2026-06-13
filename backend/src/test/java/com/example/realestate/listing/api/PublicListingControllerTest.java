@@ -326,6 +326,77 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
+    // ==================== GET /{id}/price-history — anon agri gate (side-channel fix) ====================
+
+    /**
+     * GATE PROOF: anonymous caller on an agricultural listing receives an empty array
+     * even when price changes exist. Mirrors the price/pricePaise gate in getById →
+     * toTeaserResponse. Without the gate this would return the real entries (length 1).
+     */
+    @Test
+    void getPriceHistory_anonymousAgri_withPriceChanges_returnsEmptyList() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
+                "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        // Non-empty logs: the gate must suppress them for anonymous agri callers.
+        PriceChangeLog log = buildPriceChangeLog(
+                LISTING_ID, 500_000_000L, 600_000_000L, OffsetDateTime.now().minusDays(5));
+        when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
+                .thenReturn(List.of(log));
+
+        // SecurityContextHolder cleared in @BeforeEach → anonymous
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    /**
+     * Authenticated callers on agri listings are NOT gated — price history is returned.
+     */
+    @Test
+    void getPriceHistory_authenticatedAgri_returnsHistory() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "agricultural_land",
+                "Farm Plot", "Udupi", new BigDecimal("5000000"), "Fertile land");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        PriceChangeLog log = buildPriceChangeLog(
+                LISTING_ID, 500_000_000L, 600_000_000L, OffsetDateTime.now().minusDays(5));
+        when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
+                .thenReturn(List.of(log));
+
+        // Authenticated principal (not AnonymousAuthenticationToken)
+        var authToken = new UsernamePasswordAuthenticationToken(
+                "user@example.com", null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
+        SecurityContextHolder.getContext().setAuthentication(authToken);
+
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
+    /**
+     * Non-agricultural listings are unaffected by the gate — anonymous callers
+     * still receive price history.
+     */
+    @Test
+    void getPriceHistory_anonymousResidential_returnsHistory() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "house",
+                "Sea View Villa", "Udupi", new BigDecimal("15000000"), "A nice villa");
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(listing));
+
+        PriceChangeLog log = buildPriceChangeLog(
+                LISTING_ID, 500_000_000L, 600_000_000L, OffsetDateTime.now().minusDays(5));
+        when(priceChangeLogRepository.findByListingIdOrderByChangedAtAsc(LISTING_ID))
+                .thenReturn(List.of(log));
+
+        // SecurityContextHolder cleared in @BeforeEach → anonymous
+        mockMvc.perform(get("/api/public/listings/" + LISTING_ID + "/price-history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1));
+    }
+
     // ==================== GET /{id} — PENDING_REVIEW listing -> 404 (Fix 1) ====================
 
     @Test

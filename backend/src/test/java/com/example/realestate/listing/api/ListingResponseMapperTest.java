@@ -555,13 +555,16 @@ class ListingResponseMapperTest {
         assertThat(l.getLandAreaUnit()).isEqualTo(declaredUnitBefore);
     }
 
-    // ==================== T6: real agri teaser → all 12 D1 fields populated ====================
+    // ==================== T6 (#1454): anon agri teaser → context fields present, gated fields ABSENT ===
 
     @Test
-    void toTeaserResponse_agri_populatesAll12D1Fields() {
+    @org.junit.jupiter.api.DisplayName("#1454 anon agri teaser: boundary/landArea/computedAcres/agri-context present; price/survey/lat/lng ABSENT")
+    void toTeaserResponse_agri_contextPresent_gatedFieldsMasked() {
         Listing l = buildAgriListing("LIVE");
         l.setLatitude(13.3409);
         l.setLongitude(74.7421);
+        l.setPrice(new BigDecimal("12500000"));
+        l.setPricePaise(12500000L);
         l.setLandArea(new BigDecimal("2.50"));
         l.setLandAreaUnit("acres");
         l.setWaterSource("Borewell");
@@ -580,15 +583,20 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse result = mapper.toTeaserResponse(l);
 
+        // #1454 GATED FIELDS — must be null (NON_NULL omits the JSON key)
+        assertThat(result.price()).as("anon agri price gated").isNull();
+        assertThat(result.pricePaise()).as("anon agri pricePaise gated").isNull();
+        assertThat(result.latitude()).as("anon agri lat coarsened for anon").isEqualTo(13.34);
+        assertThat(result.longitude()).as("anon agri lng coarsened for anon").isEqualTo(74.74);
+        assertThat(result.surveyNumber()).as("anon agri survey number gated").isNull();
+
+        // Agri CONTEXT fields still present (boundary polygon is out of scope, unchanged)
         assertThat(result.boundary()).isEqualTo(geojson);
-        assertThat(result.latitude()).isEqualTo(13.3409);
-        assertThat(result.longitude()).isEqualTo(74.7421);
         assertThat(result.landArea()).isEqualByComparingTo(new BigDecimal("2.50"));
         assertThat(result.landAreaUnit()).isEqualTo("acres");
         assertThat(result.computedAreaAcres())
                 .as("computedAreaAcres must not be null when area sqm is present")
                 .isNotNull();
-        // Verify value matches the same AreaNormalizer call the mapper uses
         BigDecimal expected = AreaNormalizer.sqmToAcres(BigDecimal.valueOf(areaSqm));
         assertThat(result.computedAreaAcres()).isEqualByComparingTo(expected);
         assertThat(result.waterSource()).isEqualTo("Borewell");
@@ -596,7 +604,6 @@ class ListingResponseMapperTest {
         assertThat(result.roadAccess()).isEqualTo("Tar road");
         assertThat(result.cultivationStatus()).isEqualTo("Fallow");
         assertThat(result.ownershipType()).isEqualTo("Freehold");
-        assertThat(result.surveyNumber()).isEqualTo("SY-101/2");
     }
 
     // ==================== T7: real non-agri teaser → all 12 agri fields NULL ====================
@@ -604,12 +611,18 @@ class ListingResponseMapperTest {
     @Test
     void toTeaserResponse_nonAgri_allAgriFieldsNull() {
         Listing l = buildListing("LIVE"); // propertyType = "land"
+        // Real non-null coordinates so the isAgri null-guard is exercised:
+        // coarsen(null)==null would let the buggy unconditional-coarsen code pass.
+        // With real coords set, lat/lng must still be null for non-agri (gate is real).
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
 
         // setUp() already stubs findByListingIdOrderByPositionAsc(any()) → List.of()
         // findBoundaryGeoJson / findBoundaryAreaSqm must NOT be called — verified by T8/T9
         ListingTeaserResponse result = mapper.toTeaserResponse(l);
 
         assertThat(result.boundary()).isNull();
+        // Non-agri anon teaser must NOT leak coordinates, even coarsened (regression guard #1454).
         assertThat(result.latitude()).isNull();
         assertThat(result.longitude()).isNull();
         assertThat(result.landArea()).isNull();
@@ -764,13 +777,139 @@ class ListingResponseMapperTest {
     }
 
     @Test
-    void teaserBuilder_agriListing_pricePaiseMapped() {
+    @org.junit.jupiter.api.DisplayName("#1454: anon agri teaser pricePaise is gated (null) — but canonical entity value untouched")
+    void teaserBuilder_agriListing_pricePaiseGatedForAnon() {
         Listing l = buildAgriListing("LIVE");
         l.setPricePaise(12500000L);
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        assertThat(teaser.pricePaise()).isEqualTo(12500000L);
+        // #1454: anonymous agri callers must NOT receive price/pricePaise.
+        assertThat(teaser.pricePaise()).isNull();
+        assertThat(teaser.price()).isNull();
+        // #1452 guard: entity source-of-truth is NOT mutated by the mask.
+        assertThat(l.getPricePaise()).isEqualTo(12500000L);
+    }
+
+    // ==================== #1454: anon agri gating (detail teaser) ====================
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1454 BE-TC1: anon agri teaser coarsens lat/lng + masks price+pricePaise+survey")
+    void toTeaserResponse_anonAgri_masksPriceSurveyAndExactLocation() {
+        Listing l = buildAgriListing("LIVE");
+        l.setPrice(new BigDecimal("12500000"));
+        l.setPricePaise(12500000L);
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+        l.setSurveyNumber("SY-101/2");
+        l.setLandArea(new BigDecimal("2.50"));
+        l.setLandAreaUnit("acres");
+        l.setWaterSource("Borewell");
+
+        when(listingRepository.findBoundaryGeoJson(l.getId()))
+                .thenReturn(Optional.of("{\"type\":\"Polygon\"}"));
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        // 5 gated fields ABSENT (null → omitted by @JsonInclude(NON_NULL))
+        assertThat(teaser.price()).isNull();
+        assertThat(teaser.pricePaise()).isNull();
+        assertThat(teaser.latitude()).as("anon agri lat coarsened").isEqualTo(13.34);
+        assertThat(teaser.longitude()).as("anon agri lng coarsened").isEqualTo(74.74);
+        assertThat(teaser.surveyNumber()).isNull();
+        // agri context still present
+        assertThat(teaser.boundary()).isEqualTo("{\"type\":\"Polygon\"}");
+        assertThat(teaser.landArea()).isEqualByComparingTo(new BigDecimal("2.50"));
+        assertThat(teaser.waterSource()).isEqualTo("Borewell");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1454 BE-TC2: authed agri detail (toPublicResponse) keeps price+pricePaise+survey+lat/lng")
+    void toPublicResponse_authedAgri_keepsPriceSurveyAndExactLocation() {
+        Listing l = buildAgriListing("LIVE");
+        l.setPrice(null);
+        l.setPricePaise(12500000L);
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+        l.setSurveyNumber("SY-101/2");
+
+        ListingResponse response = mapper.toPublicResponse(l);
+
+        // #1452 canonical pricePaise intact for authed callers
+        assertThat(response.pricePaise()).isEqualTo(12500000L);
+        assertThat(response.surveyNumber()).isEqualTo("SY-101/2");
+        assertThat(response.latitude()).isEqualTo(13.34091);
+        assertThat(response.longitude()).isEqualTo(74.74215);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1454 BE-TC3: dealer/admin agri (toResponse) keeps price+survey+lat/lng (no over-masking)")
+    void toResponse_dealerAdminAgri_keepsAllSensitiveFields() {
+        Listing l = buildAgriListing("LIVE");
+        l.setPrice(new BigDecimal("12500000"));
+        l.setPricePaise(12500000L);
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+        l.setSurveyNumber("SY-101/2");
+
+        ListingResponse response = mapper.toResponse(l);
+
+        assertThat(response.price()).isEqualByComparingTo(new BigDecimal("12500000"));
+        assertThat(response.pricePaise()).isEqualTo(12500000L);
+        assertThat(response.surveyNumber()).isEqualTo("SY-101/2");
+        assertThat(response.latitude()).isEqualTo(13.34091);
+        assertThat(response.longitude()).isEqualTo(74.74215);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1454 BE-TC4: residential anon teaser keeps price+pricePaise (mask scoped to agri)")
+    void toTeaserResponse_residentialAnon_priceUnchanged() {
+        Listing l = buildListing("LIVE"); // propertyType = "land" (non-agri)
+        l.setPrice(new BigDecimal("750000"));
+        l.setPricePaise(75000000L);
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        assertThat(teaser.price()).isEqualByComparingTo(new BigDecimal("750000"));
+        assertThat(teaser.pricePaise()).isEqualTo(75000000L);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1454 BE-TC5: anon agri teaser lat/lng coarsened to 2dp (not exact, not null)")
+    void toTeaserResponse_anonAgri_latLngCoarsenedTo2dp() {
+        Listing l = buildAgriListing("LIVE");
+        l.setLatitude(13.34091);
+        l.setLongitude(74.74215);
+
+        when(listingRepository.findBoundaryGeoJson(l.getId())).thenReturn(Optional.empty());
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        // Coarsened to 2dp: truncate toward zero
+        assertThat(teaser.latitude()).as("must be coarsened, not exact").isEqualTo(13.34);
+        assertThat(teaser.longitude()).as("must be coarsened, not exact").isEqualTo(74.74);
+        // Not exact
+        assertThat(teaser.latitude()).isNotEqualTo(13.34091);
+        assertThat(teaser.longitude()).isNotEqualTo(74.74215);
+        // Not null — anon should see an approximate marker
+        assertThat(teaser.latitude()).isNotNull();
+        assertThat(teaser.longitude()).isNotNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1454 BE-TC6: anon agri teaser null lat/lng stays null (no 0.0 marker)")
+    void toTeaserResponse_anonAgri_nullLatLng_staysNull() {
+        Listing l = buildAgriListing("LIVE");
+        l.setLatitude(null);
+        l.setLongitude(null);
+
+        when(listingRepository.findBoundaryGeoJson(l.getId())).thenReturn(Optional.empty());
+
+        ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
+
+        // null-guard: coarsen(null) must return null, not 0.0
+        assertThat(teaser.latitude()).as("null coord must not become 0.0").isNull();
+        assertThat(teaser.longitude()).as("null coord must not become 0.0").isNull();
     }
 
     // ==================== Helper ====================

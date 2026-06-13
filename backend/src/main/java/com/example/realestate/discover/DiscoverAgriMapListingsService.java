@@ -68,18 +68,34 @@ public class DiscoverAgriMapListingsService {
     }
 
     /**
+     * Number of decimal places to which anonymous lat/lng is truncated (#1454).
+     * 2 dp ≈ 1.1 km granularity — markers still render approximately but the exact
+     * parcel coordinates never leave the server for anonymous callers.
+     */
+    static final int ANON_COORD_DECIMALS = 2;
+
+    /**
      * Finds LIVE agricultural_land listings for the given city and area keys.
      *
-     * @param citySlug  city slug (e.g. "udupi") — must be non-blank
-     * @param areaKeys  list of area keys to filter by — must be non-empty, max {@value #MAX_AREA_KEYS}
-     * @param bbox      optional bounding box in format "minLat,minLon,maxLat,maxLon"
+     * <p>#1454 auth-aware gating: anonymous callers ({@code isAuthenticated == false})
+     * receive NO {@code pricePaise} and COARSENED lat/lng (truncated to
+     * {@value #ANON_COORD_DECIMALS} dp). Authenticated callers receive exact lat/lng and
+     * pricePaise. The coarsening is a post-read projection — the SQL SELECT, WHERE clause,
+     * and the {@code price_paise}/{@code latitude}/{@code longitude} columns are unchanged
+     * (preserves #1452 + AC7).
+     *
+     * @param citySlug        city slug (e.g. "udupi") — must be non-blank
+     * @param areaKeys        list of area keys to filter by — must be non-empty, max {@value #MAX_AREA_KEYS}
+     * @param bbox            optional bounding box in format "minLat,minLon,maxLat,maxLon"
+     * @param isAuthenticated true when the caller presented a valid (non-anonymous) JWT
      * @return response containing the city slug and matching listings
      * @throws ResponseStatusException HTTP 400 on validation failure
      */
     @Transactional(readOnly = true)
     public AgriMapListingsResponse findAgriMapListings(String citySlug,
                                                        List<String> areaKeys,
-                                                       Optional<String> bbox) {
+                                                       Optional<String> bbox,
+                                                       boolean isAuthenticated) {
         // Validate city
         if (citySlug == null || citySlug.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city_must_not_be_blank");
@@ -153,7 +169,51 @@ public class DiscoverAgriMapListingsService {
                 params
         );
 
-        log.debug("findAgriMapListings city={} returned={}", citySlug, listings.size());
+        // #1454: anonymous gating — withhold pricePaise and coarsen exact coordinates.
+        // Post-read projection only; the SQL (SELECT/WHERE/columns) is untouched.
+        if (!isAuthenticated) {
+            listings = listings.stream()
+                    .map(DiscoverAgriMapListingsService::toAnonItem)
+                    .toList();
+        }
+
+        log.debug("findAgriMapListings city={} returned={} authenticated={}",
+                citySlug, listings.size(), isAuthenticated);
         return new AgriMapListingsResponse(citySlug.toLowerCase(), listings);
+    }
+
+    /**
+     * Anonymous projection (#1454): null pricePaise + coarsened lat/lng.
+     * Zero-PII fields (areaKey, title, boundaryGeoJson, landArea, etc.) are preserved.
+     */
+    private static AgriMapListingItem toAnonItem(AgriMapListingItem item) {
+        return new AgriMapListingItem(
+                item.id(),
+                item.title(),
+                item.areaKey(),
+                coarsen(item.latitude()),
+                coarsen(item.longitude()),
+                item.propertyType(),
+                item.locality(),
+                item.boundaryGeoJson(),
+                item.landArea(),
+                item.landAreaUnit(),
+                item.computedAreaAcres(),
+                null); // pricePaise withheld from anonymous callers
+    }
+
+    /**
+     * Coarsens a coordinate to {@value #ANON_COORD_DECIMALS} decimal places by truncating
+     * toward zero (sign-correct: magnitude is truncated, sign preserved). Null-guarded so a
+     * SQL NULL coordinate stays null — never coerced to 0.0 (would place a marker at (0,0)).
+     */
+    private static Double coarsen(Double coord) {
+        if (coord == null) {
+            return null;
+        }
+        double factor = Math.pow(10, ANON_COORD_DECIMALS);
+        // Truncate toward zero so the sign is preserved symmetrically for +/- values.
+        double truncated = (coord < 0 ? Math.ceil(coord * factor) : Math.floor(coord * factor)) / factor;
+        return truncated;
     }
 }

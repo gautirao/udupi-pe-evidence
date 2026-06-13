@@ -12,10 +12,11 @@
  */
 
 import React from 'react';
-import { ChevronLeft, AlertCircle, ImageOff } from 'lucide-react';
+import { ChevronLeft, AlertCircle, ImageOff, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAgriListingDetail } from '@/hooks/useAgriListingDetail';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/lib/formatters';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 
@@ -65,12 +66,21 @@ export function AgriGroupListingPeek({
   onViewDetails,
 }: AgriGroupListingPeekProps) {
   const { data, isLoading, isError } = useAgriListingDetail(listingId);
+  const { session } = useAuth();
+  const isAuthenticated = !!session;
 
   // First-paint values (available immediately from AgriMapListingItem)
   const title = data?.title ?? firstPaintData.locality ?? 'Agricultural plot';
   const locality = firstPaintData.locality;
   const acreage = deriveAcreageDisplay(firstPaintData);
   const priceStr = formatPaisePriceOrNull(firstPaintData.pricePaise);
+
+  // Issue #1454 — anon agri visibility gating. The backend withholds pricePaise
+  // for anonymous agri callers. When that happens, show a "Sign in" affordance
+  // instead of silently omitting the price.
+  const isAgri = firstPaintData.propertyType === 'agricultural_land';
+  const showSignInForPrice =
+    isAgri && !isAuthenticated && firstPaintData.pricePaise == null;
 
   // Lazy-loaded values (from useAgriListingDetail)
   const images = data?.images ?? [];
@@ -134,6 +144,18 @@ export function AgriGroupListingPeek({
             >
               <span className="text-sm text-muted-foreground shrink-0">Price</span>
               <span className="text-sm text-foreground text-right font-medium">{priceStr}</span>
+            </div>
+          )}
+          {!priceStr && showSignInForPrice && (
+            <div
+              data-testid="agri-listing-peek-price-signin"
+              className="flex justify-between items-center gap-2"
+            >
+              <span className="text-sm text-muted-foreground shrink-0">Price</span>
+              <span className="inline-flex items-center gap-1 text-sm text-primary text-right font-medium">
+                <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                Sign in to view price
+              </span>
             </div>
           )}
         </div>

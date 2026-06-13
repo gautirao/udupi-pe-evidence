@@ -16,7 +16,7 @@
  */
 
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -24,9 +24,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
 const mockUseAgriListingDetail = vi.hoisted(() => vi.fn());
+const mockSession = vi.hoisted(() => ({ current: { user: { id: 'u1' } } as unknown }));
 
 vi.mock('@/hooks/useAgriListingDetail', () => ({
   useAgriListingDetail: mockUseAgriListingDetail,
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({ session: mockSession.current }),
 }));
 
 // ── Component under test ──────────────────────────────────────────────────────
@@ -260,6 +265,46 @@ describe('AgriGroupListingPeek — callbacks', () => {
     renderPeek({}, { onViewDetails });
     // No auto-navigate: onViewDetails must not have been called at mount time
     expect(onViewDetails).not.toHaveBeenCalled();
+  });
+});
+
+describe('AgriGroupListingPeek — anon price gating (Issue #1454)', () => {
+  beforeEach(() => {
+    mockUseAgriListingDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+  });
+
+  afterEach(() => {
+    // Restore authenticated default for the rest of the suite
+    mockSession.current = { user: { id: 'u1' } };
+  });
+
+  it('shows "Sign in to view price" when anon and pricePaise is null', () => {
+    mockSession.current = null;
+    renderPeek({ pricePaise: null });
+    const signin = screen.getByTestId('agri-listing-peek-price-signin');
+    expect(signin).toBeInTheDocument();
+    expect(signin).toHaveTextContent(/sign in to view price/i);
+    // The normal price element is not rendered
+    expect(screen.queryByTestId('agri-listing-peek-price')).not.toBeInTheDocument();
+  });
+
+  it('does NOT show the sign-in CTA when authenticated even if pricePaise is null', () => {
+    mockSession.current = { user: { id: 'u1' } };
+    renderPeek({ pricePaise: null });
+    expect(screen.queryByTestId('agri-listing-peek-price-signin')).not.toBeInTheDocument();
+  });
+
+  it('does NOT show the sign-in CTA when anon but pricePaise is present (price shown instead)', () => {
+    mockSession.current = null;
+    renderPeek(); // baseListing has pricePaise set
+    expect(screen.queryByTestId('agri-listing-peek-price-signin')).not.toBeInTheDocument();
+    expect(screen.getByTestId('agri-listing-peek-price')).toBeInTheDocument();
+  });
+
+  it('does NOT show the sign-in CTA for non-agri listings', () => {
+    mockSession.current = null;
+    renderPeek({ pricePaise: null, propertyType: 'land' });
+    expect(screen.queryByTestId('agri-listing-peek-price-signin')).not.toBeInTheDocument();
   });
 });
 

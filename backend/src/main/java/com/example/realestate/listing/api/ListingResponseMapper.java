@@ -97,12 +97,22 @@ public class ListingResponseMapper {
                                 .map(BigDecimal::valueOf)
                                 .orElse(null))
                 : null;
+        // #1454: ANON agri gating. Anonymous callers must NOT receive price, survey number,
+        // or EXACT location for agricultural land. This teaser path is the anonymous-only
+        // variant (authenticated callers go through toPublicResponse/build, which is untouched),
+        // so masking here gates anon agri without affecting authed/dealer/admin responses.
+        // Residential/non-agri pricing is preserved: price/pricePaise are nulled ONLY for agri.
+        BigDecimal price = isAgri ? null : l.getPrice();
+        Long pricePaise = isAgri ? null : l.getPricePaise();
         return new ListingTeaserResponse(
-                l.getId(), primaryImageUrl, images.size(), l.getPrice(), l.getPricePaise(),
+                l.getId(), primaryImageUrl, images.size(), price, pricePaise,
                 l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
                 boundary,
-                isAgri ? l.getLatitude() : null,
-                isAgri ? l.getLongitude() : null,
+                // #1454: anon agri receives COARSENED lat/lng (~1.1 km, 2 dp) — not exact, not null.
+                // Algorithm is kept identical to DiscoverAgriMapListingsService.coarsen() (parity is a
+                // security requirement so both anon agri surfaces leak the same precision).
+                isAgri ? coarsen(l.getLatitude()) : null,
+                isAgri ? coarsen(l.getLongitude()) : null,
                 isAgri ? l.getLandArea() : null,
                 isAgri ? l.getLandAreaUnit() : null,
                 computedAreaAcres,
@@ -111,7 +121,8 @@ public class ListingResponseMapper {
                 isAgri ? l.getRoadAccess() : null,
                 isAgri ? l.getCultivationStatus() : null,
                 isAgri ? l.getOwnershipType() : null,
-                isAgri ? l.getSurveyNumber() : null);
+                // #1454: survey number withheld from anon agri.
+                null);
     }
 
     /**
@@ -135,17 +146,22 @@ public class ListingResponseMapper {
                 .collect(Collectors.groupingBy(ListingImage::getListingId, Collectors.counting()));
 
         return listings.stream()
-                .map(l -> new ListingTeaserResponse(
-                        l.getId(),
-                        firstImageByListing.get(l.getId()),
-                        imageCountByListing.getOrDefault(l.getId(), 0L).intValue(),
-                        l.getPrice(),
-                        l.getPricePaise(),
-                        l.getPropertyType(),
-                        l.getLocality(),
-                        l.getListingPurpose(),
-                        // IC-3: batch path — null-pass for all 12 agri fields (no DB call; N+1 guard)
-                        null, null, null, null, null, null, null, null, null, null, null, null))
+                .map(l -> {
+                    // #1454: anon agri price gating on the batch teaser path too — null price/pricePaise
+                    // for agri rows; residential/non-agri pricing unchanged.
+                    boolean isAgri = "agricultural_land".equals(l.getPropertyType());
+                    return new ListingTeaserResponse(
+                            l.getId(),
+                            firstImageByListing.get(l.getId()),
+                            imageCountByListing.getOrDefault(l.getId(), 0L).intValue(),
+                            isAgri ? null : l.getPrice(),
+                            isAgri ? null : l.getPricePaise(),
+                            l.getPropertyType(),
+                            l.getLocality(),
+                            l.getListingPurpose(),
+                            // IC-3: batch path — null-pass for all 12 agri fields (no DB call; N+1 guard)
+                            null, null, null, null, null, null, null, null, null, null, null, null);
+                })
                 .toList();
     }
 
@@ -257,5 +273,19 @@ public class ListingResponseMapper {
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
                 l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
                 boundary, computedAreaAcres);
+    }
+
+    /**
+     * Coarsens a coordinate to 2 decimal places (~1.1 km granularity) by truncating toward zero.
+     * Null-safe: null input stays null (never coerced to 0.0, which would place a marker at (0,0)).
+     * Algorithm MUST remain identical to DiscoverAgriMapListingsService.coarsen() (#1454).
+     */
+    private static Double coarsen(Double coord) {
+        if (coord == null) {
+            return null;
+        }
+        double factor = Math.pow(10, 2); // 2 decimal places ≈ 1.1 km granularity
+        // Truncate toward zero so sign is preserved symmetrically for +/- values.
+        return (coord < 0 ? Math.ceil(coord * factor) : Math.floor(coord * factor)) / factor;
     }
 }
