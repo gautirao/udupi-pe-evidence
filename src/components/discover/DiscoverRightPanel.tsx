@@ -148,6 +148,9 @@ function CorridorLandingPanel({
             );
           })}
         </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Includes properties at closer distances too.
+        </p>
         {tiers.length === 0 && (
           <p className="text-sm text-muted-foreground">No distance tiers available for this corridor.</p>
         )}

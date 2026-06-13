@@ -25,6 +25,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const mockUseAgriListingDetail = vi.hoisted(() => vi.fn());
 const mockSession = vi.hoisted(() => ({ current: { user: { id: 'u1' } } as unknown }));
+const mockNavigate = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/useAgriListingDetail', () => ({
   useAgriListingDetail: mockUseAgriListingDetail,
@@ -33,6 +34,11 @@ vi.mock('@/hooks/useAgriListingDetail', () => ({
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ session: mockSession.current }),
 }));
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 // ── Component under test ──────────────────────────────────────────────────────
 
@@ -359,5 +365,95 @@ describe('AgriGroupListingPeek — required data-testids (AC11)', () => {
     renderPeek({ landArea: null, landAreaUnit: null, pricePaise: null });
 
     expect(screen.getByTestId('agri-listing-peek-no-media')).toBeInTheDocument();
+  });
+});
+
+// ─── Issue #1456 — Enquiry / login CTA ───────────────────────────────────────
+
+describe('AgriGroupListingPeek — enquiry CTA (Issue #1456)', () => {
+  beforeEach(() => {
+    mockUseAgriListingDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    mockNavigate.mockReset();
+  });
+
+  afterEach(() => {
+    // Restore authenticated default for the rest of the suite
+    mockSession.current = { user: { id: 'u1' } };
+  });
+
+  it('anon: renders enquire button with "Sign in to enquire" label', () => {
+    mockSession.current = null;
+    renderPeek();
+    const btn = screen.getByTestId('agri-listing-peek-enquire');
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent('Sign in to enquire');
+  });
+
+  it('anon: "Enquire" label is absent', () => {
+    mockSession.current = null;
+    renderPeek();
+    // Button is present but label is "Sign in to enquire", not bare "Enquire"
+    expect(screen.queryByRole('button', { name: /^Enquire$/i })).not.toBeInTheDocument();
+  });
+
+  it('anon: "View full details" button is still present alongside enquire button', () => {
+    mockSession.current = null;
+    renderPeek();
+    expect(screen.getByTestId('agri-listing-peek-view-details')).toBeInTheDocument();
+    expect(screen.getByTestId('agri-listing-peek-enquire')).toBeInTheDocument();
+  });
+
+  it('auth: renders enquire button with "Enquire" label', () => {
+    mockSession.current = { user: { id: 'u1' } };
+    renderPeek();
+    const btn = screen.getByTestId('agri-listing-peek-enquire');
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveTextContent('Enquire');
+  });
+
+  it('auth: "Sign in to enquire" label is absent', () => {
+    mockSession.current = { user: { id: 'u1' } };
+    renderPeek();
+    expect(screen.queryByText(/sign in to enquire/i)).not.toBeInTheDocument();
+  });
+
+  it('auth: "View full details" button is still present alongside enquire button', () => {
+    mockSession.current = { user: { id: 'u1' } };
+    renderPeek();
+    expect(screen.getByTestId('agri-listing-peek-view-details')).toBeInTheDocument();
+    expect(screen.getByTestId('agri-listing-peek-enquire')).toBeInTheDocument();
+  });
+
+  it('auth: clicking "Enquire" calls onViewDetails with the listingId', async () => {
+    const user = userEvent.setup();
+    mockSession.current = { user: { id: 'u1' } };
+    const onViewDetails = vi.fn();
+    renderPeek({}, { onViewDetails });
+
+    await user.click(screen.getByTestId('agri-listing-peek-enquire'));
+
+    expect(onViewDetails).toHaveBeenCalledTimes(1);
+    expect(onViewDetails).toHaveBeenCalledWith('listing-uuid-123');
+  });
+
+  it('anon: clicking "Sign in to enquire" navigates to /auth', async () => {
+    const user = userEvent.setup();
+    mockSession.current = null;
+    renderPeek();
+
+    await user.click(screen.getByTestId('agri-listing-peek-enquire'));
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('/auth');
+  });
+
+  it('anon regression: price-gate "Sign in to view price" still renders when showSignInForPrice=true', () => {
+    mockSession.current = null;
+    // pricePaise=null on an agri listing → triggers the #1454 price-gate block
+    renderPeek({ pricePaise: null, propertyType: 'agricultural_land' });
+    expect(screen.getByTestId('agri-listing-peek-price-signin')).toBeInTheDocument();
+    expect(screen.getByTestId('agri-listing-peek-price-signin')).toHaveTextContent(
+      /sign in to view price/i,
+    );
   });
 });

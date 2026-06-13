@@ -12,6 +12,7 @@
  */
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, AlertCircle, ImageOff, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,6 +66,7 @@ export function AgriGroupListingPeek({
   onClose,
   onViewDetails,
 }: AgriGroupListingPeekProps) {
+  const navigate = useNavigate();
   const { data, isLoading, isError } = useAgriListingDetail(listingId);
   const { session } = useAuth();
   const isAuthenticated = !!session;
@@ -225,6 +227,28 @@ export function AgriGroupListingPeek({
         >
           View full details
         </Button>
+        {isAuthenticated ? (
+          <Button
+            variant="outline"
+            className="w-full mt-2"
+            data-testid="agri-listing-peek-enquire"
+            onClick={() => {
+              // TODO(#1456): Replace with dedicated enquiry flow when available.
+              onViewDetails(listingId);
+            }}
+          >
+            Enquire
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            className="w-full mt-2"
+            data-testid="agri-listing-peek-enquire"
+            onClick={() => navigate('/auth')}
+          >
+            Sign in to enquire
+          </Button>
+        )}
       </div>
     </div>
   );

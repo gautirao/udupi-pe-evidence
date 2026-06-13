@@ -131,6 +131,9 @@ export function AgriGroupSelectedPanel({
               );
             })}
           </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Includes properties at closer distances too.
+          </p>
         </div>
       )}
 

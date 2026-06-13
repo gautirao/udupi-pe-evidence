@@ -460,3 +460,35 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
     expect(onSelectLocality).toHaveBeenCalledWith('Shirva');
   });
 });
+
+// ─── Issue #1456 — Cumulative distance hint text ──────────────────────────────
+
+describe('AgriGroupSelectedPanel — cumulative distance hint (Issue #1456)', () => {
+  it('renders hint text when distance tiers are present', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    expect(
+      screen.getByText('Includes properties at closer distances too.'),
+    ).toBeInTheDocument();
+  });
+
+  it('does NOT render hint text when availableMaxDistances is undefined (no chip row)', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={null}
+        availableMaxDistances={undefined}
+      />,
+    );
+    expect(
+      screen.queryByText('Includes properties at closer distances too.'),
+    ).not.toBeInTheDocument();
+  });
+});

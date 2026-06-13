@@ -428,3 +428,35 @@ describe('DiscoverRightPanel — search input (#952)', () => {
     expect(screen.queryByPlaceholderText('Search listings by keyword')).not.toBeInTheDocument();
   });
 });
+
+// ─── Issue #1456 — Cumulative distance hint text ──────────────────────────────
+
+describe('DiscoverRightPanel — cumulative distance hint (Issue #1456)', () => {
+  it('renders hint text when distance tiers are shown (region selected with tiers)', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="agri-landing"
+        areas={[]}
+        selectedRegion="NORTH"
+        selectedMaxKm={25}
+        corridorGroups={[
+          {
+            directionCode: 'NORTH',
+            groupName: 'North towards Hebri',
+            availableMaxDistances: [
+              { maxKm: 25, distanceLabel: 'Up to 25 km', includedBandCodes: [], listingCount: 3, areaKeys: [] },
+              { maxKm: 50, distanceLabel: 'Up to 50 km', includedBandCodes: [], listingCount: 5, areaKeys: [] },
+            ],
+          },
+        ]}
+        onClearRegionAndMaxKm={vi.fn()}
+        onSetMaxKm={vi.fn()}
+        onSetRegionWithMaxKm={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText('Includes properties at closer distances too.'),
+    ).toBeInTheDocument();
+  });
+});
