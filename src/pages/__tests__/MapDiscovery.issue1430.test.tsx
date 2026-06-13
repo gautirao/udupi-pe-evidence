@@ -64,6 +64,8 @@ function makeDefaultActions() {
     clearRegionAndMaxKm: mockClearRegionAndMaxKm,
     setSelectedListing: mockSetSelectedListing,
     clearSelectedListing: vi.fn(),
+    setLocality: vi.fn(),
+    clearLocality: vi.fn(),
     enterSchoolPicking: vi.fn(),
     clearSchoolPicking: vi.fn(),
     backToSchoolPicking: vi.fn(),
@@ -88,6 +90,7 @@ function makeUrlState(overrides: Record<string, unknown> = {}) {
     selectedRegion: 'N' as const,
     selectedMaxKm: 25 as const,
     selectedListing: null as string | null,
+    selectedLocality: null as string | null,
     ...overrides,
   };
 }
@@ -270,19 +273,48 @@ describe('Issue #1430 — MapDiscovery selectedGroupListingItem derivation', () 
     expect(screen.queryByTestId('agri-listing-peek')).not.toBeInTheDocument();
   });
 
-  it('AC4: agri-group listing card click calls setSelectedListing(id), not navigate', async () => {
+  it('AC4a (#1480): agri-group-selected shows towns-only (locality btn present, no inline listing rows)', async () => {
+    // Issue #1480 — Level-2 (agri-group-selected) is now towns-only.
+    // Inline listing rows were removed; users drill into a town to see listings (Level-3).
+    // The setSelectedListing call now originates from AgriGroupLocalityPanel (Level-3),
+    // not from AgriGroupSelectedPanel (Level-2).
+    mockAgriListingsData.current = { listings: [makeAgriItem('card-click-target')] };
+
+    // selectedListing + selectedLocality both null → agri-group-selected panel shows (Level 2)
+    renderAt('/discover?city=udupi&journey=agri-first&region=N&maxKm=25');
+
+    // Level 2: locality button present (makeAgriItem has locality='Manipal Village')
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-group-locality-btn')).toBeInTheDocument();
+    });
+    // Level 2: no inline listing rows (towns-only — listings only appear after locality drill-down)
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
+  });
+
+  it('AC4b (#1480): listing click in Level-3 (AgriGroupLocalityPanel) calls setSelectedListing(id)', async () => {
+    // Issue #1480 — Level-2 (agri-group-selected) is now towns-only; inline listing rows removed.
+    // Level-3 (agri-group-locality) shows listings for the selected town.
+    // This test verifies: clicking a listing row in Level-3 calls setSelectedListing(id), not navigate.
     const user = userEvent.setup();
     mockAgriListingsData.current = { listings: [makeAgriItem('card-click-target')] };
 
-    // selectedListing is null → agri-group-selected panel shows
-    renderAt('/discover?city=udupi&journey=agri-first&region=N&maxKm=25');
+    // Start at Level 3: selectedLocality set → agri-group-locality panel (AgriGroupLocalityPanel)
+    // makeAgriItem has locality: 'Manipal Village', so it matches the filter in DiscoverRightPanel
+    mockUseDiscoverUrlState.mockReturnValue([
+      makeUrlState({ selectedLocality: 'Manipal Village' }),
+      makeDefaultActions(),
+    ]);
 
+    renderAt('/discover?city=udupi&journey=agri-first&region=N&maxKm=25&locality=Manipal%20Village');
+
+    // Level 3: AgriGroupLocalityPanel renders listing rows with testId agri-locality-listing-row
     await waitFor(() => {
-      expect(screen.getByTestId('agri-group-listing-row')).toBeInTheDocument();
+      expect(screen.getByTestId('agri-locality-listing-row')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByTestId('agri-group-listing-row'));
+    await user.click(screen.getByTestId('agri-locality-listing-row'));
 
+    // setSelectedListing must be called with the listing id (not navigate — no navigation happens)
     expect(mockSetSelectedListing).toHaveBeenCalledWith('card-click-target');
   });
 });

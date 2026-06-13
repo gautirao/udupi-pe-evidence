@@ -1407,6 +1407,33 @@ export default function MapDiscovery() {
       return;
     }
 
+    // Issue #1480 — when a locality/town is selected, frame only that town's listings.
+    // Locality branch takes priority over corridor framing; early-return prevents overwrite.
+    const selectedLocality = urlState.selectedLocality ?? null;
+    if (selectedLocality) {
+      const localityListings = (agriMapListingsData?.listings ?? []).filter(
+        (l) =>
+          l.latitude != null &&
+          l.longitude != null &&
+          (l.locality ?? l.areaKey) === selectedLocality,
+      );
+      if (localityListings.length > 0) {
+        const lats = localityListings.map((l) => l.latitude as number);
+        const lons = localityListings.map((l) => l.longitude as number);
+        setAgriGroupFocusBounds([
+          [Math.min(...lats), Math.min(...lons)],
+          [Math.max(...lats), Math.max(...lons)],
+        ]);
+      } else {
+        // Locality matched no listings with valid coords — fall back to sector framing.
+        const sectorBounds = cityCenter
+          ? getSectorBounds(cityCenter[0], cityCenter[1], selectedRegion, selectedMaxKm)
+          : null;
+        setAgriGroupFocusBounds(sectorBounds);
+      }
+      return;
+    }
+
     // Issue #1447 — include sector geometry in map fit so the directional cone is
     // always fully framed, even when listings are sparse or clustered near the centroid.
     const sectorBounds = cityCenter
@@ -1452,7 +1479,7 @@ export default function MapDiscovery() {
       [Math.min(sectorBounds[0][0], listingBounds[0][0]), Math.min(sectorBounds[0][1], listingBounds[0][1])],
       [Math.max(sectorBounds[1][0], listingBounds[1][0]), Math.max(sectorBounds[1][1], listingBounds[1][1])],
     ]);
-  }, [selectedRegion, selectedMaxKm, agriMapListingsData, cityCenter]);
+  }, [selectedRegion, selectedMaxKm, agriMapListingsData, cityCenter, urlState.selectedLocality]);
 
   // Issue #1115 — wrap handleSchoolSelect (from useDiscoverPageState, forbidden to edit)
   // so that selecting a school via MapFilters or NearSchoolSheet also resets the

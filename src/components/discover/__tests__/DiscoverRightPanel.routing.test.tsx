@@ -562,7 +562,8 @@ describe('DiscoverRightPanel — agri-group-selected (Issue #1425)', () => {
     expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
   });
 
-  it('renders listing rows when listings are available', () => {
+  it('renders locality buttons (not listing rows) when listings are available', () => {
+    // Issue #1480 — Level 2 is towns-only; inline listing rows removed
     const listings = [makeAgriMapListing('g1'), makeAgriMapListing('g2')];
     renderPanel(
       <DiscoverRightPanel
@@ -575,25 +576,9 @@ describe('DiscoverRightPanel — agri-group-selected (Issue #1425)', () => {
         onClearRegionalGroup={vi.fn()}
       />,
     );
-    expect(screen.getAllByTestId('agri-group-listing-row')).toHaveLength(2);
-  });
-
-  it('clicking a listing row navigates to /listing/:id', async () => {
-    const user = userEvent.setup();
-    const listings = [makeAgriMapListing('g1')];
-    renderPanel(
-      <DiscoverRightPanel
-        {...baseProps}
-        panelContent="agri-group-selected"
-        agriGroupLabel="North"
-        agriGroupListings={listings}
-        isLoadingAgriGroupListings={false}
-        isAgriGroupListingsError={false}
-        onClearRegionalGroup={vi.fn()}
-      />,
-    );
-    await user.click(screen.getByTestId('agri-group-listing-row'));
-    expect(mockNavigate).toHaveBeenCalledWith('/listing/g1');
+    // g1 and g2 have distinct localities → 2 locality buttons, 0 listing rows
+    expect(screen.getAllByTestId('agri-group-locality-btn')).toHaveLength(2);
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
   });
 
   it('renders error state and retry/back buttons when isAgriGroupListingsError=true', () => {

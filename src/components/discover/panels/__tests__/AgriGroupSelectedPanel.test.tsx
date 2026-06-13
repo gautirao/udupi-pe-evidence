@@ -155,40 +155,23 @@ describe('AgriGroupSelectedPanel — error state', () => {
 });
 
 describe('AgriGroupSelectedPanel — listings state', () => {
-  const listings = [makeListing('a1'), makeListing('a2'), makeListing('a3')];
-
-  it('renders one row per listing', () => {
+  it('renders one locality button per distinct locality', () => {
+    const listings = [makeListing('a1'), makeListing('a2'), makeListing('a3')];
+    // Each listing gets a different locality by default (makeListing sets locality to `Locality ${id}`)
     render(
       <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={3} />,
     );
-    expect(screen.getAllByTestId('agri-group-listing-row')).toHaveLength(3);
+    // 3 distinct localities → 3 locality buttons, 0 listing rows
+    expect(screen.getAllByTestId('agri-group-locality-btn')).toHaveLength(3);
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
   });
 
-  it('click on a listing row fires onSelectListing with the correct id', async () => {
-    const user = userEvent.setup();
-    const onSelectListing = vi.fn();
+  it('no inline listing rows are visible at Level 2 (towns-only view)', () => {
+    const listings = [makeListing('a1'), makeListing('a2')];
     render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={listings}
-        listingCount={3}
-        onSelectListing={onSelectListing}
-      />,
+      <AgriGroupSelectedPanel {...baseProps} listings={listings} listingCount={2} />,
     );
-    const rows = screen.getAllByTestId('agri-group-listing-row');
-    await user.click(rows[1]);
-    expect(onSelectListing).toHaveBeenCalledWith('a2');
-  });
-
-  it('renders land area for listings that have it', () => {
-    render(
-      <AgriGroupSelectedPanel
-        {...baseProps}
-        listings={[makeListing('x1', { landArea: 3, landAreaUnit: 'acre' })]}
-        listingCount={1}
-      />,
-    );
-    expect(screen.getByTestId('agri-group-land-area')).toHaveTextContent('3 acre');
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
   });
 
   it('does not render land area element when landArea is null', () => {
@@ -415,10 +398,7 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
     expect(btns[2]).toHaveTextContent('Zebra');
   });
 
-  it('within-group listing rows are sorted by id ascending', async () => {
-    // Input order: z3, z1, z2 (descending by name) → rendered order must be z1, z2, z3
-    const user = userEvent.setup();
-    const onSelectListing = vi.fn();
+  it('single locality group shows correct count when all listings share one locality', () => {
     const listings = [
       makeListing('z3', { locality: 'Shirva' }),
       makeListing('z1', { locality: 'Shirva' }),
@@ -429,15 +409,13 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
         {...baseProps}
         listings={listings}
         listingCount={3}
-        onSelectListing={onSelectListing}
       />,
     );
-    // All 3 are in one group (same locality), order must be id-ascending
-    const rows = screen.getAllByTestId('agri-group-listing-row');
-    expect(rows).toHaveLength(3);
-    // Click the first row — it must correspond to z1 (lowest id lexicographically)
-    await user.click(rows[0]);
-    expect(onSelectListing).toHaveBeenCalledWith('z1');
+    // One group section, one button showing count 3, no listing rows
+    expect(screen.getAllByTestId('agri-group-locality-group')).toHaveLength(1);
+    const btn = screen.getByTestId('agri-group-locality-btn');
+    expect(btn).toHaveTextContent('3 agricultural properties');
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
   });
 
   it('clicking a locality group button calls onSelectLocality with the locality name', async () => {

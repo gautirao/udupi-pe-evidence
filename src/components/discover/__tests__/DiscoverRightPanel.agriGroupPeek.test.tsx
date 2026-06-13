@@ -27,6 +27,10 @@ vi.mock('@/hooks/useAgriListingDetail', () => ({
   useAgriListingDetail: mockUseAgriListingDetail,
 }));
 
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => ({ user: null, isLoading: false, isAdmin: false, isDealer: false })),
+}));
+
 // Prevent supabase crash from transitive imports
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
@@ -200,10 +204,9 @@ describe('DiscoverRightPanel — agri-group-peek routing (Issue #1430)', () => {
     expect(screen.queryByTestId('agri-listing-peek')).not.toBeInTheDocument();
   });
 
-  it('agri-group-selected: onSelectAgriGroupListing called when listing row clicked', async () => {
-    const user = userEvent.setup();
-    const onSelectAgriGroupListing = vi.fn();
-
+  it('agri-group-selected: locality button visible and no inline listing rows (Issue #1480 Level-2 towns-only)', async () => {
+    // Issue #1480 — Level 2 shows towns only; inline listing rows removed.
+    // Clicking a locality button drills into Level 3 (AgriGroupLocalityPanel).
     renderPanel(
       <DiscoverRightPanel
         {...baseProps}
@@ -213,14 +216,13 @@ describe('DiscoverRightPanel — agri-group-peek routing (Issue #1430)', () => {
         isLoadingAgriGroupListings={false}
         isAgriGroupListingsError={false}
         onClearRegionalGroup={vi.fn()}
-        onSelectAgriGroupListing={onSelectAgriGroupListing}
       />,
     );
 
-    await user.click(screen.getByTestId('agri-group-listing-row'));
-
-    expect(onSelectAgriGroupListing).toHaveBeenCalledWith('listing-click-target');
-    // navigate must NOT have been called (no legacy navigate path)
+    // Level 2: locality button present, no listing rows
+    expect(screen.getByTestId('agri-group-locality-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-group-listing-row')).not.toBeInTheDocument();
+    // navigate must NOT have been called (user hasn't clicked anything)
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

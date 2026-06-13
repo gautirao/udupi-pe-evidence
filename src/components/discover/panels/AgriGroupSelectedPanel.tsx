@@ -15,6 +15,11 @@ interface AgriGroupSelectedPanelProps {
   isError: boolean;
   onRetry: () => void;
   onClear: () => void;
+  /**
+   * Issue #1480 — retained in interface for caller compatibility (DiscoverRightPanel still passes
+   * it through); not called at Level-2 (towns-only view). Level-3 (AgriGroupLocalityPanel)
+   * uses it after locality drill-down.
+   */
   onSelectListing: (id: string) => void;
   /** Issue #1445 — selected cumulative distance tier for chip row. Null when none. */
   selectedMaxKm: number | null;
@@ -228,37 +233,6 @@ export function AgriGroupSelectedPanel({
                     {groupListings.length === 1 ? 'property' : 'properties'}
                   </span>
                 </button>
-                {/* Listings within this locality group, sorted by id ascending */}
-                {[...groupListings]
-                  .sort((a, b) => a.id.localeCompare(b.id))
-                  .map((item) => (
-                    <div
-                      key={item.id}
-                      data-testid="agri-group-listing-row"
-                      className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => onSelectListing(item.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onSelectListing(item.id);
-                        }
-                      }}
-                    >
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {item.title ?? item.locality ?? item.areaKey ?? item.id}
-                      </p>
-                      {item.landArea != null && item.landAreaUnit && (
-                        <p
-                          className="text-xs text-green-700 dark:text-green-400 mt-0.5"
-                          data-testid="agri-group-land-area"
-                        >
-                          {item.landArea} {item.landAreaUnit}
-                        </p>
-                      )}
-                    </div>
-                  ))}
               </div>
             ))}
           </div>
