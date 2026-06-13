@@ -15,7 +15,8 @@
  *   agri-group-locality   — agri-first journey, regional group selected + locality drill-down (Issue #1464)
  *   area-groups-landing   — area-first journey, no areaKey yet (always; groupId optional)
  *   area-selected         — area-first journey, area selected (areaKey present)
- *   school-browse         — school-first journey, no school selected
+ *   school-browse         — school-first journey, no group/school selected (Level 1 zones)
+ *   school-group-areas    — school-first journey, groupId selected but no areaKey/schoolId (Level 2 areas)
  *   schools-in-area       — school-first journey, area selected (schoolId absent)
  *   school-selected       — school-first journey, schoolId present
  *   area-school-combined  — area selected AND school selected (both present)
@@ -35,6 +36,7 @@ export type DiscoverPanelContent =
   | 'area-selection'
   | 'area-selected'
   | 'school-browse'
+  | 'school-group-areas'
   | 'schools-in-area'
   | 'school-selected'
   | 'area-school-combined';
@@ -106,6 +108,13 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
     }
     if (areaKey) {
       return 'schools-in-area';
+    }
+    // Issue #1485 — groupId set (no areaKey, no schoolId) → Level-2 area list for this zone.
+    // Placed AFTER the schoolId/areaKey guards so those always take precedence.
+    // MUST be inside the school-first branch so a stray groupId in area-first journey
+    // (area-groups-landing) never routes here. Non-blank guard mirrors the area-first pattern.
+    if (groupId?.trim()) {
+      return 'school-group-areas';
     }
     return 'school-browse';
   }

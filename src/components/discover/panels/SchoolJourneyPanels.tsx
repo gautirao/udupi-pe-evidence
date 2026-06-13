@@ -7,7 +7,7 @@
 import React, { useCallback, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronLeft, GraduationCap, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, GraduationCap, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,6 +24,8 @@ import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { useSchoolSearch } from '@/hooks/useSchoolSearch';
 import { usePopularSchools } from '@/hooks/usePopularSchools';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
+import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
@@ -65,6 +67,24 @@ export interface SchoolBrowsePanelProps {
   onSelectAreaKey: (areaKey: string) => void;
   /** City to fetch schools/areas for — threaded from the parent to avoid a redundant useDiscoverUrlState call. */
   city: string;
+  /**
+   * Issue #1485 — zone/group cards for Level-1 school-browse (zones → areas → schools).
+   * When provided (non-empty), zone cards replace the flat area list.
+   * The flat area list is kept as a fallback when areaGroups is empty/loading.
+   */
+  areaGroups?: AreaGroup[];
+  /** True while areaGroups is loading. */
+  isLoadingAreaGroups?: boolean;
+  /**
+   * Called when the user clicks a zone card in Level-1.
+   * Writes groupId to URL (PUSH) → routes to school-group-areas (Level 2).
+   */
+  onSelectGroup?: (groupId: string) => void;
+  /**
+   * Issue #1485 — discoverAreas for computing per-group school/listing counts.
+   * The count badges on zone cards are client-side Σ of member area counts.
+   */
+  discoverAreas?: DiscoverArea[];
 }
 
 // ─── Internal sub-components ─────────────────────────────────────────────────
@@ -82,6 +102,52 @@ function SchoolCard({ school, onClick }: { school: SchoolResult; onClick: () => 
           {school.board}
         </Badge>
       )}
+    </button>
+  );
+}
+
+// Issue #1485 — ZoneCard for Level-1 school-browse zone cards.
+// Displays group name, Σ schoolCount, Σ listingCount, area count.
+// Counts are derived by joining group.area_keys against discoverAreas (client-side).
+interface ZoneCardProps {
+  group: AreaGroup;
+  memberAreas: DiscoverArea[];
+  onClick: () => void;
+}
+
+function ZoneCard({ group, memberAreas, onClick }: ZoneCardProps) {
+  const totalSchools = memberAreas.reduce((sum, a) => sum + a.schoolCount, 0);
+  const totalListings = memberAreas.reduce((sum, a) => sum + a.listingCount, 0);
+  const areaCount = group.area_keys.length;
+
+  return (
+    <button
+      type="button"
+      data-testid={`school-zone-card-${group.id}`}
+      onClick={onClick}
+      className="w-full text-left p-4 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-lg hover:border-purple-400 hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label={`${group.name}: ${totalSchools} school${totalSchools === 1 ? '' : 's'}, ${totalListings} listing${totalListings === 1 ? '' : 's'}, ${areaCount} area${areaCount === 1 ? '' : 's'}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-semibold text-sm text-gray-900 truncate" data-testid="school-zone-card-name">{group.name}</p>
+          {group.subtitle && (
+            <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{group.subtitle}</p>
+          )}
+          <div className="flex items-center gap-3 mt-1.5">
+            <span className="flex items-center gap-1 text-xs text-purple-700">
+              <GraduationCap className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span data-testid="school-zone-card-school-count">{totalSchools} school{totalSchools === 1 ? '' : 's'}</span>
+            </span>
+            <span className="text-xs text-blue-700" data-testid="school-zone-card-listing-count">
+              {totalListings} listing{totalListings === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+        <span className="shrink-0 text-xs text-muted-foreground bg-white/70 rounded-full px-2 py-0.5 font-medium border border-purple-200" data-testid="school-zone-card-area-count">
+          {areaCount} area{areaCount === 1 ? '' : 's'}
+        </span>
+      </div>
     </button>
   );
 }
@@ -118,6 +184,10 @@ export function SchoolBrowsePanel({
   onSelectSchool,
   onSelectAreaKey,
   city,
+  areaGroups = [],
+  isLoadingAreaGroups = false,
+  onSelectGroup,
+  discoverAreas = [],
 }: SchoolBrowsePanelProps) {
   const [searchQuery, setSearchQuery] = useState('');
   // Issue #1160 cycle-2: must call setSchoolJourney (not delegate via onSelectSchool(id))
@@ -253,8 +323,38 @@ export function SchoolBrowsePanel({
               </div>
             ) : null}
 
-            {/* Browse by area */}
-            {discoverAreasResult.isLoading ? (
+            {/* Issue #1485 — Browse by zone (Level 1 grouped hierarchy).
+                When areaGroups are available, show zone cards with per-group
+                Σ school/listing/area counts. Falls back to the flat area list
+                when groups are empty (e.g. city has no groups configured). */}
+            {isLoadingAreaGroups ? (
+              <div className="space-y-2" data-testid="school-zones-loading">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : areaGroups.length > 0 && onSelectGroup ? (
+              <div className="space-y-2" data-testid="school-zones-list">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <LayoutGrid className="h-3.5 w-3.5" aria-hidden="true" />
+                  Browse schools by zone
+                </h3>
+                {areaGroups.map((group) => {
+                  const memberAreas = discoverAreas.filter((a) =>
+                    group.area_keys.includes(a.areaKey),
+                  );
+                  return (
+                    <ZoneCard
+                      key={group.id}
+                      group={group}
+                      memberAreas={memberAreas}
+                      onClick={() => onSelectGroup(group.id)}
+                    />
+                  );
+                })}
+              </div>
+            ) : discoverAreasResult.isLoading ? (
+              /* Flat area fallback loading */
               <div className="space-y-2">
                 {[1, 2].map((i) => (
                   <Skeleton key={i} className="h-16 w-full rounded-lg" />
@@ -277,7 +377,8 @@ export function SchoolBrowsePanel({
                 </button>
               </div>
             ) : discoverAreasResult.data?.areas && discoverAreasResult.data.areas.length > 0 ? (
-              <div className="space-y-2">
+              /* Flat area list fallback (no groups configured) */
+              <div className="space-y-2" data-testid="school-flat-areas-list">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Browse schools by area
                 </h3>

@@ -985,3 +985,169 @@ describe('DiscoverRightPanel — agri-selected (Issue #1371)', () => {
     expect(screen.getByTestId('agri-empty-state')).toBeInTheDocument();
   });
 });
+
+// ─── Issue #1485: school-first grouped hierarchy — school-group-areas panel ───
+
+describe('DiscoverRightPanel — school-first + groupId → school-group-areas (Issue #1485)', () => {
+  const schoolGroup = {
+    id: 'south-zone',
+    name: 'South Zone',
+    subtitle: 'Southern neighbourhoods',
+    region_label: 'South',
+    school_count: 8,
+    area_keys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Malpe'],
+  };
+
+  const schoolDiscoverAreas = [
+    {
+      areaKey: 'IN|KA|Udupi|Manipal',
+      name: 'Manipal',
+      geoCenterLat: 13.35,
+      geoCenterLon: 74.79,
+      listingCount: 12,
+      schoolCount: 4,
+    },
+    {
+      areaKey: 'IN|KA|Udupi|Malpe',
+      name: 'Malpe',
+      geoCenterLat: 13.36,
+      geoCenterLon: 74.70,
+      listingCount: 7,
+      schoolCount: 2,
+    },
+  ];
+
+  it('AC2: renders SchoolGroupAreasPanel with area rows for the resolved group', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-group-areas"
+        journey="school-first"
+        groupId="south-zone"
+        areaGroups={[schoolGroup]}
+        isLoadingAreaGroupsForSchool={false}
+        discoverAreas={schoolDiscoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('school-group-areas-list')).toBeInTheDocument();
+    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toBeInTheDocument();
+    expect(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe')).toBeInTheDocument();
+    // Group cards must NOT appear
+    expect(screen.queryByTestId('school-zone-card-south-zone')).not.toBeInTheDocument();
+  });
+
+  it('AC2: area row click calls onSelectAreaKey with canonical areaKey', async () => {
+    const onSelectAreaKey = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-group-areas"
+        journey="school-first"
+        groupId="south-zone"
+        areaGroups={[schoolGroup]}
+        isLoadingAreaGroupsForSchool={false}
+        discoverAreas={schoolDiscoverAreas}
+        onSelectAreaKey={onSelectAreaKey}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal'));
+    expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
+  });
+
+  it('AC5 Back: Back button calls onClearGroup (clears groupId)', async () => {
+    const onClearGroup = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-group-areas"
+        journey="school-first"
+        groupId="south-zone"
+        areaGroups={[schoolGroup]}
+        isLoadingAreaGroupsForSchool={false}
+        discoverAreas={schoolDiscoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={onClearGroup}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('school-group-areas-back-btn'));
+    expect(onClearGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC8: invalid groupId (not in areaGroups) falls back to school-browse gracefully', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-group-areas"
+        journey="school-first"
+        groupId="no-such-group"
+        areaGroups={[schoolGroup]}
+        isLoadingAreaGroupsForSchool={false}
+        discoverAreas={schoolDiscoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    // Falls back to school-browse — search input must be visible
+    expect(screen.getByPlaceholderText('Search school name...')).toBeInTheDocument();
+    // SchoolGroupAreasPanel must NOT render
+    expect(screen.queryByTestId('school-group-areas-list')).not.toBeInTheDocument();
+  });
+
+  it('AC8: loading state shows skeleton, not area rows', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-group-areas"
+        journey="school-first"
+        groupId="south-zone"
+        areaGroups={[]}
+        isLoadingAreaGroupsForSchool={true}
+        discoverAreas={[]}
+        onSelectAreaKey={vi.fn()}
+        onClearGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('school-group-areas-loading-fallback')).toBeInTheDocument();
+    expect(screen.queryByTestId('school-group-areas-list')).not.toBeInTheDocument();
+  });
+
+  it('AC9 regression: school-browse zone cards shown for school-first + no groupId', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="school-browse"
+        journey="school-first"
+        groupId={null}
+        areaGroups={[schoolGroup]}
+        isLoadingAreaGroupsForSchool={false}
+        discoverAreas={schoolDiscoverAreas}
+        onSelectAreaKey={vi.fn()}
+        onSelectGroup={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Find homes near a school')).toBeInTheDocument();
+    // Zone card for south-zone should appear
+    expect(screen.getByTestId('school-zone-card-south-zone')).toBeInTheDocument();
+    // Area rows should NOT appear at Level 1
+    expect(screen.queryByTestId('school-group-areas-list')).not.toBeInTheDocument();
+  });
+
+  it('AC9 regression: area-first + groupId still routes to area-groups-landing (no leak)', () => {
+    const panelContent = derivePanelContent({
+      city: 'udupi',
+      areaKey: null,
+      schoolId: null,
+      groupId: 'south-zone',
+      journey: 'area-first',
+      q: '',
+      radiusKm: null,
+      viewport: null,
+      filters: {},
+      selectedGroup: null,
+    });
+    expect(panelContent).toBe('area-groups-landing');
+  });
+});

@@ -1125,16 +1125,33 @@ export default function MapDiscovery() {
     // the map to city center/zoom after the area context is cleared.
     // Only fires in school-first journey (this handler is only called from schoolFirstOnBack).
     // Do NOT increment from handleStartOver.
+    //
+    // Issue #1485 — when returning from schools-in-area (Level 3) to school-group-areas
+    // (Level 2), we clear areaKey but KEEP groupId. The existing cityRestoreTick increment
+    // is correct: after clearing areaKey the group fitBounds effect (L1360-1396) will
+    // re-trigger on the still-set groupId and fit to the group bounds.
     setCityRestoreTick((t) => t + 1);
     urlActions.clearAreaSelection();
     setSelectedArea(null);
     setPanToArea(null);
   }, [urlActions, setSelectedArea, setPanToArea]);
 
+  // Issue #1485 — Level 0 Back for school-group-areas → school-browse.
+  // Clears groupId (PUSH from selectGroup(null)); areaKey and schoolId are already absent
+  // at this level. The cityRestoreTick increment returns the map to city-center view.
+  const handleSchoolFirstBackLevel0 = useCallback(() => {
+    setCityRestoreTick((t) => t + 1);
+    urlActions.selectGroup(null);
+  }, [urlActions]);
+
   // schoolFirstOnBack: the correct in-page Back handler for the current school-first
-  // panel level, or undefined when Back should be hidden (Level 0 or non-school journey).
-  // Level-2 panels: 'school-selected' (school-only) and 'area-school-combined' (area + school).
-  // Level-1 panel: 'schools-in-area'. Level 0 and non-school-first journeys → undefined.
+  // panel level, or undefined when Back should be hidden (Level 0/browse or non-school journey).
+  //
+  // Issue #1485 — 4-level ladder (new levels L0 + L1 added):
+  //   L3 school-selected / area-school-combined → handleSchoolFirstBackLevel2 (clear schoolId)
+  //   L2 schools-in-area                        → handleSchoolFirstBackLevel1 (clear areaKey, keep groupId)
+  //   L1 school-group-areas                     → handleSchoolFirstBackLevel0 (clear groupId)
+  //   L0 school-browse                          → undefined (no Back)
   const schoolFirstOnBack: (() => void) | undefined =
     urlState.journey !== 'school-first'
       ? undefined
@@ -1142,7 +1159,9 @@ export default function MapDiscovery() {
         ? handleSchoolFirstBackLevel2
         : panelContent === 'schools-in-area'
           ? handleSchoolFirstBackLevel1
-          : undefined;
+          : panelContent === 'school-group-areas'
+            ? handleSchoolFirstBackLevel0
+            : undefined;
 
   // Clear handlers for AreaSchoolCombinedPanel — stable references so the panel does
   // not re-render on every map pan/zoom that re-runs the MapDiscovery render.
@@ -1858,7 +1877,11 @@ export default function MapDiscovery() {
           groupId={urlState.groupId ?? null}
           onSelectGroup={(groupId) => urlActions.selectGroup(groupId)}
           // Issue #1483 — clear groupId to return from Level-2 area list to Level-1 group cards.
+          // Issue #1485 — same callback also used by school-first: school-group-areas → school-browse.
           onClearGroup={() => urlActions.selectGroup(null)}
+          // Issue #1485 — forward area-groups loading state separately for school-first zone cards
+          // so school-browse can show skeletons without coupling to the area-first isLoadingAreaGroups.
+          isLoadingAreaGroupsForSchool={isLoadingAreaGroups}
           // Issue #1429 — agri-first corridor groups (cumulative corridor model)
           corridorGroups={corridorGroups}
           isLoadingRegionalGroups={isLoadingRegionalAreaGroups}

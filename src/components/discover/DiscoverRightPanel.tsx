@@ -211,6 +211,7 @@ import {
   SchoolSelectedPanel,
   AreaSchoolCombinedPanel,
 } from './panels/SchoolJourneyPanels';
+import { SchoolGroupAreasPanel } from './panels/SchoolGroupAreasPanel';
 
 export interface DiscoverRightPanelProps {
   panelContent: DiscoverPanelContent;
@@ -254,8 +255,15 @@ export interface DiscoverRightPanelProps {
    * Issue #1483 — clears the active groupId, returning from Level-2 area list
    * back to the Level-1 group-card list. Threaded to AreaGroupsLandingPanel's
    * onClearGroup prop.
+   * Issue #1485 — also used in school-first: clears groupId returning from
+   * school-group-areas (Level 2) to school-browse (Level 1).
    */
   onClearGroup?: () => void;
+  /**
+   * Issue #1485 — true while areaGroups is loading. Forwarded to SchoolBrowsePanel
+   * so zone cards show skeleton state on cold load.
+   */
+  isLoadingAreaGroupsForSchool?: boolean;
   /** All areas in the city — used as Browse-all fallback when groups is empty. */
   discoverAreas?: DiscoverArea[];
   /** Called when the user selects an area from Browse-all fallback. */
@@ -514,6 +522,7 @@ export function DiscoverRightPanel({
   selectedLocality = null,
   onSetLocality,
   onClearLocality,
+  isLoadingAreaGroupsForSchool = false,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -883,8 +892,64 @@ export function DiscoverRightPanel({
             city={city}
             onSelectSchool={onSelectSchool ?? (() => undefined)}
             onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
+            // Issue #1485 — zone cards (Level 1 grouped hierarchy)
+            areaGroups={areaGroups}
+            isLoadingAreaGroups={isLoadingAreaGroupsForSchool}
+            onSelectGroup={onSelectGroup}
+            discoverAreas={discoverAreas}
           />
         );
+
+      case 'school-group-areas': {
+        // Issue #1485 — Level 2: selected group's areas.
+        // groupId is guaranteed non-blank by derivePanelContent (trim guard).
+        // Resolve the group from the areaGroups list; fall back to school-browse
+        // if the group is not yet loaded or the groupId is invalid (AC8).
+        const resolvedGroup = areaGroups.find((g) => g.id === groupId);
+        if (!resolvedGroup) {
+          // Either still loading or invalid groupId — show loading skeletons when
+          // isLoadingAreaGroups, otherwise gracefully degrade to school-browse.
+          if (isLoadingAreaGroupsForSchool) {
+            return (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="px-4 pt-4 pb-2 space-y-3" data-testid="school-group-areas-loading-fallback">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div key={i} className="rounded-lg border border-border p-4">
+                      <div className="h-4 w-2/3 bg-muted animate-pulse rounded mb-2" />
+                      <div className="h-3 w-1/2 bg-muted animate-pulse rounded" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          // Invalid/stale groupId — AC8 safe fallback: render school-browse.
+          return (
+            <SchoolBrowsePanel
+              onStartOver={onStartOver}
+              journey={journey}
+              city={city}
+              onSelectSchool={onSelectSchool ?? (() => undefined)}
+              onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
+              areaGroups={areaGroups}
+              isLoadingAreaGroups={isLoadingAreaGroupsForSchool}
+              onSelectGroup={onSelectGroup}
+              discoverAreas={discoverAreas}
+            />
+          );
+        }
+        return (
+          <SchoolGroupAreasPanel
+            group={resolvedGroup}
+            discoverAreas={discoverAreas}
+            isLoading={isLoadingAreaGroupsForSchool}
+            onBack={onClearGroup ?? (() => undefined)}
+            onSelectAreaKey={onSelectAreaKey ?? (() => undefined)}
+            onStartOver={onStartOver}
+            journey={journey}
+          />
+        );
+      }
 
       case 'schools-in-area':
         if (!selectedArea) {
@@ -1003,6 +1068,8 @@ export function DiscoverRightPanel({
     'agri-group-peek',
     'agri-group-locality',
     'agri-detail',
+    'school-browse',
+    'school-group-areas',
     'schools-in-area',
     'school-selected',
     'area-school-combined',

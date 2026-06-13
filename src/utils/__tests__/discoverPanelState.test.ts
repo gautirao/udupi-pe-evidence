@@ -401,6 +401,90 @@ describe('derivePanelContent — agri-group-peek (Issue #1430)', () => {
   });
 });
 
+// ─── Issue #1485: school-first grouped hierarchy routing ───────────────────────
+
+describe('derivePanelContent — school-first grouped hierarchy (Issue #1485)', () => {
+  // AC1: school-first + no group/area/school → school-browse (zone cards at Level 1)
+  it('school-first + no groupId/areaKey/schoolId → school-browse', () => {
+    expect(derivePanelContent(makeState({ journey: 'school-first' }))).toBe('school-browse');
+  });
+
+  // AC2: school-first + groupId (no areaKey, no schoolId) → school-group-areas (Level 2)
+  it('school-first + groupId (no areaKey, no schoolId) → school-group-areas', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'school-first', groupId: 'south-zone' })),
+    ).toBe('school-group-areas');
+  });
+
+  // AC3: school-first + areaKey (groupId retained) → schools-in-area (Level 3 unchanged)
+  it('school-first + areaKey + groupId (no schoolId) → schools-in-area', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'school-first', groupId: 'south-zone', areaKey: 'IN|KA|Udupi|Manipal' }),
+      ),
+    ).toBe('schools-in-area');
+  });
+
+  // AC4: school-first + schoolId → school-selected (Level 4 unchanged)
+  it('school-first + schoolId → school-selected (unchanged)', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'school-first', schoolId: 'sch-1' })),
+    ).toBe('school-selected');
+  });
+
+  // schoolId beats groupId (schoolId wins at Level 3/4 regardless of groupId)
+  it('school-first + groupId + schoolId (no areaKey) → school-selected (schoolId wins)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'school-first', groupId: 'south-zone', schoolId: 'sch-1' }),
+      ),
+    ).toBe('school-selected');
+  });
+
+  // areaKey + schoolId beats groupId → area-school-combined
+  it('school-first + groupId + areaKey + schoolId → area-school-combined (combined wins)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'school-first',
+          groupId: 'south-zone',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          schoolId: 'sch-1',
+        }),
+      ),
+    ).toBe('area-school-combined');
+  });
+
+  // AC8: blank/whitespace-only groupId → school-browse (safe fallback, no crash)
+  it('school-first + blank groupId ("  ") → school-browse (safe fallback)', () => {
+    expect(derivePanelContent(makeState({ journey: 'school-first', groupId: '  ' }))).toBe('school-browse');
+  });
+
+  // AC8: empty string groupId → school-browse
+  it('school-first + empty-string groupId → school-browse', () => {
+    expect(derivePanelContent(makeState({ journey: 'school-first', groupId: '' }))).toBe('school-browse');
+  });
+
+  // AC9 cross-journey: area-first + groupId still → area-groups-landing (no leak)
+  it('area-first + groupId → area-groups-landing (no cross-journey leak)', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'area-first', groupId: 'south-zone' })),
+    ).toBe('area-groups-landing');
+  });
+
+  // AC9: no-journey + groupId still → area-groups-landing (cold-load inference unchanged)
+  it('no journey + groupId → area-groups-landing (cold-load unchanged)', () => {
+    expect(derivePanelContent(makeState({ groupId: 'south-zone' }))).toBe('area-groups-landing');
+  });
+
+  // AC9: school-first + areaKey without groupId → schools-in-area (backward compat deep-link)
+  it('school-first + areaKey without groupId → schools-in-area (backward compat)', () => {
+    expect(
+      derivePanelContent(makeState({ journey: 'school-first', areaKey: 'IN|KA|Udupi|Manipal' })),
+    ).toBe('schools-in-area');
+  });
+});
+
 // ─── Issue #1446: agri-group-selected routing via selectedRegion + selectedMaxKm ──
 
 describe('derivePanelContent — agri-group-selected via region+maxKm (Issue #1446)', () => {

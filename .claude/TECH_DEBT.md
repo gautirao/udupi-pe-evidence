@@ -71,6 +71,9 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | F-23 | RE-164 | **`delays[]` length guard in `registerImage()`** — `maxRetries` can be bumped via default param without updating `delays[]`; fallback silently uses 2000ms. Add guard or derive delays from maxRetries. | Low | 2026-03-20 |
 | F-24 | #1483 | **area-first Level-2 "up to all groups" control a11y inconsistency** — `aria-label="Back to all groups"` but visible text is the group name (`AreaGroupsLandingPanel.tsx`). Screen-reader name and visible affordance differ. Make intent consistent (product/a11y decision). | Low | 2026-06-13 |
 | F-25 | #1483 | **No DRP routing test for `area-groups-landing` without `onSelectAreaKey`** — the no-area-key branch of the if/else (`DiscoverRightPanel.tsx`) is unexercised; a regression to a silent no-op would be invisible. Add a test that Level-1 group cards still render without crashing. | Low | 2026-06-13 |
+| F-26 | #1485 | **`SchoolGroupAreasPanel` group→area join is O(n·k) array scan** — `discoverAreas.filter(a => group.area_keys.includes(a.areaKey))`. Fine at current scale; convert to `Set` (`const keys = new Set(group.area_keys)`) for O(n+k) and fix the reversed complexity comment. | Low | 2026-06-13 |
+| F-27 | #1485 | **`SchoolBrowsePanel` silently falls back to flat area list when `onSelectGroup` is undefined** — `areaGroups.length > 0 && onSelectGroup` guard; a misconfigured caller (optional prop omitted) degrades with no signal. Make `onSelectGroup` required or add a dev-mode warning. | Low | 2026-06-13 |
+| F-28 | #1485 | **No DRP routing test for `school-group-areas` loading-skeleton path** — `isLoadingAreaGroupsForSchool=true` + unresolved `groupId` renders a fallback skeleton that is untested. Add a routing test asserting the skeleton fallback. | Low | 2026-06-13 |
 
 ## Database
 
