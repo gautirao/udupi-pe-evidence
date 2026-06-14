@@ -121,7 +121,7 @@ public final class DiscoverQueryDsl {
                 q.schoolRadiusKm(),
                 q.bbox(),
                 q.q(),
-                null  // listingPurpose: OpenSearch path does not filter by intent — no term query wired in buildBoolQuery
+                q.listingPurpose()
         );
     }
 
@@ -220,6 +220,13 @@ public final class DiscoverQueryDsl {
                     "distance", String.format("%.6fkm", radiusKm),
                     "location", Map.of("lat", f.schoolLat(), "lon", f.schoolLon())
             )));
+        }
+
+        // listing_purpose intent filter — absent/blank = no clause (backward-compat)
+        String normPurpose = (f.listingPurpose() != null && !f.listingPurpose().isBlank())
+                ? f.listingPurpose().trim() : null;
+        if (normPurpose != null) {
+            filter.add(term("listing_purpose", normPurpose));
         }
 
         Map<String, Object> bool = new LinkedHashMap<>();

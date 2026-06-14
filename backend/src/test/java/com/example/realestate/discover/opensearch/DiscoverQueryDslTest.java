@@ -514,4 +514,128 @@ class DiscoverQueryDslTest {
                 .isInstanceOf(OpenSearchQueryException.class)
                 .hasMessageContaining("Polygon filter not supported in OpenSearch path");
     }
+
+    // -----------------------------------------------------------------------
+    // listingPurpose filter tests (#1497 — OpenSearch Buy/Rent intent parity)
+    // -----------------------------------------------------------------------
+
+    /** Helper: extract a term value from the filter list by field name. */
+    @SuppressWarnings("unchecked")
+    private static Object getTermValue(List<Object> filter, String field) {
+        return filter.stream()
+                .map(f -> (Map<String, Object>) f)
+                .filter(m -> m.containsKey("term"))
+                .map(m -> (Map<String, Object>) m.get("term"))
+                .filter(t -> t.containsKey(field))
+                .map(t -> t.get(field))
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Test
+    void listingPurpose_sale_addsTermClause() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, "sale"
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isEqualTo("sale");
+    }
+
+    @Test
+    void listingPurpose_rent_addsTermClause() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, "rent"
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isEqualTo("rent");
+    }
+
+    @Test
+    void listingPurpose_null_noClause() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isNull();
+    }
+
+    @Test
+    void listingPurpose_blank_noClause() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, ""
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isNull();
+    }
+
+    @Test
+    void listingPurpose_whitespace_noClause() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, "  "
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isNull();
+    }
+
+    @Test
+    void toFilters_propagatesListingPurpose() {
+        DiscoverListingsQuery query = new DiscoverListingsQuery(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                null, null, 0, 20, false, "sale"
+        );
+
+        DiscoverListingPredicateBuilder.Filters filters = DiscoverQueryDsl.toFilters(query);
+
+        assertThat(filters.listingPurpose()).isEqualTo("sale");
+    }
+
+    @Test
+    void listingPurpose_markersPath_addsTermClause() {
+        // Confirms shared buildBoolQuery covers the markers path, not just listings
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, "rent"
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isEqualTo("rent");
+    }
+
+    @Test
+    void listingPurpose_listingsQuery_addsTermClause() {
+        // Covers the buildListingsQuery path (closes v1 code-reviewer advisory)
+        DiscoverListingsQuery query = new DiscoverListingsQuery(
+                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null,
+                null, null, 0, 20, false, "sale"
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildListingsQuery(query);
+        List<Object> filter = getFilter(getBool(body));
+
+        assertThat(getTermValue(filter, "listing_purpose")).isEqualTo("sale");
+    }
 }

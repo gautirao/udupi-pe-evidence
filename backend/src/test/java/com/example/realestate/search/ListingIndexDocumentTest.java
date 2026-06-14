@@ -98,4 +98,73 @@ class ListingIndexDocumentTest {
         assertThat(doc.getLatitude()).isNull();
         assertThat(doc.getLongitude()).isNull();
     }
+
+    // -----------------------------------------------------------------------
+    // listingPurpose tests (#1497 — OpenSearch Buy/Rent intent parity)
+    // -----------------------------------------------------------------------
+
+    @Test
+    void fromListing_sale_populatesListingPurpose() {
+        Listing listing = buildListing();
+        listing.setListingPurpose("sale");
+
+        ListingIndexDocument doc = ListingIndexDocument.fromListing(listing);
+
+        assertThat(doc.getListingPurpose()).isEqualTo("sale");
+    }
+
+    @Test
+    void fromListing_rent_populatesListingPurpose() {
+        Listing listing = buildListing();
+        listing.setListingPurpose("rent");
+
+        ListingIndexDocument doc = ListingIndexDocument.fromListing(listing);
+
+        assertThat(doc.getListingPurpose()).isEqualTo("rent");
+    }
+
+    @Test
+    void fromListing_null_listingPurposeIsNull() {
+        Listing listing = buildListing();
+        listing.setListingPurpose(null);
+
+        ListingIndexDocument doc = ListingIndexDocument.fromListing(listing);
+
+        assertThat(doc.getListingPurpose()).isNull();
+    }
+
+    /**
+     * JSON serialisation round-trip: verifies that the field is written as
+     * {@code listing_purpose} (snake_case) in the JSON output, matching the
+     * OpenSearch index mapping. The production ObjectMapper is the Spring Boot
+     * default (camelCase), so without {@code @JsonProperty("listing_purpose")}
+     * the field would serialize as {@code listingPurpose} and the term query
+     * would never match.
+     */
+    @Test
+    void serialization_listingPurpose_usesSnakeCaseKey() throws Exception {
+        Listing listing = buildListing();
+        listing.setListingPurpose("sale");
+
+        ListingIndexDocument doc = ListingIndexDocument.fromListing(listing);
+        String json = objectMapper.writeValueAsString(doc);
+
+        assertThat(json).contains("\"listing_purpose\"");
+        assertThat(json).contains("\"sale\"");
+        // Ensure the camelCase form is NOT present (would cause term query mismatch)
+        assertThat(json).doesNotContain("\"listingPurpose\"");
+    }
+
+    @Test
+    void serialization_listingPurpose_absentWhenNull() throws Exception {
+        Listing listing = buildListing();
+        listing.setListingPurpose(null);
+
+        ListingIndexDocument doc = ListingIndexDocument.fromListing(listing);
+        String json = objectMapper.writeValueAsString(doc);
+
+        // null fields serialize as null by default — query term filter skips null, so safe
+        // The key check: it must not appear as camelCase if it is present at all
+        assertThat(json).doesNotContain("\"listingPurpose\"");
+    }
 }

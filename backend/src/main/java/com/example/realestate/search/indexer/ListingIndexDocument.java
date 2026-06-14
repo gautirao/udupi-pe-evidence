@@ -1,6 +1,7 @@
 package com.example.realestate.search.indexer;
 
 import com.example.realestate.listing.core.Listing;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -41,6 +42,14 @@ public class ListingIndexDocument {
     private OffsetDateTime createdAt;
     /** Not yet present on Listing entity — always null until entity is extended. */
     private String heroImageUrl;
+    /**
+     * Listing intent: 'sale' or 'rent'. Maps to the {@code listing_purpose} OpenSearch field.
+     * {@code @JsonProperty} is required because the default Spring Boot ObjectMapper uses
+     * camelCase serialization — without it the field would serialize as {@code listingPurpose}
+     * and the term query on {@code listing_purpose} would never match.
+     */
+    @JsonProperty("listing_purpose")
+    private String listingPurpose;
 
     /**
      * Creates a {@link ListingIndexDocument} from a {@link Listing} entity using an
@@ -71,6 +80,7 @@ public class ListingIndexDocument {
         doc.status = listing.getStatus();
         doc.createdAt = listing.getCreatedAt();
         doc.heroImageUrl = null; // not present on Listing entity — forward-compatible null
+        doc.listingPurpose = listing.getListingPurpose();
         return doc;
     }
 
@@ -93,6 +103,8 @@ public class ListingIndexDocument {
     public String getStatus() { return status; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public String getHeroImageUrl() { return heroImageUrl; }
+    @JsonProperty("listing_purpose")
+    public String getListingPurpose() { return listingPurpose; }
 
     /**
      * OpenSearch geo_point representation.
