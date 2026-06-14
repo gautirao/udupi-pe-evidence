@@ -401,6 +401,22 @@ describe('derivePanelContent — agri-group-peek (Issue #1430)', () => {
   });
 });
 
+// ─── Issue #1489: area-name Level-2 fix — routing contracts ───────────────────
+
+describe('derivePanelContent — Issue #1489 area-name L2 routing', () => {
+  // school-first + groupId → school-group-areas (verifies L2 is reached)
+  it('returns school-group-areas for school-first with groupId only', () => {
+    expect(derivePanelContent(makeState({ journey: 'school-first', groupId: 'university-belt', areaKey: null, schoolId: null })))
+      .toBe('school-group-areas');
+  });
+
+  // area-first + groupId → area-groups-landing (verifies L2 is reached)
+  it('returns area-groups-landing for area-first with groupId only', () => {
+    expect(derivePanelContent(makeState({ journey: 'area-first', groupId: 'university-belt', areaKey: null })))
+      .toBe('area-groups-landing');
+  });
+});
+
 // ─── Issue #1485: school-first grouped hierarchy routing ───────────────────────
 
 describe('derivePanelContent — school-first grouped hierarchy (Issue #1485)', () => {

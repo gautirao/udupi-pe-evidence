@@ -209,9 +209,13 @@ test.describe('school-first grouped hierarchy (Issue #1485)', () => {
     // L2 area list container must be visible
     await expect(page.getByTestId('school-group-areas-list')).toBeVisible({ timeout: 10_000 });
 
-    // South Zone contains Manipal + Malpe — both must appear
-    await expect(page.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toBeVisible();
-    await expect(page.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe')).toBeVisible();
+    // South Zone contains Manipal + Malpe — both must appear with real names (#1489)
+    const manipalRow = page.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal');
+    const malpeRow = page.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe');
+    await expect(manipalRow).toBeVisible();
+    await expect(manipalRow).toContainText('Manipal');
+    await expect(malpeRow).toBeVisible();
+    await expect(malpeRow).toContainText('Malpe');
 
     // North Zone areas must NOT appear (cross-zone isolation)
     await expect(page.getByTestId('school-group-area-row-IN|KA|Udupi|Padubidri')).not.toBeVisible();
@@ -222,11 +226,17 @@ test.describe('school-first grouped hierarchy (Issue #1485)', () => {
   });
 
   // AC2: cold-load at groupId URL restores L2 directly (no interaction needed)
-  test('AC2 cold-load: ?groupId=south-zone restores L2 area list', async ({ page }) => {
+  test('AC2 cold-load: ?groupId=south-zone restores L2 area list with names', async ({ page }) => {
     await page.goto(schoolFirstBrowseUrl({ groupId: 'south-zone' }));
     await expect(page.getByTestId('school-group-areas-list')).toBeVisible({ timeout: 10_000 });
-    // Manipal must appear (confirms correct group membership loaded)
-    await expect(page.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal')).toBeVisible();
+    // Manipal must appear with real name (#1489 regression guard)
+    const manipalRow = page.getByTestId('school-group-area-row-IN|KA|Udupi|Manipal');
+    await expect(manipalRow).toBeVisible();
+    await expect(manipalRow).toContainText('Manipal');
+    // Katapadi is not in the south-zone stub; use Malpe instead (also south-zone)
+    const malpeRow = page.getByTestId('school-group-area-row-IN|KA|Udupi|Malpe');
+    await expect(malpeRow).toBeVisible();
+    await expect(malpeRow).toContainText('Malpe');
     // Padubidri must NOT appear (wrong group)
     await expect(page.getByTestId('school-group-area-row-IN|KA|Udupi|Padubidri')).not.toBeVisible();
   });

@@ -20,6 +20,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverPageState } from '@/hooks/useDiscoverPageState';
 import { useDiscoverMapData } from '@/hooks/useDiscoverMapData';
+import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
@@ -620,6 +621,16 @@ export default function MapDiscovery() {
   }, [selectedSchoolId, urlState.radiusKm, urlState.journey, selectedSchoolLat, selectedSchoolLon]);
 
   const isCityValid = city in CITY_CONFIG;
+
+  // Issue #1489 — SchoolGroupAreasPanel (school-first L2) and AreaGroupsLandingPanel
+  // (area-first L2) both expect DiscoverArea[] (has `name`). The `discoverAreas` from
+  // useDiscoverMapData is AreaPoint[] (has `areaLabel` but no `name`). We call
+  // useDiscoverAreas here with the same React Query key ['discover-areas', city] so this
+  // hits the cache — zero extra HTTP request. The result is only passed to the panel prop;
+  // the onSelectAreaKey callback below intentionally continues using the AreaPoint[]
+  // `discoverAreas` from useDiscoverMapData for geo fit-bounds via handleAreaSelect.
+  const { data: _areasDataForPanel } = useDiscoverAreas(isCityValid ? city : '');
+  const discoverAreasForPanel = _areasDataForPanel?.areas ?? [];
 
   // Area-scoping for the combined panel (AC4): when BOTH area and school are selected
   // and no user-drawn polygon is present, derive a bounding-box polygon from the area's
@@ -1901,7 +1912,7 @@ export default function MapDiscovery() {
           agriGroupLabel={agriGroupLabel}
           onRetryAgriGroupListings={refetchAgriGroupListings}
           onClearRegionalGroup={() => urlActions.clearRegionAndMaxKm()}
-          discoverAreas={discoverAreas}
+          discoverAreas={discoverAreasForPanel}
           onSelectAreaKey={(areaKey) => {
             // Issue #1067 R2 — right-panel area-card click must trigger map flyTo
             // in addition to updating the URL. The deferred-hydration effect at
@@ -1909,6 +1920,10 @@ export default function MapDiscovery() {
             // in-session selections never panned without this branch. Routing
             // through handleAreaSelect reuses the canonical AreaPoint handler
             // (URL update + setPanToArea + filter reset) — single source of truth.
+            // Issue #1489 — discoverAreas (AreaPoint[]) from useDiscoverMapData is
+            // intentionally kept here (not discoverAreasForPanel) because
+            // handleAreaSelect needs AreaPoint for setSelectedArea / setPanToArea
+            // (geo fit-bounds). discoverAreasForPanel passes to the panel for display.
             const match = discoverAreas.find((a) => a.areaKey === areaKey);
             if (match) {
               handleAreaSelect(match);
