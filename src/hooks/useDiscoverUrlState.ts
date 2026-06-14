@@ -90,6 +90,14 @@ export interface DiscoverUrlFilters {
   dateFrom?: string;
   /** ISO date string YYYY-MM-DD — URL representation of dateTo */
   dateTo?: string;
+  /** Issue #1457 — agri acreage filter minimum (acres, decimal OK). Applied client-side. */
+  agriAcresMin?: number;
+  /** Issue #1457 — agri acreage filter maximum (acres, decimal OK). Applied client-side. */
+  agriAcresMax?: number;
+  /** Issue #1457 — agri price filter minimum (rupees). Applied client-side, auth only. */
+  agriPriceMin?: number;
+  /** Issue #1457 — agri price filter maximum (rupees). Applied client-side, auth only. */
+  agriPriceMax?: number;
 }
 
 export interface DiscoverUrlState {
@@ -303,6 +311,12 @@ export interface DiscoverUrlActions {
    */
   clearLocality: () => void;
   /**
+   * Clear agri filter params only — removes agriAcresMin, agriAcresMax, agriPriceMin,
+   * agriPriceMax. Preserves all other URL state. REPLACE (not PUSH).
+   * Issue #1457.
+   */
+  clearAgriFilters: () => void;
+  /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
    * together for correct panel routing. Only used when transitioning to school-first journey
@@ -431,6 +445,27 @@ function serializeFilters(
   } else {
     params.delete('to');
   }
+  // Issue #1457 — agri client-side filter params
+  if (filters.agriAcresMin != null) {
+    params.set('agriAcresMin', String(filters.agriAcresMin));
+  } else {
+    params.delete('agriAcresMin');
+  }
+  if (filters.agriAcresMax != null) {
+    params.set('agriAcresMax', String(filters.agriAcresMax));
+  } else {
+    params.delete('agriAcresMax');
+  }
+  if (filters.agriPriceMin != null) {
+    params.set('agriPriceMin', String(filters.agriPriceMin));
+  } else {
+    params.delete('agriPriceMin');
+  }
+  if (filters.agriPriceMax != null) {
+    params.set('agriPriceMax', String(filters.agriPriceMax));
+  } else {
+    params.delete('agriPriceMax');
+  }
   return params;
 }
 
@@ -505,6 +540,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     readyToMove: urlParams.get('rtm') === '1' ? true : undefined,
     dateFrom: parseDateParam(urlParams.get('from')),
     dateTo: parseDateParam(urlParams.get('to')),
+    // Issue #1457 — agri client-side filter params (NaN guard)
+    agriAcresMin: (() => { const n = Number(urlParams.get('agriAcresMin')); return urlParams.get('agriAcresMin') && !Number.isNaN(n) ? n : undefined; })(),
+    agriAcresMax: (() => { const n = Number(urlParams.get('agriAcresMax')); return urlParams.get('agriAcresMax') && !Number.isNaN(n) ? n : undefined; })(),
+    agriPriceMin: (() => { const n = Number(urlParams.get('agriPriceMin')); return urlParams.get('agriPriceMin') && !Number.isNaN(n) ? n : undefined; })(),
+    agriPriceMax: (() => { const n = Number(urlParams.get('agriPriceMax')); return urlParams.get('agriPriceMax') && !Number.isNaN(n) ? n : undefined; })(),
   };
 
   const schoolId = urlParams.get('schoolId');
@@ -1303,6 +1343,22 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     );
   }, [setUrlParams]);
 
+  // ─── Issue #1457: Agri filter clear ────────────────────────────────────────
+
+  const clearAgriFilters = useCallback(() => {
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('agriAcresMin');
+        next.delete('agriAcresMax');
+        next.delete('agriPriceMin');
+        next.delete('agriPriceMax');
+        return next;
+      },
+      { replace: true }, // REPLACE — clearing filters doesn't add a Back step
+    );
+  }, [setUrlParams]);
+
   const backToSchoolPicking = useCallback(() => {
     // Issue #1157 rev-5 DEFECT B — Back from area-school-combined to schools-in-area.
     // Drop the selected school (schoolId + radiusKm) and re-arm the schoolPicking
@@ -1354,6 +1410,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     clearSelectedListing,
     setLocality,
     clearLocality,
+    clearAgriFilters,
   };
 
   return [state, actions];

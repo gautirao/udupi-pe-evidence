@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
+import { AgriFiltersPanel } from './AgriFiltersPanel';
+import type { AgriFilterValues } from './AgriFiltersPanel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +31,20 @@ interface AgriGroupSelectedPanelProps {
   onSetMaxKm: (km: 10 | 25 | 50 | 100) => void;
   /** Issue #1464 — called when user clicks a locality group to drill in. */
   onSelectLocality?: (localityKey: string) => void;
+  /** Issue #1457 — whether the current user is authenticated (unlocks price filter). Default false. */
+  isAuthenticated?: boolean;
+  /** Issue #1457 — currently active acreage min filter (from URL). */
+  agriAcresMin?: number;
+  /** Issue #1457 — currently active acreage max filter (from URL). */
+  agriAcresMax?: number;
+  /** Issue #1457 — currently active price min filter in rupees (from URL). */
+  agriPriceMin?: number;
+  /** Issue #1457 — currently active price max filter in rupees (from URL). */
+  agriPriceMax?: number;
+  /** Issue #1457 — called when user clicks Apply Filters. */
+  onApplyFilters?: (filters: AgriFilterValues) => void;
+  /** Issue #1457 — called when user clicks Clear Filters. */
+  onClearFilters?: () => void;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -61,6 +77,13 @@ export function AgriGroupSelectedPanel({
   availableMaxDistances,
   onSetMaxKm,
   onSelectLocality,
+  isAuthenticated = false,
+  agriAcresMin,
+  agriAcresMax,
+  agriPriceMin,
+  agriPriceMax,
+  onApplyFilters = () => {},
+  onClearFilters = () => {},
 }: AgriGroupSelectedPanelProps) {
   // Sort distance tiers ascending by maxKm for consistent display order.
   const sortedTiers = availableMaxDistances
@@ -143,6 +166,17 @@ export function AgriGroupSelectedPanel({
         </div>
       )}
 
+      {/* ── Filters (Issue #1457) ──────────────────────────────────────────────── */}
+      <AgriFiltersPanel
+        acresMin={agriAcresMin}
+        acresMax={agriAcresMax}
+        priceMinRupees={agriPriceMin}
+        priceMaxRupees={agriPriceMax}
+        isAuthenticated={isAuthenticated}
+        onApply={onApplyFilters}
+        onClear={onClearFilters}
+      />
+
       {/* ── Aggregate count ──────────────────────────────────────────────────── */}
       {!isLoading && !isError && (
         <div className="px-4 py-2 border-b border-border bg-green-500/5 shrink-0">
@@ -191,7 +225,11 @@ export function AgriGroupSelectedPanel({
           </div>
         ) : !listings || listings.length === 0 ? (
           <div
-            data-testid="agri-group-empty-state"
+            data-testid={
+              (agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null)
+                ? 'agri-filtered-empty-state'
+                : 'agri-group-empty-state'
+            }
             className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center"
           >
             <Sprout
@@ -199,7 +237,9 @@ export function AgriGroupSelectedPanel({
               aria-hidden="true"
             />
             <p className="text-sm text-muted-foreground">
-              No listings in this region
+              {(agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null)
+                ? 'No agricultural listings match the selected filters.'
+                : 'No listings in this region'}
             </p>
             <button
               type="button"

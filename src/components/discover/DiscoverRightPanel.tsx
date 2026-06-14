@@ -446,6 +446,19 @@ export interface DiscoverRightPanelProps {
    * Should call urlActions.clearLocality() (REPLACE semantics).
    */
   onClearLocality?: () => void;
+  // ── Agri filters (Issue #1457) ─────────────────────────────────────────────
+  /** Currently active acreage min filter (from URL). */
+  agriAcresMin?: number;
+  /** Currently active acreage max filter (from URL). */
+  agriAcresMax?: number;
+  /** Currently active price min filter in rupees (from URL). */
+  agriPriceMin?: number;
+  /** Currently active price max filter in rupees (from URL). */
+  agriPriceMax?: number;
+  /** Called when user clicks Apply Filters in AgriFiltersPanel. */
+  onApplyAgriFilters?: (filters: { agriAcresMin?: number; agriAcresMax?: number; agriPriceMin?: number; agriPriceMax?: number }) => void;
+  /** Called when user clicks Clear Filters in AgriFiltersPanel. */
+  onClearAgriFilters?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -523,6 +536,12 @@ export function DiscoverRightPanel({
   onSetLocality,
   onClearLocality,
   isLoadingAreaGroupsForSchool = false,
+  agriAcresMin,
+  agriAcresMax,
+  agriPriceMin,
+  agriPriceMax,
+  onApplyAgriFilters,
+  onClearAgriFilters,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -813,6 +832,14 @@ export function DiscoverRightPanel({
               onSetMaxKm={onSetMaxKm ?? (() => {})}
               // Issue #1464: locality drill-down
               onSelectLocality={onSetLocality}
+              // Issue #1457: agri filter props
+              isAuthenticated={isAuthenticated}
+              agriAcresMin={agriAcresMin}
+              agriAcresMax={agriAcresMax}
+              agriPriceMin={agriPriceMin}
+              agriPriceMax={agriPriceMax}
+              onApplyFilters={onApplyAgriFilters ?? (() => {})}
+              onClearFilters={onClearAgriFilters ?? (() => {})}
             />
           </>
         );

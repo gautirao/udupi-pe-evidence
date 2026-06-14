@@ -635,3 +635,67 @@ describe('AgriGroupSelectedPanel — cumulative distance hint (Issue #1456)', ()
     ).not.toBeInTheDocument();
   });
 });
+
+// ─── Issue #1457 — AgriFiltersPanel integration in AgriGroupSelectedPanel ────
+
+describe('AgriGroupSelectedPanel — agri filters panel (Issue #1457)', () => {
+  it('renders AgriFiltersPanel by default', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-filters-panel')).toBeInTheDocument();
+  });
+
+  it('shows locked price UI when isAuthenticated=false (default)', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} isAuthenticated={false} />);
+    expect(screen.getByTestId('agri-price-locked')).toBeInTheDocument();
+  });
+
+  it('shows price inputs when isAuthenticated=true', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} isAuthenticated={true} />);
+    expect(screen.getByTestId('agri-price-min')).toBeInTheDocument();
+    expect(screen.getByTestId('agri-price-max')).toBeInTheDocument();
+  });
+
+  it('shows agri-filtered-empty-state testid when filter active and listings empty', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        agriAcresMin={5}
+      />,
+    );
+    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
+    expect(screen.getByText(/no agricultural listings match/i)).toBeInTheDocument();
+  });
+
+  it('shows agri-group-empty-state testid when no filter active and listings empty', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
+    expect(screen.getByText(/no listings in this region/i)).toBeInTheDocument();
+  });
+
+  it('calls onApplyFilters callback when Apply Filters clicked', async () => {
+    const onApplyFilters = vi.fn();
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        onApplyFilters={onApplyFilters}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('agri-filters-apply'));
+    expect(onApplyFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClearFilters callback when Clear Filters clicked', async () => {
+    const onClearFilters = vi.fn();
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        onClearFilters={onClearFilters}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('agri-filters-clear'));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+});

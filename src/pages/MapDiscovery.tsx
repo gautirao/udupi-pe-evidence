@@ -365,6 +365,11 @@ export function hasActiveAnonPropertyFilter(filters: {
   );
 }
 
+/** Issue #1457 — convert rupees (as stored in URL) to paise for comparison against pricePaise */
+function rupeesToPaise(rupees: number): number {
+  return Math.round(rupees * 100);
+}
+
 export default function MapDiscovery() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading } = useAuth();
@@ -432,6 +437,42 @@ export default function MapDiscovery() {
         : null,
     [urlState.selectedListing, agriMapListingsData?.listings],
   );
+
+  // Issue #1457 — client-side filtered agri listings (acreage always, price only when authed).
+  // Single source of truth passed to both PropertyMap (markers) and DiscoverRightPanel (list).
+  const filteredAgriListings = useMemo(() => {
+    if (!agriMapListingsData?.listings) return null;
+    const acresMin = urlState.filters.agriAcresMin;
+    const acresMax = urlState.filters.agriAcresMax;
+    const priceMinPaise = isAuthenticated && urlState.filters.agriPriceMin != null
+      ? rupeesToPaise(urlState.filters.agriPriceMin)
+      : null;
+    const priceMaxPaise = isAuthenticated && urlState.filters.agriPriceMax != null
+      ? rupeesToPaise(urlState.filters.agriPriceMax)
+      : null;
+    return agriMapListingsData.listings.filter((l) => {
+      // Acreage filter: null computedAreaAcres excluded when filter is active
+      if (acresMin != null || acresMax != null) {
+        if (l.computedAreaAcres == null) return false;
+        if (acresMin != null && l.computedAreaAcres < acresMin) return false;
+        if (acresMax != null && l.computedAreaAcres > acresMax) return false;
+      }
+      // Price filter: only for authenticated users
+      if (priceMinPaise != null || priceMaxPaise != null) {
+        if (l.pricePaise == null) return false;
+        if (priceMinPaise != null && l.pricePaise < priceMinPaise) return false;
+        if (priceMaxPaise != null && l.pricePaise > priceMaxPaise) return false;
+      }
+      return true;
+    });
+  }, [
+    agriMapListingsData,
+    urlState.filters.agriAcresMin,
+    urlState.filters.agriAcresMax,
+    isAuthenticated,
+    urlState.filters.agriPriceMin,
+    urlState.filters.agriPriceMax,
+  ]);
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
   const [debouncedSearch, setDebouncedSearch] = useState(() => urlState.q);
@@ -1698,7 +1739,7 @@ export default function MapDiscovery() {
                 return isAuthenticated ? markerListings : [];
               })()}
               focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
-              agriGroupListings={(selectedRegion && selectedMaxKm != null) ? (agriMapListingsData?.listings ?? null) : null}
+              agriGroupListings={(selectedRegion && selectedMaxKm != null) ? filteredAgriListings : null}
               polygon={filters.polygon}
               onPolygonDrawn={handlePolygonDrawn}
               onPolygonCleared={handlePolygonCleared}
@@ -1906,7 +1947,8 @@ export default function MapDiscovery() {
           onSetMaxKm={(km) => urlActions.setMaxKm(km)}
           onClearRegionAndMaxKm={() => urlActions.clearRegionAndMaxKm()}
           // Issue #1425 — agri-group-selected panel data
-          agriGroupListings={agriMapListingsData?.listings ?? null}
+          // Issue #1457 — pass filteredAgriListings (client-side filtered) instead of raw
+          agriGroupListings={filteredAgriListings}
           isLoadingAgriGroupListings={isLoadingAgriGroupListings}
           isAgriGroupListingsError={isAgriGroupListingsError}
           agriGroupLabel={agriGroupLabel}
@@ -1968,6 +2010,21 @@ export default function MapDiscovery() {
           selectedLocality={urlState.selectedLocality ?? null}
           onSetLocality={(locality) => urlActions.setLocality(locality)}
           onClearLocality={() => urlActions.clearLocality()}
+          // Issue #1457 — agri filter props
+          agriAcresMin={urlState.filters.agriAcresMin}
+          agriAcresMax={urlState.filters.agriAcresMax}
+          agriPriceMin={urlState.filters.agriPriceMin}
+          agriPriceMax={urlState.filters.agriPriceMax}
+          onApplyAgriFilters={(filterValues) =>
+            urlActions.setFiltersCommitted({
+              ...urlState.filters,
+              ...filterValues,
+              // Belt-and-suspenders: never write price params for anon users even if UI bypassed
+              agriPriceMin: isAuthenticated ? filterValues.agriPriceMin : undefined,
+              agriPriceMax: isAuthenticated ? filterValues.agriPriceMax : undefined,
+            })
+          }
+          onClearAgriFilters={() => urlActions.clearAgriFilters()}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

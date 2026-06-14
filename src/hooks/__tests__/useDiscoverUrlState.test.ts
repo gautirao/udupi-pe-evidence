@@ -2691,3 +2691,182 @@ describe('useDiscoverUrlState — changeCity clears locality (BLOCKING fix #1464
     expect(result.current[0].city).toBe('kundapur');
   });
 });
+
+// ─── Issue #1457 — agri acreage + price filter params ────────────────────────
+
+describe('useDiscoverUrlState — agri filter params (Issue #1457)', () => {
+  it('reads agriAcresMin and agriAcresMax from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriAcresMin=2.5&agriAcresMax=10'),
+    });
+    expect(result.current[0].filters.agriAcresMin).toBe(2.5);
+    expect(result.current[0].filters.agriAcresMax).toBe(10);
+  });
+
+  it('reads agriPriceMin and agriPriceMax from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriPriceMin=100000&agriPriceMax=500000'),
+    });
+    expect(result.current[0].filters.agriPriceMin).toBe(100000);
+    expect(result.current[0].filters.agriPriceMax).toBe(500000);
+  });
+
+  it('returns undefined for agri filters when absent from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.agriAcresMin).toBeUndefined();
+    expect(result.current[0].filters.agriAcresMax).toBeUndefined();
+    expect(result.current[0].filters.agriPriceMin).toBeUndefined();
+    expect(result.current[0].filters.agriPriceMax).toBeUndefined();
+  });
+
+  it('ignores NaN values for agri filter params', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriAcresMin=notanumber'),
+    });
+    expect(result.current[0].filters.agriAcresMin).toBeUndefined();
+  });
+
+  it('clearAgriFilters removes only agri filter params and preserves other state', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&agriAcresMin=2&agriAcresMax=10&agriPriceMin=50000',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearAgriFilters();
+    });
+
+    const [state] = result.current;
+    expect(state.filters.agriAcresMin).toBeUndefined();
+    expect(state.filters.agriAcresMax).toBeUndefined();
+    expect(state.filters.agriPriceMin).toBeUndefined();
+    expect(state.filters.agriPriceMax).toBeUndefined();
+    // Other state preserved
+    expect(state.city).toBe('udupi');
+    expect(state.journey).toBe('agri-first');
+    expect(state.selectedRegion).toBe('N');
+    expect(state.selectedMaxKm).toBe(25);
+  });
+
+  it('setFiltersCommitted with agri filter values serialises to URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({
+        agriAcresMin: 3,
+        agriAcresMax: 7.5,
+        agriPriceMin: 200000,
+        agriPriceMax: 800000,
+      });
+    });
+
+    const [state] = result.current;
+    expect(state.filters.agriAcresMin).toBe(3);
+    expect(state.filters.agriAcresMax).toBe(7.5);
+    expect(state.filters.agriPriceMin).toBe(200000);
+    expect(state.filters.agriPriceMax).toBe(800000);
+  });
+
+  it('clearAgriFilters preserves region, maxKm, and journey but removes all agri params (Issue #1457)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=agri-first&region=N&maxKm=25&agriAcresMin=2&agriAcresMax=5&agriPriceMin=100000',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearAgriFilters();
+    });
+
+    const [state] = result.current;
+    // Agri filter params removed
+    expect(state.filters.agriAcresMin).toBeUndefined();
+    expect(state.filters.agriAcresMax).toBeUndefined();
+    expect(state.filters.agriPriceMin).toBeUndefined();
+    expect(state.filters.agriPriceMax).toBeUndefined();
+    // Journey context preserved
+    expect(state.city).toBe('udupi');
+    expect(state.journey).toBe('agri-first');
+    expect(state.selectedRegion).toBe('N');
+    expect(state.selectedMaxKm).toBe(25);
+  });
+
+  it('NaN URL guard: agriAcresMin=abc is undefined, agriAcresMax=5 is 5', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriAcresMin=abc&agriAcresMax=5'),
+    });
+    // "abc" cannot be parsed to a number → NaN guard kicks in → undefined
+    expect(result.current[0].filters.agriAcresMin).toBeUndefined();
+    // "5" parses fine
+    expect(result.current[0].filters.agriAcresMax).toBe(5);
+  });
+
+  it('round-trip: setFiltersCommitted with all 4 agri params reads back correctly', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+
+    act(() => {
+      result.current[1].setFiltersCommitted({
+        agriAcresMin: 2.5,
+        agriAcresMax: 10,
+        agriPriceMin: 500000,
+        agriPriceMax: 2000000,
+      });
+    });
+
+    const { filters } = result.current[0];
+    expect(filters.agriAcresMin).toBe(2.5);
+    expect(filters.agriAcresMax).toBe(10);
+    expect(filters.agriPriceMin).toBe(500000);
+    expect(filters.agriPriceMax).toBe(2000000);
+  });
+
+  it('setFiltersCommitted uses PUSH; clearAgriFilters uses REPLACE (observable via history-stack presence)', () => {
+    // We observe PUSH by checking a non-agri location entry existed before the filter commit.
+    // MemoryRouter does not expose history.length, so we track via useLocation renders.
+    const locations: string[] = [];
+    function HistoryTrackingWrapper({ children }: { children: React.ReactNode }) {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      function LocationProbe() {
+        const loc = useLocation();
+        locations.push(loc.search);
+        return null;
+      }
+      return React.createElement(
+        QueryClientProvider,
+        { client: qc },
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ['/discover?city=udupi'] },
+          React.createElement(LocationProbe, null),
+          children,
+        ),
+      );
+    }
+
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: HistoryTrackingWrapper,
+    });
+
+    // setFiltersCommitted — PUSH: prior location (no agri params) must remain in stack
+    act(() => {
+      result.current[1].setFiltersCommitted({ agriAcresMin: 2, agriAcresMax: 5 });
+    });
+    expect(locations.some((s) => !s.includes('agriAcresMin'))).toBe(true);
+    expect(locations.some((s) => s.includes('agriAcresMin=2'))).toBe(true);
+
+    // clearAgriFilters — REPLACE: agri params gone, previous (committed) entry not stacked again
+    act(() => {
+      result.current[1].clearAgriFilters();
+    });
+    const [state] = result.current;
+    expect(state.filters.agriAcresMin).toBeUndefined();
+    expect(state.filters.agriAcresMax).toBeUndefined();
+  });
+});
