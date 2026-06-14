@@ -412,12 +412,16 @@ export default function MapDiscovery() {
     ? selectedCorridorData.availableMaxDistances.find((t) => t.maxKm === selectedMaxKm) ?? null
     : null;
   const selectedGroupAreaKeys = selectedTierData?.areaKeys ?? [];
+  // Issue #1494 — map URL intent ('buy'|'rent') to backend listingPurpose ('sale'|'rent').
+  // 'buy' is the default; absent/invalid intent → 'sale'. Never send 'buy' to the backend.
+  const intentListingPurpose: string = urlState.intent === 'rent' ? 'rent' : 'sale';
+
   const {
     data: agriMapListingsData,
     isLoading: isLoadingAgriGroupListings,
     isError: isAgriGroupListingsError,
     refetch: refetchAgriGroupListings,
-  } = useAgriMapListings(urlState.city, selectedGroupAreaKeys);
+  } = useAgriMapListings(urlState.city, selectedGroupAreaKeys, intentListingPurpose);
 
   // Issue #1429 — corridor + distance tier label for the agri-group-selected panel header chip.
   // Show "groupName · distanceLabel" when both are selected; fall back to just groupName.
@@ -739,6 +743,8 @@ export default function MapDiscovery() {
     page,
     bbox: mapBbox,
     journey: urlState.journey,
+    // Issue #1494 — thread buy/rent intent as listingPurpose filter
+    listingPurpose: intentListingPurpose,
   });
 
   // Debug: expose areaListings and related data to window.__debug for Playwright tests
@@ -2025,6 +2031,9 @@ export default function MapDiscovery() {
             })
           }
           onClearAgriFilters={() => urlActions.clearAgriFilters()}
+          // Issue #1494 — buy/rent intent selector
+          intent={urlState.intent}
+          onIntentChange={(newIntent) => urlActions.setIntent(newIntent)}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

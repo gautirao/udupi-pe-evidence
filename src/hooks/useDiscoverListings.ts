@@ -63,6 +63,8 @@ export interface UseDiscoverListingsParams {
    * Server-side FTS (V18 search_vector). 500-char limit enforced server-side.
    */
   q?: string;
+  /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
+  listingPurpose?: string;
 }
 
 export function useDiscoverListings({
@@ -74,6 +76,7 @@ export function useDiscoverListings({
   enabled = true,
   bbox,
   q,
+  listingPurpose,
 }: UseDiscoverListingsParams) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
@@ -82,7 +85,7 @@ export function useDiscoverListings({
   const trimmedQ = q?.trim() || null;
 
   return useQuery<DiscoverListingsPage>({
-    queryKey: ['discover-listings', city, page, size, filters, includeAggregates, snapped, trimmedQ],
+    queryKey: ['discover-listings', city, page, size, filters, includeAggregates, snapped, trimmedQ, listingPurpose ?? null],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
@@ -114,6 +117,7 @@ export function useDiscoverListings({
       if (filters.schoolLon != null) params.set('schoolLon', String(filters.schoolLon));
       if (filters.schoolRadiusKm != null) params.set('schoolRadiusKm', String(filters.schoolRadiusKm));
       if (trimmedQ) params.set('q', trimmedQ);
+      if (listingPurpose) params.set('listingPurpose', listingPurpose);
 
       return api.get<DiscoverListingsPage>(`/api/discover/listings?${params.toString()}`, { signal });
     },

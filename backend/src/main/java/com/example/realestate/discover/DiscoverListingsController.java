@@ -65,7 +65,8 @@ public class DiscoverListingsController {
             @RequestParam(name = "bbox", required = false) String bboxParam,
             @RequestParam(name = "page", required = false, defaultValue = "0") int page,
             @RequestParam(name = "size", required = false, defaultValue = "20") int size,
-            @RequestParam(name = "includeAggregates", required = false, defaultValue = "false") boolean includeAggregates
+            @RequestParam(name = "includeAggregates", required = false, defaultValue = "false") boolean includeAggregates,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
     ) {
         log.debug("GET /api/discover/listings city={} page={} size={}", city, page, size);
 
@@ -118,7 +119,8 @@ public class DiscoverListingsController {
                 bbox,
                 page,
                 effectiveSize,
-                includeAggregates
+                includeAggregates,
+                listingPurpose
         );
 
         return ResponseEntity.ok()

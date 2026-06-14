@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
-import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { useSchoolSearch } from '@/hooks/useSchoolSearch';
@@ -450,6 +450,8 @@ export interface SchoolsInAreaPanelProps {
   isAuthenticated?: boolean;
   /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
   activeContextChips?: React.ReactNode;
+  /** Issue #1494 — current buy/rent intent for summary/empty-state copy. Default 'buy'. */
+  intent?: DiscoverIntent;
 }
 export function SchoolsInAreaPanel({
   onStartOver,
@@ -466,6 +468,7 @@ export function SchoolsInAreaPanel({
   isFetching = false,
   isAuthenticated = false,
   activeContextChips,
+  intent = 'buy',
 }: SchoolsInAreaPanelProps) {
   const navigate = useNavigate();
 
@@ -496,7 +499,9 @@ export function SchoolsInAreaPanel({
           data-testid="schools-in-area-properties"
         >
           <div className="px-4 py-2 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground">Homes in this area</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              Properties for {intent === 'rent' ? 'rent' : 'sale'} in this area
+            </h3>
           </div>
           {/* Issue #1170 — mirror AreaSelectedPanel: dim during an in-flight refetch
               (isFetching) but NOT during the initial skeleton load, so cached responses
@@ -520,7 +525,9 @@ export function SchoolsInAreaPanel({
             ) : !areaListings || areaListings.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
                 <MapPin className="h-6 w-6 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">No listings in this area yet</p>
+                <p className="text-sm text-muted-foreground">
+                  No properties for {intent === 'rent' ? 'rent' : 'sale'} in this area yet
+                </p>
               </div>
             ) : (
               <div className="divide-y divide-border">
@@ -580,6 +587,8 @@ export interface SchoolSelectedPanelProps {
    * "Search" call-to-action to a results count helper line.
    */
   boundedSearchTriggered?: boolean;
+  /** Issue #1494 — current buy/rent intent for summary/empty-state copy. Default 'buy'. */
+  intent?: DiscoverIntent;
 }
 
 export function SchoolSelectedPanel({
@@ -599,6 +608,7 @@ export function SchoolSelectedPanel({
   activeContextChips,
   onBoundedSearch,
   boundedSearchTriggered = false,
+  intent = 'buy',
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
 
@@ -747,7 +757,8 @@ export function SchoolSelectedPanel({
           data-testid="school-bounded-search-count"
           aria-live="polite"
         >
-          {listings.length} {listings.length === 1 ? 'property' : 'properties'} found
+          {listings.length} {listings.length === 1 ? 'property' : 'properties'} for{' '}
+          {intent === 'rent' ? 'rent' : 'sale'} found
           {school ? ` near ${school.name}` : ''}
         </p>
       )}
@@ -776,7 +787,7 @@ export function SchoolSelectedPanel({
           <div className="flex flex-col items-center justify-center h-full p-6 text-center">
             <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground mb-4" data-testid="empty-state-message">
-              No properties found within {effectiveRadius} km
+              No properties for {intent === 'rent' ? 'rent' : 'sale'} found within {effectiveRadius} km
               {school ? ` of ${school.name}` : ''}
             </p>
             <div className="flex flex-col gap-2 w-full max-w-xs">

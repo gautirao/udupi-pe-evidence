@@ -246,7 +246,7 @@ class ShadowComparisonRunnerTest {
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null,
                 null, null, null, null,
-                null, null, 0, 20, false);
+                null, null, 0, 20, false, null);
     }
 
     private static DiscoverListingsPage emptyPage() {
@@ -272,7 +272,8 @@ class ShadowComparisonRunnerTest {
                 null,     // schoolLon
                 null,     // schoolRadiusKm
                 null,     // bbox
-                null);    // q
+                null,     // q
+                null);    // listingPurpose
     }
 
     private static DiscoverMarkersResponse emptyMarkersResponse() {

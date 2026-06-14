@@ -45,7 +45,8 @@ public class DiscoverAgriMapListingsService {
                 pl.land_area,
                 pl.land_area_unit,
                 ROUND(ST_Area(pl.boundary)::numeric / 4046.8564224, 2) AS computed_area_acres,
-                pl.price_paise
+                pl.price_paise,
+                pl.listing_purpose
             FROM property_listings pl
             JOIN areas a ON a.area_key = pl.area_key
             JOIN cities c ON c.id = a.city_id
@@ -95,7 +96,8 @@ public class DiscoverAgriMapListingsService {
     public AgriMapListingsResponse findAgriMapListings(String citySlug,
                                                        List<String> areaKeys,
                                                        Optional<String> bbox,
-                                                       boolean isAuthenticated) {
+                                                       boolean isAuthenticated,
+                                                       String listingPurpose) {
         // Validate city
         if (citySlug == null || citySlug.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "city_must_not_be_blank");
@@ -115,34 +117,47 @@ public class DiscoverAgriMapListingsService {
                 ? BboxParser.parse(bbox.get())
                 : null;
 
+        // Normalise listingPurpose: blank → absent (no filter)
+        String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
+                ? listingPurpose.trim() : null;
+
         // Build the IN clause placeholders — e.g. "(?,?,?)"
         String inClause = "(" + "?,".repeat(areaKeys.size() - 1) + "?" + ")";
         String sql = BASE_SQL
                 + " AND pl.area_key IN " + inClause + "\n"
+                + (normPurpose != null ? " AND pl.listing_purpose = ?\n" : "")
                 + (parsedBbox != null ? BBOX_CLAUSE : "")
                 + " ORDER BY pl.id";
 
         // Build positional params
-        // order: [citySlug, areaKeys..., (bbox: minLat, maxLat, minLon, maxLon)?]
+        // order: [citySlug, areaKeys..., (listingPurpose)?, (bbox: minLat, maxLat, minLon, maxLon)?]
         // BboxParser returns (south=minLat, west=minLon, north=maxLat, east=maxLon)
+        int purposeCount = normPurpose != null ? 1 : 0;
         Object[] params;
         if (parsedBbox != null) {
-            Object[] baseParams = new Object[1 + areaKeys.size() + 4];
+            Object[] baseParams = new Object[1 + areaKeys.size() + purposeCount + 4];
             baseParams[0] = citySlug.toLowerCase();
             for (int i = 0; i < areaKeys.size(); i++) {
                 baseParams[1 + i] = areaKeys.get(i);
             }
-            int bboxOffset = 1 + areaKeys.size();
+            int purposeOffset = 1 + areaKeys.size();
+            if (normPurpose != null) {
+                baseParams[purposeOffset] = normPurpose;
+            }
+            int bboxOffset = purposeOffset + purposeCount;
             baseParams[bboxOffset]     = parsedBbox.south(); // minLat
             baseParams[bboxOffset + 1] = parsedBbox.north(); // maxLat
             baseParams[bboxOffset + 2] = parsedBbox.west();  // minLon
             baseParams[bboxOffset + 3] = parsedBbox.east();  // maxLon
             params = baseParams;
         } else {
-            Object[] baseParams = new Object[1 + areaKeys.size()];
+            Object[] baseParams = new Object[1 + areaKeys.size() + purposeCount];
             baseParams[0] = citySlug.toLowerCase();
             for (int i = 0; i < areaKeys.size(); i++) {
                 baseParams[1 + i] = areaKeys.get(i);
+            }
+            if (normPurpose != null) {
+                baseParams[1 + areaKeys.size()] = normPurpose;
             }
             params = baseParams;
         }
@@ -164,7 +179,8 @@ public class DiscoverAgriMapListingsService {
                         rs.getBigDecimal("land_area"),
                         rs.getString("land_area_unit"),
                         rs.getBigDecimal("computed_area_acres"),
-                        rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null
+                        rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
+                        rs.getString("listing_purpose")
                 ),
                 params
         );
@@ -199,7 +215,8 @@ public class DiscoverAgriMapListingsService {
                 item.landArea(),
                 item.landAreaUnit(),
                 item.computedAreaAcres(),
-                null); // pricePaise withheld from anonymous callers
+                null, // pricePaise withheld from anonymous callers
+                item.listingPurpose());
     }
 
     /**

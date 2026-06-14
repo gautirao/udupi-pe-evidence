@@ -398,6 +398,7 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
       viewport: null,
       filters: {},
       selectedGroup: null,
+      intent: 'buy', // Issue #1494
     });
     expect(panelContent).toBe('area-groups-landing');
   });
@@ -595,7 +596,7 @@ describe('DiscoverRightPanel — area-selected content parity', () => {
         isLoadingListings={false}
       />,
     );
-    expect(screen.getByText('No listings in this area yet')).toBeInTheDocument();
+    expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
   });
 
   it('renders PropertyCard list with correct price', () => {
@@ -1147,6 +1148,7 @@ describe('DiscoverRightPanel — school-first + groupId → school-group-areas (
       viewport: null,
       filters: {},
       selectedGroup: null,
+      intent: 'buy', // Issue #1494
     });
     expect(panelContent).toBe('area-groups-landing');
   });

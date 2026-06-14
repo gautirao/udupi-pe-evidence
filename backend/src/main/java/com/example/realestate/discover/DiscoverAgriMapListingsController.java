@@ -47,7 +47,8 @@ public class DiscoverAgriMapListingsController {
     public ResponseEntity<AgriMapListingsResponse> getAgriMapListings(
             @RequestParam String city,
             @RequestParam List<String> areaKeys,
-            @RequestParam(required = false) String bbox) {
+            @RequestParam(required = false) String bbox,
+            @RequestParam(required = false) String listingPurpose) {
 
         // #1454: JWT-aware. Mirror PublicListingController.getById exactly — the
         // !(auth instanceof AnonymousAuthenticationToken) guard is load-bearing; without it
@@ -61,7 +62,7 @@ public class DiscoverAgriMapListingsController {
                 city, areaKeys != null ? areaKeys.size() : 0, bbox != null, isAuthenticated);
 
         AgriMapListingsResponse result = service.findAgriMapListings(
-                city, areaKeys, Optional.ofNullable(bbox), isAuthenticated);
+                city, areaKeys, Optional.ofNullable(bbox), isAuthenticated, listingPurpose);
 
         // #1454 cache semantics: the authenticated response carries full-precision lat/lng and
         // pricePaise — it MUST NOT be stored by a shared/CDN cache (a cached authed body could be

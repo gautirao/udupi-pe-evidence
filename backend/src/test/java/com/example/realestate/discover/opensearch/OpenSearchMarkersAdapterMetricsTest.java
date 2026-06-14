@@ -85,7 +85,7 @@ class OpenSearchMarkersAdapterMetricsTest {
                 null, null, null, null, null,
                 null, null, null,
                 new DiscoverListingPredicateBuilder.Bbox(13.0, 74.5, 13.5, 75.0),
-                null);
+                null, null);
     }
 
     // -----------------------------------------------------------------------

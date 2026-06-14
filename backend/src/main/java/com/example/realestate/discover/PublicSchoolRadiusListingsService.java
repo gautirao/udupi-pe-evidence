@@ -44,8 +44,13 @@ public class PublicSchoolRadiusListingsService {
             double schoolLon,
             double schoolRadiusKm,
             int page,
-            int size
+            int size,
+            String listingPurpose
     ) {
+        // Normalise listingPurpose: blank → absent
+        String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
+                ? listingPurpose.trim() : null;
+
         // Build predicate: city + school proximity only; all other filters null.
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 city,
@@ -65,7 +70,8 @@ public class PublicSchoolRadiusListingsService {
                 schoolLon,
                 schoolRadiusKm,
                 null,   // bbox
-                null    // q
+                null,   // q
+                normPurpose
         );
 
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);

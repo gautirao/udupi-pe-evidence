@@ -108,10 +108,16 @@ describe('AgriGroupSelectedPanel — loading state', () => {
 });
 
 describe('AgriGroupSelectedPanel — empty state', () => {
-  it('renders "No listings in this region" when listings is empty array', () => {
+  it('renders intent-aware empty state when listings is empty array (default intent=buy → "for sale")', () => {
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} listingCount={0} />);
     expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
-    expect(screen.getByText('No listings in this region')).toBeInTheDocument();
+    expect(screen.getByText('No agricultural land for sale in this region')).toBeInTheDocument();
+  });
+
+  it('renders "for rent" empty state when intent=rent', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} listingCount={0} intent="rent" />);
+    expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
+    expect(screen.getByText('No agricultural land for rent in this region')).toBeInTheDocument();
   });
 
   it('back-to-list button in empty state fires onClear', async () => {
@@ -187,21 +193,30 @@ describe('AgriGroupSelectedPanel — listings state', () => {
 });
 
 describe('AgriGroupSelectedPanel — aggregate count', () => {
-  it('renders plural "properties" when listingCount > 1', () => {
+  it('renders plural "properties for sale" when listingCount > 1 (default intent=buy)', () => {
     render(
       <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1'), makeListing('a2')]} listingCount={2} />,
     );
     expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
-      '2 agri properties in this region',
+      '2 agri properties for sale in this region',
     );
   });
 
-  it('renders singular "property" when listingCount === 1', () => {
+  it('renders singular "property for sale" when listingCount === 1 (default intent=buy)', () => {
     render(
       <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1')]} listingCount={1} />,
     );
     expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
-      '1 agri property in this region',
+      '1 agri property for sale in this region',
+    );
+  });
+
+  it('renders "for rent" count when intent=rent', () => {
+    render(
+      <AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1'), makeListing('a2')]} listingCount={2} intent="rent" />,
+    );
+    expect(screen.getByTestId('agri-group-listing-count')).toHaveTextContent(
+      '2 agri properties for rent in this region',
     );
   });
 });
@@ -670,7 +685,7 @@ describe('AgriGroupSelectedPanel — agri filters panel (Issue #1457)', () => {
   it('shows agri-group-empty-state testid when no filter active and listings empty', () => {
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
     expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
-    expect(screen.getByText(/no listings in this region/i)).toBeInTheDocument();
+    expect(screen.getByText(/no agricultural land for sale in this region/i)).toBeInTheDocument();
   });
 
   it('calls onApplyFilters callback when Apply Filters clicked', async () => {

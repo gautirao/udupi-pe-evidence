@@ -457,3 +457,35 @@ describe('AgriGroupListingPeek — enquiry CTA (Issue #1456)', () => {
     );
   });
 });
+
+// ─── Issue #1494 — For Sale / For Rent intent badge ──────────────────────────
+
+describe('AgriGroupListingPeek — intent badge (Issue #1494)', () => {
+  beforeEach(() => {
+    mockUseAgriListingDetail.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+  });
+
+  it('renders "For Sale" badge when listingPurpose=sale', () => {
+    renderPeek({ listingPurpose: 'sale' });
+    const badge = screen.getByTestId('agri-peek-intent-badge');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('For Sale');
+  });
+
+  it('renders "For Rent" badge when listingPurpose=rent', () => {
+    renderPeek({ listingPurpose: 'rent' });
+    const badge = screen.getByTestId('agri-peek-intent-badge');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('For Rent');
+  });
+
+  it('does not render badge when listingPurpose is absent', () => {
+    renderPeek(); // baseListing has no listingPurpose
+    expect(screen.queryByTestId('agri-peek-intent-badge')).not.toBeInTheDocument();
+  });
+
+  it('does not render badge when listingPurpose is null', () => {
+    renderPeek({ listingPurpose: null });
+    expect(screen.queryByTestId('agri-peek-intent-badge')).not.toBeInTheDocument();
+  });
+});

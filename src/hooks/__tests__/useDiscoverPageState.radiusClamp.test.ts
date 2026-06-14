@@ -20,6 +20,7 @@ function makeUrlState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlSta
     journey: null,
     groupId: null,
     selectedGroup: null,
+    intent: 'buy', // Issue #1494
     ...overrides,
   };
 }

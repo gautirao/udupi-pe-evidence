@@ -65,6 +65,8 @@ export interface UseSchoolRadiusListingsParams {
   size?: number;
   /** Extra disable switch (e.g. only run on the anon path). */
   enabled?: boolean;
+  /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
+  listingPurpose?: string;
 }
 
 /**
@@ -139,6 +141,7 @@ export function useSchoolRadiusListings({
   page = 0,
   size = 50,
   enabled = true,
+  listingPurpose,
 }: UseSchoolRadiusListingsParams) {
   const hasCoords = schoolLat != null && schoolLon != null;
 
@@ -151,6 +154,7 @@ export function useSchoolRadiusListings({
       schoolRadiusKm ?? null,
       page,
       size,
+      listingPurpose ?? null,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -159,6 +163,7 @@ export function useSchoolRadiusListings({
       if (schoolRadiusKm != null) params.set('schoolRadiusKm', String(schoolRadiusKm));
       params.set('page', String(page));
       params.set('size', String(size));
+      if (listingPurpose != null) params.set('listingPurpose', listingPurpose);
       return api.get<PublicSchoolRadiusListingsPage>(
         `/api/discover/cities/${encodeURIComponent(city)}/school-radius-listings?${params.toString()}`,
         { skipAuth: true },

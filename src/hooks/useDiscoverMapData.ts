@@ -46,6 +46,11 @@ export interface UseDiscoverMapDataParams {
    * NEVER affected — AreaPoint.listingCount always reflects the blended count.
    */
   journey?: DiscoverJourney | null;
+  /**
+   * Issue #1494 — buy/rent intent mapped to backend listingPurpose ('sale'|'rent').
+   * When undefined or 'sale', no listing_purpose filter is applied (backward-compatible).
+   */
+  listingPurpose?: string;
 }
 
 export interface UseDiscoverMapDataResult {
@@ -124,6 +129,7 @@ export function useDiscoverMapData({
   page,
   bbox,
   journey,
+  listingPurpose,
 }: UseDiscoverMapDataParams): UseDiscoverMapDataResult {
   const isCityValid = city in CITY_CONFIG;
 
@@ -146,6 +152,7 @@ export function useDiscoverMapData({
     enabled: isAuthenticated,
     bbox,
     q: debouncedSearch || undefined,
+    listingPurpose,
   });
 
   // ── Filtered markers (auth-only, same predicate as listings) ──────────────
@@ -203,6 +210,7 @@ export function useDiscoverMapData({
     bedrooms: discoverBedrooms,
     propertyType: discoverPropertyType,
     q: debouncedSearch?.trim() || undefined,
+    listingPurpose,
   });
 
   // Issue #1261 — cross-area school-radius listings (PUBLIC endpoint).
@@ -226,6 +234,7 @@ export function useDiscoverMapData({
     schoolRadiusKm: schoolRadiusKmClamped,
     size: 50, // DECISION-2: request the full single page; surface hasMore as a hint.
     enabled: schoolRadiusEnabled,
+    listingPurpose,
   });
 
   const {

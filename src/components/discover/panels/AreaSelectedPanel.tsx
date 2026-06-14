@@ -10,7 +10,7 @@ import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { PropertyCard } from '../PropertyCard';
 import { PanelHeader } from '../PanelHeader';
-import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { SlidersHorizontal } from 'lucide-react';
 
@@ -52,6 +52,8 @@ interface AreaSelectedPanelProps {
    * Back returns to area-selected instead of deleting the area.
    */
   onAddSchool?: () => void;
+  /** Issue #1494 — current buy/rent intent for summary/empty-state copy. Default 'buy'. */
+  intent?: DiscoverIntent;
 }
 
 export function AreaSelectedPanel({
@@ -73,6 +75,7 @@ export function AreaSelectedPanel({
   onFiltersChange,
   onSelectJourney,
   onAddSchool,
+  intent = 'buy',
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
 
@@ -319,20 +322,32 @@ export function AreaSelectedPanel({
                 </Button>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">No listings in this area yet</p>
+              <p className="text-sm text-muted-foreground">
+              No properties for {intent === 'rent' ? 'rent' : 'sale'} in this area yet
+            </p>
             )}
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {areaListings.map((listing) => (
-              <PropertyCard
-                key={listing.id}
-                listing={listing}
-                isAuthenticated={isAuthenticated}
-                onNavigate={() => navigate(`/listing/${listing.id}`)}
-              />
-            ))}
-          </div>
+          <>
+            {/* Issue #1494 — intent-aware result summary (AC4) */}
+            <div className="px-4 py-2 border-b border-border bg-muted/20" data-testid="area-result-summary">
+              <p className="text-xs text-muted-foreground">
+                {areaListings.length}{' '}
+                {areaListings.length === 1 ? 'property' : 'properties'} for{' '}
+                {intent === 'rent' ? 'rent' : 'sale'} in {selectedArea.areaLabel}
+              </p>
+            </div>
+            <div className="divide-y divide-border">
+              {areaListings.map((listing) => (
+                <PropertyCard
+                  key={listing.id}
+                  listing={listing}
+                  isAuthenticated={isAuthenticated}
+                  onNavigate={() => navigate(`/listing/${listing.id}`)}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
     </>

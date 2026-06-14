@@ -100,7 +100,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void noJwt_returns200_publicEndpoint() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -195,7 +195,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void sizeAboveMax_clampedTo50() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(new PublicSchoolRadiusListingsPage(List.of(), 0, 50, false));
 
         mockMvc.perform(get(BASE_URL)
@@ -204,14 +204,14 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("size", "51"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), anyDouble(), eq(0), eq(50));
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), anyDouble(), eq(0), eq(50), isNull());
     }
 
     // ── 9. radius > 10 → clamped to 10 ──────────────────────────────────────
 
     @Test
     void radiusAboveMax_clampedTo10() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -220,7 +220,7 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("schoolRadiusKm", "99"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(10.0), eq(0), anyInt());
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(10.0), eq(0), anyInt(), isNull());
     }
 
     // ── 10. Valid request → 200, correct shape, 20 included fields present ────
@@ -231,7 +231,7 @@ class PublicSchoolRadiusListingsControllerTest {
         PublicSchoolRadiusListingsPage page = new PublicSchoolRadiusListingsPage(
                 List.of(card), 0, 20, false);
 
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(page);
 
         mockMvc.perform(get(BASE_URL)
@@ -276,7 +276,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void cityWithNoResults_returns200_emptyContent() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get("/api/discover/cities/unknown-city/school-radius-listings")
@@ -291,7 +291,7 @@ class PublicSchoolRadiusListingsControllerTest {
 
     @Test
     void omittedRadius_appliesDefault2km() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -299,14 +299,14 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("schoolLon", "74.7"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(2.0), eq(0), eq(20));
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(2.0), eq(0), eq(20), isNull());
     }
 
     // ── 13. radius=0 is valid (exact-location match) ─────────────────────────
 
     @Test
     void radiusZero_isValid_returns200() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)
@@ -315,14 +315,14 @@ class PublicSchoolRadiusListingsControllerTest {
                         .param("schoolRadiusKm", "0"))
                 .andExpect(status().isOk());
 
-        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(0.0), eq(0), anyInt());
+        verify(service).getListings(eq("udupi"), eq(13.3), eq(74.7), eq(0.0), eq(0), anyInt(), isNull());
     }
 
     // ── Cache-Control: public, max-age=60 ────────────────────────────────────
 
     @Test
     void getSchoolRadiusListings_responseHasCacheControlPublicMaxAge60() throws Exception {
-        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt()))
+        when(service.getListings(anyString(), anyDouble(), anyDouble(), anyDouble(), anyInt(), anyInt(), any()))
                 .thenReturn(emptyPage());
 
         mockMvc.perform(get(BASE_URL)

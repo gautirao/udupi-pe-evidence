@@ -24,7 +24,7 @@ class DiscoverQueryDslTest {
     private static DiscoverListingPredicateBuilder.Filters filtersFor(String city) {
         return new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null
         );
     }
 
@@ -54,7 +54,7 @@ class DiscoverQueryDslTest {
     void textOnlyQuery_emitsMultiMatchMust() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, "apartment"
+                null, null, null, null, null, null, null, null, null, "apartment", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -77,7 +77,7 @@ class DiscoverQueryDslTest {
         DiscoverListingPredicateBuilder.Bbox bbox = new DiscoverListingPredicateBuilder.Bbox(13.0, 74.5, 13.5, 75.0);
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, bbox, null
+                null, null, null, null, null, null, null, null, bbox, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -105,7 +105,7 @@ class DiscoverQueryDslTest {
     void radiusOnly_emitsGeoDistance() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, 13.3, 74.7, 3.0, null, null
+                null, null, null, null, null, 13.3, 74.7, 3.0, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -138,7 +138,7 @@ class DiscoverQueryDslTest {
         DiscoverListingPredicateBuilder.Bbox bbox = new DiscoverListingPredicateBuilder.Bbox(13.0, 74.5, 13.5, 75.0);
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, bbox, "villa"
+                null, null, null, null, null, null, null, null, bbox, "villa", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -162,7 +162,7 @@ class DiscoverQueryDslTest {
     void combinedQAndRadius_emitsBothClauses() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, 13.3, 74.7, 2.0, null, "flat"
+                null, null, null, null, null, 13.3, 74.7, 2.0, null, "flat", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -245,7 +245,7 @@ class DiscoverQueryDslTest {
     void backOnMarket_emitsExistsAndRangeClauses() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                Boolean.TRUE, null, null, null, null, null, null, null, null, null
+                Boolean.TRUE, null, null, null, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -296,7 +296,7 @@ class DiscoverQueryDslTest {
     void reraRegistered_emitsExistsReraNumber() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, null, null, null, null, null
+                null, null, Boolean.TRUE, null, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -321,7 +321,7 @@ class DiscoverQueryDslTest {
     void readyToMove_emitsTermPossessionStatusReady() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, Boolean.TRUE, null, null, null, null, null, null
+                null, null, null, Boolean.TRUE, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -346,7 +346,7 @@ class DiscoverQueryDslTest {
     void blankQ_doesNotEmitMultiMatch() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, "   "
+                null, null, null, null, null, null, null, null, null, "   ", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -375,7 +375,7 @@ class DiscoverQueryDslTest {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, 2, 10, false
+                null, null, 2, 10, false, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildListingsQuery(query);
@@ -433,7 +433,7 @@ class DiscoverQueryDslTest {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, 0, 20, false
+                null, null, 0, 20, false, null
         );
         Map<String, Object> body = DiscoverQueryDsl.buildListingsQuery(query);
         assertThat(body).containsEntry("track_total_hits", true);
@@ -448,7 +448,7 @@ class DiscoverQueryDslTest {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, 0, 20, true
+                null, null, 0, 20, true, null
         );
         Map<String, Object> body = DiscoverQueryDsl.buildListingsQuery(query);
         assertThat(body).containsKey("aggs");
@@ -459,7 +459,7 @@ class DiscoverQueryDslTest {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, 0, 20, false
+                null, null, 0, 20, false, null
         );
         Map<String, Object> body = DiscoverQueryDsl.buildListingsQuery(query);
         assertThat(body).doesNotContainKey("aggs");
@@ -489,7 +489,7 @@ class DiscoverQueryDslTest {
         );
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, polygon, null, null, null, null, null
+                null, null, null, null, polygon, null, null, null, null, null, null
         );
 
         assertThatThrownBy(() -> DiscoverQueryDsl.buildMarkersQuery(filters))
@@ -507,7 +507,7 @@ class DiscoverQueryDslTest {
         DiscoverListingsQuery query = new DiscoverListingsQuery(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, polygon, null, null, null,
-                null, null, 0, 20, false
+                null, null, 0, 20, false, null
         );
 
         assertThatThrownBy(() -> DiscoverQueryDsl.buildListingsQuery(query))

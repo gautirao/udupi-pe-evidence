@@ -6,6 +6,7 @@ import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 import { AgriFiltersPanel } from './AgriFiltersPanel';
 import type { AgriFilterValues } from './AgriFiltersPanel';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,8 @@ interface AgriGroupSelectedPanelProps {
   onApplyFilters?: (filters: AgriFilterValues) => void;
   /** Issue #1457 — called when user clicks Clear Filters. */
   onClearFilters?: () => void;
+  /** Issue #1494 — current buy/rent intent for copy and badge display. Default 'buy'. */
+  intent?: DiscoverIntent;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -84,6 +87,7 @@ export function AgriGroupSelectedPanel({
   agriPriceMax,
   onApplyFilters = () => {},
   onClearFilters = () => {},
+  intent = 'buy',
 }: AgriGroupSelectedPanelProps) {
   // Sort distance tiers ascending by maxKm for consistent display order.
   const sortedTiers = availableMaxDistances
@@ -184,7 +188,7 @@ export function AgriGroupSelectedPanel({
             data-testid="agri-group-listing-count"
             className="text-sm text-muted-foreground"
           >
-            {listingCount} agri propert{listingCount === 1 ? 'y' : 'ies'} in this region
+            {listingCount} agri propert{listingCount === 1 ? 'y' : 'ies'} for {intent === 'rent' ? 'rent' : 'sale'} in this region
           </span>
         </div>
       )}
@@ -239,7 +243,7 @@ export function AgriGroupSelectedPanel({
             <p className="text-sm text-muted-foreground">
               {(agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null)
                 ? 'No agricultural listings match the selected filters.'
-                : 'No listings in this region'}
+                : `No agricultural land for ${intent === 'rent' ? 'rent' : 'sale'} in this region`}
             </p>
             <button
               type="button"

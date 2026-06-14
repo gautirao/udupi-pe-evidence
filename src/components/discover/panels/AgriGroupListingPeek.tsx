@@ -119,6 +119,22 @@ export function AgriGroupListingPeek({
 
         {/* First-paint fields — always visible (synchronous) */}
         <div className="px-4 py-3 space-y-2 border-b border-border">
+          {/* Issue #1494 — For Sale / For Rent badge */}
+          {firstPaintData.listingPurpose && (
+            <div>
+              <span
+                data-testid="agri-peek-intent-badge"
+                className={[
+                  'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
+                  firstPaintData.listingPurpose === 'rent'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+                ].join(' ')}
+              >
+                {firstPaintData.listingPurpose === 'rent' ? 'For Rent' : 'For Sale'}
+              </span>
+            </div>
+          )}
           {locality && (
             <div
               data-testid="agri-listing-peek-locality"

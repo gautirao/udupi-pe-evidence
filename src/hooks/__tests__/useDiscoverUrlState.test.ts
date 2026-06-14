@@ -2870,3 +2870,62 @@ describe('useDiscoverUrlState — agri filter params (Issue #1457)', () => {
     expect(state.filters.agriAcresMax).toBeUndefined();
   });
 });
+
+// ─── Issue #1494 — Buy/Rent intent URL state ──────────────────────────────────
+
+describe('useDiscoverUrlState — intent (Issue #1494)', () => {
+  it('defaults to "buy" when intent param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].intent).toBe('buy');
+  });
+
+  it('reads intent=rent from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&intent=rent'),
+    });
+    expect(result.current[0].intent).toBe('rent');
+  });
+
+  it('defaults to "buy" for an unknown intent value', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&intent=other'),
+    });
+    expect(result.current[0].intent).toBe('buy');
+  });
+
+  it('setIntent("rent") sets intent=rent in URL (REPLACE semantics, no stack entry)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    act(() => {
+      result.current[1].setIntent('rent');
+    });
+    expect(result.current[0].intent).toBe('rent');
+  });
+
+  it('setIntent("buy") removes intent param from URL (buy is default)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&intent=rent'),
+    });
+    act(() => {
+      result.current[1].setIntent('buy');
+    });
+    expect(result.current[0].intent).toBe('buy');
+  });
+
+  it('startOver preserves intent=rent across a start-over', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&intent=rent&areaKey=IN%7CKA%7CUdupi%7CManipal'),
+    });
+    // Confirm rent is set
+    expect(result.current[0].intent).toBe('rent');
+    act(() => {
+      result.current[1].startOver();
+    });
+    // intent must still be rent; areaKey should be gone
+    expect(result.current[0].intent).toBe('rent');
+    expect(result.current[0].areaKey).toBeFalsy();
+  });
+});

@@ -53,7 +53,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(item));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         assertThat(resp.city()).isEqualTo("udupi");
         assertThat(resp.listings()).hasSize(1);
@@ -70,7 +70,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of());
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "UDUPI", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "UDUPI", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         assertThat(resp.city()).isEqualTo("udupi");
     }
@@ -80,7 +80,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_blankCity_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "  ", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true))
+                "  ", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -89,7 +89,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_nullCity_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true))
+                null, List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -100,7 +100,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_emptyAreaKeys_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", List.of(), Optional.empty(), true))
+                "udupi", List.of(), Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -109,7 +109,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_nullAreaKeys_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", null, Optional.empty(), true))
+                "udupi", null, Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -121,7 +121,7 @@ class DiscoverAgriMapListingsServiceTest {
     void findAgriMapListings_tooManyAreaKeys_throws400() {
         List<String> bigList = java.util.Collections.nCopies(DiscoverAgriMapListingsService.MAX_AREA_KEYS + 1, "key");
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", bigList, Optional.empty(), true))
+                "udupi", bigList, Optional.empty(), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -136,7 +136,7 @@ class DiscoverAgriMapListingsServiceTest {
         List<String> maxList = java.util.Collections.nCopies(DiscoverAgriMapListingsService.MAX_AREA_KEYS, "key");
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", maxList, Optional.empty(), true);
+                "udupi", maxList, Optional.empty(), true, null);
 
         assertThat(resp.listings()).isEmpty();
     }
@@ -146,7 +146,7 @@ class DiscoverAgriMapListingsServiceTest {
     @Test
     void findAgriMapListings_malformedBbox_throws400() {
         assertThatThrownBy(() -> service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.of("not,a,valid"), true))
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.of("not,a,valid"), true, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                         .isEqualTo(BAD_REQUEST));
@@ -161,7 +161,7 @@ class DiscoverAgriMapListingsServiceTest {
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
                 "udupi", List.of("IN|KA|Udupi|Area1"),
-                Optional.of("13.0,74.0,14.0,75.0"), true); // south,west,north,east
+                Optional.of("13.0,74.0,14.0,75.0"), true, null); // south,west,north,east
 
         assertThat(resp.listings()).isEmpty();
     }
@@ -174,7 +174,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of());
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         assertThat(resp.listings()).isEmpty();
         assertThat(resp.city()).isEqualTo("udupi");
@@ -192,7 +192,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(item));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         assertThat(resp.listings().get(0).boundaryGeoJson()).isEqualTo("{\"type\":\"Polygon\"}");
     }
@@ -209,7 +209,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(item));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         assertThat(resp.listings().get(0).boundaryGeoJson()).isNull();
     }
@@ -222,7 +222,7 @@ class DiscoverAgriMapListingsServiceTest {
         // by checking that known-safe fields exist and no PII fields exist
         AgriMapListingItem item = new AgriMapListingItem(
                 "id", "Test Agri Title", "area", 1.0, 2.0, "agricultural_land", "loc",
-                "{}", new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 100L);
+                "{}", new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 100L, "sale");
 
         // Safe fields present
         assertThat(item.id()).isNotNull();
@@ -233,8 +233,8 @@ class DiscoverAgriMapListingsServiceTest {
         assertThat(item.propertyType()).isNotNull();
         assertThat(item.pricePaise()).isNotNull();
 
-        // Record component count — must be exactly 12 (no extra fields)
-        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(12);
+        // Record component count — must be exactly 13 (no extra fields)
+        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(13);
 
         // Verify no fields named after PII or internal fields
         var fieldNames = java.util.Arrays.stream(AgriMapListingItem.class.getRecordComponents())
@@ -260,7 +260,7 @@ class DiscoverAgriMapListingsServiceTest {
         AgriMapListingsResponse resp = service.findAgriMapListings(
                 "udupi",
                 List.of("IN|KA|Udupi|Area1", "IN|KA|Udupi|Area2"),
-                Optional.empty(), true);
+                Optional.empty(), true, null);
 
         assertThat(resp.listings()).hasSize(2);
         assertThat(resp.listings().stream().map(AgriMapListingItem::id))
@@ -298,6 +298,7 @@ class DiscoverAgriMapListingsServiceTest {
                         if (item.pricePaise() != null) {
                             when(rs.getLong("price_paise")).thenReturn(item.pricePaise());
                         }
+                        when(rs.getString("listing_purpose")).thenReturn(item.listingPurpose());
                         result.add(rm.mapRow(rs, result.size()));
                     }
                     return result;
@@ -311,7 +312,7 @@ class DiscoverAgriMapListingsServiceTest {
                                                BigDecimal landArea, String landAreaUnit,
                                                BigDecimal computedAcres, Long pricePaise) {
         return new AgriMapListingItem(id, title, areaKey, lat, lon, propertyType, locality,
-                boundaryGeoJson, landArea, landAreaUnit, computedAcres, pricePaise);
+                boundaryGeoJson, landArea, landAreaUnit, computedAcres, pricePaise, null);
     }
 
     // ── SQL schema regression: computed_area_acres must be derived, not stored ──
@@ -351,7 +352,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(item));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         assertThat(resp.listings()).hasSize(1);
         assertThat(resp.listings().get(0).title()).isEqualTo("5-Acre Rice Farm, Hebri");
@@ -370,7 +371,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(source));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         // pricePaise withheld from anonymous callers
@@ -397,7 +398,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(source));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         assertThat(returned.latitude()).as("null coord must NOT become 0.0").isNull();
@@ -416,7 +417,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(source));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         // Truncate toward zero: -13.34091 -> -13.34 (NOT -13.35), -74.74215 -> -74.74
@@ -436,7 +437,7 @@ class DiscoverAgriMapListingsServiceTest {
         stubQuery(List.of(source));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
-                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true);
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
 
         AgriMapListingItem returned = resp.listings().get(0);
         // exact coords retained
@@ -444,5 +445,90 @@ class DiscoverAgriMapListingsServiceTest {
         assertThat(returned.longitude()).isEqualTo(74.74215);
         // pricePaise canonical value retained (#1452)
         assertThat(returned.pricePaise()).isEqualTo(12500000L);
+    }
+
+    // ── #1494: listingPurpose field — DTO mapper and SQL filter ─────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1494 agri DTO: listingPurpose read from listing_purpose column, other fields not shifted")
+    void agriMapListingItem_rowMapper_readsListingPurposeColumn() throws SQLException {
+        // Source item with listingPurpose='sale'
+        AgriMapListingItem source = new AgriMapListingItem(
+                "lp-1", "Farm with purpose", "IN|KA|Udupi|Area1",
+                13.3, 74.7, "agricultural_land", "Kundapur",
+                "{\"type\":\"Polygon\"}", new BigDecimal("3.0"), "acres",
+                new BigDecimal("3.0"), 7500000L, "sale");
+        stubQuery(List.of(source));
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        assertThat(resp.listings()).hasSize(1);
+        AgriMapListingItem returned = resp.listings().get(0);
+        // 13th field must be listingPurpose, not a shifted value from another column
+        assertThat(returned.listingPurpose()).isEqualTo("sale");
+        // Existing 12 fields must not shift
+        assertThat(returned.id()).isEqualTo("lp-1");
+        assertThat(returned.title()).isEqualTo("Farm with purpose");
+        assertThat(returned.areaKey()).isEqualTo("IN|KA|Udupi|Area1");
+        assertThat(returned.latitude()).isEqualTo(13.3);
+        assertThat(returned.longitude()).isEqualTo(74.7);
+        assertThat(returned.propertyType()).isEqualTo("agricultural_land");
+        assertThat(returned.locality()).isEqualTo("Kundapur");
+        assertThat(returned.pricePaise()).isEqualTo(7500000L);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1494 agri DTO: listingPurpose null when column returns null")
+    void agriMapListingItem_rowMapper_listingPurposeNullWhenAbsent() throws SQLException {
+        AgriMapListingItem source = agriItem("lp-null", "Farm", "IN|KA|Udupi|Area1",
+                13.3, 74.7, "agricultural_land", "Malpe", null, null, null, null, null);
+        stubQuery(List.of(source));
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        assertThat(resp.listings().get(0).listingPurpose()).isNull();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1494 agri filter: listingPurpose='rent' produces AND pl.listing_purpose = ? in SQL")
+    void findAgriMapListings_listingPurposeRent_producesWhereClause() throws Exception {
+        when(jdbcOperations.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+
+        service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, "rent");
+
+        org.mockito.Mockito.verify(jdbcOperations)
+                .query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
+
+        assertThat(sqlCaptor.getValue()).contains("pl.listing_purpose = ?");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1494 agri filter: listingPurpose=null → no listing_purpose WHERE predicate in SQL")
+    void findAgriMapListings_listingPurposeNull_noWhereClause() throws Exception {
+        when(jdbcOperations.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        org.mockito.ArgumentCaptor<String> sqlCaptor =
+                org.mockito.ArgumentCaptor.forClass(String.class);
+
+        service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        org.mockito.Mockito.verify(jdbcOperations)
+                .query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
+
+        // pl.listing_purpose appears in the SELECT clause always; but must NOT appear as a WHERE filter
+        assertThat(sqlCaptor.getValue()).doesNotContain("pl.listing_purpose = ?");
     }
 }

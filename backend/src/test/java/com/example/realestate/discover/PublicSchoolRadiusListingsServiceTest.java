@@ -69,7 +69,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(probeResult);
 
-        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 2);
+        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 2, null);
 
         assertThat(page.hasMore()).isFalse();
         assertThat(page.content()).hasSize(2);
@@ -88,7 +88,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(probeResult);
 
-        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 2);
+        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 2, null);
 
         assertThat(page.hasMore()).isTrue();
         assertThat(page.content()).hasSize(2);
@@ -104,7 +104,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());
 
-        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20);
+        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20, null);
 
         assertThat(page.hasMore()).isFalse();
         assertThat(page.content()).isEmpty();
@@ -118,7 +118,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());
 
-        service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20);
+        service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20, null);
 
         ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
         verify(jdbc).query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
@@ -175,7 +175,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());
 
-        service.getListings("udupi", 13.3456, 74.7891, 3.5, 0, 20);
+        service.getListings("udupi", 13.3456, 74.7891, 3.5, 0, 20, null);
 
         ArgumentCaptor<Object[]> paramsCaptor = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).query(anyString(), any(RowMapper.class), paramsCaptor.capture());
@@ -203,7 +203,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());
 
-        service.getListings("udupi", 13.3, 74.7, 0.0, 0, 20);
+        service.getListings("udupi", 13.3, 74.7, 0.0, 0, 20, null);
 
         ArgumentCaptor<Object[]> paramsCaptor = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).query(anyString(), any(RowMapper.class), paramsCaptor.capture());
@@ -227,7 +227,7 @@ class PublicSchoolRadiusListingsServiceTest {
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
                 .thenReturn(List.of());
 
-        service.getListings("udupi", 13.3, 74.7, 2.0, 1, 5);
+        service.getListings("udupi", 13.3, 74.7, 2.0, 1, 5, null);
 
         ArgumentCaptor<Object[]> paramsCaptor = ArgumentCaptor.forClass(Object[].class);
         verify(jdbc).query(anyString(), any(RowMapper.class), paramsCaptor.capture());
@@ -282,7 +282,7 @@ class PublicSchoolRadiusListingsServiceTest {
                     return List.of(mapper.mapRow(rs, 0));
                 });
 
-        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20);
+        PublicSchoolRadiusListingsPage page = service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20, null);
 
         assertThat(page.content()).hasSize(1);
         PublicSchoolRadiusListingCard card = page.content().get(0);
@@ -300,5 +300,38 @@ class PublicSchoolRadiusListingsServiceTest {
         assertThat(card.possessionStatus()).isEqualTo("READY");
         assertThat(card.backOnMarket()).isFalse();
         assertThat(card.createdAt()).isNotNull();
+    }
+
+    // ── 9. #1494 listingPurpose filter: 'sale' → AND pl.listing_purpose = ? in SQL ─
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listingPurposeSale_producesListingPurposeClause() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+
+        service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20, "sale");
+
+        verify(jdbc).query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
+        assertThat(sqlCaptor.getValue()).contains("pl.listing_purpose = ?");
+    }
+
+    // ── 10. #1494 listingPurpose filter: null → no listing_purpose WHERE predicate ──
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void listingPurposeNull_noListingPurposeClause() {
+        when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
+                .thenReturn(List.of());
+
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+
+        service.getListings("udupi", 13.3, 74.7, 2.0, 0, 20, null);
+
+        verify(jdbc).query(sqlCaptor.capture(), any(RowMapper.class), any(Object[].class));
+        // pl.listing_purpose appears in the SELECT clause always; must NOT appear as a WHERE filter
+        assertThat(sqlCaptor.getValue()).doesNotContain("pl.listing_purpose = ?");
     }
 }

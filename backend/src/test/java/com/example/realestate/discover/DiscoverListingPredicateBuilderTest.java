@@ -16,7 +16,7 @@ class DiscoverListingPredicateBuilderTest {
         return new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
     }
 
     // ── 1. Empty/default filters → base predicate + city only ───────────────
@@ -40,7 +40,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", List.of("house"), null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -56,7 +56,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 List.of(4), null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -72,7 +72,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 List.of(2, 4), null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -88,7 +88,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, 10_000L, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -103,7 +103,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, Boolean.TRUE, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -118,7 +118,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, Boolean.TRUE, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -143,7 +143,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null, null);
+                polygon, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -191,7 +191,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                twoPoints, null, null, null, null, null);
+                twoPoints, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -215,7 +215,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null, null);
+                polygon, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -242,7 +242,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                polygon, null, null, null, null, null);
+                polygon, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -261,7 +261,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, 3.0, null, null);
+                null, 13.0, 74.0, 3.0, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -288,7 +288,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, null, null, null); // schoolRadiusKm = null
+                null, 13.0, 74.0, null, null, null, null); // schoolRadiusKm = null
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -307,7 +307,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, null, 2.0, null, null); // schoolLon = null
+                null, 13.0, null, 2.0, null, null, null); // schoolLon = null
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -324,7 +324,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, bbox, null);
+                null, null, null, null, bbox, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -359,7 +359,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, Boolean.TRUE, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -389,7 +389,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, "apartment");
+                null, null, null, null, null, "apartment", null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -412,7 +412,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, null, null, null, null, "   ");
+                null, null, null, null, null, "   ", null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -429,7 +429,7 @@ class DiscoverListingPredicateBuilderTest {
         DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null,
                 null, null, null, null, null, null,
-                null, 13.0, 74.0, 2.0, null, "flat");
+                null, 13.0, 74.0, 2.0, null, "flat", null);
 
         DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
 
@@ -461,5 +461,67 @@ class DiscoverListingPredicateBuilderTest {
         // Exact count guard: city(1) + lon(2) + lat(3) + radius_m(4) + q(5)
         assertEquals(5, sql.params().size(),
                 "Expected exactly 5 params: city + lon + lat + radius_m + q");
+    }
+
+    // ── T5. listingPurpose="sale" → AND pl.listing_purpose = ? clause + param ─
+
+    @Test
+    void build_listingPurposeSale_generatesListingPurposeClause() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, "sale");
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("AND pl.listing_purpose = ?"),
+                "Expected listing_purpose = ? clause when listingPurpose='sale'");
+        assertTrue(sql.params().contains("sale"),
+                "Expected 'sale' to appear in params");
+    }
+
+    // ── T6. listingPurpose="rent" → same clause with 'rent' param ────────────
+
+    @Test
+    void build_listingPurposeRent_generatesListingPurposeClause() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, "rent");
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertTrue(sql.whereFragment().contains("AND pl.listing_purpose = ?"),
+                "Expected listing_purpose = ? clause when listingPurpose='rent'");
+        assertTrue(sql.params().contains("rent"),
+                "Expected 'rent' to appear in params");
+    }
+
+    // ── T7. listingPurpose=null → no listing_purpose clause ──────────────────
+
+    @Test
+    void build_listingPurposeNull_noListingPurposeClause() {
+        DiscoverListingPredicateBuilder.Sql sql =
+                DiscoverListingPredicateBuilder.build(minimal("udupi"));
+
+        assertFalse(sql.whereFragment().contains("pl.listing_purpose"),
+                "No listing_purpose clause should be generated when listingPurpose is null");
+    }
+
+    // ── T8. listingPurpose="  " (blank) → normalised to null, no clause ──────
+
+    @Test
+    void build_blankListingPurpose_noListingPurposeClause() {
+        DiscoverListingPredicateBuilder.Filters f = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null,
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, "   ");
+
+        DiscoverListingPredicateBuilder.Sql sql = DiscoverListingPredicateBuilder.build(f);
+
+        assertFalse(sql.whereFragment().contains("pl.listing_purpose"),
+                "Blank listingPurpose must be treated as absent — no listing_purpose clause");
+        assertFalse(sql.params().contains("   "),
+                "Blank listingPurpose must not appear in params");
     }
 }

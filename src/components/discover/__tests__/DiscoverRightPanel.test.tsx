@@ -148,7 +148,7 @@ describe('DiscoverRightPanel', () => {
         isLoadingListings={false}
       />,
     );
-    expect(screen.getByText('No listings in this area yet')).toBeInTheDocument();
+    expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
   });
 
   it('renders listing cards with price and locality', () => {

@@ -54,7 +54,8 @@ public class PublicSchoolRadiusListingsController {
             @RequestParam(name = "schoolLon", required = false) Double schoolLon,
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
             @RequestParam(name = "page", required = false, defaultValue = "0") int page,
-            @RequestParam(name = "size", required = false, defaultValue = "20") int size
+            @RequestParam(name = "size", required = false, defaultValue = "20") int size,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
     ) {
         log.debug("GET /api/discover/cities/{}/school-radius-listings schoolLat={} schoolLon={} radiusKm={} page={} size={}",
                 city, schoolLat, schoolLon, schoolRadiusKm, page, size);
@@ -94,6 +95,6 @@ public class PublicSchoolRadiusListingsController {
 
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
-                .body(service.getListings(city, schoolLat, schoolLon, effectiveRadius, page, effectiveSize));
+                .body(service.getListings(city, schoolLat, schoolLon, effectiveRadius, page, effectiveSize, listingPurpose));
     }
 }

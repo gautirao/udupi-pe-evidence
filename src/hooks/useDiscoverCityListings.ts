@@ -52,6 +52,8 @@ export interface DiscoverCityListingsParams {
   propertyType?: string;
   /** Free-text keyword search forwarded to the backend FTS endpoint. */
   q?: string;
+  /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
+  listingPurpose?: string;
 }
 
 /**
@@ -70,6 +72,7 @@ export function useDiscoverCityListings({
   bedrooms,
   propertyType,
   q,
+  listingPurpose,
 }: DiscoverCityListingsParams) {
   const sortedKeys = [...areaKeys].sort();
 
@@ -84,6 +87,7 @@ export function useDiscoverCityListings({
       bedrooms ?? null,
       propertyType ?? null,
       q?.trim() || null,
+      listingPurpose ?? null,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -94,6 +98,7 @@ export function useDiscoverCityListings({
       if (bedrooms != null) params.append('bedrooms', String(bedrooms));
       if (propertyType) params.append('propertyType', propertyType);
       if (q?.trim()) params.append('q', q.trim());
+      if (listingPurpose) params.append('listingPurpose', listingPurpose);
       return api.get<DiscoverCityListingsResponse>(
         `/api/discover/cities/${encodeURIComponent(city)}/listings?${params.toString()}`,
         { skipAuth: true },

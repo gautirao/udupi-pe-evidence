@@ -69,7 +69,8 @@ public class CityAreaListingsController {
             @RequestParam(required = false) Long maxPrice,
             @RequestParam(required = false) Integer bedrooms,
             @RequestParam(required = false) String propertyType,
-            @RequestParam(required = false) String q) {
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) String listingPurpose) {
 
         if (areaKeys == null || areaKeys.isEmpty() || areaKeys.stream().allMatch(String::isBlank)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "areaKeys_required");
@@ -84,7 +85,7 @@ public class CityAreaListingsController {
                 q != null ? "[present]" : null);
 
         CityAreaListingsResponse response = service.getAreaListings(
-                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q);
+                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q, listingPurpose);
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
                 .body(response);

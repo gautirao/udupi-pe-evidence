@@ -16,6 +16,7 @@ import { ArrowLeft, Sprout, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ export interface AgriGroupLocalityPanelProps {
   onRetry: () => void;
   onSelectListing: (id: string) => void;
   onClose: () => void;
+  /** Issue #1494 — current buy/rent intent for count label. Default 'buy'. */
+  intent?: DiscoverIntent;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -54,6 +57,7 @@ export function AgriGroupLocalityPanel({
   onRetry,
   onSelectListing,
   onClose,
+  intent = 'buy',
 }: AgriGroupLocalityPanelProps) {
   // Sort by id ascending — stable, deterministic order across renders.
   // Spread first to avoid mutating the prop array.
@@ -89,7 +93,7 @@ export function AgriGroupLocalityPanel({
               data-testid="agri-locality-count"
               className="text-xs text-muted-foreground"
             >
-              {count} agricultural {count === 1 ? 'property' : 'properties'}
+              {count} agricultural {count === 1 ? 'property' : 'properties'} for {intent === 'rent' ? 'rent' : 'sale'}
             </p>
           )}
         </div>

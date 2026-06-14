@@ -287,7 +287,8 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.schoolLon(),
                 q.schoolRadiusKm(),
                 q.bbox(),
-                q.q()
+                q.q(),
+                q.listingPurpose()
         );
     }
 }

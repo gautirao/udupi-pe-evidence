@@ -39,7 +39,8 @@ public class DiscoverListingPredicateBuilder {
             Double schoolLon,
             Double schoolRadiusKm,         // default 2.0 when schoolLat+schoolLon provided
             Bbox bbox,                     // viewport rectangle filter, nullable
-            String q                       // keyword search query; null/blank = no FTS filter
+            String q,                      // keyword search query; null/blank = no FTS filter
+            String listingPurpose          // 'sale' or 'rent'; null = no filter
     ) {}
 
     /**
@@ -226,6 +227,14 @@ public class DiscoverListingPredicateBuilder {
         if (normQ != null) {
             sb.append(" AND pl.search_vector @@ websearch_to_tsquery('english', ?)");
             params.add(normQ);
+        }
+
+        // listingPurpose — 'sale' or 'rent'; null/blank = no filter (backward-compatible)
+        String normPurpose = (f.listingPurpose() != null && !f.listingPurpose().isBlank())
+                ? f.listingPurpose().trim() : null;
+        if (normPurpose != null) {
+            sb.append(" AND pl.listing_purpose = ?");
+            params.add(normPurpose);
         }
 
         return new Sql(sb.toString(), params, bboxApplied);

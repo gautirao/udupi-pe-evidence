@@ -120,7 +120,8 @@ public final class DiscoverQueryDsl {
                 q.schoolLon(),
                 q.schoolRadiusKm(),
                 q.bbox(),
-                q.q()
+                q.q(),
+                null  // listingPurpose: OpenSearch path does not filter by intent — no term query wired in buildBoolQuery
         );
     }
 

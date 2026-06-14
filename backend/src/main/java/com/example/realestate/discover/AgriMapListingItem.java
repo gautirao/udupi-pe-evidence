@@ -24,5 +24,6 @@ public record AgriMapListingItem(
         BigDecimal landArea,
         String landAreaUnit,
         BigDecimal computedAreaAcres,
-        Long pricePaise
+        Long pricePaise,
+        String listingPurpose
 ) {}

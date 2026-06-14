@@ -16,14 +16,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAgriListingDetail } from '@/hooks/useAgriListingDetail';
 import { useAuth } from '@/contexts/AuthContext';
 import { formatPrice } from '@/lib/formatters';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 
 interface AgriListingPanelProps {
   listingId: string;
   onBack: () => void;
   onNavigate: () => void;
+  /** Issue #1494 — current buy/rent intent for badge display. Default 'buy'. */
+  intent?: DiscoverIntent;
 }
 
-export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingPanelProps) {
+export function AgriListingPanel({ listingId, onBack, onNavigate, intent = 'buy' }: AgriListingPanelProps) {
   const { data, isLoading, isError, refetch } = useAgriListingDetail(listingId);
   const { session } = useAuth();
   const isAuthenticated = !!session;
@@ -125,6 +128,20 @@ export function AgriListingPanel({ listingId, onBack, onNavigate }: AgriListingP
 
       {/* Compact peek rows */}
       <div className="flex-1 overflow-y-auto px-4 py-2">
+        {/* Issue #1494 — For Sale / For Rent badge */}
+        <div className="py-2">
+          <span
+            data-testid="agri-detail-intent-badge"
+            className={[
+              'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
+              intent === 'rent'
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+            ].join(' ')}
+          >
+            {intent === 'rent' ? 'For Rent' : 'For Sale'}
+          </span>
+        </div>
         {locality && (
           <div className="flex justify-between items-start gap-2 py-2 border-b border-border">
             <span className="text-sm text-muted-foreground shrink-0">Locality</span>

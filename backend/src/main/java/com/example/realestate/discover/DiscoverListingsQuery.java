@@ -24,5 +24,6 @@ public record DiscoverListingsQuery(
         DiscoverListingPredicateBuilder.Bbox bbox,
         int page,
         int size,
-        boolean includeAggregates
+        boolean includeAggregates,
+        String listingPurpose
 ) {}

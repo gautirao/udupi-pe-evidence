@@ -108,7 +108,7 @@ describe('AreaSelectedPanel', () => {
   describe('Empty state', () => {
     it('shows no listings message when empty without filters', () => {
       renderPanel({ areaListings: [] });
-      expect(screen.getByText('No listings in this area yet')).toBeInTheDocument();
+      expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
       expect(screen.queryByTestId('clear-filters-button')).not.toBeInTheDocument();
     });
 
@@ -187,6 +187,32 @@ describe('AreaSelectedPanel', () => {
       const input = screen.getByPlaceholderText('Search listings by keyword');
       fireEvent.change(input, { target: { value: 'test' } });
       expect(onSearchChange).toHaveBeenCalledWith('test');
+    });
+  });
+
+  // ── Issue #1494 — intent-aware copy (AC4/AC10 area journey) ──────────────
+
+  describe('intent-aware result summary and empty state (Issue #1494)', () => {
+    it('shows "for sale" result summary by default (intent=buy)', () => {
+      renderPanel({ areaListings: [mockListing] });
+      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('for sale');
+      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('Test Area');
+    });
+
+    it('shows "for rent" result summary when intent=rent', () => {
+      renderPanel({ areaListings: [mockListing], intent: 'rent' });
+      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('for rent');
+      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('1 property for rent in Test Area');
+    });
+
+    it('shows "for sale in this area yet" empty state by default (intent=buy)', () => {
+      renderPanel({ areaListings: [] });
+      expect(screen.getByText(/No properties for sale in this area yet/)).toBeInTheDocument();
+    });
+
+    it('shows "for rent in this area yet" empty state when intent=rent', () => {
+      renderPanel({ areaListings: [], intent: 'rent' });
+      expect(screen.getByText(/No properties for rent in this area yet/)).toBeInTheDocument();
     });
   });
 });

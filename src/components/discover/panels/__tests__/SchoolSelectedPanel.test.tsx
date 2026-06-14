@@ -112,7 +112,7 @@ describe('SchoolSelectedPanel', () => {
   it('renders the empty-state distance as "within 1 km" (not "within 0 km") when radiusKm=0', () => {
     renderPanel({ radiusKm: 0, listings: [], isLoadingListings: false });
     expect(screen.getByTestId('empty-state-message')).toHaveTextContent(
-      'No properties found within 1 km of Manipal Public School',
+      'No properties for sale found within 1 km of Manipal Public School',
     );
   });
 
@@ -182,7 +182,7 @@ describe('SchoolSelectedPanel', () => {
     renderPanel({ listings: [], isLoadingListings: false });
     expect(screen.getByTestId('empty-state-message')).toBeInTheDocument();
     expect(screen.getByTestId('empty-state-message')).toHaveTextContent(
-      'No properties found within 3 km of Manipal Public School',
+      'No properties for sale found within 3 km of Manipal Public School',
     );
   });
 
@@ -288,7 +288,7 @@ describe('SchoolSelectedPanel', () => {
       isLoadingListings: false,
     });
     expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent(
-      '3 properties found near Manipal Public School',
+      '3 properties for sale found near Manipal Public School',
     );
   });
 
@@ -301,7 +301,7 @@ describe('SchoolSelectedPanel', () => {
       isLoadingListings: false,
     });
     expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent(
-      '1 property found near Manipal Public School',
+      '1 property for sale found near Manipal Public School',
     );
   });
 
@@ -370,5 +370,48 @@ describe('SchoolSelectedPanel', () => {
         schoolRadiusKm: 3,
       }),
     );
+  });
+
+  // ── Issue #1494 — intent-aware copy (AC5 school journey) ─────────────────
+
+  describe('intent-aware result count and empty state (Issue #1494)', () => {
+    it('shows "for sale" in count helper by default (intent=buy)', () => {
+      renderPanel({
+        isAuthenticated: true,
+        onBoundedSearch: vi.fn(),
+        boundedSearchTriggered: true,
+        listings: [makeListing('l-1')],
+        isLoadingListings: false,
+        intent: 'buy',
+      });
+      expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent('for sale');
+      expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent('1 property for sale found near Manipal Public School');
+    });
+
+    it('shows "for rent" in count helper when intent=rent', () => {
+      renderPanel({
+        isAuthenticated: true,
+        onBoundedSearch: vi.fn(),
+        boundedSearchTriggered: true,
+        listings: [makeListing('l-1')],
+        isLoadingListings: false,
+        intent: 'rent',
+      });
+      expect(screen.getByTestId('school-bounded-search-count')).toHaveTextContent('for rent');
+    });
+
+    it('shows "No properties for sale" empty state by default (intent=buy)', () => {
+      renderPanel({ listings: [] });
+      expect(screen.getByTestId('empty-state-message')).toHaveTextContent(
+        'No properties for sale found',
+      );
+    });
+
+    it('shows "No properties for rent" empty state when intent=rent', () => {
+      renderPanel({ listings: [], intent: 'rent' });
+      expect(screen.getByTestId('empty-state-message')).toHaveTextContent(
+        'No properties for rent found',
+      );
+    });
   });
 });

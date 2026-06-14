@@ -58,6 +58,7 @@ public class CityAreaListingsService {
      *                     Passed to {@code websearch_to_tsquery('english', ?)} — malformed input
      *                     may cause a {@code DataAccessException} which propagates to the global
      *                     exception handler.
+     * @param listingPurpose optional listing purpose filter ('sale' or 'rent'); null/blank = no filter
      * @throws ResponseStatusException 400 "unknown_city" when city slug is not in cities table
      */
     @Transactional(readOnly = true)
@@ -68,12 +69,17 @@ public class CityAreaListingsService {
                                                     Long maxPrice,
                                                     Integer bedrooms,
                                                     String propertyType,
-                                                    String q) {
+                                                    String q,
+                                                    String listingPurpose) {
 
         int limit = clampLimit(rawLimit);
 
         // Normalise keyword query: blank/whitespace-only → treat as absent
         String normQ = (q != null && !q.isBlank()) ? q.trim() : null;
+
+        // Normalise listingPurpose: blank/whitespace-only → treat as absent
+        String normPurpose = (listingPurpose != null && !listingPurpose.isBlank())
+                ? listingPurpose.trim() : null;
 
         // Validate city exists
         Integer cityCount = jdbc.queryForObject(
@@ -114,6 +120,9 @@ public class CityAreaListingsService {
             // FTS clause must be in the LEFT JOIN ON clause (not WHERE) so that areas with
             // zero keyword-matching listings still appear in the response with listings:[].
             joinFilterClauses.append("\n                        AND pl.search_vector @@ websearch_to_tsquery('english', ?)");
+        }
+        if (normPurpose != null) {
+            joinFilterClauses.append("\n                        AND pl.listing_purpose = ?");
         }
 
         // Single query: join areas → cities to enforce city ownership, lateral join to listing_images
@@ -200,7 +209,7 @@ public class CityAreaListingsService {
         // Filter params appear first because the LEFT JOIN ON clause precedes the WHERE clause
         // in the SQL text; JDBC binds ? positionally left-to-right.
         Object[] params = buildParams(city.toLowerCase(), areaKeys, limit,
-                minPrice, maxPrice, bedrooms, propertyType, normQ);
+                minPrice, maxPrice, bedrooms, propertyType, normQ, normPurpose);
 
         // area_key → list of cards; LinkedHashMap preserves insertion (sorted) order per key
         Map<String, List<AreaListingCard>> cardsByArea = new LinkedHashMap<>();
@@ -280,7 +289,8 @@ public class CityAreaListingsService {
 
     private static Object[] buildParams(String city, List<String> areaKeys, int limit,
                                         Long minPrice, Long maxPrice,
-                                        Integer bedrooms, String propertyType, String normQ) {
+                                        Integer bedrooms, String propertyType, String normQ,
+                                        String normPurpose) {
         List<Object> params = new ArrayList<>();
         // Parameter order mirrors the left-to-right ? placeholder order in the SQL:
         //
@@ -290,11 +300,12 @@ public class CityAreaListingsService {
         //     3. bedrooms           (if non-null AND < 4; bedrooms >= 4 uses literal, no placeholder)
         //     4. propertyType       (if non-null/non-blank)
         //     5. normQ              (if non-null/non-blank — FTS via websearch_to_tsquery)
+        //     6. normPurpose        (if non-null/non-blank — listing_purpose filter)
         //
         //   WHERE clause params:
-        //     6. city               (always)
-        //     7. areaKey × N        (one per element in areaKeys)
-        //     8. limit              (outer rn bound, always)
+        //     7. city               (always)
+        //     8. areaKey × N        (one per element in areaKeys)
+        //     9. limit              (outer rn bound, always)
         if (minPrice != null) {
             params.add(minPrice);
         }
@@ -309,6 +320,9 @@ public class CityAreaListingsService {
         }
         if (normQ != null) {
             params.add(normQ);
+        }
+        if (normPurpose != null) {
+            params.add(normPurpose);
         }
         // WHERE clause params: city, areaKeys, then the outer WHERE rn limit
         params.add(city);

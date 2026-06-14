@@ -86,7 +86,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_anonymousRequest_returns200() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of()));
 
         // No Authorization header — must succeed (public endpoint)
@@ -107,9 +107,9 @@ class DiscoverAgriMapListingsControllerTest {
                 "agricultural_land", "Kundapur",
                 "{\"type\":\"Polygon\",\"coordinates\":[]}",
                 new BigDecimal("2.5"), "acres",
-                new BigDecimal("2.5"), 5000000L
+                new BigDecimal("2.5"), 5000000L, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item)));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -137,9 +137,9 @@ class DiscoverAgriMapListingsControllerTest {
                 "id-pii-check", "PII Check Farmland",
                 "IN|KA|Udupi|Area1",
                 13.3, 74.7, "agricultural_land", "TestLocality",
-                null, null, null, null, null
+                null, null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item)));
 
         String responseBody = mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -169,7 +169,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_responseHasCacheControlPublicMaxAge120() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -186,7 +186,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_responseIsJson() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of()));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -218,7 +218,7 @@ class DiscoverAgriMapListingsControllerTest {
 
     @Test
     void getAgriMapListings_serviceThrows400_returns400() throws Exception {
-        when(agriMapListingsService.findAgriMapListings(anyString(), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(anyString(), anyList(), any(), anyBoolean(), any()))
                 .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty"));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -234,13 +234,13 @@ class DiscoverAgriMapListingsControllerTest {
         AgriMapListingItem item1 = new AgriMapListingItem(
                 "id-1", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Area1", null,
-                null, null, null, null);
+                null, null, null, null, null);
         AgriMapListingItem item2 = new AgriMapListingItem(
                 "id-2", null, "IN|KA|Udupi|Area2", 13.4, 74.8,
                 "agricultural_land", "Area2", null,
-                null, null, null, null);
+                null, null, null, null, null);
 
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item1, item2)));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -262,9 +262,9 @@ class DiscoverAgriMapListingsControllerTest {
                 "IN|KA|Udupi|Area1",
                 13.3, 74.7, "agricultural_land", "Kundapur",
                 null, // boundaryGeoJson = null
-                null, null, null, null
+                null, null, null, null, null
         );
-        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean()))
+        when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item)));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")

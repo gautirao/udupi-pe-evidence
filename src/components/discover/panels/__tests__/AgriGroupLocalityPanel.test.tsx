@@ -52,19 +52,27 @@ describe('AgriGroupLocalityPanel — header', () => {
     expect(screen.getByTestId('agri-locality-name')).toHaveTextContent('Shirva');
   });
 
-  it('renders count in header (plural)', () => {
+  it('renders count in header (plural, default intent=buy → "for sale")', () => {
     const listings = [makeListing('l1'), makeListing('l2')];
     render(<AgriGroupLocalityPanel {...baseProps} listings={listings} />);
     expect(screen.getByTestId('agri-locality-count')).toHaveTextContent(
-      '2 agricultural properties',
+      '2 agricultural properties for sale',
     );
   });
 
-  it('renders count in header (singular)', () => {
+  it('renders count in header (singular, default intent=buy → "for sale")', () => {
     const listings = [makeListing('l1')];
     render(<AgriGroupLocalityPanel {...baseProps} listings={listings} />);
     expect(screen.getByTestId('agri-locality-count')).toHaveTextContent(
-      '1 agricultural property',
+      '1 agricultural property for sale',
+    );
+  });
+
+  it('renders "for rent" count when intent=rent', () => {
+    const listings = [makeListing('l1'), makeListing('l2')];
+    render(<AgriGroupLocalityPanel {...baseProps} listings={listings} intent="rent" />);
+    expect(screen.getByTestId('agri-locality-count')).toHaveTextContent(
+      '2 agricultural properties for rent',
     );
   });
 

@@ -8,7 +8,8 @@ import type { PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { AgriListingPanel } from './panels/AgriListingPanel';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
-import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
+import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import { IntentSelector } from './IntentSelector';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
@@ -459,6 +460,10 @@ export interface DiscoverRightPanelProps {
   onApplyAgriFilters?: (filters: { agriAcresMin?: number; agriAcresMax?: number; agriPriceMin?: number; agriPriceMax?: number }) => void;
   /** Called when user clicks Clear Filters in AgriFiltersPanel. */
   onClearAgriFilters?: () => void;
+  /** Issue #1494 — current buy/rent intent for filtering. Default 'buy'. */
+  intent?: DiscoverIntent;
+  /** Issue #1494 — called when user changes buy/rent intent. */
+  onIntentChange?: (intent: DiscoverIntent) => void;
 }
 
 export function DiscoverRightPanel({
@@ -542,6 +547,8 @@ export function DiscoverRightPanel({
   agriPriceMax,
   onApplyAgriFilters,
   onClearAgriFilters,
+  intent = 'buy',
+  onIntentChange,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -798,6 +805,7 @@ export function DiscoverRightPanel({
               onRetry={onRetryAgriGroupListings ?? (() => {})}
               onSelectListing={onSelectAgriGroupListing ?? ((id) => navigate(`/listing/${id}`))}
               onClose={onClearLocality ?? (() => {})}
+              intent={intent}
             />
           </>
         );
@@ -840,6 +848,7 @@ export function DiscoverRightPanel({
               agriPriceMax={agriPriceMax}
               onApplyFilters={onApplyAgriFilters ?? (() => {})}
               onClearFilters={onClearAgriFilters ?? (() => {})}
+              intent={intent}
             />
           </>
         );
@@ -908,6 +917,7 @@ export function DiscoverRightPanel({
             onFiltersChange={onFiltersChange}
             onSelectJourney={onSelectJourney}
             onAddSchool={onAddSchool}
+            intent={intent}
           />
         );
 
@@ -1010,6 +1020,7 @@ export function DiscoverRightPanel({
             isFetching={isFetching}
             isAuthenticated={isAuthenticated}
             activeContextChips={activeContextChips}
+            intent={intent}
           />
         );
 
@@ -1032,6 +1043,7 @@ export function DiscoverRightPanel({
             activeContextChips={activeContextChips}
             onBoundedSearch={onBoundedSearch}
             boundedSearchTriggered={boundedSearchTriggered}
+            intent={intent}
           />
         );
 
@@ -1070,6 +1082,7 @@ export function DiscoverRightPanel({
             listingId={selectedMarkerListing.id}
             onBack={onClearAgriSelection ?? (() => undefined)}
             onNavigate={() => navigate(`/listing/${selectedMarkerListing.id}`)}
+            intent={intent}
           />
         ) : null;
 
@@ -1110,6 +1123,12 @@ export function DiscoverRightPanel({
       className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
+      {/* Issue #1494 — Buy/Rent intent selector, always visible at the top of the right panel */}
+      {onIntentChange && (
+        <div className="flex items-center justify-end gap-3 px-4 py-2 border-b border-border shrink-0 bg-card">
+          <IntentSelector intent={intent} onIntentChange={onIntentChange} />
+        </div>
+      )}
       {showTopChipStrip && (
         <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border shrink-0">
           {activeContextChips}

@@ -24,6 +24,7 @@ function makeUrlState(overrides: Partial<DiscoverUrlState> = {}): DiscoverUrlSta
     journey: null,
     groupId: null,
     selectedGroup: null,
+    intent: 'buy', // Issue #1494
     ...overrides,
   };
 }
@@ -51,6 +52,8 @@ function makeUrlActions(overrides: Partial<DiscoverUrlActions> = {}): DiscoverUr
     setRegion: vi.fn(),
     setMaxKm: vi.fn(),
     clearRegionAndMaxKm: vi.fn(),
+    // Issue #1494 — buy/rent intent
+    setIntent: vi.fn(),
     ...overrides,
     // Cast: the Partial<DiscoverUrlActions> spread widens each property to
     // `fn | Mock<Procedure>`, which is not assignable to the exact action

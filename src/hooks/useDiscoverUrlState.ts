@@ -100,6 +100,11 @@ export interface DiscoverUrlFilters {
   agriPriceMax?: number;
 }
 
+// ─── Intent (buy / rent) ──────────────────────────────────────────────────────
+// Sits outside DiscoverUrlFilters because it is a global user preference, not a
+// property filter. It survives startOver() so the user does not lose their choice.
+export type DiscoverIntent = 'buy' | 'rent';
+
 export interface DiscoverUrlState {
   city: string;
   areaKey: string | null;
@@ -155,6 +160,12 @@ export interface DiscoverUrlState {
    * Optional to allow partial construction in tests/callers.
    */
   selectedLocality?: string | null;
+  /**
+   * Issue #1494 — buy/rent user intent. Defaults to 'buy' when absent or invalid.
+   * Serialised as `intent=rent`; 'buy' is the canonical default and is NOT emitted
+   * to the URL (shorter URLs, stable canonical form).
+   */
+  intent: DiscoverIntent;
 }
 
 export interface DiscoverUrlActions {
@@ -316,6 +327,11 @@ export interface DiscoverUrlActions {
    * Issue #1457.
    */
   clearAgriFilters: () => void;
+  /**
+   * Issue #1494 — set the buy/rent intent. REPLACE (preference change, not a new
+   * navigation destination; Back should not undo a buy/rent toggle).
+   */
+  setIntent: (intent: DiscoverIntent) => void;
   /**
    * Atomic school-first journey start — sets journey='school-first', school params (schoolId,
    * radiusKm, lat, lon, zoom), and areaKey in a single PUSH. Ensures all params reach the URL
@@ -547,6 +563,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     agriPriceMax: (() => { const n = Number(urlParams.get('agriPriceMax')); return urlParams.get('agriPriceMax') && !Number.isNaN(n) ? n : undefined; })(),
   };
 
+  // Issue #1494 — intent param: 'rent' is the only non-default value. Anything else
+  // (absent, 'buy', or invalid) maps to the default 'buy'.
+  const rawIntent = urlParams.get('intent');
+  const intent: DiscoverIntent = rawIntent === 'rent' ? 'rent' : 'buy';
+
   const schoolId = urlParams.get('schoolId');
   const radiusKmRaw = urlParams.get('radiusKm');
   const radiusKm = radiusKmRaw ? parseInt(radiusKmRaw, 10) : null;
@@ -622,6 +643,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     selectedMaxKm,
     selectedListing,
     selectedLocality,
+    intent,
   };
 
   // ─── OD-1 Option A: Legacy group=DIR:BAND cold-load migration ────────────────
@@ -1161,6 +1183,11 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
         const next = new URLSearchParams();
         const cityVal = prev.get('city');
         if (cityVal) next.set('city', cityVal);
+        // Issue #1494 — intent is a global user preference (buy vs rent), NOT journey
+        // state. It must survive startOver so the user does not lose their choice.
+        // 'buy' is the default — omit it from the URL (shorter, canonical form).
+        const intentVal = prev.get('intent');
+        if (intentVal === 'rent') next.set('intent', 'rent');
         // Journey, groupId, group, areaKey, schoolId, radiusKm, board, category, q, viewport,
         // and all property filters (type/beds/priceMin/priceMax/seller/bom/ntm/rera/
         // rtm/from/to) are intentionally omitted — nothing survives Start Over except city.
@@ -1378,6 +1405,26 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     );
   }, [setUrlParams]);
 
+  // Issue #1494 — buy/rent intent. REPLACE (preference change, not navigation).
+  // 'buy' is the default — omit from URL; only emit 'rent'.
+  const setIntent = useCallback(
+    (newIntent: DiscoverIntent) => {
+      setUrlParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (newIntent === 'rent') {
+            next.set('intent', 'rent');
+          } else {
+            next.delete('intent');
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setUrlParams],
+  );
+
   const actions: DiscoverUrlActions = {
     changeCity,
     setCity,
@@ -1411,6 +1458,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setLocality,
     clearLocality,
     clearAgriFilters,
+    setIntent,
   };
 
   return [state, actions];

@@ -60,7 +60,8 @@ public class DiscoverMarkersController {
             @RequestParam(name = "schoolLon", required = false) Double schoolLon,
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
             @RequestParam(name = "bbox", required = false) String bboxParam,
-            @RequestParam(name = "q", required = false) String q
+            @RequestParam(name = "q", required = false) String q,
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -102,7 +103,8 @@ public class DiscoverMarkersController {
                 schoolLon,
                 schoolRadiusKm,
                 bbox,
-                (q != null && !q.isBlank()) ? q.trim() : null
+                (q != null && !q.isBlank()) ? q.trim() : null,
+                (listingPurpose != null && !listingPurpose.isBlank()) ? listingPurpose.trim() : null
         );
 
         return ResponseEntity.ok()
