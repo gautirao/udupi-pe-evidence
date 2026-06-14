@@ -168,7 +168,7 @@ export function useDiscoverMapData({
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
     isFetching: filteredMarkersFetching,
-  } = useDiscoverFilteredMarkers(city, agriFilters, markersEnabled, bbox, debouncedSearch?.trim() || undefined);
+  } = useDiscoverFilteredMarkers(city, agriFilters, markersEnabled, bbox, debouncedSearch?.trim() || undefined, listingPurpose);
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);

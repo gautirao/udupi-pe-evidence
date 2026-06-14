@@ -598,4 +598,97 @@ describe('useDiscoverFilteredMarkers', () => {
   });
 
   // ─── End AC-F2 (#944) ─────────────────────────────────────────────────────
+
+  // ─── Issue #1496 — listingPurpose intent filter ───────────────────────────
+
+  it('T1_listingPurpose_rent_appended_to_url_params', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, undefined, 'rent'),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('listingPurpose')).toBe('rent');
+  });
+
+  it('T2_listingPurpose_sale_appended_to_url_params', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, undefined, 'sale'),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.get('listingPurpose')).toBe('sale');
+  });
+
+  it('T3_listingPurpose_absent_not_appended_backward_compat', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    // Caller without 6th arg — must not send listingPurpose in URL (regression / backward-compat)
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('listingPurpose')).toBe(false);
+  });
+
+  it('T4_distinct_listingPurpose_produces_distinct_queryKey', () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    const { rerender } = renderHook(
+      ({ lp }: { lp?: string }) =>
+        useDiscoverFilteredMarkers('udupi', {}, true, null, undefined, lp),
+      { wrapper, initialProps: { lp: 'sale' } },
+    );
+
+    rerender({ lp: 'rent' });
+
+    const keys = qc.getQueryCache().getAll().map((entry) => entry.queryKey);
+    const withSale = keys.find((k) => JSON.stringify(k).includes('"sale"'));
+    const withRent = keys.find((k) => JSON.stringify(k).includes('"rent"'));
+    expect(withSale).toBeDefined();
+    expect(withRent).toBeDefined();
+  });
+
+  it('T5_same_listingPurpose_produces_same_queryKey', () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    const { rerender } = renderHook(
+      ({ lp }: { lp?: string }) =>
+        useDiscoverFilteredMarkers('udupi', {}, true, null, undefined, lp),
+      { wrapper, initialProps: { lp: 'sale' } },
+    );
+
+    rerender({ lp: 'sale' });
+
+    const keys = qc.getQueryCache().getAll().map((entry) => entry.queryKey);
+    const saleKeys = keys.filter((k) => JSON.stringify(k).includes('"sale"'));
+    expect(saleKeys.length).toBe(1); // Only one cache entry for same value
+  });
+
+  it('T6_listingPurpose_undefined_not_appended', async () => {
+    mockGet.mockResolvedValue(BASE_MARKERS);
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true, null, undefined, undefined),
+      { wrapper: makeWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('listingPurpose')).toBe(false);
+  });
+
+  // ─── End Issue #1496 ─────────────────────────────────────────────────────────
 });

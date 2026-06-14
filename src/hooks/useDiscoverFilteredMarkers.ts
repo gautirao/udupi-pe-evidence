@@ -45,6 +45,8 @@ export function useDiscoverFilteredMarkers(
   bbox?: [number, number, number, number] | null,
   /** Optional keyword search — forwarded as ?q= to the markers API. */
   q?: string,
+  /** Issue #1496 — Buy/Rent intent mapped to 'sale'|'rent'. Absent param preserves existing all-intent marker behaviour. */
+  listingPurpose?: string,
 ) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
@@ -53,7 +55,7 @@ export function useDiscoverFilteredMarkers(
   const trimmedQ = q?.trim() || undefined;
 
   return useQuery<DiscoverFilteredMarkersResponse>({
-    queryKey: ['discover-filtered-markers', city, filters, snapped, trimmedQ],
+    queryKey: ['discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
@@ -81,6 +83,7 @@ export function useDiscoverFilteredMarkers(
       if (filters.schoolLon != null) params.set('schoolLon', String(filters.schoolLon));
       if (filters.schoolRadiusKm != null) params.set('schoolRadiusKm', String(filters.schoolRadiusKm));
       if (trimmedQ) params.set('q', trimmedQ);
+      if (listingPurpose) params.set('listingPurpose', listingPurpose);
 
       return api.get<DiscoverFilteredMarkersResponse>(`/api/discover/markers?${params.toString()}`, { signal });
     },
