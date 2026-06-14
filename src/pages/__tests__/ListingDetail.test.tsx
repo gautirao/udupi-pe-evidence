@@ -250,19 +250,33 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
   });
 });
 
-// ── B. Back button ─────────────────────────────────────────────
+// ── B. Breadcrumb navigation (Figma residential redesign) ──────
+// The public detail view replaced the "Back to Map" header button with a
+// breadcrumb (Home / Discover / {locality} / {title}). The not-found state
+// (section D) still uses a "Back to Map" button — that is intentionally kept.
 
-describe('ListingDetail — back button (PR-11.4)', () => {
-  it('renders "Back to Map" label', () => {
+describe('ListingDetail — breadcrumb (Figma redesign)', () => {
+  it('renders Home and Discover breadcrumb links', () => {
     renderWithListing(makeListing());
-    expect(screen.getAllByText('Back to Map').length).toBeGreaterThan(0);
+    expect(screen.getByRole('link', { name: 'Home' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Discover' })).toBeInTheDocument();
   });
 
-  it('navigates to "/" when back button is clicked', async () => {
-    const { getByText } = renderWithListing(makeListing());
-    // Click the Back to Map button in the header
-    getByText('Back to Map').click();
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+  it('Home breadcrumb links to "/"', () => {
+    renderWithListing(makeListing());
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+  });
+
+  it('Discover breadcrumb links to "/discover"', () => {
+    renderWithListing(makeListing());
+    expect(screen.getByRole('link', { name: 'Discover' })).toHaveAttribute('href', '/discover');
+  });
+
+  it('shows the locality and current listing title in the breadcrumb trail', () => {
+    renderWithListing(makeListing({ title: 'Sea View Villa', locality: 'Malpe' }));
+    const crumb = screen.getByRole('navigation', { name: /breadcrumb/i });
+    expect(crumb).toHaveTextContent('Malpe');
+    expect(crumb).toHaveTextContent('Sea View Villa');
   });
 });
 
@@ -663,5 +677,55 @@ describe('anonymous gallery teaser flow (issue #844)', () => {
     }));
 
     expect(screen.queryByText(/^1 \/ 1$/)).not.toBeInTheDocument();
+  });
+});
+
+// ── K. Residential Figma redesign smoke ───────────────────────
+// Guards the redesigned summary card + sticky action column render with real
+// data and degrade gracefully when optional fields are absent.
+
+describe('ListingDetail — residential redesign smoke', () => {
+  beforeEach(() => {
+    mockUser.current = null;
+  });
+  afterEach(() => {
+    mockUser.current = null;
+  });
+
+  it('summary card renders title, price and a Google Maps link when coords exist', () => {
+    renderWithListing(makeListing({
+      propertyType: 'house',
+      title: 'Sea View House',
+      price: 1000000,
+      latitude: 13.34,
+      longitude: 74.74,
+    }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Sea View House' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /view on google maps/i })).toBeInTheDocument();
+  });
+
+  it('renders share and save overlay controls on the gallery', () => {
+    renderWithListing(makeListing({
+      images: [],
+      primaryImageUrl: 'https://example.com/p.jpg',
+      imageCount: 1,
+    }));
+    expect(screen.getByRole('button', { name: /share listing/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save listing/i })).toBeInTheDocument();
+  });
+
+  it('does not crash and still renders the title when price, coords and description are absent', () => {
+    renderWithListing(makeListing({
+      propertyType: 'apartment',
+      title: 'Bare Listing',
+      price: null,
+      price_per_cent_paise: null,
+      latitude: null,
+      longitude: null,
+      description: null,
+    }));
+    expect(screen.getByRole('heading', { level: 1, name: 'Bare Listing' })).toBeInTheDocument();
+    // No coords → Google Maps affordance is omitted, not broken.
+    expect(screen.queryByRole('link', { name: /view on google maps/i })).not.toBeInTheDocument();
   });
 });

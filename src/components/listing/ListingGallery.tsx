@@ -76,10 +76,12 @@ export function ListingGallery({
                   <ChevronRight className="h-4 w-4" />
                 </Button>
 
-                {/* Image counter — use effectiveImageCount so anon sees total */}
+                {/* Image counter — bottom-right keeps the top-right clear for
+                    overlay actions (share/save). Uses effectiveImageCount so
+                    anon users see the total count incl. locked photos. */}
                 <div
                   data-testid="gallery-counter"
-                  className="absolute top-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-sm"
+                  className="absolute bottom-3 right-3 bg-black/60 text-white px-2 py-1 rounded text-sm"
                 >
                   {currentImageIndex + 1} / {effectiveImageCount}
                 </div>

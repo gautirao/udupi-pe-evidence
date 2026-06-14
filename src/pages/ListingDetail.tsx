@@ -9,13 +9,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
 import { ListingResponse } from '@/hooks/useBrokerListings';
 import { PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
-import { AlertTriangle, ArrowLeft, Share2, Check } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Share2, Check, Heart } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { RequestViewingModal } from '@/components/listing/RequestViewingModal';
-import { NearbyPois } from '@/components/poi/NearbyPois';
-import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
 import { ListingGallery } from '@/components/listing/ListingGallery';
 import { ListingDetailMainContent } from '@/components/listing/ListingDetailMainContent';
 import { ListingDetailSidebar } from '@/components/listing/ListingDetailSidebar';
@@ -124,6 +122,7 @@ export default function ListingDetail() {
   const { data: priceHistory = [] } = useListingPriceHistory(id);
   const { data: trustData } = useTrustBadges(id);
   const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
 
   if (isLoading) {
@@ -216,9 +215,19 @@ export default function ListingDetail() {
     );
   }
 
+  const displayTitle = listing.title || `${label} in ${listing.locality || 'Unknown Location'}`;
+
+  const handleToggleSaved = () => {
+    setSaved((s) => !s);
+    toast({
+      title: saved ? 'Removed from saved' : 'Saved',
+      description: saved ? 'Removed from your saved items.' : 'Added to your saved items.',
+    });
+  };
+
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto p-4 md:p-6">
+      <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Preview banner */}
         {isPreview && (
           <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
@@ -237,56 +246,96 @@ export default function ListingDetail() {
           </Alert>
         )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <Button variant="ghost" onClick={() => navigate(isPreview ? '/broker/listings' : '/')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            {isPreview ? 'Back to My Listings' : 'Back to Map'}
-          </Button>
-          <div className="flex items-center gap-2">
-            {isPreview && (listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
-              <Button variant="outline" size="sm" asChild>
-                <Link to={`/broker/listings/${id}/edit`}>Edit Listing</Link>
-              </Button>
-            )}
-            {isPreview && listing.status === 'LIVE' && <TakeOfflineButton listingId={listing.id} />}
-            {isPreview && listing.status === 'ARCHIVED' && (
-              <>
-                <ReopenForEditingButton listingId={listing.id} />
+        {/* Preview header keeps the back button + owner actions; public view uses
+            a breadcrumb (Figma layout). */}
+        {isPreview ? (
+          <div className="flex items-center justify-between mb-6">
+            <Button variant="ghost" onClick={() => navigate('/broker/listings')}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to My Listings
+            </Button>
+            <div className="flex items-center gap-2">
+              {(listing.status === 'DRAFT' || listing.status === 'REJECTED') && (
                 <Button variant="outline" size="sm" asChild>
                   <Link to={`/broker/listings/${id}/edit`}>Edit Listing</Link>
                 </Button>
-              </>
-            )}
-            <Button variant="outline" onClick={handleShare} className="gap-2">
-              {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-              {copied ? 'Copied!' : 'Share'}
-            </Button>
+              )}
+              {listing.status === 'LIVE' && <TakeOfflineButton listingId={listing.id} />}
+              {listing.status === 'ARCHIVED' && (
+                <>
+                  <ReopenForEditingButton listingId={listing.id} />
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to={`/broker/listings/${id}/edit`}>Edit Listing</Link>
+                  </Button>
+                </>
+              )}
+              <Button variant="outline" onClick={handleShare} className="gap-2">
+                {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                {copied ? 'Copied!' : 'Share'}
+              </Button>
+            </div>
           </div>
-        </div>
-
-        {/* Land: location panel appears before photos */}
-        {listing.propertyType === 'land' && (
-          <div className="space-y-4 mb-6">
-            <NearbyPois listingId={listing.id} propertyType={listing.propertyType} />
-            {listing.latitude != null && listing.longitude != null && (
-              <PoiMiniMap listingId={listing.id} latitude={listing.latitude} longitude={listing.longitude} propertyType={listing.propertyType} />
-            )}
-          </div>
+        ) : (
+          <nav aria-label="Breadcrumb" className="mb-4">
+            <ol className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+              <li><Link to="/" className="hover:text-foreground">Home</Link></li>
+              <li aria-hidden="true">/</li>
+              <li><Link to="/discover" className="hover:text-foreground">Discover</Link></li>
+              {listing.locality && (
+                <>
+                  <li aria-hidden="true">/</li>
+                  <li>{listing.locality}</li>
+                </>
+              )}
+              <li aria-hidden="true">/</li>
+              <li aria-current="page" className="max-w-[16rem] truncate font-medium text-foreground">
+                {displayTitle}
+              </li>
+            </ol>
+          </nav>
         )}
 
-        {/* Image Gallery */}
-        <ListingGallery images={images} effectiveImageCount={effectiveImageCount} isAnonymous={!user} listingId={id ?? ''} />
-
-        {/* Main grid */}
+        {/* Two-column layout: main content (with hero gallery) + sticky actions */}
         <div className="grid gap-6 lg:grid-cols-3">
-          <ListingDetailMainContent
-            listing={listing}
-            label={label}
-            badgeClass={badgeClass}
-            priceHistory={priceHistory}
-            trustBadges={trustData?.badges}
-          />
+          <div className="lg:col-span-2 space-y-6">
+            {/* Hero gallery with share + save overlay (mirrors agri detail) */}
+            <div className="relative">
+              <div className="absolute right-3 top-3 z-20 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  aria-label="Share listing"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-muted"
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleSaved}
+                  aria-label={saved ? 'Remove from saved' : 'Save listing'}
+                  aria-pressed={saved}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-muted"
+                >
+                  <Heart className={`h-4 w-4 ${saved ? 'fill-current text-rose-500' : ''}`} />
+                </button>
+              </div>
+              <ListingGallery
+                images={images}
+                effectiveImageCount={effectiveImageCount}
+                isAnonymous={!user}
+                listingId={id ?? ''}
+              />
+            </div>
+
+            <ListingDetailMainContent
+              listing={listing}
+              label={label}
+              badgeClass={badgeClass}
+              priceHistory={priceHistory}
+              trustBadges={trustData?.badges}
+            />
+          </div>
+
           <ListingDetailSidebar
             listing={listing}
             user={user}

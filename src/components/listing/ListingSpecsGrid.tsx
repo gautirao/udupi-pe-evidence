@@ -1,5 +1,4 @@
 import { Ruler, Home, Bath, Building, Layers, ParkingCircle, Armchair, Store, IndianRupee, Calendar } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { formatArea } from '@/lib/formatters';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
 
@@ -11,11 +10,13 @@ interface SpecCellProps {
 
 function SpecCell({ icon, label, value }: SpecCellProps) {
   return (
-    <div className="flex items-center gap-2">
-      {icon}
-      <div>
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="font-medium">{value}</p>
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="font-medium truncate">{value}</p>
       </div>
     </div>
   );
@@ -26,11 +27,31 @@ export interface ListingSpecsGridProps {
 }
 
 export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
+  const hasSpec = !!(
+    listing.landArea ||
+    listing.builtArea ||
+    listing.bedrooms ||
+    listing.bathrooms ||
+    listing.carpetArea != null ||
+    listing.washrooms != null ||
+    listing.floorNumber != null ||
+    listing.furnishingStatus ||
+    listing.parkingCount != null ||
+    listing.roadFrontageFt != null ||
+    listing.commercialUsage ||
+    listing.numberOfUnits != null
+  );
+  const hasRentTerms =
+    listing.listingPurpose === 'rent' &&
+    (listing.securityDepositMonths != null || listing.lockInMonths != null);
+
+  // Avoid rendering an empty "Property Details" card (e.g. anonymous teaser).
+  if (!hasSpec && !hasRentTerms) return null;
+
   return (
-    <Card>
-      <CardContent className="p-4">
-        <h3 className="font-semibold mb-4">Property Details</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+    <section className="rounded-2xl border border-border bg-card p-5 md:p-6">
+      <h2 className="text-lg font-semibold mb-4">Property Details</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {listing.landArea && (
             <SpecCell
               icon={<Ruler className="h-4 w-4 text-muted-foreground" />}
@@ -150,7 +171,6 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </section>
   );
 }

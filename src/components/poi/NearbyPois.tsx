@@ -356,7 +356,10 @@ function SemiRuralMode({ pois }: { pois: PoiResponse[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Location & Essentials</CardTitle>
+        {/* "Nearby Essentials" (not "Location & Essentials") so this amenities
+            card does not collide with the residential detail page's combined
+            Location & Essentials section (map + schools). */}
+        <CardTitle>Nearby Essentials</CardTitle>
       </CardHeader>
       <CardContent className="p-4">
         <div className="space-y-0 divide-y">
@@ -466,7 +469,7 @@ export function NearbyPois({ listingId, propertyType }: NearbyPoisProps) {
     land: 'Location & Access',
     apartment: 'Nearby Essentials',
     commercial: 'Location & Visibility',
-    house: 'Location & Essentials',
+    house: 'Nearby Essentials',
   };
   const heading = headingByType[propertyType] ?? 'Nearby';
 
