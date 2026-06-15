@@ -720,21 +720,44 @@ describe('AgriGroupSelectedPanel — cumulative distance hint (Issue #1456)', ()
   });
 });
 
-// ─── Issue #1457 — AgriFiltersPanel integration in AgriGroupSelectedPanel ────
+// ─── Issue #1457 — agri filters now live behind the "Filters" drawer ─────────
+// The advanced filter form moved from always-visible into a Sheet opened by the
+// area-first-style "Filters" button. These tests open the drawer first, then
+// assert the form is reachable and Apply/Clear still work.
 
-describe('AgriGroupSelectedPanel — agri filters panel (Issue #1457)', () => {
-  it('renders AgriFiltersPanel by default', () => {
+/** Open the agri Filters drawer (Sheet) and return once its content is mounted. */
+async function openFiltersDrawer(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId('agri-filters-trigger'));
+  expect(await screen.findByTestId('agri-filters-panel')).toBeInTheDocument();
+}
+
+describe('AgriGroupSelectedPanel — agri filters drawer (Issue #1457)', () => {
+  it('does NOT render the filter form until the Filters drawer is opened', () => {
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    // Form is in a closed Sheet — not in the document yet.
+    expect(screen.queryByTestId('agri-filters-panel')).not.toBeInTheDocument();
+    // But the trigger button IS visible on the main panel.
+    expect(screen.getByTestId('agri-filters-trigger')).toBeInTheDocument();
+  });
+
+  it('renders AgriFiltersPanel after opening the Filters drawer', async () => {
+    const user = userEvent.setup();
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    await openFiltersDrawer(user);
     expect(screen.getByTestId('agri-filters-panel')).toBeInTheDocument();
   });
 
-  it('shows locked price UI when isAuthenticated=false (default)', () => {
+  it('shows locked price UI inside the drawer when isAuthenticated=false (default)', async () => {
+    const user = userEvent.setup();
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} isAuthenticated={false} />);
+    await openFiltersDrawer(user);
     expect(screen.getByTestId('agri-price-locked')).toBeInTheDocument();
   });
 
-  it('shows price inputs when isAuthenticated=true', () => {
+  it('shows price inputs inside the drawer when isAuthenticated=true', async () => {
+    const user = userEvent.setup();
     render(<AgriGroupSelectedPanel {...baseProps} listings={[]} isAuthenticated={true} />);
+    await openFiltersDrawer(user);
     expect(screen.getByTestId('agri-price-min')).toBeInTheDocument();
     expect(screen.getByTestId('agri-price-max')).toBeInTheDocument();
   });
@@ -757,7 +780,8 @@ describe('AgriGroupSelectedPanel — agri filters panel (Issue #1457)', () => {
     expect(screen.getByText(/no agricultural land for sale in this region/i)).toBeInTheDocument();
   });
 
-  it('calls onApplyFilters callback when Apply Filters clicked', async () => {
+  it('calls onApplyFilters callback when Apply Filters clicked inside the drawer', async () => {
+    const user = userEvent.setup();
     const onApplyFilters = vi.fn();
     render(
       <AgriGroupSelectedPanel
@@ -766,11 +790,13 @@ describe('AgriGroupSelectedPanel — agri filters panel (Issue #1457)', () => {
         onApplyFilters={onApplyFilters}
       />,
     );
-    await userEvent.click(screen.getByTestId('agri-filters-apply'));
+    await openFiltersDrawer(user);
+    await user.click(screen.getByTestId('agri-filters-apply'));
     expect(onApplyFilters).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClearFilters callback when Clear Filters clicked', async () => {
+  it('calls onClearFilters callback when Clear Filters clicked inside the drawer', async () => {
+    const user = userEvent.setup();
     const onClearFilters = vi.fn();
     render(
       <AgriGroupSelectedPanel
@@ -779,7 +805,214 @@ describe('AgriGroupSelectedPanel — agri filters panel (Issue #1457)', () => {
         onClearFilters={onClearFilters}
       />,
     );
-    await userEvent.click(screen.getByTestId('agri-filters-clear'));
+    await openFiltersDrawer(user);
+    await user.click(screen.getByTestId('agri-filters-clear'));
     expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Filters button active-filter count ───────────────────────────────────────
+
+describe('AgriGroupSelectedPanel — Filters button active-filter count', () => {
+  it('shows no count badge when no advanced filters are active', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} />);
+    expect(screen.getByTestId('agri-filters-trigger')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-filters-count')).not.toBeInTheDocument();
+  });
+
+  it('shows count = 1 when only the acreage range is set (min or max)', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[]} agriAcresMin={5} />);
+    expect(screen.getByTestId('agri-filters-count')).toHaveTextContent('1');
+  });
+
+  it('counts acreage + price + land category + farmhouse + fencing + water = 6', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        isAuthenticated
+        agriAcresMin={5}
+        agriAcresMax={20}
+        agriPriceMin={2000000}
+        agriPriceMax={10000000}
+        agriLandCategory="FARMLAND"
+        agriFarmhouseAvailable={true}
+        agriFencingDone={true}
+        agriWaterSource="BOREWELL"
+      />,
+    );
+    // acreage(1) + price(1) + landCategory(1) + farmhouse(1) + fencing(1) + water(1)
+    expect(screen.getByTestId('agri-filters-count')).toHaveTextContent('6');
+  });
+
+  it('does NOT count distance/maxKm, region or intent toward the badge', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        intent="rent"
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    // Distance is selected + intent is rent, but no advanced filters → no badge.
+    expect(screen.queryByTestId('agri-filters-count')).not.toBeInTheDocument();
+  });
+});
+
+// ─── Active advanced-filter chips ─────────────────────────────────────────────
+
+describe('AgriGroupSelectedPanel — active advanced-filter chips', () => {
+  it('renders no chip row when no advanced filters are active', () => {
+    render(<AgriGroupSelectedPanel {...baseProps} listings={[makeListing('a1')]} listingCount={1} />);
+    expect(screen.queryByTestId('agri-active-filters')).not.toBeInTheDocument();
+  });
+
+  it('renders one chip per active advanced filter with friendly labels', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        isAuthenticated
+        agriAcresMin={5}
+        agriAcresMax={20}
+        agriPriceMin={2000000}
+        agriPriceMax={10000000}
+        agriLandCategory="FARMLAND"
+        agriFarmhouseAvailable={true}
+        agriFencingDone={true}
+        agriWaterSource="BOREWELL"
+      />,
+    );
+    const chips = screen.getAllByTestId('agri-active-filter-chip');
+    expect(chips).toHaveLength(6);
+    expect(screen.getByText('5–20 acres')).toBeInTheDocument();
+    expect(screen.getByText(/Land category: Farmland/)).toBeInTheDocument();
+    expect(screen.getByText('Farmhouse available')).toBeInTheDocument();
+    expect(screen.getByText('Fencing done')).toBeInTheDocument();
+    expect(screen.getByText('Borewell')).toBeInTheDocument();
+  });
+
+  it('formats one-sided acreage and price ranges', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        isAuthenticated
+        agriAcresMin={5}
+        agriPriceMax={10000000}
+      />,
+    );
+    expect(screen.getByText('5+ acres')).toBeInTheDocument();
+    // formatPrice(10000000) → "₹1 Cr"
+    expect(screen.getByText(/Up to ₹1 Cr/)).toBeInTheDocument();
+  });
+
+  it('renders "No farmhouse"/"No fencing" chips when the boolean filter is explicitly false', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        agriFarmhouseAvailable={false}
+        agriFencingDone={false}
+      />,
+    );
+    expect(screen.getByText('No farmhouse')).toBeInTheDocument();
+    expect(screen.getByText('No fencing')).toBeInTheDocument();
+  });
+
+  it('does NOT render chips for default ("Any"/"All") values', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        agriLandCategory={null}
+        agriFarmhouseAvailable={null}
+        agriFencingDone={null}
+        agriWaterSource={null}
+      />,
+    );
+    expect(screen.queryByTestId('agri-active-filters')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('agri-active-filter-chip')).not.toBeInTheDocument();
+  });
+
+  it('does NOT render a chip for the selected distance (distance stays on the main panel)', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    // Distance chip row is present, but no advanced-filter chip row.
+    expect(screen.getByTestId('distance-chip-25')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-active-filters')).not.toBeInTheDocument();
+  });
+
+  it('per-chip remove re-applies the remaining filters with only that field cleared', async () => {
+    const user = userEvent.setup();
+    const onApplyFilters = vi.fn();
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        agriAcresMin={5}
+        agriAcresMax={20}
+        agriLandCategory="FARMLAND"
+        onApplyFilters={onApplyFilters}
+      />,
+    );
+    await user.click(screen.getByTestId('agri-active-filter-remove-landCategory'));
+    expect(onApplyFilters).toHaveBeenCalledTimes(1);
+    expect(onApplyFilters).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agriAcresMin: 5,
+        agriAcresMax: 20,
+        agriLandCategory: null,
+      }),
+    );
+  });
+
+  it('"Clear all" fires onClearFilters', async () => {
+    const user = userEvent.setup();
+    const onClearFilters = vi.fn();
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[makeListing('a1')]}
+        listingCount={1}
+        agriAcresMin={5}
+        agriLandCategory="FARMLAND"
+        onClearFilters={onClearFilters}
+      />,
+    );
+    await user.click(screen.getByTestId('agri-active-filters-clear-all'));
+    expect(onClearFilters).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Distance chips remain visible on the main panel (regression guard) ───────
+
+describe('AgriGroupSelectedPanel — distance chips stay on main panel (not in drawer)', () => {
+  it('renders distance chips on the main panel WITHOUT opening the Filters drawer', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        selectedMaxKm={25}
+        availableMaxDistances={ALL_TIERS}
+      />,
+    );
+    // Drawer is closed (form absent) but distance chips are immediately visible.
+    expect(screen.queryByTestId('agri-filters-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('distance-chip-10')).toBeInTheDocument();
+    expect(screen.getByTestId('distance-chip-25')).toHaveAttribute('aria-pressed', 'true');
   });
 });

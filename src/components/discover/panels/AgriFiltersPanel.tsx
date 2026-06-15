@@ -12,25 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { LAND_CATEGORY_OPTIONS, WATER_SOURCE_OPTIONS } from './agriFilterOptions';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const LAND_CATEGORY_OPTIONS = [
-  { value: 'FARMLAND', label: 'Farmland' },
-  { value: 'PLANTATION', label: 'Plantation' },
-  { value: 'FARM_PLOT', label: 'Farm plot' },
-  { value: 'AGRICULTURAL_PLOT', label: 'Agricultural plot' },
-  { value: 'OTHER', label: 'Other' },
-] as const;
-
-const WATER_SOURCE_OPTIONS = [
-  { value: 'WELL', label: 'Well' },
-  { value: 'BOREWELL', label: 'Borewell' },
-  { value: 'POND', label: 'Pond' },
-  { value: 'STREAM', label: 'Stream' },
-  { value: 'NOT_AVAILABLE', label: 'Not available' },
-  { value: 'OTHER', label: 'Other' },
-] as const;
 
 // Sentinel for "no filter selected" in shadcn Select (empty string placeholder).
 // We never write this to state — it maps to null on apply.

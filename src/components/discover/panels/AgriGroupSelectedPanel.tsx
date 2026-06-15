@@ -1,12 +1,21 @@
 import React from 'react';
-import { X, Sprout, AlertCircle } from 'lucide-react';
+import { X, Sprout, AlertCircle, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { CumulativeDistanceTier } from '@/hooks/useRegionalAreaGroups';
 import { AgriFiltersPanel } from './AgriFiltersPanel';
 import type { AgriFilterValues } from './AgriFiltersPanel';
+import { landCategoryLabel, waterSourceLabel } from './agriFilterOptions';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import { formatPrice } from '@/lib/formatters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -126,6 +135,109 @@ export function AgriGroupSelectedPanel({
       return aKey.localeCompare(bKey, 'en', { sensitivity: 'base' });
     });
   }, [listings]);
+
+  // ── Active advanced-filter summary (count + chips) ─────────────────────────────
+  // "Advanced" = the hidden drawer filters only. Distance/maxKm, region, direction
+  // and Buy/Rent intent are explicitly EXCLUDED — distance stays visible on the main
+  // panel via the chip row above, so it must not be counted as a hidden filter.
+  // Each chip clears just its own filter by re-applying the current values with that
+  // field reset (onApplyFilters merges over existing URL state in MapDiscovery).
+  const activeFilterChips = React.useMemo(() => {
+    // Current advanced-filter values reconstructed from props, so a per-chip clear
+    // re-applies everything else untouched.
+    const current: AgriFilterValues = {
+      agriAcresMin,
+      agriAcresMax,
+      agriPriceMin,
+      agriPriceMax,
+      agriLandCategory,
+      agriFarmhouseAvailable,
+      agriFencingDone,
+      agriWaterSource,
+    };
+    const chips: { key: string; label: string; clear: () => void }[] = [];
+
+    // Acreage range — 1 chip if either bound is set.
+    if (agriAcresMin != null || agriAcresMax != null) {
+      const label =
+        agriAcresMin != null && agriAcresMax != null
+          ? `${agriAcresMin}–${agriAcresMax} acres`
+          : agriAcresMin != null
+            ? `${agriAcresMin}+ acres`
+            : `Up to ${agriAcresMax} acres`;
+      chips.push({
+        key: 'acreage',
+        label,
+        clear: () => onApplyFilters({ ...current, agriAcresMin: undefined, agriAcresMax: undefined }),
+      });
+    }
+
+    // Price range — 1 chip if either bound is set (only reachable when authenticated).
+    if (agriPriceMin != null || agriPriceMax != null) {
+      const label =
+        agriPriceMin != null && agriPriceMax != null
+          ? `${formatPrice(agriPriceMin)} – ${formatPrice(agriPriceMax)}`
+          : agriPriceMin != null
+            ? `${formatPrice(agriPriceMin)}+`
+            : `Up to ${formatPrice(agriPriceMax!)}`;
+      chips.push({
+        key: 'price',
+        label,
+        clear: () => onApplyFilters({ ...current, agriPriceMin: undefined, agriPriceMax: undefined }),
+      });
+    }
+
+    // Land category — 1 chip when set (null = "All" default, not counted).
+    if (agriLandCategory != null) {
+      chips.push({
+        key: 'landCategory',
+        label: `Land category: ${landCategoryLabel(agriLandCategory)}`,
+        clear: () => onApplyFilters({ ...current, agriLandCategory: null }),
+      });
+    }
+
+    // Farmhouse available — 1 chip when set (null = "Any" default, not counted).
+    if (agriFarmhouseAvailable != null) {
+      chips.push({
+        key: 'farmhouse',
+        label: agriFarmhouseAvailable ? 'Farmhouse available' : 'No farmhouse',
+        clear: () => onApplyFilters({ ...current, agriFarmhouseAvailable: null }),
+      });
+    }
+
+    // Fencing done — 1 chip when set (null = "Any" default, not counted).
+    if (agriFencingDone != null) {
+      chips.push({
+        key: 'fencing',
+        label: agriFencingDone ? 'Fencing done' : 'No fencing',
+        clear: () => onApplyFilters({ ...current, agriFencingDone: null }),
+      });
+    }
+
+    // Water source — 1 chip when set (null = "Any" default, not counted).
+    if (agriWaterSource != null) {
+      chips.push({
+        key: 'waterSource',
+        label: waterSourceLabel(agriWaterSource),
+        clear: () => onApplyFilters({ ...current, agriWaterSource: null }),
+      });
+    }
+
+    return chips;
+  }, [
+    agriAcresMin,
+    agriAcresMax,
+    agriPriceMin,
+    agriPriceMax,
+    agriLandCategory,
+    agriFarmhouseAvailable,
+    agriFencingDone,
+    agriWaterSource,
+    onApplyFilters,
+  ]);
+
+  const activeFilterCount = activeFilterChips.length;
+
   return (
     <div
       data-testid="agri-group-selected-panel"
@@ -140,6 +252,51 @@ export function AgriGroupSelectedPanel({
         >
           {groupLabel}
         </span>
+
+        {/* ── Filters drawer trigger (mirrors area-first AreaSelectedPanel) ──────── */}
+        {/* Icon + "Filters" label + active-filter count so the button itself signals
+            that hidden advanced filters are applied, even with the drawer closed. */}
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-7 px-2 shrink-0"
+              data-testid="agri-filters-trigger"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span
+                  data-testid="agri-filters-count"
+                  aria-label={`${activeFilterCount} active filters`}
+                  className="rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1.5 py-0.5 leading-none"
+                >
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="right" className="w-80 p-0 overflow-y-auto">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Agricultural land filters</SheetTitle>
+            </SheetHeader>
+            <AgriFiltersPanel
+              acresMin={agriAcresMin}
+              acresMax={agriAcresMax}
+              priceMinRupees={agriPriceMin}
+              priceMaxRupees={agriPriceMax}
+              isAuthenticated={isAuthenticated}
+              onApply={onApplyFilters}
+              onClear={onClearFilters}
+              agriLandCategory={agriLandCategory}
+              agriFarmhouseAvailable={agriFarmhouseAvailable}
+              agriFencingDone={agriFencingDone}
+              agriWaterSource={agriWaterSource}
+            />
+          </SheetContent>
+        </Sheet>
+
         <button
           type="button"
           aria-label="Clear selected region"
@@ -182,20 +339,42 @@ export function AgriGroupSelectedPanel({
         </div>
       )}
 
-      {/* ── Filters (Issue #1457) ──────────────────────────────────────────────── */}
-      <AgriFiltersPanel
-        acresMin={agriAcresMin}
-        acresMax={agriAcresMax}
-        priceMinRupees={agriPriceMin}
-        priceMaxRupees={agriPriceMax}
-        isAuthenticated={isAuthenticated}
-        onApply={onApplyFilters}
-        onClear={onClearFilters}
-        agriLandCategory={agriLandCategory}
-        agriFarmhouseAvailable={agriFarmhouseAvailable}
-        agriFencingDone={agriFencingDone}
-        agriWaterSource={agriWaterSource}
-      />
+      {/* ── Active advanced-filter chips ─────────────────────────────────────── */}
+      {/* Shown below the distance/context row and above the result summary so the
+          user can see (and individually clear) which hidden drawer filters are on. */}
+      {activeFilterCount > 0 && (
+        <div
+          data-testid="agri-active-filters"
+          className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border shrink-0"
+        >
+          {activeFilterChips.map((chip) => (
+            <span
+              key={chip.key}
+              data-testid="agri-active-filter-chip"
+              className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium"
+            >
+              {chip.label}
+              <button
+                type="button"
+                onClick={chip.clear}
+                data-testid={`agri-active-filter-remove-${chip.key}`}
+                aria-label={`Remove ${chip.label} filter`}
+                className="rounded-full hover:bg-primary/20 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-2.5 w-2.5" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={onClearFilters}
+            data-testid="agri-active-filters-clear-all"
+            className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors ml-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* ── Aggregate count ──────────────────────────────────────────────────── */}
       {!isLoading && !isError && (
