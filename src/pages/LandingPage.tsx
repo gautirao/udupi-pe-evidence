@@ -1,241 +1,287 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Map, ShieldCheck, BarChart2, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Loader2,
+  MapPin,
+  TrendingUp,
+  Bookmark,
+  Shield,
+  ShieldCheck,
+  CheckCircle2,
+  ArrowRight,
+  Search,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { formatPrice } from '@/lib/formatters';
-import { AREA_DEFAULTS } from '@/constants/areaDefaults';
 import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
-import { HomepageFilterPanel } from '@/components/HomepageFilterPanel';
-import { CITIES, ANY_AREA_SENTINEL } from '@/constants/cities';
-import { usePublicListings } from '@/hooks/usePublicListings';
+import { CITIES } from '@/constants/cities';
 
-const PROPERTY_TYPE_LABELS: Record<string, string> = {
-  apartment: 'Apartment',
-  villa: 'Villa',
-  land: 'Plot / Land',
-  commercial: 'Commercial',
-  house: 'House',
-  plot: 'Plot / Land',
-};
+// ────────────────────────────────────────────────────────────────────────────
+// Static marketing content. These mirror the ReTrends mock exactly. The
+// Trending Localities section prefers live data from useTrendingAreas and only
+// falls back to this static set when no live areas are available. The Trust
+// Badges and Area Overview sections are static marketing content by design.
+// ────────────────────────────────────────────────────────────────────────────
 
-function humanizePropertyType(raw: string | null): string | null {
-  if (raw == null) return null;
-  return PROPERTY_TYPE_LABELS[raw.toLowerCase()] ?? raw;
+interface StaticLocality {
+  name: string;
+  city: string;
+  price: string;
+  properties: string;
 }
 
-function LatestListingsSection() {
-  const { data: publicListings = [] } = usePublicListings(6);
+const STATIC_TRENDING: StaticLocality[] = [
+  { name: 'Koramangala', city: 'Bangalore', price: '₹1.15 Cr', properties: '342+' },
+  { name: 'Indiranagar', city: 'Bangalore', price: '₹1.02 Cr', properties: '287+' },
+  { name: 'HSR Layout', city: 'Bangalore', price: '₹1.28 Cr', properties: '398+' },
+];
 
-  if (publicListings.length === 0) return null;
-
-  return (
-    <section className="container mx-auto px-4 py-16 max-w-7xl">
-      <h2 className="text-2xl font-semibold text-foreground mb-10">Latest Listings</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {publicListings.map((listing) => {
-          const typeLabel = humanizePropertyType(listing.propertyType);
-          const purposeLabel =
-            listing.listingPurpose === 'SALE'
-              ? 'For Sale'
-              : listing.listingPurpose === 'RENT'
-              ? 'For Rent'
-              : listing.listingPurpose != null
-              ? listing.listingPurpose
-              : null;
-
-          return (
-            <Link
-              key={listing.id}
-              to={`/listing/${listing.id}`}
-              aria-label={[
-                typeLabel,
-                listing.locality,
-                listing.price != null ? formatPrice(listing.price) : 'Price on request',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            >
-              <Card className="overflow-hidden hover:shadow-md transition-shadow">
-                {listing.primaryImageUrl != null ? (
-                  <img
-                    src={listing.primaryImageUrl}
-                    alt={typeLabel ?? 'Property'}
-                    className="w-full h-48 object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-48 bg-muted flex items-center justify-center text-muted-foreground text-sm">
-                    No image
-                  </div>
-                )}
-                <CardContent className="p-4 flex flex-col gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {typeLabel != null && (
-                      <Badge variant="secondary">{typeLabel}</Badge>
-                    )}
-                    {purposeLabel != null && (
-                      <Badge variant="outline">{purposeLabel}</Badge>
-                    )}
-                  </div>
-                  {listing.locality != null && (
-                    <p className="text-sm text-muted-foreground">{listing.locality}</p>
-                  )}
-                  <p className="text-sm font-medium text-foreground">
-                    {listing.price != null ? formatPrice(listing.price) : 'Price on request'}
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
-  const { areas, isLoading, isError } = useTrendingAreas();
-  const [expanded, setExpanded] = useState(false);
-
-  if (isError || (!isLoading && areas.length === 0)) {
-    return null;
-  }
-
-  const visibleAreas = expanded ? areas : areas.slice(0, 3);
-
-  return (
-    <section className="container mx-auto px-4 py-16 max-w-7xl">
-      <div className="flex items-center justify-between mb-10">
-        <h2 className="text-2xl font-semibold text-foreground">
-          Trending Localities
-        </h2>
-        <Link
-          to={`/trends?city=${encodeURIComponent(selectedCity)}`}
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          View All Trends →
-        </Link>
-      </div>
-
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Card key={i}>
-              <CardContent className="p-6 flex flex-col gap-3">
-                <Skeleton className="h-5 w-20" />
-                <Skeleton className="h-6 w-40" />
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-4 w-24" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {visibleAreas.map((area) => {
-              const price =
-                area.medianPricePaise != null
-                  ? formatPrice(area.medianPricePaise / 100)
-                  : null;
-              const districtSegment = area.areaKey.split('|')[2] ?? '';
-              const cardCity = DISTRICT_TO_CITY_SLUG[districtSegment] ?? (districtSegment.toLowerCase() || 'udupi');
-              return (
-                <Card key={area.areaKey}>
-                  <CardContent className="p-6 flex flex-col gap-2">
-                    <div>
-                      <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-0">
-                        Trending
-                      </Badge>
-                    </div>
-                    <h3 className="font-semibold text-foreground text-lg leading-snug">
-                      {area.areaLabel}
-                    </h3>
-                    {area.districtLabel != null && (
-                      <p className="text-sm text-muted-foreground">{area.districtLabel}</p>
-                    )}
-                    {price != null && (
-                      <p className="text-sm font-medium text-foreground">{price}</p>
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      {area.listingCount90d} properties
-                    </p>
-                    <div className="mt-2 flex items-center gap-4">
-                      <Link
-                        to={`/trends?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        Explore Area →
-                      </Link>
-                      <Link
-                        to={`/discover?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`}
-                        className="text-sm text-muted-foreground hover:underline"
-                      >
-                        Explore on Map
-                      </Link>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          {areas.length > 3 && !expanded && (
-            <div className="mt-8 flex justify-center">
-              <Button variant="outline" onClick={() => setExpanded(true)}>
-                Show more
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-interface FeatureCard {
+interface FeatureItem {
   icon: React.ReactNode;
+  iconWrap: string;
   title: string;
   description: string;
 }
 
-const FEATURE_CARDS: FeatureCard[] = [
+const FEATURES: FeatureItem[] = [
   {
-    icon: <Map className="h-6 w-6 text-primary" />,
+    icon: <MapPin className="h-6 w-6 text-blue-600" />,
+    iconWrap: 'bg-blue-50',
     title: 'Map-First Discovery',
     description:
-      'Explore properties by locality on an interactive map. Select up to 3 areas and see what\'s available instantly.',
+      "Explore properties by locality on an interactive map. Select up to 3 areas and see what's available instantly.",
   },
   {
-    icon: <ShieldCheck className="h-6 w-6 text-primary" />,
+    icon: <Shield className="h-6 w-6 text-green-600" />,
+    iconWrap: 'bg-green-50',
     title: 'Trust Signals',
     description:
       'Every listing shows verification status. Verified properties have checked documents, RERA registration, and broker credentials.',
   },
   {
-    icon: <BarChart2 className="h-6 w-6 text-primary" />,
-    title: 'Area Insights',
+    icon: <TrendingUp className="h-6 w-6 text-purple-600" />,
+    iconWrap: 'bg-purple-50',
+    title: 'Market Insights',
     description:
-      'Understand price trends, demand patterns, and locality dynamics before you decide.',
+      'Understand price trends, demand patterns, and locality dynamics before you decide. Data you can trust.',
   },
 ];
+
+interface TrustBadge {
+  icon: React.ReactNode;
+  iconWrap: string;
+  title: string;
+  description: string;
+}
+
+const TRUST_BADGES: TrustBadge[] = [
+  {
+    icon: <CheckCircle2 className="h-5 w-5 text-green-600" />,
+    iconWrap: 'bg-green-100',
+    title: 'Verified',
+    description: 'Documents verified, RERA registered, broker credentials confirmed',
+  },
+  {
+    icon: <ShieldCheck className="h-5 w-5 text-blue-600" />,
+    iconWrap: 'bg-blue-100',
+    title: 'Trusted',
+    description: 'From verified brokers with proven track record',
+  },
+  {
+    icon: <MapPin className="h-5 w-5 text-slate-500" />,
+    iconWrap: 'bg-slate-100',
+    title: 'Listed',
+    description: 'Standard listing, verification in progress',
+  },
+];
+
+interface AreaOverviewCard {
+  name: string;
+  badge: string;
+  badgeClass: string;
+  description: string;
+}
+
+const AREA_OVERVIEWS: AreaOverviewCard[] = [
+  {
+    name: 'Koramangala',
+    badge: 'Full Data',
+    badgeClass: 'bg-green-100 text-green-700',
+    description: 'Comprehensive market data with trends and activity metrics',
+  },
+  {
+    name: 'Katapadi',
+    badge: 'Limited Data',
+    badgeClass: 'bg-amber-100 text-amber-700',
+    description: 'Useful insights with cautious interpretation',
+  },
+  {
+    name: 'Tiny Village',
+    badge: 'Fallback Data',
+    badgeClass: 'bg-blue-100 text-blue-700',
+    description: 'District-level price context for new areas',
+  },
+];
+
+const AREA_OVERVIEW_META: Record<string, string> = {
+  Koramangala: '42 listings',
+  Katapadi: '9 listings',
+  'Tiny Village': '<5 listings',
+};
+
+// ────────────────────────────────────────────────────────────────────────────
+// Header
+// ────────────────────────────────────────────────────────────────────────────
+
+function SiteHeader() {
+  return (
+    <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
+      <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white">
+            <MapPin className="h-5 w-5" />
+          </span>
+          <span className="flex flex-col leading-none">
+            <span className="text-base font-bold text-foreground">ReTrends</span>
+            <span className="text-[11px] text-muted-foreground">Real Estate Trends</span>
+          </span>
+        </Link>
+
+        {/* Center nav */}
+        <nav className="hidden items-center gap-8 md:flex">
+          <Link
+            to="/discover"
+            className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
+          >
+            <MapPin className="h-4 w-4" />
+            Discover
+          </Link>
+          <Link
+            to="/trends"
+            className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
+          >
+            <TrendingUp className="h-4 w-4" />
+            Trends
+          </Link>
+          <Link
+            to="/saved-areas"
+            className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
+          >
+            <Bookmark className="h-4 w-4" />
+            Saved
+          </Link>
+        </nav>
+
+        {/* Sign in */}
+        <Button asChild variant="outline" size="sm">
+          <Link to="/auth">Sign In</Link>
+        </Button>
+      </div>
+    </header>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Trending Localities (live data with static fallback)
+// ────────────────────────────────────────────────────────────────────────────
+
+function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
+  const { areas, isLoading } = useTrendingAreas();
+
+  const liveCards =
+    !isLoading && areas.length > 0
+      ? areas.slice(0, 3).map((area) => {
+          const districtSegment = area.areaKey.split('|')[2] ?? '';
+          const cardCity =
+            DISTRICT_TO_CITY_SLUG[districtSegment] ?? (districtSegment.toLowerCase() || 'udupi');
+          return {
+            name: area.areaLabel,
+            city: area.districtLabel ?? cardCity,
+            price: area.medianPricePaise != null ? formatPrice(area.medianPricePaise / 100) : '—',
+            properties: `${area.listingCount90d}+`,
+            href: `/discover?city=${encodeURIComponent(cardCity)}&areaKey=${encodeURIComponent(area.areaKey)}`,
+          };
+        })
+      : STATIC_TRENDING.map((l) => ({
+          ...l,
+          href: `/discover?city=${encodeURIComponent(l.city.toLowerCase())}`,
+        }));
+
+  return (
+    <section className="bg-slate-50/80 py-20">
+      <div className="container mx-auto max-w-7xl px-4">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              Trending Localities in Bangalore
+            </h2>
+            <p className="mt-2 text-muted-foreground">High demand areas with verified listings</p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="self-start">
+            <Link to={`/trends?city=${encodeURIComponent(selectedCity)}`}>
+              View All Trends
+              <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          {liveCards.map((card) => (
+            <Card key={card.name} className="border-border/80 transition-shadow hover:shadow-md">
+              <CardContent className="flex flex-col p-6">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">{card.name}</h3>
+                    <p className="text-sm text-muted-foreground">{card.city}</p>
+                  </div>
+                  <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+                    Trending
+                  </span>
+                </div>
+
+                <div className="mt-5 space-y-2 border-t border-border/70 pt-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Avg. Price</span>
+                    <span className="font-semibold text-foreground">{card.price}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Properties</span>
+                    <span className="font-semibold text-foreground">{card.properties}</span>
+                  </div>
+                </div>
+
+                <Link
+                  to={card.href}
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
+                >
+                  Explore Area
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Landing page
+// ────────────────────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
   const { isLoading } = useAuth();
   const navigate = useNavigate();
   const [selectedCity, setSelectedCity] = useState('bangalore');
-  const [selectedAreaKey, setSelectedAreaKey] = useState(ANY_AREA_SENTINEL);
-  const [panelOpen, setPanelOpen] = useState(true);
-  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  const { areas: areaOptions, isLoading: areasLoading } = useTrendingAreas();
+  const [locality, setLocality] = useState('');
 
   // Delayed-show: only render the auth spinner if it takes > 200 ms to resolve.
   // Supabase restores sessions from localStorage synchronously on most warm loads,
@@ -250,221 +296,268 @@ export default function LandingPage() {
     return () => clearTimeout(t);
   }, [isLoading]);
 
-  const cityAreas = areaOptions.filter((a) => {
-    const district = a.areaKey.split('|')[2] ?? '';
-    return (DISTRICT_TO_CITY_SLUG[district] ?? district.toLowerCase()) === selectedCity;
-  });
-
-  const areasToShow = cityAreas.length > 0 ? cityAreas : (AREA_DEFAULTS[selectedCity] ?? []);
-
-  const handleCityChange = (city: string) => {
-    setSelectedCity(city);
-    setSelectedAreaKey(ANY_AREA_SENTINEL);
-  };
-
   const handleExplore = () => {
-    const params = new URLSearchParams({ city: selectedCity });
-    const resolvedArea = selectedAreaKey === ANY_AREA_SENTINEL ? '' : selectedAreaKey;
-    if (resolvedArea) params.set('areaKey', resolvedArea);
-    navigate(`/discover?${params.toString()}`);
+    navigate(`/discover?city=${encodeURIComponent(selectedCity)}`);
   };
 
-  // Wait for auth to resolve before rendering to avoid a Sign-in link flash
-  // for users who are already logged in (Supabase restores session from localStorage).
-  // showAuthLoader uses the 200 ms delayed-show gate to suppress flicker on fast loads.
   if (showAuthLoader) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
-
   return (
     <div className="min-h-screen bg-background">
-      {/* ------------------------------------------------------------------ */}
-      {/* Header */}
-      {/* ------------------------------------------------------------------ */}
-      <header className="border-b bg-background">
-        <div className="container mx-auto px-4 max-w-7xl flex items-center justify-between h-14">
-          <span className="font-semibold text-foreground">ReTrends</span>
-          <Link to="/auth" className="text-sm font-medium text-primary hover:underline">
-            Sign in
-          </Link>
-        </div>
-      </header>
+      <SiteHeader />
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Hero + Filter Panel — two-column at lg, stacked on mobile */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="flex flex-col lg:flex-row relative" data-testid="two-column-wrapper">
-        {/* Left column: hero copy + city/area selectors */}
-        <div className={cn('flex flex-col justify-center px-8 py-16 transition-all duration-300', panelOpen ? 'lg:w-1/2' : 'lg:w-full')}>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-            Find Your Perfect Home with Trust &amp; Clarity
-          </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-2xl">
-            Explore properties through interactive maps, discover localities with real market trends,
-            and buy with confidence from verified listings.
-          </p>
-          <p className="mt-4 text-sm font-medium text-muted-foreground">
-            500+ Verified Listings · Trusted Brokers
-          </p>
-
-          {/* On lg+ the HomepageFilterPanel right column owns city/area/CTA — hide duplicates here */}
-          <div className="mt-8 lg:hidden flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-            <Select value={selectedCity} onValueChange={handleCityChange}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Select city" />
-              </SelectTrigger>
-              <SelectContent>
-                {CITIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={selectedAreaKey}
-              onValueChange={setSelectedAreaKey}
-              disabled={areasLoading && areasToShow.length === 0}
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="Any area (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ANY_AREA_SENTINEL}>Any area</SelectItem>
-                {areasToShow.map((a) => (
-                  <SelectItem key={a.areaKey} value={a.areaKey}>
-                    {a.areaLabel}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button size="lg" onClick={handleExplore} className="bg-blue-600 hover:bg-blue-700 text-white">
-              Explore on Map
-            </Button>
-
-            {/* Mobile-only: open filter panel in a Sheet drawer */}
-            <Button
-              variant="outline"
-              data-testid="mobile-filter-trigger"
-              className="lg:hidden self-start"
-              onClick={() => setMobileFilterOpen(true)}
-            >
-              <SlidersHorizontal className="h-4 w-4 mr-2" />
-              Filters
-            </Button>
-          </div>
-        </div>
-
-        {/* Toggle button — absolutely positioned at the left edge of the right panel, lg+ only */}
-        <Button
-          variant="ghost"
-          size="icon"
-          data-testid="panel-toggle"
-          aria-label={panelOpen ? 'Collapse filter panel' : 'Expand filter panel'}
-          className={cn(
-            'hidden lg:flex absolute top-1/2 -translate-y-1/2 z-10 h-8 w-6 rounded-l-none bg-card border border-l-0 border-border shadow-sm transition-all duration-300',
-            panelOpen ? 'left-1/2' : 'right-0',
-          )}
-          onClick={() => setPanelOpen(!panelOpen)}
-        >
-          {panelOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </Button>
-
-        {/* Right column: scoped filter panel — hidden on mobile, CSS width collapse on lg+.
-            min-w-0 allows lg:w-0 to override the Card's intrinsic min-content width. */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* Hero */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <section className="bg-gradient-to-b from-blue-50/70 via-blue-50/30 to-background">
         <div
-          data-testid="filter-panel-col"
-          className={cn(
-            'hidden lg:flex lg:flex-shrink-0 min-w-0 bg-muted/40 items-center justify-center overflow-hidden transition-all duration-300',
-            panelOpen ? 'lg:w-1/2 px-8 py-16' : 'lg:w-0 px-0 py-0',
-          )}
+          className="container mx-auto grid max-w-7xl grid-cols-1 items-center gap-12 px-4 py-16 lg:grid-cols-2 lg:py-24"
+          data-testid="hero"
         >
-          <HomepageFilterPanel
-            city={selectedCity}
-            areaKey={selectedAreaKey}
-            onCityChange={handleCityChange}
-            onAreaKeyChange={setSelectedAreaKey}
-          />
-        </div>
-      </div>
+          {/* Left column */}
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Discover smarter with verified insights
+            </span>
 
-      {/* Mobile filter Sheet — lg+ uses the right column above instead */}
-      <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
-        <SheetContent side="right" className="w-full max-w-sm overflow-y-auto">
-          <SheetHeader className="sr-only">
-            <SheetTitle>Property filters</SheetTitle>
-          </SheetHeader>
-          <div className="pt-8">
-            <HomepageFilterPanel
-              city={selectedCity}
-              areaKey={selectedAreaKey}
-              onCityChange={handleCityChange}
-              onAreaKeyChange={setSelectedAreaKey}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
+            <h1 className="mt-5 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              Find Your Perfect Home with <span className="text-blue-600">Trust &amp; Clarity</span>
+            </h1>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Latest Listings */}
-      {/* ------------------------------------------------------------------ */}
-      <LatestListingsSection />
+            <p className="mt-5 max-w-xl text-lg text-muted-foreground">
+              Explore properties through interactive maps, discover localities with real market
+              trends, and buy with confidence from verified listings.
+            </p>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Why Choose ReTrends? */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="container mx-auto px-4 py-16 max-w-7xl">
-        <h2 className="text-2xl font-semibold text-foreground text-center mb-10">
-          Why Choose ReTrends?
-        </h2>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-          {FEATURE_CARDS.map((card) => (
-            <Card key={card.title}>
-              <CardContent className="p-6 flex flex-col gap-3">
-                <div className="flex items-center gap-3">
-                  {card.icon}
-                  <h3 className="font-semibold text-foreground">{card.title}</h3>
+            {/* Search card */}
+            <Card className="mt-8 max-w-xl border-border/80 shadow-sm">
+              <CardContent className="p-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-foreground" htmlFor="hero-city">
+                      City
+                    </label>
+                    <Select value={selectedCity} onValueChange={setSelectedCity}>
+                      <SelectTrigger id="hero-city" className="w-full">
+                        <SelectValue placeholder="Select city" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CITIES.map((c) => (
+                          <SelectItem key={c.value} value={c.value}>
+                            {c.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <label
+                      className="mb-1.5 block text-sm font-medium text-foreground"
+                      htmlFor="hero-locality"
+                    >
+                      Locality (Optional)
+                    </label>
+                    <div className="relative">
+                      <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="hero-locality"
+                        value={locality}
+                        onChange={(e) => setLocality(e.target.value)}
+                        placeholder="Search localities..."
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <p className="text-sm text-muted-foreground">{card.description}</p>
+
+                <Button
+                  onClick={handleExplore}
+                  size="lg"
+                  className="mt-4 w-full bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  <Search className="mr-2 h-4 w-4" />
+                  Explore on Map
+                </Button>
               </CardContent>
             </Card>
+
+            {/* Trust stats */}
+            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                500+ Verified Listings
+              </span>
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                Trusted Brokers
+              </span>
+            </div>
+          </div>
+
+          {/* Right column — hero image with overlay card */}
+          <div className="relative">
+            <div className="overflow-hidden rounded-2xl shadow-xl">
+              <img
+                src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=600&fit=crop"
+                alt="Verified property with house keys"
+                className="h-[280px] w-full object-cover sm:h-[360px] lg:h-[400px]"
+                loading="eager"
+              />
+            </div>
+            <div className="absolute inset-x-4 bottom-4 rounded-xl bg-slate-900/55 p-4 text-white backdrop-blur-sm sm:inset-x-6 sm:bottom-6">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-green-400" />
+                <span className="font-semibold">Verified Property</span>
+              </div>
+              <p className="mt-1 text-sm text-white/85">
+                All documents checked, RERA registered, ready to view
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* Why Choose ReTrends? */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <section className="container mx-auto max-w-7xl px-4 py-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Why Choose ReTrends?
+          </h2>
+          <p className="mt-3 text-muted-foreground">
+            We're not another listings portal. We help you make informed decisions with verified
+            data and market insights.
+          </p>
+        </div>
+
+        <div className="mt-14 grid grid-cols-1 gap-10 md:grid-cols-3">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="flex flex-col items-center text-center">
+              <span className={cn('flex h-14 w-14 items-center justify-center rounded-2xl', f.iconWrap)}>
+                {f.icon}
+              </span>
+              <h3 className="mt-5 text-lg font-semibold text-foreground">{f.title}</h3>
+              <p className="mt-2 max-w-xs text-sm text-muted-foreground">{f.description}</p>
+            </div>
           ))}
         </div>
       </section>
 
-      {/* ------------------------------------------------------------------ */}
+      {/* ──────────────────────────────────────────────────────────────── */}
       {/* Trending Localities */}
-      {/* ------------------------------------------------------------------ */}
+      {/* ──────────────────────────────────────────────────────────────── */}
       <TrendingLocalitiesSection selectedCity={selectedCity} />
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Footer CTA */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="bg-muted">
-        <div className="container mx-auto px-4 py-20 max-w-7xl text-center">
-          <h2 className="text-2xl font-semibold text-foreground">
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* Understanding Trust Badges */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <section className="container mx-auto max-w-7xl px-4 py-20">
+        <div className="mx-auto max-w-4xl rounded-2xl bg-gradient-to-br from-blue-50 to-green-50 p-8 sm:p-10">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-white shadow-sm">
+              <Shield className="h-5 w-5 text-blue-600" />
+            </span>
+            <div>
+              <h2 className="text-xl font-bold text-foreground sm:text-2xl">
+                Understanding Trust Badges
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                We verify every listing to help you buy with confidence
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {TRUST_BADGES.map((b) => (
+              <div key={b.title} className="rounded-xl bg-white p-5 shadow-sm">
+                <span className={cn('flex h-9 w-9 items-center justify-center rounded-lg', b.iconWrap)}>
+                  {b.icon}
+                </span>
+                <h3 className="mt-4 font-semibold text-foreground">{b.title}</h3>
+                <p className="mt-1.5 text-sm text-muted-foreground">{b.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* Area Overview Pages */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <section className="bg-slate-50/80 py-20">
+        <div className="container mx-auto max-w-7xl px-4">
+          <div className="mx-auto max-w-2xl text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+              Area Overview Pages
+            </h2>
+            <p className="mt-3 text-muted-foreground">
+              Explore detailed insights for different localities based on available data
+            </p>
+          </div>
+
+          <div className="mt-12 grid grid-cols-1 gap-6 md:grid-cols-3">
+            {AREA_OVERVIEWS.map((a) => (
+              <Card key={a.name} className="border-border/80 transition-shadow hover:shadow-md">
+                <CardContent className="flex flex-col p-6">
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="text-lg font-semibold text-foreground">{a.name}</h3>
+                    <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-medium', a.badgeClass)}>
+                      {a.badge}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {AREA_OVERVIEW_META[a.name]} · {a.description}
+                  </p>
+                  <Link
+                    to={`/area-overview?city=${encodeURIComponent(selectedCity)}`}
+                    className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
+                  >
+                    View Overview
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ──────────────────────────────────────────────────────────────── */}
+      {/* Bottom CTA */}
+      {/* ──────────────────────────────────────────────────────────────── */}
+      <section className="bg-blue-600">
+        <div className="container mx-auto max-w-7xl px-4 py-20 text-center">
+          <h2 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
             Ready to Find Your Perfect Home?
           </h2>
-          <p className="mt-4 text-muted-foreground">
-            Start exploring verified properties in your preferred localities.
+          <p className="mt-3 text-blue-100">
+            Start exploring verified properties in your preferred localities
           </p>
-          <div className="mt-8 flex items-center justify-center">
-            <Button asChild size="lg">
-              <Link
-                to={`/discover?${new URLSearchParams(
-                  selectedAreaKey !== ANY_AREA_SENTINEL
-                    ? { city: selectedCity, areaKey: selectedAreaKey }
-                    : { city: selectedCity },
-                ).toString()}`}
-              >
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Button asChild size="lg" className="bg-white text-blue-700 hover:bg-blue-50">
+              <Link to={`/discover?city=${encodeURIComponent(selectedCity)}`}>
+                <MapPin className="mr-2 h-4 w-4" />
                 Start Map Search
+              </Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="border-white/70 bg-transparent text-white hover:bg-white/10 hover:text-white"
+            >
+              <Link to="/trends">
+                <TrendingUp className="mr-2 h-4 w-4" />
+                Explore Trends
               </Link>
             </Button>
           </div>

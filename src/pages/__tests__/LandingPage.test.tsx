@@ -3,9 +3,7 @@ import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import React from 'react';
 import LandingPage from '../LandingPage';
-import { usePublicListings } from '@/hooks/usePublicListings';
 
 // ─── Hoisted mock handles ──────────────────────────────────────
 const mockNavigate = vi.hoisted(() => vi.fn());
@@ -24,10 +22,6 @@ vi.mock('@/hooks/useTrendingAreas', () => ({
     isLoading: false,
     isError: false,
   })),
-}));
-
-vi.mock('@/hooks/usePublicListings', () => ({
-  usePublicListings: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 vi.mock('react-router-dom', async () => {
@@ -51,177 +45,185 @@ function renderPage() {
 }
 
 // ─── Tests ────────────────────────────────────────────────────
-describe('LandingPage', () => {
+describe('LandingPage (ReTrends redesign)', () => {
   beforeEach(() => {
     mockIsLoading = false;
     mockNavigate.mockReset();
   });
 
-  it('renders the two-column wrapper at the layout level', () => {
+  it('renders the hero with the main heading', () => {
     renderPage();
-    expect(screen.getByTestId('two-column-wrapper')).toBeInTheDocument();
-  });
-
-  it('renders both columns: hero content and filter panel', () => {
-    renderPage();
-    // Left column: hero h1 heading (exact text starts with "Find Your Perfect Home with Trust")
     expect(
       screen.getByRole('heading', { name: /Find Your Perfect Home with Trust/i }),
     ).toBeInTheDocument();
-    // Right column: HomepageFilterPanel heading
-    expect(
-      screen.getByRole('heading', { name: /Find your next property/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId('hero')).toBeInTheDocument();
   });
 
-  it('shows a spinner while auth is loading and does not render the two-column wrapper', async () => {
+  it('shows a spinner while auth is loading and does not render the hero', async () => {
     vi.useFakeTimers();
     try {
       mockIsLoading = true;
       renderPage();
       // Advance past the 200 ms delayed-show threshold and flush the React state update
-      await act(() => { vi.advanceTimersByTime(201); });
-      expect(screen.queryByTestId('two-column-wrapper')).not.toBeInTheDocument();
+      await act(() => {
+        vi.advanceTimersByTime(201);
+      });
+      expect(screen.queryByTestId('hero')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('renders the header with ReTrends brand and Sign in link', () => {
-    renderPage();
-    expect(screen.getByText('ReTrends')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Sign in/i })).toBeInTheDocument();
-  });
-
-  it('renders the hero Explore on Map button', () => {
-    renderPage();
-    // Left-column button is lg:hidden (mobile-only); HomepageFilterPanel (right column) has its own.
-    // jsdom does not apply responsive CSS so both remain in the DOM — assert at least 1 is present.
-    const exploreButtons = screen.getAllByRole('button', { name: /Explore on Map/i });
-    expect(exploreButtons.length).toBeGreaterThanOrEqual(1);
-  });
-
-  it('left-column Explore on Map navigates to /discover with city param', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const buttons = screen.getAllByRole('button', { name: /Explore on Map/i });
-    // First button is the left-column CTA
-    await user.click(buttons[0]);
-    expect(mockNavigate).toHaveBeenCalledWith(expect.stringContaining('/discover?city=bangalore'));
-  });
-
-  it('renders the panel toggle button', () => {
-    renderPage();
-    expect(screen.getByTestId('panel-toggle')).toBeInTheDocument();
-  });
-
-  it('toggle button is at left-1/2 when panel is open and right-0 when collapsed', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const toggle = screen.getByTestId('panel-toggle');
-
-    // Open state: toggle sits at the seam between columns
-    expect(toggle.className).toContain('left-1/2');
-    expect(toggle.className).not.toContain('right-0');
-
-    // Collapsed state: toggle moves to right edge so user can find it to re-expand
-    await user.click(toggle);
-    expect(toggle.className).toContain('right-0');
-    expect(toggle.className).not.toContain('left-1/2');
-
-    // Re-expanded: back to seam
-    await user.click(toggle);
-    expect(toggle.className).toContain('left-1/2');
-    expect(toggle.className).not.toContain('right-0');
-  });
-
-  it('panel is open by default — right column has lg:w-1/2 class', () => {
-    renderPage();
-    const rightCol = screen.getByTestId('filter-panel-col');
-    expect(rightCol.className).toContain('lg:w-1/2');
-  });
-
-  it('right column is hidden on mobile — has hidden and lg:flex classes', () => {
-    renderPage();
-    const rightCol = screen.getByTestId('filter-panel-col');
-    expect(rightCol.className).toContain('hidden');
-    expect(rightCol.className).toContain('lg:flex');
-  });
-
-  it('renders a mobile filter trigger button', () => {
-    renderPage();
-    expect(screen.getByTestId('mobile-filter-trigger')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /filters/i })).toBeInTheDocument();
-  });
-
-  it('clicking toggle collapses the right panel then expands it again', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const toggle = screen.getByTestId('panel-toggle');
-    const rightCol = screen.getByTestId('filter-panel-col');
-
-    // Initially open
-    expect(rightCol.className).toContain('lg:w-1/2');
-    expect(rightCol.className).not.toContain('lg:w-0');
-
-    // Collapse
-    await user.click(toggle);
-    expect(rightCol.className).toContain('lg:w-0');
-    expect(rightCol.className).not.toContain('lg:w-1/2');
-
-    // Expand
-    await user.click(toggle);
-    expect(rightCol.className).toContain('lg:w-1/2');
-    expect(rightCol.className).not.toContain('lg:w-0');
-  });
-
-  describe('Latest Listings section', () => {
-    it('does not render "Latest Listings" heading when hook returns empty array', () => {
-      vi.mocked(usePublicListings).mockReturnValue({ data: [], isLoading: false } as ReturnType<typeof usePublicListings>);
+  describe('Header', () => {
+    it('renders the ReTrends brand', () => {
       renderPage();
-      expect(screen.queryByRole('heading', { name: /Latest Listings/i })).not.toBeInTheDocument();
+      expect(screen.getByText('ReTrends')).toBeInTheDocument();
+      expect(screen.getByText('Real Estate Trends')).toBeInTheDocument();
     });
 
-    it('does not render "Latest Listings" heading while loading', () => {
-      vi.mocked(usePublicListings).mockReturnValue({ data: [], isLoading: true } as ReturnType<typeof usePublicListings>);
+    it('renders the nav links (Discover, Trends, Saved) with correct routes', () => {
       renderPage();
-      expect(screen.queryByRole('heading', { name: /Latest Listings/i })).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /Discover/i })).toHaveAttribute('href', '/discover');
+      expect(screen.getByRole('link', { name: /^Trends$/i })).toHaveAttribute('href', '/trends');
+      expect(screen.getByRole('link', { name: /Saved/i })).toHaveAttribute('href', '/saved-areas');
     });
 
-    it('renders listing cards with links to /listing/{id} when hook returns data', () => {
-      vi.mocked(usePublicListings).mockReturnValue({
-        data: [
+    it('renders a Sign In link to /auth', () => {
+      renderPage();
+      expect(screen.getByRole('link', { name: /Sign In/i })).toHaveAttribute('href', '/auth');
+    });
+  });
+
+  describe('Hero search', () => {
+    it('renders the city select and optional locality input', () => {
+      renderPage();
+      expect(screen.getByLabelText(/City/i)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Locality/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Search localities/i)).toBeInTheDocument();
+    });
+
+    it('renders the Explore on Map button', () => {
+      renderPage();
+      expect(screen.getByRole('button', { name: /Explore on Map/i })).toBeInTheDocument();
+    });
+
+    it('Explore on Map navigates to /discover with the city param', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole('button', { name: /Explore on Map/i }));
+      expect(mockNavigate).toHaveBeenCalledWith(
+        expect.stringContaining('/discover?city=bangalore'),
+      );
+    });
+
+    it('renders the trust stats row', () => {
+      renderPage();
+      expect(screen.getByText(/500\+ Verified Listings/i)).toBeInTheDocument();
+      expect(screen.getByText(/Trusted Brokers/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Hero image', () => {
+    it('uses the required Unsplash hero image', () => {
+      renderPage();
+      const img = screen.getByRole('img', { name: /Verified property/i });
+      expect(img).toHaveAttribute(
+        'src',
+        'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=600&fit=crop',
+      );
+    });
+
+    it('renders the Verified Property overlay card', () => {
+      renderPage();
+      expect(screen.getByText('Verified Property')).toBeInTheDocument();
+    });
+  });
+
+  describe('Major sections', () => {
+    it('renders the Why Choose ReTrends section with three features', () => {
+      renderPage();
+      expect(
+        screen.getByRole('heading', { name: /Why Choose ReTrends\?/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Map-First Discovery/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Trust Signals/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /Market Insights/i })).toBeInTheDocument();
+    });
+
+    it('renders the Trending Localities section (static fallback when no live data)', () => {
+      renderPage();
+      expect(
+        screen.getByRole('heading', { name: /Trending Localities in Bangalore/i }),
+      ).toBeInTheDocument();
+      // Koramangala appears in both Trending and Area Overview sections (static fallback)
+      expect(screen.getAllByRole('heading', { name: /Koramangala/i }).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByRole('heading', { name: /Indiranagar/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /HSR Layout/i })).toBeInTheDocument();
+      // View All Trends link routes to /trends
+      expect(screen.getByRole('link', { name: /View All Trends/i })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/trends'),
+      );
+    });
+
+    it('renders the Trust Badges section with Verified, Trusted, Listed', () => {
+      renderPage();
+      expect(
+        screen.getByRole('heading', { name: /Understanding Trust Badges/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Verified$/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Trusted$/i })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Listed$/i })).toBeInTheDocument();
+    });
+
+    it('renders the Area Overview Pages section with three cards', () => {
+      renderPage();
+      expect(
+        screen.getByRole('heading', { name: /Area Overview Pages/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/Full Data/i)).toBeInTheDocument();
+      expect(screen.getByText(/Limited Data/i)).toBeInTheDocument();
+      expect(screen.getByText(/Fallback Data/i)).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: /View Overview/i }).length).toBe(3);
+    });
+
+    it('renders the bottom CTA with both action buttons', () => {
+      renderPage();
+      expect(
+        screen.getByRole('heading', { name: /Ready to Find Your Perfect Home\?/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /Start Map Search/i })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/discover'),
+      );
+      expect(screen.getByRole('link', { name: /Explore Trends/i })).toHaveAttribute(
+        'href',
+        '/trends',
+      );
+    });
+  });
+
+  describe('Trending Localities live data', () => {
+    it('renders live trending areas when the hook returns data', async () => {
+      const { useTrendingAreas } = await import('@/hooks/useTrendingAreas');
+      vi.mocked(useTrendingAreas).mockReturnValue({
+        areas: [
           {
-            id: 'abc-1',
-            primaryImageUrl: 'https://example.com/img1.jpg',
-            price: 5000000,
-            propertyType: 'apartment',
-            locality: 'Koramangala',
-            listingPurpose: 'SALE',
-          },
-          {
-            id: 'abc-2',
-            primaryImageUrl: null,
-            price: null,
-            propertyType: 'land',
-            locality: 'Indiranagar',
-            listingPurpose: 'RENT',
+            areaKey: 'area|manipal|udupi',
+            areaLabel: 'Manipal',
+            districtLabel: 'Udupi',
+            medianPricePaise: 1_500_000_000,
+            listingCount90d: 12,
           },
         ],
         isLoading: false,
-      } as ReturnType<typeof usePublicListings>);
+        isError: false,
+      } as ReturnType<typeof useTrendingAreas>);
 
       renderPage();
-
-      expect(screen.getByRole('heading', { name: /Latest Listings/i })).toBeInTheDocument();
-
-      const links = screen.getAllByRole('link', { name: /Apartment|Plot \/ Land|Koramangala|Indiranagar/i });
-      const hrefs = links.map((l) => l.getAttribute('href'));
-      expect(hrefs).toContain('/listing/abc-1');
-      expect(hrefs).toContain('/listing/abc-2');
-
-      // AC3: null primaryImageUrl renders placeholder text
-      expect(screen.getByText('No image')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /^Manipal$/i })).toBeInTheDocument();
+      // static fallback should NOT render when live data is present
+      expect(screen.queryByRole('heading', { name: /Indiranagar/i })).not.toBeInTheDocument();
     });
   });
 });
