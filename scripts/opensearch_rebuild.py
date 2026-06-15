@@ -107,6 +107,18 @@ INDEX_MAPPING: dict[str, Any] = {
             "last_updated_at": {"type": "date"},
             "first_published_at": {"type": "date"},
             "back_to_market_at": {"type": "date"},
+            # Agricultural fields (issue #1461)
+            # Tier 1: already public via AgriMapListingItem
+            "land_category": {"type": "keyword"},
+            "water_source": {"type": "keyword"},
+            "farmhouse_available": {"type": "boolean"},
+            "fencing_done": {"type": "boolean"},
+            "computed_area_acres": {"type": "double"},
+            # Tier 2: columns exist V84; included pending Gate F security review
+            "soil_type": {"type": "keyword"},
+            "road_access": {"type": "keyword"},
+            "cultivation_status": {"type": "keyword"},
+            "ownership_type": {"type": "keyword"},
         }
     },
 }
@@ -154,7 +166,23 @@ SELECT
         WHERE li.listing_id = pl.id
         ORDER BY li.position ASC, li.id ASC
         LIMIT 1
-    ) AS hero_image_url
+    ) AS hero_image_url,
+    -- Agricultural fields (issue #1461)
+    -- Tier 1: already public via AgriMapListingItem
+    pl.land_category,
+    pl.water_source,
+    pl.farmhouse_available,
+    pl.fencing_done,
+    -- computed_area_acres: NOT a stored column — derived via ST_Area expression,
+    -- mirroring DiscoverAgriMapListingsService exactly.
+    -- boundary is geography(Polygon,4326): ST_Area returns square metres → /4046.8564224 = acres.
+    -- NULL boundary → NULL → omitted by null-omission loop.
+    ROUND(ST_Area(pl.boundary)::numeric / 4046.8564224, 2) AS computed_area_acres,
+    -- Tier 2: columns exist V84; included pending Gate F security review
+    pl.soil_type,
+    pl.road_access,
+    pl.cultivation_status,
+    pl.ownership_type
 FROM property_listings pl
 LEFT JOIN areas a ON a.area_key = pl.area_key
 LEFT JOIN cities c ON c.id = a.city_id
@@ -255,6 +283,19 @@ def _row_to_doc(row: dict, index_name: str) -> dict | None:
             "trust_tier": row.get("trust_tier"),
             "possession_status": row.get("possession_status"),
             "listing_purpose": row.get("listing_purpose"),
+            # Agricultural fields (issue #1461)
+            # Booleans: row.get() returns True/False/None — do NOT coerce.
+            # The null-omission loop uses `is None`, so False is preserved (null != false).
+            # water_source 'NOT_AVAILABLE' is a real keyword — only None is omitted.
+            "land_category": row.get("land_category"),
+            "water_source": row.get("water_source"),
+            "soil_type": row.get("soil_type"),
+            "road_access": row.get("road_access"),
+            "cultivation_status": row.get("cultivation_status"),
+            "ownership_type": row.get("ownership_type"),
+            "farmhouse_available": row.get("farmhouse_available"),
+            "fencing_done": row.get("fencing_done"),
+            "computed_area_acres": float(row["computed_area_acres"]) if row.get("computed_area_acres") is not None else None,
         },
     }
     # Omit null-valued optional fields so the index stays lean;
@@ -264,6 +305,10 @@ def _row_to_doc(row: dict, index_name: str) -> dict | None:
         "last_updated_at", "back_to_market_at", "listing_number", "land_area",
         "land_area_unit", "built_area", "built_area_unit", "rera_number",
         "trust_tier", "possession_status", "listing_purpose",
+        # Agricultural fields (issue #1461) — omit when None; preserve False/0.0
+        "land_category", "water_source", "soil_type", "road_access",
+        "cultivation_status", "ownership_type", "farmhouse_available",
+        "fencing_done", "computed_area_acres",
     )
     for field in _OPTIONAL_FIELDS:
         if doc["_source"].get(field) is None:

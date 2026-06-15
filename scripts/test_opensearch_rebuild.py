@@ -369,5 +369,215 @@ class TestBulkFailureOverThreshold(unittest.TestCase):
         mock_client.indices.update_aliases.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# 19. Agricultural field parity tests (issue #1461)
+# ---------------------------------------------------------------------------
+
+def _make_agri_row(**overrides) -> dict:
+    """Return a representative agri Postgres row as SELECT_SQL would return it."""
+    from decimal import Decimal
+    row = {
+        "id": 99,
+        "title": "[AGRI] 12-Acre Paddy Field, Padubidri",
+        "locality": "Padubidri",
+        "description": "Fertile paddy land near highway",
+        "area_key": "area_agri_001",
+        "property_type": "AGRICULTURAL",
+        "seller_type": "OWNER",
+        "bedrooms": None,
+        "bathrooms": None,
+        "price_paise": 12500000,
+        "latitude": 13.1782,
+        "longitude": 74.7582,
+        "status": "LIVE",
+        "created_at": None,
+        "updated_at": None,
+        "first_published_at": None,
+        "last_updated_at": None,
+        "back_to_market_at": None,
+        "city_slug": "udupi",
+        "hero_image_url": None,
+        "listing_number": 1001,
+        "land_area": Decimal("12.0"),
+        "land_area_unit": "ACRES",
+        "built_area": None,
+        "built_area_unit": None,
+        "rera_number": None,
+        "trust_tier": None,
+        "possession_status": None,
+        "listing_purpose": "SALE",
+        # Agri-specific
+        "land_category": "FARMLAND",
+        "water_source": "BOREWELL",
+        "soil_type": "LATERITE",
+        "road_access": "TARRED_ROAD",
+        "cultivation_status": "CULTIVATED",
+        "ownership_type": "FREEHOLD",
+        "farmhouse_available": False,
+        "fencing_done": True,
+        "computed_area_acres": Decimal("12.50"),
+    }
+    row.update(overrides)
+    return row
+
+
+class TestRowToDocAgriFields(unittest.TestCase):
+    """Tests for _row_to_doc covering agricultural field parity (issue #1461)."""
+
+    _INDEX = "listings_v20261001_120000"
+
+    def test_agri_row_all_fields_present(self):
+        """Full agri row → doc._source contains all 9 agri fields with correct values."""
+        row = _make_agri_row()
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        src = doc["_source"]
+
+        self.assertEqual(src["land_category"], "FARMLAND")
+        self.assertEqual(src["water_source"], "BOREWELL")
+        self.assertEqual(src["soil_type"], "LATERITE")
+        self.assertEqual(src["road_access"], "TARRED_ROAD")
+        self.assertEqual(src["cultivation_status"], "CULTIVATED")
+        self.assertEqual(src["ownership_type"], "FREEHOLD")
+        self.assertIs(src["farmhouse_available"], False)
+        self.assertIs(src["fencing_done"], True)
+        self.assertAlmostEqual(src["computed_area_acres"], 12.50, places=2)
+        self.assertIsInstance(src["computed_area_acres"], float)
+
+    def test_water_source_not_available_preserved(self):
+        """water_source='NOT_AVAILABLE' is a real keyword and must NOT be omitted."""
+        row = _make_agri_row(water_source="NOT_AVAILABLE")
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertIn("water_source", doc["_source"])
+        self.assertEqual(doc["_source"]["water_source"], "NOT_AVAILABLE")
+
+    def test_water_source_none_omitted(self):
+        """water_source=None → key absent from _source (null-omission)."""
+        row = _make_agri_row(water_source=None)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertNotIn("water_source", doc["_source"])
+
+    def test_farmhouse_available_false_preserved(self):
+        """farmhouse_available=False must be present as False (not omitted — null != false)."""
+        row = _make_agri_row(farmhouse_available=False)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertIn("farmhouse_available", doc["_source"])
+        self.assertIs(doc["_source"]["farmhouse_available"], False)
+
+    def test_farmhouse_available_none_omitted(self):
+        """farmhouse_available=None → key absent from _source."""
+        row = _make_agri_row(farmhouse_available=None)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertNotIn("farmhouse_available", doc["_source"])
+
+    def test_farmhouse_available_true_preserved(self):
+        """farmhouse_available=True must be present as True."""
+        row = _make_agri_row(farmhouse_available=True)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertIs(doc["_source"]["farmhouse_available"], True)
+
+    def test_fencing_done_false_preserved(self):
+        """fencing_done=False must be present (not omitted)."""
+        row = _make_agri_row(fencing_done=False)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertIn("fencing_done", doc["_source"])
+        self.assertIs(doc["_source"]["fencing_done"], False)
+
+    def test_fencing_done_none_omitted(self):
+        """fencing_done=None → key absent from _source."""
+        row = _make_agri_row(fencing_done=None)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertNotIn("fencing_done", doc["_source"])
+
+    def test_computed_area_acres_decimal_converted_to_float(self):
+        """Decimal from Postgres ROUND(...) is converted to Python float."""
+        from decimal import Decimal
+        row = _make_agri_row(computed_area_acres=Decimal("12.50"))
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        src = doc["_source"]
+        self.assertIn("computed_area_acres", src)
+        self.assertIsInstance(src["computed_area_acres"], float)
+        self.assertAlmostEqual(src["computed_area_acres"], 12.50, places=2)
+
+    def test_computed_area_acres_none_omitted(self):
+        """computed_area_acres=None (NULL boundary) → key absent from _source."""
+        row = _make_agri_row(computed_area_acres=None)
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertNotIn("computed_area_acres", doc["_source"])
+
+    def test_no_pii_fields_in_source(self):
+        """No PII columns must appear in _source regardless of what the row contains."""
+        pii_keys = {
+            "survey_number", "user_id", "seller_id", "supabase_user_id",
+            "phone", "email", "owner_name", "rejection_reason",
+        }
+        # Inject PII-like keys into the row dict to prove they are never copied through
+        row = _make_agri_row(
+            user_id="user-uuid-abc",
+            seller_id="seller-uuid-xyz",
+            supabase_user_id="supa-uuid-123",
+            survey_number="SRV/123/456",
+            phone="+919999999999",
+            email="seller@example.com",
+            owner_name="Test Owner",
+            rejection_reason="incomplete docs",
+        )
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        present = pii_keys & set(doc["_source"].keys())
+        self.assertEqual(present, set(), msg=f"PII keys found in _source: {present}")
+
+    def test_computed_area_acres_zero_preserved(self):
+        """computed_area_acres=0.0 must be present (proves `is None` omission, not falsiness).
+
+        0.0 is a legitimate value (boundary resolves to zero acres via ST_Area rounding).
+        The null-omission loop uses `is None`, so 0.0 must survive and not be stripped.
+        """
+        from decimal import Decimal
+        row = _make_agri_row(computed_area_acres=Decimal("0.0"))
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        self.assertIn("computed_area_acres", doc["_source"])
+        self.assertEqual(doc["_source"]["computed_area_acres"], 0.0)
+        self.assertIsInstance(doc["_source"]["computed_area_acres"], float)
+
+    def test_non_agri_row_has_no_agri_keys(self):
+        """Non-agri row (HOUSE, all agri columns None) → none of the 9 agri keys present.
+
+        This proves byte-compat with pre-#1461 indexed docs: existing non-agri
+        listings are not polluted with empty agri fields.
+        """
+        agri_keys = {
+            "land_category", "water_source", "soil_type", "road_access",
+            "cultivation_status", "ownership_type", "farmhouse_available",
+            "fencing_done", "computed_area_acres",
+        }
+        row = _make_valid_row(
+            property_type="HOUSE",
+            land_category=None,
+            water_source=None,
+            soil_type=None,
+            road_access=None,
+            cultivation_status=None,
+            ownership_type=None,
+            farmhouse_available=None,
+            fencing_done=None,
+            computed_area_acres=None,
+        )
+        doc = _row_to_doc(row, self._INDEX)
+        self.assertIsNotNone(doc)
+        present = agri_keys & set(doc["_source"].keys())
+        self.assertEqual(present, set(), msg=f"Agri keys leaked into non-agri doc: {present}")
+
+
 if __name__ == "__main__":
     unittest.main()
