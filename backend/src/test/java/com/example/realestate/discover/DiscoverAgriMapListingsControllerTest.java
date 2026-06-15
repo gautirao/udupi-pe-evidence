@@ -87,7 +87,7 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_anonymousRequest_returns200() throws Exception {
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of()));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         // No Authorization header — must succeed (public endpoint)
         mockMvc.perform(get("/api/discover/agri-map-listings")
@@ -111,13 +111,15 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null
         );
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item)));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
                         .param("areaKeys", "IN|KA|Udupi|Area1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.city", is("udupi")))
+                .andExpect(jsonPath("$.truncated", is(false)))
+                .andExpect(jsonPath("$.limit", is(250)))
                 .andExpect(jsonPath("$.listings", hasSize(1)))
                 .andExpect(jsonPath("$.listings[0].id", is("listing-id-1")))
                 .andExpect(jsonPath("$.listings[0].title", is("3-Acre Farmland, Kundapur")))
@@ -142,7 +144,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null
         );
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item)));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         String responseBody = mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
@@ -172,7 +174,7 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_responseHasCacheControlPublicMaxAge120() throws Exception {
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of()));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
@@ -189,7 +191,7 @@ class DiscoverAgriMapListingsControllerTest {
     @Test
     void getAgriMapListings_responseIsJson() throws Exception {
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of()));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
@@ -245,7 +247,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null);
 
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item1, item2)));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item1, item2), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")
@@ -270,7 +272,7 @@ class DiscoverAgriMapListingsControllerTest {
                 null, null, null, null
         );
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
-                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item)));
+                .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
 
         mockMvc.perform(get("/api/discover/agri-map-listings")
                         .param("city", "udupi")

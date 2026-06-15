@@ -398,6 +398,10 @@ export interface DiscoverRightPanelProps {
   // ── Agri-group-selected panel (Issue #1425) ────────────────────────────────
   /** Listings fetched for the selected agri regional group's area keys. */
   agriGroupListings?: AgriMapListingItem[] | null;
+  /** Issue #1460 — true when the agri map listings response was capped by the backend. */
+  agriGroupTruncated?: boolean;
+  /** Issue #1460 — the cap limit from the backend (e.g. 250). */
+  agriGroupListingsLimit?: number;
   /** True while agri group listings are loading. */
   isLoadingAgriGroupListings?: boolean;
   /** True when the agri group listings fetch errored. */
@@ -537,6 +541,8 @@ export function DiscoverRightPanel({
   selectedMarkerListing = null,
   onClearAgriSelection,
   agriGroupListings = null,
+  agriGroupTruncated,
+  agriGroupListingsLimit,
   isLoadingAgriGroupListings = false,
   isAgriGroupListingsError = false,
   agriGroupLabel = null,
@@ -867,6 +873,9 @@ export function DiscoverRightPanel({
               agriFencingDone={agriFencingDone}
               agriWaterSource={agriWaterSource}
               intent={intent}
+              // Issue #1460: truncation notice
+              truncated={agriGroupTruncated}
+              limit={agriGroupListingsLimit}
             />
           </>
         );

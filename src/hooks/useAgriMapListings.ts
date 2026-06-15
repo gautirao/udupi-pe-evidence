@@ -38,6 +38,10 @@ export interface AgriMapListingItem {
 export interface AgriMapListingsResponse {
   city: string;
   listings: AgriMapListingItem[];
+  /** Issue #1460 — true when results were capped at `limit`. */
+  truncated: boolean;
+  /** Issue #1460 — the cap applied by the backend (e.g. 250). */
+  limit: number;
 }
 
 export const AGRI_MAP_LISTINGS_QUERY_KEY_BASE = ['agri-map-listings'] as const;
@@ -57,6 +61,6 @@ export function useAgriMapListings(city: string, areaKeys: string[], listingPurp
       return data;
     },
     enabled: city.length > 0 && areaKeys.length > 0,
-    staleTime: 60_000,
+    staleTime: 120_000,
   });
 }

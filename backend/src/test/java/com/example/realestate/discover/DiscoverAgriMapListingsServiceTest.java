@@ -57,6 +57,8 @@ class DiscoverAgriMapListingsServiceTest {
 
         assertThat(resp.city()).isEqualTo("udupi");
         assertThat(resp.listings()).hasSize(1);
+        assertThat(resp.truncated()).isFalse();
+        assertThat(resp.limit()).isEqualTo(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
         AgriMapListingItem returned = resp.listings().get(0);
         assertThat(returned.id()).isEqualTo("id-1");
         assertThat(returned.propertyType()).isEqualTo("agricultural_land");
@@ -268,7 +270,110 @@ class DiscoverAgriMapListingsServiceTest {
                 .containsExactlyInAnyOrder("id-1", "id-2");
     }
 
+    // ── #1460: LIMIT N+1 truncation ──────────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1460 Test A: under-cap — truncated=false, all rows returned")
+    void findAgriMapListings_underCap_notTruncated() throws SQLException {
+        // Return MAX_LISTINGS_PER_REQUEST - 1 items (under the cap)
+        int count = DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST - 1;
+        List<AgriMapListingItem> items = buildItems(count);
+        stubQuery(items);
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        assertThat(resp.truncated()).isFalse();
+        assertThat(resp.limit()).isEqualTo(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+        assertThat(resp.listings()).hasSize(count);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1460 Test B: exactly-cap — truncated=false, all MAX rows returned")
+    void findAgriMapListings_exactlyCap_notTruncated() throws SQLException {
+        // JDBC returns exactly MAX_LISTINGS_PER_REQUEST rows — not truncated
+        int count = DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST;
+        List<AgriMapListingItem> items = buildItems(count);
+        stubQuery(items);
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        assertThat(resp.truncated()).isFalse();
+        assertThat(resp.limit()).isEqualTo(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+        assertThat(resp.listings()).hasSize(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1460 Test C: over-cap (N+1 triggered) — truncated=true, exactly MAX rows returned, overflow row stripped")
+    void findAgriMapListings_overCap_truncatedAndOverflowRowStripped() throws SQLException {
+        // JDBC returns MAX_LISTINGS_PER_REQUEST + 1 rows (the LIMIT N+1 sentinel)
+        int count = DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST + 1;
+        List<AgriMapListingItem> items = buildItems(count);
+        stubQuery(items);
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        assertThat(resp.truncated()).isTrue();
+        assertThat(resp.limit()).isEqualTo(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+        // overflow row must be stripped — exactly MAX, not MAX+1
+        assertThat(resp.listings()).hasSize(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+        // last item should be the 250th (index 249), not the 251st (index 250)
+        assertThat(resp.listings().get(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST - 1).id())
+                .isEqualTo("item-" + (DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST - 1));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1460 Test D: anon + over-cap — truncation applied before anon coarsening; return exactly MAX coarsened items")
+    void findAgriMapListings_anonOverCap_truncatesFirstThenCoarsens() throws SQLException {
+        // Build MAX+1 items with exact-precision coords and a price
+        int count = DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST + 1;
+        List<AgriMapListingItem> items = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            items.add(agriItem("item-" + i, "Farm " + i, "IN|KA|Udupi|Area1",
+                    13.34091 + i * 0.001, 74.74215 + i * 0.001,
+                    "agricultural_land", "Shirva", null,
+                    new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 5000000L));
+        }
+        stubQuery(items);
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
+
+        // Truncation: exactly MAX items (not MAX+1)
+        assertThat(resp.truncated()).isTrue();
+        assertThat(resp.listings()).hasSize(DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+
+        // Anon coarsening applied to each of the MAX retained items: pricePaise=null, lat/lng 2dp
+        AgriMapListingItem first = resp.listings().get(0);
+        assertThat(first.pricePaise()).isNull();
+        assertThat(String.valueOf(first.latitude())).matches("-?\\d+\\.\\d{1,2}");
+
+        // Verify the 251st item is NOT in the response (truncation happened before coarsening)
+        assertThat(resp.listings().stream().map(AgriMapListingItem::id))
+                .doesNotContain("item-" + DiscoverAgriMapListingsService.MAX_LISTINGS_PER_REQUEST);
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Builds a list of {@code count} minimal AgriMapListingItem instances with IDs "item-0", "item-1", etc.
+     */
+    private static List<AgriMapListingItem> buildItems(int count) {
+        List<AgriMapListingItem> items = new java.util.ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            items.add(agriItem("item-" + i, "Farm " + i, "IN|KA|Udupi|Area1",
+                    13.3 + i * 0.001, 74.7 + i * 0.001,
+                    "agricultural_land", "Shirva", null,
+                    null, null, null, 1000000L));
+        }
+        return items;
+    }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private void stubQuery(List<AgriMapListingItem> items) throws SQLException {

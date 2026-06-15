@@ -148,7 +148,7 @@ export function useRegionalAreaGroups(city: string): RegionalAreaGroupsData {
       return normalizeRegionalAreaGroupsResponse(rawResponse, city);
     },
     enabled: city.length > 0,
-    staleTime: 60_000,
+    staleTime: 120_000,
     retry: false,
   });
 

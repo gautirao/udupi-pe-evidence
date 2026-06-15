@@ -30,6 +30,14 @@ public class DiscoverAgriMapListingsService {
     /** Maximum number of areaKeys allowed in one request to guard against unbounded IN clauses. */
     static final int MAX_AREA_KEYS = 50;
 
+    /**
+     * Maximum number of listings returned in a single response.
+     * Requests matching more than this limit return the first N listings
+     * with {@code truncated=true} and {@code limit=MAX_LISTINGS_PER_REQUEST}.
+     * Uses LIMIT N+1 detection to avoid an expensive COUNT(*) subquery.
+     */
+    static final int MAX_LISTINGS_PER_REQUEST = 250;
+
     static final String BASE_SQL = """
             SELECT
                 pl.id,
@@ -131,7 +139,8 @@ public class DiscoverAgriMapListingsService {
                 + " AND pl.area_key IN " + inClause + "\n"
                 + (normPurpose != null ? " AND pl.listing_purpose = ?\n" : "")
                 + (parsedBbox != null ? BBOX_CLAUSE : "")
-                + " ORDER BY pl.id";
+                + " ORDER BY pl.id\n"
+                + " LIMIT " + (MAX_LISTINGS_PER_REQUEST + 1);
 
         // Build positional params
         // order: [citySlug, areaKeys..., (listingPurpose)?, (bbox: minLat, maxLat, minLon, maxLon)?]
@@ -193,17 +202,26 @@ public class DiscoverAgriMapListingsService {
                 params
         );
 
+        // #1460: LIMIT N+1 truncation detection. If we got more than cap,
+        // the result set exceeds the max — strip the overflow row and flag truncated.
+        boolean truncated = listings.size() > MAX_LISTINGS_PER_REQUEST;
+        if (truncated) {
+            listings = new java.util.ArrayList<>(listings.subList(0, MAX_LISTINGS_PER_REQUEST));
+        }
+
         // #1454: anonymous gating — withhold pricePaise and coarsen exact coordinates.
         // Post-read projection only; the SQL (SELECT/WHERE/columns) is untouched.
+        // Applied AFTER truncation so we coarsen exactly MAX_LISTINGS_PER_REQUEST items,
+        // not the overflow row.
         if (!isAuthenticated) {
             listings = listings.stream()
                     .map(DiscoverAgriMapListingsService::toAnonItem)
                     .toList();
         }
 
-        log.debug("findAgriMapListings city={} returned={} authenticated={}",
-                citySlug, listings.size(), isAuthenticated);
-        return new AgriMapListingsResponse(citySlug.toLowerCase(), listings);
+        log.debug("findAgriMapListings city={} returned={} authenticated={} truncated={}",
+                citySlug, listings.size(), isAuthenticated, truncated);
+        return new AgriMapListingsResponse(citySlug.toLowerCase(), listings, truncated, MAX_LISTINGS_PER_REQUEST);
     }
 
     /**

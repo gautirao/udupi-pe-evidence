@@ -1963,6 +1963,9 @@ export default function MapDiscovery() {
           // Issue #1425 — agri-group-selected panel data
           // Issue #1457 — pass filteredAgriListings (client-side filtered) instead of raw
           agriGroupListings={filteredAgriListings}
+          // Issue #1460 — thread truncated/limit from useAgriMapListings to surface the cap notice.
+          agriGroupTruncated={agriMapListingsData?.truncated ?? false}
+          agriGroupListingsLimit={agriMapListingsData?.limit}
           isLoadingAgriGroupListings={isLoadingAgriGroupListings}
           isAgriGroupListingsError={isAgriGroupListingsError}
           agriGroupLabel={agriGroupLabel}

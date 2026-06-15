@@ -65,6 +65,10 @@ interface AgriGroupSelectedPanelProps {
   agriWaterSource?: string | null;
   /** Issue #1494 — current buy/rent intent for copy and badge display. Default 'buy'. */
   intent?: DiscoverIntent;
+  /** Issue #1460 — true when backend capped the result set. */
+  truncated?: boolean;
+  /** Issue #1460 — the cap limit applied by the backend (e.g. 250). */
+  limit?: number;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -109,6 +113,8 @@ export function AgriGroupSelectedPanel({
   agriFencingDone = null,
   agriWaterSource = null,
   intent = 'buy',
+  truncated,
+  limit,
 }: AgriGroupSelectedPanelProps) {
   // Sort distance tiers ascending by maxKm for consistent display order.
   const sortedTiers = availableMaxDistances
@@ -508,6 +514,13 @@ export function AgriGroupSelectedPanel({
           </div>
         )}
       </div>
+
+      {/* Issue #1460 — non-blocking truncation notice, rendered only when backend capped results. */}
+      {truncated && (
+        <p className="text-xs text-muted-foreground mt-2 px-4">
+          Showing first {limit} plots. Zoom in or choose a smaller region to narrow results.
+        </p>
+      )}
     </div>
   );
 }
