@@ -46,7 +46,11 @@ public class DiscoverAgriMapListingsService {
                 pl.land_area_unit,
                 ROUND(ST_Area(pl.boundary)::numeric / 4046.8564224, 2) AS computed_area_acres,
                 pl.price_paise,
-                pl.listing_purpose
+                pl.listing_purpose,
+                pl.water_source,
+                pl.land_category,
+                pl.farmhouse_available,
+                pl.fencing_done
             FROM property_listings pl
             JOIN areas a ON a.area_key = pl.area_key
             JOIN cities c ON c.id = a.city_id
@@ -180,7 +184,11 @@ public class DiscoverAgriMapListingsService {
                         rs.getString("land_area_unit"),
                         rs.getBigDecimal("computed_area_acres"),
                         rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
-                        rs.getString("listing_purpose")
+                        rs.getString("listing_purpose"),
+                        rs.getString("water_source"),
+                        rs.getString("land_category"),
+                        rs.getObject("farmhouse_available") != null ? rs.getBoolean("farmhouse_available") : null,
+                        rs.getObject("fencing_done") != null ? rs.getBoolean("fencing_done") : null
                 ),
                 params
         );
@@ -216,7 +224,11 @@ public class DiscoverAgriMapListingsService {
                 item.landAreaUnit(),
                 item.computedAreaAcres(),
                 null, // pricePaise withheld from anonymous callers
-                item.listingPurpose());
+                item.listingPurpose(),
+                item.waterSource(),
+                item.landCategory(),
+                item.farmhouseAvailable(),
+                item.fencingDone());
     }
 
     /**

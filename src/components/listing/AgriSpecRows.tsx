@@ -15,6 +15,24 @@
 import React from 'react';
 import { formatPrice } from '@/lib/formatters';
 
+// Issue #1458 — label maps for enum values displayed to the user.
+const LAND_CATEGORY_LABELS: Record<string, string> = {
+  FARMLAND: 'Farmland',
+  PLANTATION: 'Plantation',
+  FARM_PLOT: 'Farm plot',
+  AGRICULTURAL_PLOT: 'Agricultural plot',
+  OTHER: 'Other',
+};
+
+const WATER_SOURCE_LABELS: Record<string, string> = {
+  WELL: 'Well',
+  BOREWELL: 'Borewell',
+  POND: 'Pond',
+  STREAM: 'Stream',
+  NOT_AVAILABLE: 'Not available',
+  OTHER: 'Other',
+};
+
 export interface AgriSpecRowsProps {
   surveyNumber?: string | null;
   landArea?: number | null;
@@ -27,6 +45,12 @@ export interface AgriSpecRowsProps {
   cultivationStatus?: string | null;
   ownershipType?: string | null;
   boundary?: string | null;
+  /** Issue #1458 — land category enum value from backend. Null → omit row. */
+  landCategory?: string | null;
+  /** Issue #1458 — farmhouse availability. Null → omit row (unknown). */
+  farmhouseAvailable?: boolean | null;
+  /** Issue #1458 — fencing status. Null → omit row (unknown). */
+  fencingDone?: boolean | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +91,9 @@ export function AgriSpecRows({
   cultivationStatus,
   ownershipType,
   boundary,
+  landCategory,
+  farmhouseAvailable,
+  fencingDone,
 }: AgriSpecRowsProps) {
   // Land area: e.g. "2.5 acres"
   const landAreaValue =
@@ -99,6 +126,22 @@ export function AgriSpecRows({
   const showBoundaryDisclaimer =
     typeof boundary === 'string' && boundary.length > 0;
 
+  // Issue #1458 — derived display values for new structured fields.
+  // landCategory: map enum to human label; null → omit row (FieldRow handles null).
+  const landCategoryValue =
+    landCategory != null ? (LAND_CATEGORY_LABELS[landCategory] ?? landCategory) : null;
+
+  // waterSource: map NOT_AVAILABLE → "Not available"; other values use label map or as-is.
+  // null → omit row (FieldRow handles null).
+  const waterSourceValue =
+    waterSource != null ? (WATER_SOURCE_LABELS[waterSource] ?? waterSource) : null;
+
+  // farmhouseAvailable / fencingDone: true→"Yes", false→"No", null→omit row.
+  const farmhouseValue =
+    farmhouseAvailable === true ? 'Yes' : farmhouseAvailable === false ? 'No' : null;
+  const fencingValue =
+    fencingDone === true ? 'Yes' : fencingDone === false ? 'No' : null;
+
   return (
     <div>
       <FieldRow label="Survey number" value={surveyNumber} testId="agri-survey-number" />
@@ -106,7 +149,10 @@ export function AgriSpecRows({
       <FieldRow label="Approx. area" value={computedAreaValue} testId="agri-computed-area" />
       <FieldRow label="Price" value={priceValue} testId="agri-price" />
       <FieldRow label="Price per acre" value={pricePerAcreValue} testId="agri-price-per-acre" />
-      <FieldRow label="Water source" value={waterSource} testId="agri-water-source" />
+      <FieldRow label="Land category" value={landCategoryValue} testId="agri-land-category" />
+      <FieldRow label="Water source" value={waterSourceValue} testId="agri-water-source" />
+      <FieldRow label="Farmhouse available" value={farmhouseValue} testId="agri-farmhouse-available" />
+      <FieldRow label="Fencing done" value={fencingValue} testId="agri-fencing-done" />
       <FieldRow label="Soil type" value={soilType} testId="agri-soil-type" />
       <FieldRow label="Road access" value={roadAccess} testId="agri-road-access" />
       <FieldRow label="Cultivation status" value={cultivationStatus} testId="agri-cultivation-status" />

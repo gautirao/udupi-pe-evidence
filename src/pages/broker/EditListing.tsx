@@ -38,6 +38,9 @@ import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
 const VIDEO_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
 
+// Issue #1458 — known water source enum values; used to detect legacy free-text values.
+const KNOWN_WATER_SOURCES = ['WELL', 'BOREWELL', 'POND', 'STREAM', 'NOT_AVAILABLE', 'OTHER'];
+
 function extractYouTubeId(url: string): string | null {
   const shortMatch = url.match(/youtu\.be\/([^?&\s]+)/);
   if (shortMatch) return shortMatch[1];
@@ -143,6 +146,11 @@ export default function EditListing() {
   const [cultivationStatus, setCultivationStatus] = useState('');
   const [ownershipType, setOwnershipType] = useState('');
   const [surveyNumber, setSurveyNumber] = useState('');
+  // Issue #1458 — new structured agri fields
+  const [landCategory, setLandCategory] = useState('');
+  // '' = not specified; 'true'/'false' for Select binding
+  const [farmhouseAvailable, setFarmhouseAvailable] = useState('');
+  const [fencingDone, setFencingDone] = useState('');
   // Agricultural plot boundary — [lat, lng][] coords from DrawControl
   const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
 
@@ -187,6 +195,18 @@ export default function EditListing() {
     setCultivationStatus(listing.cultivationStatus ?? '');
     setOwnershipType(listing.ownershipType ?? '');
     setSurveyNumber(listing.surveyNumber ?? '');
+    // Issue #1458 — pre-populate new structured agri fields
+    setLandCategory(listing.landCategory ?? '');
+    setFarmhouseAvailable(
+      listing.farmhouseAvailable === true ? 'true'
+        : listing.farmhouseAvailable === false ? 'false'
+        : '',
+    );
+    setFencingDone(
+      listing.fencingDone === true ? 'true'
+        : listing.fencingDone === false ? 'false'
+        : '',
+    );
     // Pre-populate boundary coords from existing agri listing
     if (listing.boundary) {
       setBoundaryCoords(fromGeoJsonString(listing.boundary));
@@ -358,6 +378,10 @@ export default function EditListing() {
         cultivationStatus: cultivationStatus.trim() || undefined,
         ownershipType: ownershipType.trim() || undefined,
         surveyNumber: surveyNumber.trim() || undefined,
+        // Issue #1458 — new structured agri fields
+        landCategory: landCategory || undefined,
+        farmhouseAvailable: farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined,
+        fencingDone: fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined,
       },
       {
         onSuccess: () => {
@@ -653,6 +677,23 @@ export default function EditListing() {
                   <div className="space-y-4" data-testid="agri-fields-section">
                     <h3 className="text-sm font-medium text-foreground">Agricultural Land Details</h3>
 
+                    {/* Land Category — Issue #1458 */}
+                    <div className="space-y-2">
+                      <Label htmlFor="landCategory">Land Category</Label>
+                      <Select value={landCategory} onValueChange={setLandCategory}>
+                        <SelectTrigger id="landCategory">
+                          <SelectValue placeholder="Select land category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="FARMLAND">Farmland</SelectItem>
+                          <SelectItem value="PLANTATION">Plantation</SelectItem>
+                          <SelectItem value="FARM_PLOT">Farm plot</SelectItem>
+                          <SelectItem value="AGRICULTURAL_PLOT">Agricultural plot</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     {/* Water Source */}
                     <div className="space-y-2">
                       <Label htmlFor="waterSource">Water Source</Label>
@@ -661,9 +702,47 @@ export default function EditListing() {
                           <SelectValue placeholder="Select water source" />
                         </SelectTrigger>
                         <SelectContent>
-                          {['Borewell', 'Open well', 'Canal', 'River', 'Rain-fed', 'Other'].map(opt => (
-                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                          ))}
+                          {/* Issue #1458 — show a legacy free-text value as a visible option
+                              when the stored value doesn't match any known enum. This prevents
+                              the Select from rendering blank while still preserving the value
+                              on save-without-change. */}
+                          {waterSource && !KNOWN_WATER_SOURCES.includes(waterSource) && (
+                            <SelectItem value={waterSource}>{waterSource} (legacy)</SelectItem>
+                          )}
+                          <SelectItem value="WELL">Well</SelectItem>
+                          <SelectItem value="BOREWELL">Borewell</SelectItem>
+                          <SelectItem value="POND">Pond</SelectItem>
+                          <SelectItem value="STREAM">Stream</SelectItem>
+                          <SelectItem value="NOT_AVAILABLE">Not available</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Farmhouse Available — Issue #1458 */}
+                    <div className="space-y-2">
+                      <Label htmlFor="farmhouseAvailable">Farmhouse Available</Label>
+                      <Select value={farmhouseAvailable} onValueChange={setFarmhouseAvailable}>
+                        <SelectTrigger id="farmhouseAvailable">
+                          <SelectValue placeholder="Not specified" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Yes</SelectItem>
+                          <SelectItem value="false">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Fencing Done — Issue #1458 */}
+                    <div className="space-y-2">
+                      <Label htmlFor="fencingDone">Fencing Done</Label>
+                      <Select value={fencingDone} onValueChange={setFencingDone}>
+                        <SelectTrigger id="fencingDone">
+                          <SelectValue placeholder="Not specified" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Yes</SelectItem>
+                          <SelectItem value="false">No</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

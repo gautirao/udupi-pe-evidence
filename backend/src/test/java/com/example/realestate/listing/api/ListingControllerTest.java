@@ -136,7 +136,7 @@ class ListingControllerTest {
                     l.getFirstPublishedAt(), l.getPossessionStatus(),
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), reraValid, 0,
                     l.getTrustTier(), l.getAreaKey(), java.util.List.of(),
-                    null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
+                    null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
         });
         // Batch variant: delegate each listing through the single-listing stub.
         when(listingResponseMapper.toResponseList(any())).thenAnswer(inv -> {
@@ -158,7 +158,8 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq("broker"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                eq("broker"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -177,7 +178,8 @@ class ListingControllerTest {
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
-                "broker", null, null, null, null, null, null);
+                "broker", null, null, null, null, null, null,
+                null, null, null);
     }
 
     // ==================== Test 2: GET /mine -> 200, array ====================
@@ -214,7 +216,8 @@ class ListingControllerTest {
                 eq(new BigDecimal("6000000")), eq("Updated desc"),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), eq(false), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
+                isNull(), isNull(), isNull()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -233,7 +236,8 @@ class ListingControllerTest {
                 new BigDecimal("6000000"), "Updated desc",
                 null, null, null, null, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null,
+                null, null, null);
     }
 
     // ==================== Test 4: DELETE -> 204 ====================
@@ -281,7 +285,8 @@ class ListingControllerTest {
         verify(listingCrudService, never()).createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
     }
 
     // ==================== Test 7: PUT -> not found -> 404 ====================
@@ -292,7 +297,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -313,7 +319,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -536,7 +543,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -559,7 +567,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -578,7 +587,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -597,7 +607,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingStatusException(
                         "Cannot update listing with status PENDING_REVIEW"));
 
@@ -617,7 +628,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingStatusException(
                         "Cannot update listing with status LIVE"));
 
@@ -637,7 +649,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -661,7 +674,7 @@ class ListingControllerTest {
         when(listingCrudService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(saved);
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
@@ -741,7 +754,8 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -757,7 +771,8 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 eq("https://www.youtube.com/watch?v=abc123"), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
     }
 
     @Test
@@ -771,7 +786,8 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -787,7 +803,8 @@ class ListingControllerTest {
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 isNull(), eq(true), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
     }
 
     // ==================== RE-99: RERA & docs readiness fields ====================
@@ -920,7 +937,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq("owner"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                eq("owner"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -938,7 +955,7 @@ class ListingControllerTest {
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
-                "owner", null, null, null, null, null, null);
+                "owner", null, null, null, null, null, null, null, null, null);
     }
 
     @Test
@@ -947,7 +964,7 @@ class ListingControllerTest {
         when(listingCrudService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                eq("owner"), any(), any(), any(), any(), any(), any()))
+                eq("owner"), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new OwnerListingLimitException(
                         "Owner accounts are limited to 3 active listings"));
 
@@ -975,7 +992,7 @@ class ListingControllerTest {
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
                 isNull(), isNull(), isNull(), isNull(), isNull(), isNull(),
-                eq("broker"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+                eq("broker"), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
@@ -993,7 +1010,7 @@ class ListingControllerTest {
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null,
-                "broker", null, null, null, null, null, null);
+                "broker", null, null, null, null, null, null, null, null, null);
     }
 
     // ==================== RE-135: Archive endpoint tests ====================
@@ -1337,7 +1354,8 @@ class ListingControllerTest {
         verify(listingCrudService, never()).updateListing(any(), any(), anyBoolean(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
     }
 
     @Test
@@ -1350,7 +1368,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -1371,7 +1390,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -1412,7 +1432,8 @@ class ListingControllerTest {
         verify(listingCrudService, never()).updateListing(any(), any(), anyBoolean(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any());
     }
 
     // ==================== #1366: Polygon boundary tests ====================
@@ -1429,7 +1450,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
@@ -1448,7 +1470,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingValidationException(List.of(
                         Map.of("error", "boundary is only accepted for agricultural_land listings",
                                "code", "BOUNDARY_NON_AGRI_TYPE"))));
@@ -1468,7 +1491,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenThrow(new ListingValidationException(List.of(
                         Map.of("error", "boundary ring is not closed: first and last coordinates must be equal",
                                "code", "BOUNDARY_NOT_CLOSED"))));
@@ -1492,7 +1516,8 @@ class ListingControllerTest {
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), any()))
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)

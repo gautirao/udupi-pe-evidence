@@ -25,6 +25,14 @@ export interface AgriMapListingItem {
   pricePaise?: number | null;
   /** Issue #1494 — buy/rent purpose. Backend 13th field. */
   listingPurpose?: string | null;
+  /** Issue #1458 — land category enum (FARMLAND|PLANTATION|FARM_PLOT|AGRICULTURAL_PLOT|OTHER). */
+  landCategory?: string | null;
+  /** Issue #1458 — whether a farmhouse is available on the plot. */
+  farmhouseAvailable?: boolean | null;
+  /** Issue #1458 — whether the plot boundary has fencing. */
+  fencingDone?: boolean | null;
+  /** Issue #1458 — water source enum (WELL|BOREWELL|POND|STREAM|NOT_AVAILABLE|OTHER). */
+  waterSource?: string | null;
 }
 
 export interface AgriMapListingsResponse {

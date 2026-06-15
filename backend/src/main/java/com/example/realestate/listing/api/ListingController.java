@@ -83,7 +83,8 @@ public class ListingController {
                     req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths(),
                     sellerType,
                     req.waterSource(), req.soilType(), req.roadAccess(),
-                    req.cultivationStatus(), req.ownershipType(), req.surveyNumber());
+                    req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
+                    req.landCategory(), req.farmhouseAvailable(), req.fencingDone());
 
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
                     saved.getId(), caller.userId(), sellerType);
@@ -154,6 +155,7 @@ public class ListingController {
                     req.possessionStatus(), req.expectedPossessionDate(), req.approvalsDeclared(),
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
+                    req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
                     req.boundary());
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingNotFoundException e) {
@@ -343,7 +345,10 @@ public class ListingController {
             String roadAccess,
             String cultivationStatus,
             String ownershipType,
-            String surveyNumber
+            String surveyNumber,
+            String landCategory,
+            Boolean farmhouseAvailable,
+            Boolean fencingDone
     ) {}
 
     public record UpdateRequest(
@@ -391,6 +396,9 @@ public class ListingController {
             String cultivationStatus,
             String ownershipType,
             String surveyNumber,
+            String landCategory,
+            Boolean farmhouseAvailable,
+            Boolean fencingDone,
             String boundary
     ) {}
 

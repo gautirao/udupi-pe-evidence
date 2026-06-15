@@ -98,6 +98,23 @@ export interface DiscoverUrlFilters {
   agriPriceMin?: number;
   /** Issue #1457 — agri price filter maximum (rupees). Applied client-side, auth only. */
   agriPriceMax?: number;
+  /** Issue #1458 — agri land category filter (exact match; null = no filter). */
+  agriLandCategory?: string | null;
+  /**
+   * Issue #1458 — farmhouse available tri-state filter.
+   * true = only rows where farmhouseAvailable===true;
+   * false = only rows where farmhouseAvailable===false (NOT null);
+   * null = no filter (include all).
+   */
+  agriFarmhouseAvailable?: boolean | null;
+  /** Issue #1458 — fencing done tri-state filter. Same semantics as agriFarmhouseAvailable. */
+  agriFencingDone?: boolean | null;
+  /**
+   * Issue #1458 — water source exact-match filter.
+   * 'NOT_AVAILABLE' matches only explicit NOT_AVAILABLE rows (not null rows).
+   * null = no filter.
+   */
+  agriWaterSource?: string | null;
 }
 
 // ─── Intent (buy / rent) ──────────────────────────────────────────────────────
@@ -322,9 +339,10 @@ export interface DiscoverUrlActions {
    */
   clearLocality: () => void;
   /**
-   * Clear agri filter params only — removes agriAcresMin, agriAcresMax, agriPriceMin,
-   * agriPriceMax. Preserves all other URL state. REPLACE (not PUSH).
-   * Issue #1457.
+   * Clear all agri filter params — removes agriAcresMin, agriAcresMax, agriPriceMin,
+   * agriPriceMax, agriLandCategory, agriFarmhouseAvailable, agriFencingDone, agriWaterSource.
+   * Preserves all other URL state. REPLACE (not PUSH).
+   * Issue #1457, #1458.
    */
   clearAgriFilters: () => void;
   /**
@@ -482,6 +500,27 @@ function serializeFilters(
   } else {
     params.delete('agriPriceMax');
   }
+  // Issue #1458 — agri categorical/boolean filter params
+  if (filters.agriLandCategory != null) {
+    params.set('agriLandCategory', filters.agriLandCategory);
+  } else {
+    params.delete('agriLandCategory');
+  }
+  if (filters.agriFarmhouseAvailable != null) {
+    params.set('agriFarmhouseAvailable', String(filters.agriFarmhouseAvailable));
+  } else {
+    params.delete('agriFarmhouseAvailable');
+  }
+  if (filters.agriFencingDone != null) {
+    params.set('agriFencingDone', String(filters.agriFencingDone));
+  } else {
+    params.delete('agriFencingDone');
+  }
+  if (filters.agriWaterSource != null) {
+    params.set('agriWaterSource', filters.agriWaterSource);
+  } else {
+    params.delete('agriWaterSource');
+  }
   return params;
 }
 
@@ -561,6 +600,16 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     agriAcresMax: (() => { const n = Number(urlParams.get('agriAcresMax')); return urlParams.get('agriAcresMax') && !Number.isNaN(n) ? n : undefined; })(),
     agriPriceMin: (() => { const n = Number(urlParams.get('agriPriceMin')); return urlParams.get('agriPriceMin') && !Number.isNaN(n) ? n : undefined; })(),
     agriPriceMax: (() => { const n = Number(urlParams.get('agriPriceMax')); return urlParams.get('agriPriceMax') && !Number.isNaN(n) ? n : undefined; })(),
+    // Issue #1458 — agri categorical/boolean filter params
+    agriLandCategory: urlParams.get('agriLandCategory') ?? null,
+    // Boolean URL params use tri-state parse: 'true'→true, 'false'→false, absent→null.
+    // null means "no filter" (include all rows). Must NOT use presence-flag (==='1') since
+    // false is a meaningful distinct filter value (show only non-farmhouse rows).
+    agriFarmhouseAvailable: urlParams.get('agriFarmhouseAvailable') === 'true' ? true
+      : urlParams.get('agriFarmhouseAvailable') === 'false' ? false : null,
+    agriFencingDone: urlParams.get('agriFencingDone') === 'true' ? true
+      : urlParams.get('agriFencingDone') === 'false' ? false : null,
+    agriWaterSource: urlParams.get('agriWaterSource') ?? null,
   };
 
   // Issue #1494 — intent param: 'rent' is the only non-default value. Anything else
@@ -1376,10 +1425,16 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     setUrlParams(
       (prev) => {
         const next = new URLSearchParams(prev);
+        // Issue #1457 — numeric range filters
         next.delete('agriAcresMin');
         next.delete('agriAcresMax');
         next.delete('agriPriceMin');
         next.delete('agriPriceMax');
+        // Issue #1458 — categorical/boolean filters (cleared atomically with numeric)
+        next.delete('agriLandCategory');
+        next.delete('agriFarmhouseAvailable');
+        next.delete('agriFencingDone');
+        next.delete('agriWaterSource');
         return next;
       },
       { replace: true }, // REPLACE — clearing filters doesn't add a Back step

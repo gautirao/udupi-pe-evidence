@@ -222,7 +222,8 @@ class DiscoverAgriMapListingsServiceTest {
         // by checking that known-safe fields exist and no PII fields exist
         AgriMapListingItem item = new AgriMapListingItem(
                 "id", "Test Agri Title", "area", 1.0, 2.0, "agricultural_land", "loc",
-                "{}", new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 100L, "sale");
+                "{}", new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 100L, "sale",
+                "borewell", "wetland", true, false);
 
         // Safe fields present
         assertThat(item.id()).isNotNull();
@@ -233,8 +234,8 @@ class DiscoverAgriMapListingsServiceTest {
         assertThat(item.propertyType()).isNotNull();
         assertThat(item.pricePaise()).isNotNull();
 
-        // Record component count — must be exactly 13 (no extra fields)
-        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(13);
+        // Record component count — must be exactly 17 (no extra fields)
+        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(17);
 
         // Verify no fields named after PII or internal fields
         var fieldNames = java.util.Arrays.stream(AgriMapListingItem.class.getRecordComponents())
@@ -299,6 +300,16 @@ class DiscoverAgriMapListingsServiceTest {
                             when(rs.getLong("price_paise")).thenReturn(item.pricePaise());
                         }
                         when(rs.getString("listing_purpose")).thenReturn(item.listingPurpose());
+                        when(rs.getString("water_source")).thenReturn(item.waterSource());
+                        when(rs.getString("land_category")).thenReturn(item.landCategory());
+                        when(rs.getObject("farmhouse_available")).thenReturn(item.farmhouseAvailable());
+                        if (item.farmhouseAvailable() != null) {
+                            when(rs.getBoolean("farmhouse_available")).thenReturn(item.farmhouseAvailable());
+                        }
+                        when(rs.getObject("fencing_done")).thenReturn(item.fencingDone());
+                        if (item.fencingDone() != null) {
+                            when(rs.getBoolean("fencing_done")).thenReturn(item.fencingDone());
+                        }
                         result.add(rm.mapRow(rs, result.size()));
                     }
                     return result;
@@ -312,7 +323,8 @@ class DiscoverAgriMapListingsServiceTest {
                                                BigDecimal landArea, String landAreaUnit,
                                                BigDecimal computedAcres, Long pricePaise) {
         return new AgriMapListingItem(id, title, areaKey, lat, lon, propertyType, locality,
-                boundaryGeoJson, landArea, landAreaUnit, computedAcres, pricePaise, null);
+                boundaryGeoJson, landArea, landAreaUnit, computedAcres, pricePaise,
+                null, null, null, null, null);
     }
 
     // ── SQL schema regression: computed_area_acres must be derived, not stored ──
@@ -458,7 +470,8 @@ class DiscoverAgriMapListingsServiceTest {
                 "lp-1", "Farm with purpose", "IN|KA|Udupi|Area1",
                 13.3, 74.7, "agricultural_land", "Kundapur",
                 "{\"type\":\"Polygon\"}", new BigDecimal("3.0"), "acres",
-                new BigDecimal("3.0"), 7500000L, "sale");
+                new BigDecimal("3.0"), 7500000L, "sale",
+                null, null, null, null);
         stubQuery(List.of(source));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(

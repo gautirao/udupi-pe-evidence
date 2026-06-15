@@ -122,7 +122,10 @@ public class ListingResponseMapper {
                 isAgri ? l.getCultivationStatus() : null,
                 isAgri ? l.getOwnershipType() : null,
                 // #1454: survey number withheld from anon agri.
-                null);
+                null,
+                isAgri ? l.getLandCategory() : null,
+                isAgri ? l.getFarmhouseAvailable() : null,
+                isAgri ? l.getFencingDone() : null);
     }
 
     /**
@@ -159,8 +162,8 @@ public class ListingResponseMapper {
                             l.getPropertyType(),
                             l.getLocality(),
                             l.getListingPurpose(),
-                            // IC-3: batch path — null-pass for all 12 agri fields (no DB call; N+1 guard)
-                            null, null, null, null, null, null, null, null, null, null, null, null);
+                            // IC-3: batch path — null-pass for all 15 agri fields (no DB call; N+1 guard)
+                            null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
                 })
                 .toList();
     }
@@ -272,6 +275,7 @@ public class ListingResponseMapper {
                 l.getTrustTier(), l.getAreaKey(), gallery,
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
                 l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
+                l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),
                 boundary, computedAreaAcres);
     }
 

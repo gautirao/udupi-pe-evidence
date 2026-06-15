@@ -25,5 +25,9 @@ public record AgriMapListingItem(
         String landAreaUnit,
         BigDecimal computedAreaAcres,
         Long pricePaise,
-        String listingPurpose
+        String listingPurpose,
+        String waterSource,
+        String landCategory,
+        Boolean farmhouseAvailable,
+        Boolean fencingDone
 ) {}

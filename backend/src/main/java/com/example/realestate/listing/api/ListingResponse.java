@@ -81,6 +81,9 @@ public record ListingResponse(
         String cultivationStatus,
         String ownershipType,
         String surveyNumber,
+        String landCategory,
+        Boolean farmhouseAvailable,
+        Boolean fencingDone,
         // Polygon boundary (null for non-agri listings and list endpoints)
         String boundary,
         /**

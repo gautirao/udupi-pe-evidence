@@ -136,26 +136,28 @@ class PublicListingControllerTest {
                             new ListingImageDTO("https://cdn.example.com/img-a.jpg", null, 0),
                             new ListingImageDTO("https://cdn.example.com/img-b.jpg", null, 1),
                             new ListingImageDTO("https://cdn.example.com/img-c.jpg", null, 2)),
-                    null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
+                    null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
         });
 
-        // Teaser mapper — single listing (12 agri fields null for non-agri fixtures in setUp)
+        // Teaser mapper — single listing (15 agri fields null for non-agri fixtures in setUp)
         when(listingResponseMapper.toTeaserResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
             return new ListingTeaserResponse(
                     l.getId(), null, 0, l.getPrice(), l.getPricePaise(),
                     l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
-                    null, null, null, null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null, null,
+                    null, null, null);
         });
 
-        // Teaser mapper — batch (12 agri fields null for non-agri fixtures in setUp)
+        // Teaser mapper — batch (15 agri fields null for non-agri fixtures in setUp)
         when(listingResponseMapper.toTeaserResponseList(anyList())).thenAnswer(inv -> {
             List<Listing> listings = inv.getArgument(0);
             return listings.stream()
                     .map(l -> new ListingTeaserResponse(
                             l.getId(), null, 0, l.getPrice(), l.getPricePaise(),
                             l.getPropertyType(), l.getLocality(), l.getListingPurpose(),
-                            null, null, null, null, null, null, null, null, null, null, null, null))
+                            null, null, null, null, null, null, null, null, null, null, null, null,
+                            null, null, null))
                     .toList();
         });
     }
@@ -617,7 +619,8 @@ class PublicListingControllerTest {
                         new BigDecimal("2.50"), "acres",
                         new BigDecimal("2.47"),
                         "Borewell", "Red laterite", "Tar road",
-                        "Fallow", "Freehold", "SY-101/2"));
+                        "Fallow", "Freehold", "SY-101/2",
+                        null, null, null));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())
@@ -715,7 +718,8 @@ class PublicListingControllerTest {
                         "{\"type\":\"Polygon\",\"coordinates\":[]}", 13.3409, 74.7421,
                         new BigDecimal("2.50"), "acres", new BigDecimal("2.47"),
                         "Borewell", "Red laterite", "Tar road",
-                        "Fallow", "Freehold", "SY-101/2"));
+                        "Fallow", "Freehold", "SY-101/2",
+                        null, null, null));
 
         mockMvc.perform(get("/api/public/listings/" + LISTING_ID))
                 .andExpect(status().isOk())

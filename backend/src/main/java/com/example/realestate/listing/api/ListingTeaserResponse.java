@@ -64,5 +64,8 @@ public record ListingTeaserResponse(
         String roadAccess,
         String cultivationStatus,
         String ownershipType,
-        String surveyNumber
+        String surveyNumber,
+        String landCategory,
+        Boolean farmhouseAvailable,
+        Boolean fencingDone
 ) {}

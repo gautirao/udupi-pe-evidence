@@ -24,6 +24,7 @@ import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
 import { AgriGroupListingPeek } from './panels/AgriGroupListingPeek';
 import { AgriGroupLocalityPanel } from './panels/AgriGroupLocalityPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
+import type { AgriFilterValues } from './panels/AgriFiltersPanel';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
 
@@ -457,9 +458,17 @@ export interface DiscoverRightPanelProps {
   /** Currently active price max filter in rupees (from URL). */
   agriPriceMax?: number;
   /** Called when user clicks Apply Filters in AgriFiltersPanel. */
-  onApplyAgriFilters?: (filters: { agriAcresMin?: number; agriAcresMax?: number; agriPriceMin?: number; agriPriceMax?: number }) => void;
+  onApplyAgriFilters?: (filters: AgriFilterValues) => void;
   /** Called when user clicks Clear Filters in AgriFiltersPanel. */
   onClearAgriFilters?: () => void;
+  /** Issue #1458 — active land category filter from URL. */
+  agriLandCategory?: string | null;
+  /** Issue #1458 — active farmhouse available tri-state filter from URL. */
+  agriFarmhouseAvailable?: boolean | null;
+  /** Issue #1458 — active fencing done tri-state filter from URL. */
+  agriFencingDone?: boolean | null;
+  /** Issue #1458 — active water source filter from URL. */
+  agriWaterSource?: string | null;
   /** Issue #1494 — current buy/rent intent for filtering. Default 'buy'. */
   intent?: DiscoverIntent;
   /** Issue #1494 — called when user changes buy/rent intent. */
@@ -547,6 +556,10 @@ export function DiscoverRightPanel({
   agriPriceMax,
   onApplyAgriFilters,
   onClearAgriFilters,
+  agriLandCategory = null,
+  agriFarmhouseAvailable = null,
+  agriFencingDone = null,
+  agriWaterSource = null,
   intent = 'buy',
   onIntentChange,
 }: DiscoverRightPanelProps) {
@@ -848,6 +861,11 @@ export function DiscoverRightPanel({
               agriPriceMax={agriPriceMax}
               onApplyFilters={onApplyAgriFilters ?? (() => {})}
               onClearFilters={onClearAgriFilters ?? (() => {})}
+              // Issue #1458: categorical/boolean filter props
+              agriLandCategory={agriLandCategory}
+              agriFarmhouseAvailable={agriFarmhouseAvailable}
+              agriFencingDone={agriFencingDone}
+              agriWaterSource={agriWaterSource}
               intent={intent}
             />
           </>

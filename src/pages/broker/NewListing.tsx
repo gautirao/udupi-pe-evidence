@@ -74,6 +74,11 @@ export default function NewListing() {
   const [cultivationStatus, setCultivationStatus] = useState('');
   const [ownershipType, setOwnershipType] = useState('');
   const [surveyNumber, setSurveyNumber] = useState('');
+  // Issue #1458 — new structured agri fields
+  const [landCategory, setLandCategory] = useState('');
+  // '' = not specified (omit from request); 'true'/'false' = boolean string for Select
+  const [farmhouseAvailable, setFarmhouseAvailable] = useState('');
+  const [fencingDone, setFencingDone] = useState('');
 
   // Guard: allow dealer, admin, and user (owner) roles
   const role = userRole as string | null;
@@ -149,6 +154,10 @@ export default function NewListing() {
         cultivationStatus: cultivationStatus.trim() || undefined,
         ownershipType: ownershipType.trim() || undefined,
         surveyNumber: surveyNumber.trim() || undefined,
+        // Issue #1458 — new structured agri fields (omit when not specified)
+        landCategory: landCategory || undefined,
+        farmhouseAvailable: farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined,
+        fencingDone: fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined,
       },
       {
         onSuccess: (data) => {
@@ -254,7 +263,7 @@ export default function NewListing() {
               <div className="space-y-4" data-testid="agri-fields-section">
                 <h3 className="text-sm font-medium text-foreground">Agricultural Land Details</h3>
 
-                {/* Water Source */}
+                {/* Water Source — Issue #1458: use enum values (WELL, BOREWELL, …) */}
                 <div className="space-y-2">
                   <Label htmlFor="waterSource">Water Source</Label>
                   <Select value={waterSource} onValueChange={setWaterSource}>
@@ -262,9 +271,12 @@ export default function NewListing() {
                       <SelectValue placeholder="Select water source" />
                     </SelectTrigger>
                     <SelectContent>
-                      {['Borewell', 'Open well', 'Canal', 'River', 'Rain-fed', 'Other'].map(opt => (
-                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                      ))}
+                      <SelectItem value="WELL">Well</SelectItem>
+                      <SelectItem value="BOREWELL">Borewell</SelectItem>
+                      <SelectItem value="POND">Pond</SelectItem>
+                      <SelectItem value="STREAM">Stream</SelectItem>
+                      <SelectItem value="NOT_AVAILABLE">Not available</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -340,6 +352,51 @@ export default function NewListing() {
                     value={surveyNumber}
                     onChange={(e) => setSurveyNumber(e.target.value)}
                   />
+                </div>
+
+                {/* Issue #1458 — Land Category */}
+                <div className="space-y-2">
+                  <Label htmlFor="landCategory">Land Category</Label>
+                  <Select value={landCategory} onValueChange={setLandCategory}>
+                    <SelectTrigger id="landCategory">
+                      <SelectValue placeholder="Select land category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FARMLAND">Farmland</SelectItem>
+                      <SelectItem value="PLANTATION">Plantation</SelectItem>
+                      <SelectItem value="FARM_PLOT">Farm plot</SelectItem>
+                      <SelectItem value="AGRICULTURAL_PLOT">Agricultural plot</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Issue #1458 — Farmhouse Available */}
+                <div className="space-y-2">
+                  <Label htmlFor="farmhouseAvailable">Farmhouse Available</Label>
+                  <Select value={farmhouseAvailable} onValueChange={setFarmhouseAvailable}>
+                    <SelectTrigger id="farmhouseAvailable">
+                      <SelectValue placeholder="Not specified" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">Yes</SelectItem>
+                      <SelectItem value="false">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Issue #1458 — Fencing Done */}
+                <div className="space-y-2">
+                  <Label htmlFor="fencingDone">Fencing Done</Label>
+                  <Select value={fencingDone} onValueChange={setFencingDone}>
+                    <SelectTrigger id="fencingDone">
+                      <SelectValue placeholder="Not specified" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">Yes</SelectItem>
+                      <SelectItem value="false">No</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}

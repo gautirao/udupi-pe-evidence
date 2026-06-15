@@ -36,6 +36,10 @@ interface CreateListingRequest {
   cultivationStatus?: string;
   ownershipType?: string;
   surveyNumber?: string;
+  // Issue #1458 — new structured agri fields
+  landCategory?: string;
+  farmhouseAvailable?: boolean | null;
+  fencingDone?: boolean | null;
 }
 
 // Mirrors backend UpdateRequest DTO
@@ -80,6 +84,10 @@ export interface UpdateListingRequest {
   surveyNumber?: string;
   /** Stringified GeoJSON Polygon for agricultural plot boundary; null clears; omit = no change */
   boundary?: string | null;
+  // Issue #1458 — new structured agri fields
+  landCategory?: string;
+  farmhouseAvailable?: boolean | null;
+  fencingDone?: boolean | null;
 }
 
 // Mirrors backend ListingResponse DTO
@@ -136,6 +144,10 @@ export interface ListingResponse {
   surveyNumber: string | null;
   /** Stringified GeoJSON Polygon from backend; absent/null for non-agri listings */
   boundary?: string | null;
+  // Issue #1458 — new structured agri fields (null for non-agri or not-set)
+  landCategory?: string | null;
+  farmhouseAvailable?: boolean | null;
+  fencingDone?: boolean | null;
   /**
    * Boundary-derived area in acres (ST_Area, 2dp) for agri listings with a saved
    * boundary; absent/null when no boundary or non-agri. Distinct from broker-declared

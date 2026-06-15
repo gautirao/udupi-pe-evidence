@@ -46,6 +46,14 @@ interface AgriGroupSelectedPanelProps {
   onApplyFilters?: (filters: AgriFilterValues) => void;
   /** Issue #1457 — called when user clicks Clear Filters. */
   onClearFilters?: () => void;
+  /** Issue #1458 — active land category filter from URL. */
+  agriLandCategory?: string | null;
+  /** Issue #1458 — active farmhouse available tri-state filter from URL. */
+  agriFarmhouseAvailable?: boolean | null;
+  /** Issue #1458 — active fencing done tri-state filter from URL. */
+  agriFencingDone?: boolean | null;
+  /** Issue #1458 — active water source filter from URL. */
+  agriWaterSource?: string | null;
   /** Issue #1494 — current buy/rent intent for copy and badge display. Default 'buy'. */
   intent?: DiscoverIntent;
 }
@@ -87,6 +95,10 @@ export function AgriGroupSelectedPanel({
   agriPriceMax,
   onApplyFilters = () => {},
   onClearFilters = () => {},
+  agriLandCategory = null,
+  agriFarmhouseAvailable = null,
+  agriFencingDone = null,
+  agriWaterSource = null,
   intent = 'buy',
 }: AgriGroupSelectedPanelProps) {
   // Sort distance tiers ascending by maxKm for consistent display order.
@@ -179,6 +191,10 @@ export function AgriGroupSelectedPanel({
         isAuthenticated={isAuthenticated}
         onApply={onApplyFilters}
         onClear={onClearFilters}
+        agriLandCategory={agriLandCategory}
+        agriFarmhouseAvailable={agriFarmhouseAvailable}
+        agriFencingDone={agriFencingDone}
+        agriWaterSource={agriWaterSource}
       />
 
       {/* ── Aggregate count ──────────────────────────────────────────────────── */}
@@ -230,7 +246,8 @@ export function AgriGroupSelectedPanel({
         ) : !listings || listings.length === 0 ? (
           <div
             data-testid={
-              (agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null)
+              (agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null
+                || agriLandCategory != null || agriFarmhouseAvailable != null || agriFencingDone != null || agriWaterSource != null)
                 ? 'agri-filtered-empty-state'
                 : 'agri-group-empty-state'
             }
@@ -241,7 +258,8 @@ export function AgriGroupSelectedPanel({
               aria-hidden="true"
             />
             <p className="text-sm text-muted-foreground">
-              {(agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null)
+              {(agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null
+                || agriLandCategory != null || agriFarmhouseAvailable != null || agriFencingDone != null || agriWaterSource != null)
                 ? 'No agricultural listings match the selected filters.'
                 : `No agricultural land for ${intent === 'rent' ? 'rent' : 'sale'} in this region`}
             </p>

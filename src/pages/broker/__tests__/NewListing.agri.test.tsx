@@ -201,6 +201,6 @@ describe('NewListing — agricultural_land (AC3: payload includes waterSource)',
 
     const [payload] = mockMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
     expect(payload.propertyType).toBe('agricultural_land');
-    expect(payload.waterSource).toBe('Borewell');
+    expect(payload.waterSource).toBe('BOREWELL');
   });
 });

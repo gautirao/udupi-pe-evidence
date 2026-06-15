@@ -2929,3 +2929,135 @@ describe('useDiscoverUrlState — intent (Issue #1494)', () => {
     expect(result.current[0].areaKey).toBeFalsy();
   });
 });
+
+// ─── Issue #1458 — agri structured field URL params ───────────────────────────
+
+describe('useDiscoverUrlState — agriLandCategory URL param (Issue #1458)', () => {
+  it('reads agriLandCategory=FARMLAND from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriLandCategory=FARMLAND'),
+    });
+    expect(result.current[0].filters.agriLandCategory).toBe('FARMLAND');
+  });
+
+  it('returns null agriLandCategory when param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.agriLandCategory).toBeNull();
+  });
+});
+
+describe('useDiscoverUrlState — agriWaterSource URL param (Issue #1458)', () => {
+  it('reads agriWaterSource=NOT_AVAILABLE from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriWaterSource=NOT_AVAILABLE'),
+    });
+    expect(result.current[0].filters.agriWaterSource).toBe('NOT_AVAILABLE');
+  });
+
+  it('reads agriWaterSource=WELL from URL', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriWaterSource=WELL'),
+    });
+    expect(result.current[0].filters.agriWaterSource).toBe('WELL');
+  });
+
+  it('returns null agriWaterSource when param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.agriWaterSource).toBeNull();
+  });
+});
+
+describe('useDiscoverUrlState — agriFarmhouseAvailable tri-state URL param (Issue #1458)', () => {
+  it('reads agriFarmhouseAvailable=true as boolean true', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriFarmhouseAvailable=true'),
+    });
+    expect(result.current[0].filters.agriFarmhouseAvailable).toBe(true);
+  });
+
+  it('reads agriFarmhouseAvailable=false as boolean false (not null)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriFarmhouseAvailable=false'),
+    });
+    expect(result.current[0].filters.agriFarmhouseAvailable).toBe(false);
+  });
+
+  it('returns null agriFarmhouseAvailable when param is absent (unfiltered)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.agriFarmhouseAvailable).toBeNull();
+  });
+});
+
+describe('useDiscoverUrlState — agriFencingDone tri-state URL param (Issue #1458)', () => {
+  it('reads agriFencingDone=true as boolean true', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriFencingDone=true'),
+    });
+    expect(result.current[0].filters.agriFencingDone).toBe(true);
+  });
+
+  it('reads agriFencingDone=false as boolean false (not null)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriFencingDone=false'),
+    });
+    expect(result.current[0].filters.agriFencingDone).toBe(false);
+  });
+
+  it('returns null agriFencingDone when param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi'),
+    });
+    expect(result.current[0].filters.agriFencingDone).toBeNull();
+  });
+});
+
+describe('useDiscoverUrlState — clearAgriFilters removes all 8 agri params (Issue #1458)', () => {
+  it('clears all 8 agri filter params (4 old + 4 new) in one call', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&agriAcresMin=1&agriAcresMax=10&agriPriceMin=500000&agriPriceMax=5000000' +
+          '&agriLandCategory=FARMLAND&agriFarmhouseAvailable=true&agriFencingDone=false&agriWaterSource=WELL',
+      ),
+    });
+
+    // Confirm all params are present first
+    expect(result.current[0].filters.agriAcresMin).toBe(1);
+    expect(result.current[0].filters.agriAcresMax).toBe(10);
+    expect(result.current[0].filters.agriLandCategory).toBe('FARMLAND');
+    expect(result.current[0].filters.agriFarmhouseAvailable).toBe(true);
+    expect(result.current[0].filters.agriFencingDone).toBe(false);
+    expect(result.current[0].filters.agriWaterSource).toBe('WELL');
+
+    act(() => {
+      result.current[1].clearAgriFilters();
+    });
+
+    const { filters } = result.current[0];
+    expect(filters.agriAcresMin).toBeUndefined();
+    expect(filters.agriAcresMax).toBeUndefined();
+    expect(filters.agriPriceMin).toBeUndefined();
+    expect(filters.agriPriceMax).toBeUndefined();
+    expect(filters.agriLandCategory).toBeNull();
+    expect(filters.agriFarmhouseAvailable).toBeNull();
+    expect(filters.agriFencingDone).toBeNull();
+    expect(filters.agriWaterSource).toBeNull();
+  });
+
+  it('city is preserved after clearAgriFilters', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&agriLandCategory=PLANTATION'),
+    });
+
+    act(() => {
+      result.current[1].clearAgriFilters();
+    });
+
+    expect(result.current[0].city).toBe('udupi');
+  });
+});

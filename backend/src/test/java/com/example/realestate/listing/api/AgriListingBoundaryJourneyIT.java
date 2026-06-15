@@ -196,7 +196,7 @@ class AgriListingBoundaryJourneyIT {
                 /* addressConfirmed */ true, /* lat */ null, /* lon */ null,
                 "acre", null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null,
                 VALID_POLYGON);
 
         // Submit for review (works only because Part 1 made agricultural_land submittable).
@@ -225,7 +225,7 @@ class AgriListingBoundaryJourneyIT {
                 new BigDecimal("5"), null, null,
                 true, null, null, "acre", null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null,
                 BOWTIE_POLYGON))
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
@@ -250,7 +250,7 @@ class AgriListingBoundaryJourneyIT {
                 null, null, null,
                 true, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null,
                 VALID_POLYGON))
                 .isInstanceOf(ListingValidationException.class)
                 .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())

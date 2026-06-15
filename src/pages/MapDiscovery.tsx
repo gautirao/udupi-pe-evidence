@@ -467,6 +467,22 @@ export default function MapDiscovery() {
         if (priceMinPaise != null && l.pricePaise < priceMinPaise) return false;
         if (priceMaxPaise != null && l.pricePaise > priceMaxPaise) return false;
       }
+      // Issue #1458 — categorical field filters (exact match; null = no filter = include all)
+      if (urlState.filters.agriLandCategory != null) {
+        if (l.landCategory !== urlState.filters.agriLandCategory) return false;
+      }
+      // Boolean tri-state: null = no filter; true/false = exact match.
+      // null listing field is NOT the same as false — we only exclude on exact inequality.
+      if (urlState.filters.agriFarmhouseAvailable != null) {
+        if (l.farmhouseAvailable !== urlState.filters.agriFarmhouseAvailable) return false;
+      }
+      if (urlState.filters.agriFencingDone != null) {
+        if (l.fencingDone !== urlState.filters.agriFencingDone) return false;
+      }
+      // Water source: exact string match. 'NOT_AVAILABLE' matches only 'NOT_AVAILABLE' rows (not null).
+      if (urlState.filters.agriWaterSource != null) {
+        if (l.waterSource !== urlState.filters.agriWaterSource) return false;
+      }
       return true;
     });
   }, [
@@ -476,6 +492,10 @@ export default function MapDiscovery() {
     isAuthenticated,
     urlState.filters.agriPriceMin,
     urlState.filters.agriPriceMax,
+    urlState.filters.agriLandCategory,
+    urlState.filters.agriFarmhouseAvailable,
+    urlState.filters.agriFencingDone,
+    urlState.filters.agriWaterSource,
   ]);
 
   const [searchQuery, setSearchQuery] = useState(() => urlState.q);
@@ -2021,6 +2041,11 @@ export default function MapDiscovery() {
           agriAcresMax={urlState.filters.agriAcresMax}
           agriPriceMin={urlState.filters.agriPriceMin}
           agriPriceMax={urlState.filters.agriPriceMax}
+          // Issue #1458 — agri categorical/boolean filter props
+          agriLandCategory={urlState.filters.agriLandCategory ?? null}
+          agriFarmhouseAvailable={urlState.filters.agriFarmhouseAvailable ?? null}
+          agriFencingDone={urlState.filters.agriFencingDone ?? null}
+          agriWaterSource={urlState.filters.agriWaterSource ?? null}
           onApplyAgriFilters={(filterValues) =>
             urlActions.setFiltersCommitted({
               ...urlState.filters,
@@ -2028,6 +2053,11 @@ export default function MapDiscovery() {
               // Belt-and-suspenders: never write price params for anon users even if UI bypassed
               agriPriceMin: isAuthenticated ? filterValues.agriPriceMin : undefined,
               agriPriceMax: isAuthenticated ? filterValues.agriPriceMax : undefined,
+              // Issue #1458 — categorical/boolean filters pass through as-is (no auth gate)
+              agriLandCategory: filterValues.agriLandCategory ?? null,
+              agriFarmhouseAvailable: filterValues.agriFarmhouseAvailable ?? null,
+              agriFencingDone: filterValues.agriFencingDone ?? null,
+              agriWaterSource: filterValues.agriWaterSource ?? null,
             })
           }
           onClearAgriFilters={() => urlActions.clearAgriFilters()}

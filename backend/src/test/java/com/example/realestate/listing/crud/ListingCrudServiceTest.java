@@ -671,7 +671,8 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 "dealer",
-                "Borewell", "Red laterite", "Tar road", "Cultivated", "Freehold", "SRV/123/456");
+                "Borewell", "Red laterite", "Tar road", "Cultivated", "Freehold", "SRV/123/456",
+                null, null, null);
 
         assertThat(draft.getWaterSource()).isEqualTo("Borewell");
         assertThat(draft.getSoilType()).isEqualTo("Red laterite");
@@ -703,7 +704,7 @@ class ListingCrudServiceTest {
                 null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 null, null, null,
-                null, "Red laterite", null, null, null, "SRV/789", null);
+                null, "Red laterite", null, null, null, "SRV/789", null, null, null, null);
 
         assertThat(result.getSoilType()).isEqualTo("Red laterite");
         assertThat(result.getSurveyNumber()).isEqualTo("SRV/789");
@@ -878,7 +879,7 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 validGeoJson);
 
         verify(listingRepository).updateBoundary(eq(listingId), eq(validGeoJson));
@@ -910,9 +911,51 @@ class ListingCrudServiceTest {
                 null, null, null,
                 null, null, null,
                 null, null, null,
-                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null,
                 null);  // null boundary
 
         verify(listingRepository, never()).updateBoundary(any(), any());
+    }
+
+    // ===== #1458: land_category / farmhouse_available / fencing_done =====
+
+    @Test
+    void createDraft_persists_agriStructuredFields() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "agricultural_land", "Wetland Farm", "Udupi",
+                new BigDecimal("3000000"), "Fertile wetland",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer",
+                null, null, null, null, null, null,
+                "wetland", true, false);
+
+        assertThat(draft.getLandCategory()).isEqualTo("wetland");
+        assertThat(draft.getFarmhouseAvailable()).isTrue();
+        assertThat(draft.getFencingDone()).isFalse();
+    }
+
+    @Test
+    void createDraft_farmhouseAvailableFalse_storedAsFalse() {
+        // Boolean false must be persisted as false, not confused with null
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "agricultural_land", "Dry Farm", "Kundapur",
+                new BigDecimal("1500000"), "Dry land plot",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer",
+                null, null, null, null, null, null,
+                null, false, null);
+
+        assertThat(draft.getFarmhouseAvailable()).isFalse();
+        // landCategory and fencingDone were not supplied → remain null
+        assertThat(draft.getLandCategory()).isNull();
+        assertThat(draft.getFencingDone()).isNull();
     }
 }

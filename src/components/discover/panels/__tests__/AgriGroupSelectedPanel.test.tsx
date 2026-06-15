@@ -457,6 +457,75 @@ describe('AgriGroupSelectedPanel — locality grouping (Issue #1464)', () => {
   });
 });
 
+// ─── Issue #1458 — categorical filter props ───────────────────────────────────
+
+describe('AgriGroupSelectedPanel — agri structured field filter props (Issue #1458)', () => {
+  it('renders agri-filtered-empty-state testid when agriLandCategory filter is active and no listings', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        listingCount={0}
+        agriLandCategory="FARMLAND"
+      />,
+    );
+    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
+  });
+
+  it('renders agri-filtered-empty-state testid when agriFarmhouseAvailable filter is active (true) and no listings', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        listingCount={0}
+        agriFarmhouseAvailable={true}
+      />,
+    );
+    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
+  });
+
+  it('renders agri-filtered-empty-state testid when agriFencingDone filter is active (false) and no listings', () => {
+    // false is an active filter (explicitly set to false), not the same as null (absent)
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        listingCount={0}
+        agriFencingDone={false}
+      />,
+    );
+    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
+  });
+
+  it('renders agri-filtered-empty-state testid when agriWaterSource=NOT_AVAILABLE filter is active and no listings', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        listingCount={0}
+        agriWaterSource="NOT_AVAILABLE"
+      />,
+    );
+    expect(screen.getByTestId('agri-filtered-empty-state')).toBeInTheDocument();
+  });
+
+  it('renders plain agri-group-empty-state when NO categorical filters are active and no listings', () => {
+    render(
+      <AgriGroupSelectedPanel
+        {...baseProps}
+        listings={[]}
+        listingCount={0}
+        agriLandCategory={null}
+        agriFarmhouseAvailable={null}
+        agriFencingDone={null}
+        agriWaterSource={null}
+      />,
+    );
+    expect(screen.getByTestId('agri-group-empty-state')).toBeInTheDocument();
+    expect(screen.queryByTestId('agri-filtered-empty-state')).not.toBeInTheDocument();
+  });
+});
+
 // ─── Issue #1486 — Sort by count desc + acreage line ──────────────────────────
 
 describe('AgriGroupSelectedPanel — sort count-desc + acreage (Issue #1486)', () => {

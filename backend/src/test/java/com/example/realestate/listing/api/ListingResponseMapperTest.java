@@ -451,8 +451,8 @@ class ListingResponseMapperTest {
         assertThat(teaser.propertyType()).isEqualTo(l.getPropertyType());
         assertThat(teaser.locality()).isEqualTo(l.getLocality());
         assertThat(teaser.listingPurpose()).isEqualTo("SALE");
-        // #1452: record now has 20 components (8 base + 12 agri-only); pricePaise added
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(20);
+        // #1452/#1458: record now has 23 components (8 base + 15 agri-only); pricePaise added in #1452, landCategory/farmhouseAvailable/fencingDone added in #1458
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(23);
     }
 
     @Test
@@ -461,19 +461,20 @@ class ListingResponseMapperTest {
 
         ListingTeaserResponse teaser = mapper.toTeaserResponse(l);
 
-        // #1452: record now has 20 components (8 base + 12 agri-only fields); pricePaise added
-        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(20);
+        // #1452: record now has 23 components (8 base + 15 agri-only fields); pricePaise added
+        assertThat(ListingTeaserResponse.class.getRecordComponents()).hasSize(23);
         var componentNames = java.util.Arrays.stream(ListingTeaserResponse.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toList();
         // Base 8 fields always present (pricePaise added in #1452)
         assertThat(componentNames).contains(
                 "id", "primaryImageUrl", "imageCount", "price", "pricePaise", "propertyType", "locality", "listingPurpose");
-        // 12 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
+        // 15 agri-only fields present in record definition (null for non-agri via @JsonInclude(NON_NULL))
         assertThat(componentNames).contains(
                 "boundary", "latitude", "longitude", "landArea", "landAreaUnit",
                 "computedAreaAcres", "waterSource", "soilType", "roadAccess",
-                "cultivationStatus", "ownershipType", "surveyNumber");
+                "cultivationStatus", "ownershipType", "surveyNumber",
+                "landCategory", "farmhouseAvailable", "fencingDone");
         // Truly sensitive names must not appear
         assertThat(componentNames).doesNotContain(
                 "address", "description", "sellerType", "bedrooms", "builtArea",

@@ -118,6 +118,10 @@ describe('AgriFiltersPanel — Apply Filters', () => {
       agriAcresMax: undefined,
       agriPriceMin: undefined,
       agriPriceMax: undefined,
+      agriLandCategory: null,
+      agriFarmhouseAvailable: null,
+      agriFencingDone: null,
+      agriWaterSource: null,
     });
   });
 });

@@ -238,6 +238,15 @@ public class Listing {
     @Column(name = "survey_number", length = 64)
     private String surveyNumber;
 
+    @Column(name = "land_category", length = 32)
+    private String landCategory;
+
+    @Column(name = "farmhouse_available")
+    private Boolean farmhouseAvailable;
+
+    @Column(name = "fencing_done")
+    private Boolean fencingDone;
+
     // --- Trust tier and ranking (RE-142 / Phase 3.1) ---
 
     /**
@@ -1062,6 +1071,30 @@ public class Listing {
 
     public void setSurveyNumber(String surveyNumber) {
         this.surveyNumber = surveyNumber;
+    }
+
+    public String getLandCategory() {
+        return landCategory;
+    }
+
+    public void setLandCategory(String landCategory) {
+        this.landCategory = landCategory;
+    }
+
+    public Boolean getFarmhouseAvailable() {
+        return farmhouseAvailable;
+    }
+
+    public void setFarmhouseAvailable(Boolean farmhouseAvailable) {
+        this.farmhouseAvailable = farmhouseAvailable;
+    }
+
+    public Boolean getFencingDone() {
+        return fencingDone;
+    }
+
+    public void setFencingDone(Boolean fencingDone) {
+        this.fencingDone = fencingDone;
     }
 
     // --- Polygon boundary (transient — written/read via native SQL) ---

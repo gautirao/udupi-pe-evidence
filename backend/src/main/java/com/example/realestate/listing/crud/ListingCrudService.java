@@ -91,7 +91,7 @@ public class ListingCrudService {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null);
+                "dealer", null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional
@@ -101,7 +101,7 @@ public class ListingCrudService {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 null, null, null, null, null, videoUrl,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null);
+                "dealer", null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -115,7 +115,7 @@ public class ListingCrudService {
         return createDraft(createdBy, propertyType, title, locality, price, description,
                 landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                "dealer", null, null, null, null, null, null);
+                "dealer", null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -140,7 +140,8 @@ public class ListingCrudService {
                                Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
                                String sellerType,
                                String waterSource, String soilType, String roadAccess,
-                               String cultivationStatus, String ownershipType, String surveyNumber) {
+                               String cultivationStatus, String ownershipType, String surveyNumber,
+                               String landCategory, Boolean farmhouseAvailable, Boolean fencingDone) {
         // Enforce owner listing limit: max 3 LIVE listings for owner accounts.
         // Archived listings must not count against this limit.
         if ("owner".equals(sellerType)) {
@@ -191,6 +192,9 @@ public class ListingCrudService {
         if (cultivationStatus != null) listing.setCultivationStatus(cultivationStatus);
         if (ownershipType != null) listing.setOwnershipType(ownershipType);
         if (surveyNumber != null) listing.setSurveyNumber(surveyNumber);
+        if (landCategory != null) listing.setLandCategory(landCategory);
+        if (farmhouseAvailable != null) listing.setFarmhouseAvailable(farmhouseAvailable);
+        if (fencingDone != null) listing.setFencingDone(fencingDone);
 
         // Compute derived area fields only when both area and unit are supplied
         if (landArea != null && landAreaUnit != null) {
@@ -277,7 +281,7 @@ public class ListingCrudService {
         return updateListing(listingId, userId, isAdmin,
                 propertyType, title, locality, price, description, null, null, null, null, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -298,7 +302,7 @@ public class ListingCrudService {
         return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, null, null, null, null, null, false, null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -317,7 +321,7 @@ public class ListingCrudService {
                 price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
                 landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     /**
@@ -355,6 +359,7 @@ public class ListingCrudService {
                                  // Agricultural land fields
                                  String waterSource, String soilType, String roadAccess,
                                  String cultivationStatus, String ownershipType, String surveyNumber,
+                                 String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
                                  String boundaryGeoJson) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
@@ -437,6 +442,9 @@ public class ListingCrudService {
         if (cultivationStatus != null) listing.setCultivationStatus(cultivationStatus);
         if (ownershipType != null) listing.setOwnershipType(ownershipType);
         if (surveyNumber != null) listing.setSurveyNumber(surveyNumber);
+        if (landCategory != null) listing.setLandCategory(landCategory);
+        if (farmhouseAvailable != null) listing.setFarmhouseAvailable(farmhouseAvailable);
+        if (fencingDone != null) listing.setFencingDone(fencingDone);
 
         // Recompute dedupe hash if any hash-relevant field changed
         if (description != null || locality != null || price != null) {
