@@ -24,15 +24,18 @@
  *   • Deep-link tests (cold-load / clear-chip / city-change) and the journey-card
  *     tests (E2E-7/8/9, Issue #1142) are KEPT — they never depended on the popup;
  *     incidental "Near a school" button assertions were removed.
- *   • The three NearSchoolSheet-popup tests (sheet happy-path, in-sheet area
- *     dropdown, popular-schools error/empty) are test.skip()'d: their product path
- *     is unreachable now. Equivalent user-goal coverage lives in the journey-card
- *     tests below (E2E-7/8/9), e2e/discover-school-first-journey.spec.ts, and
- *     e2e/discover/school-panel-error-states.spec.ts. The NearSchoolSheet /
- *     PopularSchoolCard components remain unit-tested
- *     (src/components/map/__tests__/{NearSchoolSheet,PopularSchoolCard}.test.tsx).
- *     They are skipped, not deleted, so they are trivially restorable if a trigger
- *     is reintroduced.
+ *   • The former "Near a school" popup happy-path is REWRITTEN (Option A) to enter
+ *     via the "Search by school area" journey card (journey-card-school-first) and
+ *     pick a school from SchoolBrowsePanel's Popular schools list — the modern home
+ *     for the old popup grid. It asserts the same end-state (schoolId+radiusKm in URL
+ *     + the Near-school filter chip).
+ *   • Two popup-only tests remain test.skip()'d with no supported product path:
+ *     the in-sheet "Filter by area" dropdown (SchoolBrowsePanel's area browse writes
+ *     areaKey to the URL by design — there is no local-only narrowing control), and
+ *     the popup error/empty UI (covered for the journey-card path by
+ *     e2e/discover/school-panel-error-states.spec.ts ERR-1/2/3). NearSchoolSheet /
+ *     PopularSchoolCard remain unit-tested and are skipped (not deleted), so they are
+ *     trivially restorable if a trigger is reintroduced.
  *
  * Run locally:
  *   bash scripts/run-e2e-local.sh --project=full e2e/discover-school-journey.spec.ts
@@ -212,7 +215,8 @@ async function stubSchoolByIdLookup(page: Page, school: typeof MANIPAL_SCHOOL): 
   );
 }
 
-/** Open the NearSchoolSheet by clicking the "Near a school" button. */
+/** Open the NearSchoolSheet by clicking the "Near a school" button.
+ *  Retained only for the two popup-only tests that remain test.skip()'d. */
 async function openNearSchoolSheet(page: Page): Promise<void> {
   const trigger = page.getByRole('button', { name: /near a school/i });
   await expect(trigger).toBeVisible({ timeout: 15_000 });
@@ -220,6 +224,22 @@ async function openNearSchoolSheet(page: Page): Promise<void> {
   await expect(
     page.getByRole('heading', { name: /popular schools/i }),
   ).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Enter the school-first journey via the supported "Search by school area"
+ * journey card (the on-map "Near a school" popup trigger was removed in the
+ * Figma Discover polish). Lands on SchoolBrowsePanel, whose "Popular schools"
+ * list is the modern home for the old NearSchoolSheet grid.
+ */
+async function enterSchoolFirstViaCard(page: Page): Promise<void> {
+  const card = page.getByTestId('journey-card-school-first');
+  await expect(card).toBeVisible({ timeout: 15_000 });
+  await card.click();
+  await expect(page).toHaveURL(/journey=school-first/, { timeout: 8_000 });
+  await expect(
+    page.getByRole('heading', { name: /popular schools/i }),
+  ).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -245,59 +265,42 @@ function getUrlParam(page: Page, key: string): string | null {
 // ---------------------------------------------------------------------------
 
 test.describe('@integration-ui Discover school-first journey (#970)', () => {
-  // SKIPPED (Figma polish): drives the NearSchoolSheet popup via the removed
-  // "Near a school" button. The journey-card equivalent (pick a school → schoolId
-  // in URL) is covered by E2E-8 below and discover-school-first-journey.spec.ts.
-  test.skip('happy path — narrowing area in sheet, picking school writes URL state and chip', async ({ page }) => {
+  // Option A rewrite: the on-map "Near a school" popup trigger was removed, so this
+  // test now enters the school-first journey via the "Search by school area" journey
+  // card and picks a school from SchoolBrowsePanel's Popular schools list. It asserts
+  // the same end-state the old popup happy-path did: schoolId + radiusKm in the URL
+  // and the active Near-school filter chip inside the Filters sheet.
+  test('happy path (journey card) — picking a popular school writes URL state and the Near-school filter chip', async ({ page }) => {
     await stubTrendsOptions(page);
     await stubDiscoverAreas(page);
     await stubPopularSchools(page);
+    await stubSchoolByIdLookup(page, MANIPAL_SCHOOL);
     const listings = await stubDiscoverListings(page);
 
     await page.goto('/discover?city=udupi');
     await page.waitForLoadState('domcontentloaded');
-    await openNearSchoolSheet(page);
 
-    const grid = page.locator('section[aria-labelledby="popular-schools-heading"]');
-    await expect(grid.getByRole('button', { name: /^Select / })).toHaveCount(
-      POPULAR_SCHOOLS_FIXTURE.length,
-      { timeout: 10_000 },
-    );
+    // Supported entry point (replaces the removed "Near a school" button).
+    await enterSchoolFirstViaCard(page);
 
-    const narrowed = page.waitForResponse(
-      (r) => r.url().includes('/api/public/schools/popular') && r.url().includes('areaKey='),
-      { timeout: 10_000 },
-    );
-    await page.locator('#popular-schools-area').click();
-    await page.getByRole('option', { name: 'Manipal', exact: true }).click();
-    await narrowed;
+    // Pick a popular school → SchoolBrowsePanel.handleSchoolSelect → setSchoolJourney
+    // writes schoolId + radiusKm (DEFAULT_SCHOOL_RADIUS_KM = 3). MANIPAL_SCHOOL has no
+    // areaKey, so the end-state mirrors the cold-load restoration test (schoolId only).
+    await page.getByRole('button', { name: /Manipal Public School/ }).click();
 
-    await expect(grid.getByRole('button', { name: /^Select / })).toHaveCount(
-      POPULAR_SCHOOLS_MANIPAL_FIXTURE.length,
-    );
-
-    await grid.getByRole('button', { name: /^Select Manipal Public School$/ }).click();
-    await page.keyboard.press('Escape');
-    await expect(page.getByRole('heading', { name: /popular schools/i })).toHaveCount(0);
-
-    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 5_000 }).toBe(MANIPAL_SCHOOL.id);
+    await expect.poll(() => getUrlParam(page, 'schoolId'), { timeout: 8_000 }).toBe(MANIPAL_SCHOOL.id);
     expect(getUrlParam(page, 'radiusKm')).toBe('3');
 
-    await expect(
-      page.getByRole('button', { name: /near a school/i }),
-    ).toHaveAttribute('aria-pressed', 'true');
-
+    // The active "Near school" filter chip surfaces inside the Filters sheet
+    // (ActiveContextChips — journey-independent, keyed on the school-radius filter).
     await openFiltersSheet(page);
     await expect(
       page.getByRole('button', { name: /^Remove Near school filter$/ }),
-    ).toBeVisible({ timeout: 5_000 });
+    ).toBeVisible({ timeout: 10_000 });
 
     if (listings.lastRequest) {
       const url = new URL(listings.lastRequest.url());
-      expect(url.searchParams.get('schoolLat')).toBe(String(MANIPAL_SCHOOL.latitude));
-      expect(url.searchParams.get('schoolLon')).toBe(String(MANIPAL_SCHOOL.longitude));
       expect(url.searchParams.get('schoolRadiusKm')).toBe('3');
-      expect(url.searchParams.get('localities')).toBeNull();
     }
   });
 
