@@ -17,6 +17,23 @@
  *   - Area chip in the filter strip
  *   - PopularSchoolCard internals (covered by e2e/popular-schools.spec.ts)
  *
+ * ── Figma Discover polish update ──────────────────────────────────────────────
+ * The on-map "Near a school" button (the NearSchoolSheet trigger) was removed.
+ * The school journey is now reached only via the "Search by school area" journey
+ * card (journey=school-first). Consequences for this spec:
+ *   • Deep-link tests (cold-load / clear-chip / city-change) and the journey-card
+ *     tests (E2E-7/8/9, Issue #1142) are KEPT — they never depended on the popup;
+ *     incidental "Near a school" button assertions were removed.
+ *   • The three NearSchoolSheet-popup tests (sheet happy-path, in-sheet area
+ *     dropdown, popular-schools error/empty) are test.skip()'d: their product path
+ *     is unreachable now. Equivalent user-goal coverage lives in the journey-card
+ *     tests below (E2E-7/8/9), e2e/discover-school-first-journey.spec.ts, and
+ *     e2e/discover/school-panel-error-states.spec.ts. The NearSchoolSheet /
+ *     PopularSchoolCard components remain unit-tested
+ *     (src/components/map/__tests__/{NearSchoolSheet,PopularSchoolCard}.test.tsx).
+ *     They are skipped, not deleted, so they are trivially restorable if a trigger
+ *     is reintroduced.
+ *
  * Run locally:
  *   bash scripts/run-e2e-local.sh --project=full e2e/discover-school-journey.spec.ts
  */
@@ -228,7 +245,10 @@ function getUrlParam(page: Page, key: string): string | null {
 // ---------------------------------------------------------------------------
 
 test.describe('@integration-ui Discover school-first journey (#970)', () => {
-  test('happy path — narrowing area in sheet, picking school writes URL state and chip', async ({ page }) => {
+  // SKIPPED (Figma polish): drives the NearSchoolSheet popup via the removed
+  // "Near a school" button. The journey-card equivalent (pick a school → schoolId
+  // in URL) is covered by E2E-8 below and discover-school-first-journey.spec.ts.
+  test.skip('happy path — narrowing area in sheet, picking school writes URL state and chip', async ({ page }) => {
     await stubTrendsOptions(page);
     await stubDiscoverAreas(page);
     await stubPopularSchools(page);
@@ -291,9 +311,10 @@ test.describe('@integration-ui Discover school-first journey (#970)', () => {
     await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`);
     await page.waitForLoadState('domcontentloaded');
 
-    const trigger = page.getByRole('button', { name: /near a school/i });
-    await expect(trigger).toBeVisible({ timeout: 15_000 });
-    await expect(trigger).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+    // Figma polish: the "Near a school" button was removed; the right panel is the
+    // stable hydration beacon. The active school filter is still surfaced as a chip
+    // inside the Filters sheet (ActiveContextChips), which is journey-independent.
+    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
 
     await openFiltersSheet(page);
     await expect(
@@ -321,8 +342,8 @@ test.describe('@integration-ui Discover school-first journey (#970)', () => {
     await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3`);
     await page.waitForLoadState('domcontentloaded');
 
-    const trigger = page.getByRole('button', { name: /near a school/i });
-    await expect(trigger).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
+    // Figma polish: "Near a school" button removed; wait on the right panel instead.
+    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
 
     await openFiltersSheet(page);
     const chip = page.getByRole('button', { name: /^Remove Near school filter$/ });
@@ -352,9 +373,8 @@ test.describe('@integration-ui Discover school-first journey (#970)', () => {
     await page.goto(`/discover?city=udupi&schoolId=${MANIPAL_SCHOOL.id}&radiusKm=3&areaKey=${encodeURIComponent(MANIPAL_AREA_KEY)}`);
     await page.waitForLoadState('domcontentloaded');
 
-    await expect(
-      page.getByRole('button', { name: /near a school/i }),
-    ).toBeVisible({ timeout: 15_000 });
+    // Figma polish: "Near a school" button removed; the right panel is the load beacon.
+    await expect(page.getByTestId('discover-right-panel')).toBeVisible({ timeout: 15_000 });
 
     expect(getUrlParam(page, 'areaKey')).toBe(MANIPAL_AREA_KEY);
 
@@ -366,7 +386,11 @@ test.describe('@integration-ui Discover school-first journey (#970)', () => {
     await expect.poll(() => getUrlParam(page, 'areaKey'), { timeout: 5_000 }).toBeNull();
   });
 
-  test('local area dropdown narrows popular results without writing areaKey to URL', async ({ page }) => {
+  // SKIPPED (Figma polish): the in-sheet "Filter by area" dropdown (#popular-schools-area)
+  // lives only inside the NearSchoolSheet popup, which is unreachable after the
+  // "Near a school" button removal. No journey-card equivalent exists for this popup-only
+  // control. PopularSchoolCard/NearSchoolSheet remain unit-tested.
+  test.skip('local area dropdown narrows popular results without writing areaKey to URL', async ({ page }) => {
     await stubTrendsOptions(page);
     await stubDiscoverAreas(page);
     await stubPopularSchools(page);
@@ -403,7 +427,10 @@ test.describe('@integration-ui Discover school-first journey (#970)', () => {
     expect(popularRequestsWithAreaKey).toBeGreaterThan(0);
   });
 
-  test('error and empty states — Retry refetches; empty payload renders empty copy', async ({ page }) => {
+  // SKIPPED (Figma polish): exercises the popular-schools error/empty UI inside the
+  // NearSchoolSheet popup (unreachable now). Equivalent error/empty coverage for the
+  // journey-card school path lives in e2e/discover/school-panel-error-states.spec.ts.
+  test.skip('error and empty states — Retry refetches; empty payload renders empty copy', async ({ page }) => {
     await stubTrendsOptions(page);
     await stubDiscoverAreas(page);
 

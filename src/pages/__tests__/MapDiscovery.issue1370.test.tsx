@@ -1,18 +1,20 @@
 /**
- * Issue #1370 (MVP2) — MapDiscovery: the agri-first journey hides the school controls.
+ * Issue #1370 (MVP2) — MapDiscovery school-control visibility.
  *
- * AC4: In agri-first mode the "Near a school" trigger button and the NearSchoolSheet
- *      mount are NOT rendered (hidden, not disabled). Asserts they are ABSENT from the
- *      DOM (queryBy… === null), structurally preventing a school-sheet open that would
- *      call setSchoolJourney and flip the journey to school-first.
- * AC5 (regression): area-first journey still renders the "Near a school" button.
+ * UPDATED (Discover Figma polish): the on-map "Near a school" quick-filter button was
+ * removed from ALL journeys. The school-first journey remains reachable via the
+ * "Search by school area" journey card in the right panel. These tests now assert the
+ * button is ABSENT in every journey (agri-first, area-first, guided-entry), which both
+ * preserves the original #1370 AC4 guarantee (agri-first never exposes school controls)
+ * and locks in the button removal.
  *
  * Harness mirrors MapDiscovery.issue1178.test.tsx — only PropertyMap, AppLayout, and
- * react-leaflet are mocked, so the real MapDiscovery chrome (incl. the school controls)
- * renders and can be asserted against the DOM.
+ * react-leaflet are mocked, so the real MapDiscovery chrome renders and can be asserted
+ * against the DOM. The always-present Buy/Rent `intent-selector` is used as the mount
+ * anchor so button-absence is asserted only after the right-panel chrome has rendered.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import React from 'react';
@@ -144,7 +146,7 @@ const renderAt = (url: string) =>
     </QueryClientProvider>,
   );
 
-describe('Issue #1370 — agri-first hides school controls', () => {
+describe('Issue #1370 / Figma polish — "Near a school" button removed from all journeys', () => {
   beforeEach(() => {
     mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
   });
@@ -160,20 +162,18 @@ describe('Issue #1370 — agri-first hides school controls', () => {
     expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();
   });
 
-  it('AC5 regression: area-first journey STILL renders the "Near a school" button', async () => {
+  it('area-first journey no longer renders the "Near a school" button (removed in Figma polish)', async () => {
     renderAt('/discover?city=udupi&journey=area-first');
 
-    // Wait for the area-first panel chrome to mount.
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /near a school/i })).toBeInTheDocument();
-    });
+    // Anchor on the always-present Buy/Rent control so chrome has mounted before asserting.
+    await screen.findByTestId('intent-selector');
+    expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();
   });
 
-  it('AC5 regression: guided-entry (no journey) STILL renders the "Near a school" button', async () => {
+  it('guided-entry (no journey) no longer renders the "Near a school" button (removed in Figma polish)', async () => {
     renderAt('/discover?city=udupi');
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /near a school/i })).toBeInTheDocument();
-    });
+    await screen.findByTestId('intent-selector');
+    expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();
   });
 });

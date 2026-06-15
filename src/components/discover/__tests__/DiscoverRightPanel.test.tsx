@@ -429,6 +429,52 @@ describe('DiscoverRightPanel — search input (#952)', () => {
   });
 });
 
+// ─── Buy/Rent intent selector in the right-panel header (Discover Figma polish) ─
+// The Buy/Rent control was moved from a right-aligned bar to the left/content side of
+// the right-panel header, above the journey cards. These tests assert it renders there
+// (visible above the journey cards) and that the Buy/Rent state behaviour is preserved.
+
+describe('DiscoverRightPanel — Buy/Rent intent selector header', () => {
+  it('renders the Buy/Rent control in the header when onIntentChange is provided', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        areas={[]}
+        intent="buy"
+        onIntentChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('intent-selector')).toBeInTheDocument();
+    expect(screen.getByText('Looking to')).toBeInTheDocument();
+    expect(screen.getByTestId('intent-selector-buy')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('intent-selector-rent')).toHaveAttribute('aria-pressed', 'false');
+    // Journey cards still render below the control.
+    expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
+  });
+
+  it('clicking Rent fires onIntentChange("rent") (state behaviour preserved)', async () => {
+    const user = userEvent.setup();
+    const onIntentChange = vi.fn();
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        areas={[]}
+        intent="buy"
+        onIntentChange={onIntentChange}
+      />,
+    );
+    await user.click(screen.getByTestId('intent-selector-rent'));
+    expect(onIntentChange).toHaveBeenCalledWith('rent');
+  });
+
+  it('does not render the intent selector when onIntentChange is absent', () => {
+    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} />);
+    expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
+  });
+});
+
 // ─── Issue #1456 — Cumulative distance hint text ──────────────────────────────
 
 describe('DiscoverRightPanel — cumulative distance hint (Issue #1456)', () => {

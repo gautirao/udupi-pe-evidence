@@ -34,6 +34,7 @@ vi.mock('leaflet', () => {
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
+  ZoomControl: () => null,
   useMap: vi.fn(() => ({
     addLayer: vi.fn(),
     removeLayer: vi.fn(),
@@ -171,6 +172,18 @@ describe('PropertyMap — divIcon HTML escaping (RE-174)', () => {
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;');
     expect(html).not.toMatch(/<(?!\/?(div|span|br)\b)/); // no raw open tags other than div/span/br
+  });
+});
+
+// ─── Property type legend removed (Figma Discover polish) ─────
+// The bottom-left "Property Types" legend was removed from the map. This guards
+// against it being reintroduced — the legend Card no longer renders for any state.
+
+describe('PropertyMap — property type legend removed', () => {
+  it('does not render the "Property Types" legend', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+    render(<PropertyMap listings={[]} />);
+    expect(screen.queryByText('Property Types')).not.toBeInTheDocument();
   });
 });
 

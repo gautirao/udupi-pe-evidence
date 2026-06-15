@@ -46,6 +46,7 @@ vi.mock('leaflet', () => {
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
+  ZoomControl: () => null,
   Polygon: vi.fn(({ pathOptions }: { pathOptions?: { interactive?: boolean } }) => (
     <div
       data-testid="mock-sector-polygon"

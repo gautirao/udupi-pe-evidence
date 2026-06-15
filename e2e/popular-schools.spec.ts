@@ -165,7 +165,18 @@ async function openNearSchoolSheet(page: Page): Promise<void> {
 // Tests
 // ---------------------------------------------------------------------------
 
-test.describe('@journey Popular schools grid (#968)', () => {
+// SKIPPED (Figma Discover polish): every test below exercises the "Popular schools"
+// grid inside the NearSchoolSheet popup, which is opened ONLY by the on-map
+// "Near a school" button. That button was removed, so this popup surface is
+// unreachable from the product UI. There is no journey-card equivalent for the
+// popular-schools grid (the journey card opens the schools-in-area / by-area panel,
+// a different surface already covered by e2e/discover-school-first-journey.spec.ts and
+// e2e/discover/school-panel-error-states.spec.ts). The PopularSchoolCard and
+// NearSchoolSheet components remain unit-tested
+// (src/components/map/__tests__/{PopularSchoolCard,NearSchoolSheet}.test.tsx).
+// The suite is skipped (not deleted) so it is trivially restorable if a trigger
+// that re-opens NearSchoolSheet is reintroduced.
+test.describe.skip('@journey Popular schools grid (#968)', () => {
   test('renders 3+ school cards with name + board + address and no listing count badge', async ({
     page,
   }) => {

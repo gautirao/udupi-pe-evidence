@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 
 interface IntentSelectorProps {
@@ -7,37 +7,43 @@ interface IntentSelectorProps {
   onIntentChange: (intent: DiscoverIntent) => void;
 }
 
+const OPTIONS: { value: DiscoverIntent; label: string }[] = [
+  { value: 'buy', label: 'Buy' },
+  { value: 'rent', label: 'Rent' },
+];
+
 export function IntentSelector({ intent, onIntentChange }: IntentSelectorProps) {
   return (
     <div
-      className="flex items-center gap-2"
+      className="flex items-center gap-2.5"
       data-testid="intent-selector"
       role="group"
       aria-label="Looking to"
     >
       <span className="text-xs text-muted-foreground font-medium shrink-0">Looking to</span>
-      <div className="flex rounded-md border border-border overflow-hidden">
-        <Button
-          variant={intent === 'buy' ? 'default' : 'ghost'}
-          size="sm"
-          className="rounded-none border-0 h-7 px-3 text-xs"
-          aria-pressed={intent === 'buy'}
-          data-testid="intent-selector-buy"
-          onClick={() => onIntentChange('buy')}
-        >
-          Buy
-        </Button>
-        <div className="w-px bg-border" aria-hidden="true" />
-        <Button
-          variant={intent === 'rent' ? 'default' : 'ghost'}
-          size="sm"
-          className="rounded-none border-0 h-7 px-3 text-xs"
-          aria-pressed={intent === 'rent'}
-          data-testid="intent-selector-rent"
-          onClick={() => onIntentChange('rent')}
-        >
-          Rent
-        </Button>
+      {/* Compact segmented pill control — selected segment lifts to a white pill (Figma). */}
+      <div className="inline-flex items-center rounded-full bg-muted p-0.5">
+        {OPTIONS.map(({ value, label }) => {
+          const selected = intent === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={selected}
+              data-testid={`intent-selector-${value}`}
+              onClick={() => onIntentChange(value)}
+              className={cn(
+                'rounded-full px-4 py-1 text-xs font-semibold transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+                selected
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

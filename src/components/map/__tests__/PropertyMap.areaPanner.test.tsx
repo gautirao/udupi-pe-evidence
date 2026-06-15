@@ -58,6 +58,7 @@ vi.mock('leaflet.markercluster', () => ({}));
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   TileLayer: () => null,
+  ZoomControl: () => null,
   Marker: () => null,
   Circle: () => null,
   Tooltip: () => null,

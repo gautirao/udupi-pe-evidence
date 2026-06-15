@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip, Polygon } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip, Polygon, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
@@ -11,7 +11,6 @@ import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { ScaleHud } from '@/dev/ScaleHud';
-import { Card } from '@/components/ui/card';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
@@ -1223,10 +1222,6 @@ export function PropertyMap({
   agriGroupListings,
   sectorOverlay = null,
 }: PropertyMapProps) {
-  const listingsWithCoords = useMemo(() => {
-    return listings.filter((listing) => listing.latitude && listing.longitude);
-  }, [listings]);
-
   // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
   // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
   // An empty array is intentional (0 markers for the selected group = correct behaviour).
@@ -1249,7 +1244,11 @@ export function PropertyMap({
         zoom={initialZoom ?? cityZoom ?? DEFAULT_ZOOM}
         className="w-full h-full rounded-lg z-0"
         scrollWheelZoom
+        zoomControl={false}
       >
+        {/* Zoom +/- moved to bottom-left so it is never hidden behind the top-left
+            "Udupi" area pill (AreaIndicatorOverlay). */}
+        <ZoomControl position="bottomleft" />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1369,24 +1368,6 @@ export function PropertyMap({
           </>
         )}
       </MapContainer>
-
-      {/* Legend */}
-      <Card className="absolute bottom-4 left-4 z-[1000] p-3 bg-card/95 backdrop-blur">
-        <p className="text-xs font-medium mb-2 text-muted-foreground">Property Types</p>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(propertyConfig).map(([type, { label, bgClass }]) => (
-            <div key={type} className="flex items-center gap-1.5">
-              <div className={`w-3 h-3 rounded-full ${bgClass}`} />
-              <span className="text-xs">{label}</span>
-            </div>
-          ))}
-        </div>
-        {listingsWithCoords.length > 0 && (
-          <p className="text-[10px] text-muted-foreground mt-2 pt-2 border-t">
-            {listingsWithCoords.length} properties on map
-          </p>
-        )}
-      </Card>
     </div>
   );
 }

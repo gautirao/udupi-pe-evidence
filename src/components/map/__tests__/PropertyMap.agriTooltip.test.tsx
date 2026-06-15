@@ -54,6 +54,7 @@ vi.mock('leaflet', () => {
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
+  ZoomControl: () => null,
   Polygon: vi.fn(() => null),
   useMap: vi.fn(() => ({
     addLayer: mockAddLayer,

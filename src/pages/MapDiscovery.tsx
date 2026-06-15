@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { GraduationCap, Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Re-exported so existing test imports from '@/pages/MapDiscovery' continue to resolve.
 export { isNew } from '@/lib/isNew';
@@ -1852,21 +1852,9 @@ export default function MapDiscovery() {
             <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
           </div>
 
-          {/* Near a school — below city select. Hidden in the agri-first journey (MVP2). */}
-          {!isAgriJourney && (
-            <div className="absolute top-16 right-4 z-[1000]">
-              <Button
-                size="sm"
-                variant={selectedSchool ? 'default' : 'outline'}
-                className={selectedSchool ? 'gap-1.5 shadow-sm' : 'gap-1.5 bg-card shadow-sm'}
-                onClick={() => setNearSchoolOpen(true)}
-                aria-pressed={Boolean(urlState.schoolId || selectedSchool)}
-              >
-                <GraduationCap className="h-4 w-4" />
-                Near a school
-              </Button>
-            </div>
-          )}
+          {/* "Near a school" quick-filter button removed (Figma polish) — the school
+              journey is reachable via the "Search by school area" card in the right panel.
+              NearSchoolSheet stays mounted below but is no longer triggered from here. */}
 
           {/* City / area listing count — bottom-right (Issue #1152) */}
           {discoverBadge.visible && discoverBadge.count != null && (

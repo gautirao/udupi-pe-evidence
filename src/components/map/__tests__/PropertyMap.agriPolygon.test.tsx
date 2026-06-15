@@ -21,6 +21,7 @@ const capturedPolygons: Array<{
 vi.mock('react-leaflet', () => ({
   MapContainer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TileLayer: () => null,
+  ZoomControl: () => null,
   Circle: () => null,
   Marker: () => null,
   Tooltip: () => null,
