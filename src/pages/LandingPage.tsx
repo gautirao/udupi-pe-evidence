@@ -1,9 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import {
   Loader2,
   MapPin,
@@ -14,6 +23,7 @@ import {
   CheckCircle2,
   ArrowRight,
   Search,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -140,6 +150,9 @@ const AREA_OVERVIEW_META: Record<string, string> = {
 // ────────────────────────────────────────────────────────────────────────────
 
 function SiteHeader() {
+  const { user, signOut, isLoading } = useAuth();
+  const location = useLocation();
+
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
@@ -179,10 +192,36 @@ function SiteHeader() {
           </Link>
         </nav>
 
-        {/* Sign in */}
-        <Button asChild variant="outline" size="sm">
-          <Link to="/auth">Sign In</Link>
-        </Button>
+        {/* Auth control */}
+        {isLoading ? null : user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                    {(user.email?.split('@')[0].slice(0, 2).toUpperCase()) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button asChild variant="outline" size="sm">
+            <Link to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}>Sign In</Link>
+          </Button>
+        )}
       </div>
     </header>
   );

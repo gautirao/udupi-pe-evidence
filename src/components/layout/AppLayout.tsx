@@ -289,7 +289,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             </DropdownMenu>
           ) : (
             <Link
-              to="/auth"
+              to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
               className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
             >
               Sign in

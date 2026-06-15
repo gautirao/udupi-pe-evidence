@@ -7,13 +7,15 @@ import LandingPage from '../LandingPage';
 
 // ─── Hoisted mock handles ──────────────────────────────────────
 const mockNavigate = vi.hoisted(() => vi.fn());
+const mockSignOut = vi.hoisted(() => vi.fn());
 
 // ─── Mutable auth state ───────────────────────────────────────
 let mockIsLoading = false;
+let mockUser: { email: string } | null = null;
 
 // ─── Mocks ────────────────────────────────────────────────────
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ isLoading: mockIsLoading }),
+  useAuth: () => ({ isLoading: mockIsLoading, user: mockUser, signOut: mockSignOut }),
 }));
 
 vi.mock('@/hooks/useTrendingAreas', () => ({
@@ -34,10 +36,10 @@ function makeQC() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
-function renderPage() {
+function renderPage(initialPath = '/') {
   return render(
     <QueryClientProvider client={makeQC()}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialPath]}>
         <LandingPage />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -48,7 +50,9 @@ function renderPage() {
 describe('LandingPage (ReTrends redesign)', () => {
   beforeEach(() => {
     mockIsLoading = false;
+    mockUser = null;
     mockNavigate.mockReset();
+    mockSignOut.mockReset();
   });
 
   it('renders the hero with the main heading', () => {
@@ -88,9 +92,73 @@ describe('LandingPage (ReTrends redesign)', () => {
       expect(screen.getByRole('link', { name: /Saved/i })).toHaveAttribute('href', '/saved-areas');
     });
 
-    it('renders a Sign In link to /auth', () => {
+    it('renders a Sign In link to /auth (unauthenticated)', () => {
       renderPage();
-      expect(screen.getByRole('link', { name: /Sign In/i })).toHaveAttribute('href', '/auth');
+      const signInLink = screen.getByRole('link', { name: /Sign In/i });
+      expect(signInLink).toBeInTheDocument();
+      expect(signInLink.getAttribute('href')).toContain('/auth');
+    });
+  });
+
+  describe('SiteHeader — auth state', () => {
+    it('unauthenticated: renders Sign In button, no avatar', () => {
+      // mockUser is null from beforeEach
+      renderPage();
+      expect(screen.getByRole('link', { name: /Sign In/i })).toBeInTheDocument();
+      // No avatar trigger (ghost button with initials)
+      expect(screen.queryByRole('button', { name: /^[A-Z]{2}$/i })).not.toBeInTheDocument();
+    });
+
+    it('authenticated: renders avatar, hides Sign In button', () => {
+      mockUser = { email: 'test@example.com' };
+      renderPage();
+      // Sign In link must not be present
+      expect(screen.queryByRole('link', { name: /Sign In/i })).not.toBeInTheDocument();
+      // Avatar initials button is present (first 2 chars of "test" → "TE")
+      expect(screen.getByRole('button', { name: /^TE$/i })).toBeInTheDocument();
+    });
+
+    it('authenticated: email is shown inside the dropdown', async () => {
+      mockUser = { email: 'test@example.com' };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole('button', { name: /^TE$/i }));
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
+    it('authenticated: clicking Sign out calls signOut', async () => {
+      mockUser = { email: 'test@example.com' };
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole('button', { name: /^TE$/i }));
+      await user.click(screen.getByRole('menuitem', { name: /sign out/i }));
+      expect(mockSignOut).toHaveBeenCalledTimes(1);
+    });
+
+    it('loading: renders neither Sign In nor avatar', async () => {
+      mockIsLoading = true;
+      // Do not advance timers — isLoading=true but showAuthLoader hasn't fired yet,
+      // so the header renders with isLoading=true → null from SiteHeader
+      renderPage();
+      expect(screen.queryByRole('link', { name: /Sign In/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^[A-Z]{2}$/i })).not.toBeInTheDocument();
+    });
+
+    it('Sign In link encodes returnTo with current pathname', () => {
+      renderPage('/');
+      const signInLink = screen.getByRole('link', { name: /Sign In/i });
+      const href = signInLink.getAttribute('href') ?? '';
+      expect(href).toContain('returnTo');
+      expect(href).toContain(encodeURIComponent('/'));
+    });
+
+    it('Sign In link encodes returnTo including query params', () => {
+      renderPage('/discover?city=udupi&journey=area-first');
+      const signInLink = screen.getByRole('link', { name: /Sign In/i });
+      const href = signInLink.getAttribute('href') ?? '';
+      expect(href).toContain('returnTo');
+      // The encoded value must contain the path portion
+      expect(href).toContain('%2Fdiscover');
     });
   });
 

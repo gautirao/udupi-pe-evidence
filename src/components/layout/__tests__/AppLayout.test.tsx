@@ -246,10 +246,28 @@ describe('AppLayout — anonymous user menu', () => {
     // mockAuth is already baseAuth() (user: null) from beforeEach
     renderLayout();
 
-    expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/auth');
+    const signInLink = screen.getByRole('link', { name: /sign in/i });
+    expect(signInLink).toBeInTheDocument();
+    // href must start with /auth and include returnTo (the link now carries ?returnTo=...)
+    expect(signInLink.getAttribute('href')).toMatch(/^\/auth(\?|$)/);
     // No avatar trigger button (the fallback 'U' button must not be present)
     expect(screen.queryByRole('button', { name: /^U$/i })).not.toBeInTheDocument();
+  });
+
+  it('Sign in link includes returnTo encoding current path+search', () => {
+    render(
+      <MemoryRouter initialEntries={['/discover?city=udupi']}>
+        <AppLayout>
+          <div>content</div>
+        </AppLayout>
+      </MemoryRouter>,
+    );
+
+    const signInLink = screen.getByRole('link', { name: /sign in/i });
+    const href = signInLink.getAttribute('href') ?? '';
+    expect(href).toContain('returnTo');
+    // /discover?city=udupi encoded → %2Fdiscover or contains discover
+    expect(href).toContain('%2Fdiscover');
   });
 
   it('does not show "Sign in" link when user is authenticated', () => {
