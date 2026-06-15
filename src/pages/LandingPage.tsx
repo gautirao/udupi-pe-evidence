@@ -152,6 +152,12 @@ const AREA_OVERVIEW_META: Record<string, string> = {
 function SiteHeader() {
   const { user, signOut, isLoading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/', { replace: true });
+  };
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
@@ -211,7 +217,7 @@ function SiteHeader() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive">
+              <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>

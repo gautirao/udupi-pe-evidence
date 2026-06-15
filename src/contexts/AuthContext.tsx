@@ -171,13 +171,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setUserRole(null);
-    setIsAdmin(false);
-    setIsBroker(false);
-    setInsightsAccessUntil(null);
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      // Best-effort: global sign-out API failed (network error, expired token, etc.)
+      // Still clear local auth state below so UI is consistent.
+      console.error('[AuthContext] signOut API error (local state still cleared):', err);
+    } finally {
+      setUser(null);
+      setSession(null);
+      setUserRole(null);
+      setIsAdmin(false);
+      setIsBroker(false);
+      setInsightsAccessUntil(null);
+    }
   };
 
   return (
