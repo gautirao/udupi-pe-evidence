@@ -5,7 +5,7 @@ import { useGetListing, useUpdateListing, useSubmitListing } from '@/hooks/useBr
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,8 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Lock, Check, MapPin, FileText, ImageIcon, Send, X, Link, AlertTriangle } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { Loader2, Lock, Check, MapPin, X, Link, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploader } from '@/components/broker/ImageUploader';
 import { useListingImages } from '@/hooks/useListingImages';
@@ -27,10 +26,13 @@ import { AreaField } from '@/components/broker/AreaField';
 import { AddressPicker } from '@/components/broker/AddressPicker';
 import { PoiManager } from '@/components/poi/PoiManager';
 import { StepIndicator } from '@/components/broker/StepIndicator';
+import { SectionCard } from '@/components/broker/SectionCard';
+import { ListingPurposeToggle } from '@/components/broker/ListingPurposeToggle';
+import { PropertyTypeCardSelector } from '@/components/broker/PropertyTypeCardSelector';
 import { BoundaryDrawStep } from '@/components/dealer/BoundaryDrawStep';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
-import { PROPERTY_TYPES, COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
+import { COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
@@ -561,103 +563,34 @@ export default function EditListing() {
           steps={steps}
           currentStep={currentStep}
           onStepClick={handleStepClick}
-          helperText="Complete each step, then submit for admin review."
         />
 
         {/* ── Step 1: Describe ── */}
         <div data-testid="step-1-panel" style={{ display: currentStep === 1 ? 'block' : 'none' }}>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Listing Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleStep1Save} className="space-y-6">
-                {/* Property Type */}
-                <div className="space-y-2">
-                  <Label htmlFor="propertyType">Property Type</Label>
-                  <Select
-                    value={propertyType}
-                    onValueChange={(v) => setPropertyType(v as PropertyType)}
-                  >
-                    <SelectTrigger id="propertyType">
-                      <SelectValue placeholder="Select property type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PROPERTY_TYPES.map((pt) => (
-                        <SelectItem key={pt.value} value={pt.value}>
-                          {pt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <form onSubmit={handleStep1Save} className="space-y-6">
+            {/* Listing basics */}
+            <SectionCard title="Listing basics">
+              {/* Property Type */}
+              <div className="space-y-2">
+                <Label htmlFor="propertyType">Property Type</Label>
+                <PropertyTypeCardSelector
+                  id="propertyType"
+                  value={propertyType}
+                  onChange={setPropertyType}
+                />
+              </div>
+
+              {/* Listing Purpose (Sale / Rent) */}
+              <div className="space-y-2">
+                <Label>Listing Purpose</Label>
+                <div>
+                  <ListingPurposeToggle value={listingPurpose} onChange={setListingPurpose} />
                 </div>
+              </div>
+            </SectionCard>
 
-                {/* Title */}
-                <div className="space-y-2">
-                  <Label htmlFor="title">Title</Label>
-                  <Input
-                    id="title"
-                    placeholder="e.g. 3 BHK Apartment in Manipal"
-                    value={title}
-                    onChange={(e) => {
-                      setTitle(e.target.value);
-                      setTitleManuallyEdited(true);
-                    }}
-                  />
-                </div>
-
-                {/* Price */}
-                <PriceField initialRupees={priceRupees} onChange={setPriceRupees} required />
-
-                {/* Locality */}
-                <div className="space-y-2">
-                  <Label htmlFor="locality">Locality</Label>
-                  <Input
-                    id="locality"
-                    placeholder="e.g. Manipal, Udupi"
-                    value={locality}
-                    onChange={(e) => setLocality(e.target.value)}
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Brief description of the property..."
-                    rows={4}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-
-                {/* Listing Purpose (Sale / Rent) */}
-                <div className="space-y-2">
-                  <Label>Listing Purpose</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant={listingPurpose === 'sale' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setListingPurpose('sale')}
-                    >
-                      For Sale
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={listingPurpose === 'rent' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setListingPurpose('rent')}
-                    >
-                      For Rent
-                    </Button>
-                  </div>
-                </div>
-
+            {/* Property details — size, layout and type-specific fields */}
+            <SectionCard title="Property details">
                 {/* Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
                 {showLandArea && (
                   <AreaField
@@ -1041,41 +974,81 @@ export default function EditListing() {
                     />
                   </div>
                 )}
+            </SectionCard>
 
-                {/* Step 1 action */}
-                <div className="flex justify-end pt-4 border-t mt-2">
-                  <Button type="submit" disabled={updateListing.isPending}>
-                    {updateListing.isPending && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Save & Continue
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+            {/* Listing information */}
+            <SectionCard title="Listing information">
+              {/* Title */}
+              <div className="space-y-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  placeholder="e.g. 3 BHK Apartment in Manipal"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setTitleManuallyEdited(true);
+                  }}
+                />
+              </div>
+
+              {/* Locality */}
+              <div className="space-y-2">
+                <Label htmlFor="locality">Locality</Label>
+                <Input
+                  id="locality"
+                  placeholder="e.g. Manipal, Udupi"
+                  value={locality}
+                  onChange={(e) => setLocality(e.target.value)}
+                />
+              </div>
+
+              {/* Price */}
+              <PriceField initialRupees={priceRupees} onChange={setPriceRupees} required />
+
+              {/* Description */}
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Brief description of the property..."
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+            </SectionCard>
+
+            {/* Step 1 action */}
+            <div className="flex justify-end pt-2">
+              <Button type="submit" disabled={updateListing.isPending}>
+                {updateListing.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Save & Continue
+              </Button>
+            </div>
+          </form>
         </div>
 
         {/* ── Step 2: Add Photos ── */}
         <div data-testid="step-2-panel" style={{ display: currentStep === 2 ? 'block' : 'none' }}>
           {isSubmittable && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <ImageIcon className="h-5 w-5" />
-                  Listing Images
-                </CardTitle>
-                <CardDescription>Minimum 3 images required to submit for review.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <div className="space-y-6">
+              <SectionCard
+                title="Listing images"
+                description="A great set of photos helps buyers understand the property better."
+              >
                 {/* ImageUploader is always mounted (CSS visibility) so upload state is preserved */}
                 <ImageUploader listingId={id!} onCanSubmitChange={setCanSubmitImages} />
+              </SectionCard>
 
-                {/* Video link section */}
-                <Separator className="my-4" />
+              <SectionCard
+                title="Property video"
+                description="Optional — add a YouTube or Instagram Reel link to give buyers a walkthrough."
+              >
                 <div className="space-y-2">
-                  <Label htmlFor="videoUrl" className="text-sm font-medium">Property Video (optional)</Label>
-                  <p className="text-xs text-muted-foreground">YouTube or Instagram Reel link</p>
+                  <Label htmlFor="videoUrl" className="sr-only">Property video link</Label>
                   <Input
                     id="videoUrl"
                     type="url"
@@ -1104,40 +1077,34 @@ export default function EditListing() {
                     </div>
                   )}
                 </div>
+              </SectionCard>
 
-                <div className="flex flex-col items-end pt-4 border-t gap-1">
-                  <Button
-                    type="button"
-                    onClick={handleStep2Continue}
-                    disabled={!canSubmitImages}
-                  >
-                    Save & Continue
-                  </Button>
-                  {!canSubmitImages && (
-                    <p className="text-sm text-muted-foreground">
-                      Add at least 3 photos to continue.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  type="button"
+                  onClick={handleStep2Continue}
+                  disabled={!canSubmitImages}
+                >
+                  Save & Continue
+                </Button>
+                {!canSubmitImages && (
+                  <p className="text-sm text-muted-foreground">
+                    Add at least 3 photos to continue.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
         {/* ── Step 3: Pin Location ── */}
         <div data-testid="step-3-panel" style={{ display: currentStep === 3 ? 'block' : 'none' }}>
           {isSubmittable && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Confirm Location
-                </CardTitle>
-                <CardDescription>
-                  Search for your listing's address, drag the pin to the exact spot, then confirm.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <div className="space-y-6">
+              <SectionCard
+                title="Confirm location"
+                description="Search for your listing's address, drag the pin to the exact spot, then confirm."
+              >
                 <AddressPicker
                   initialLatitude={listing.latitude}
                   initialLongitude={listing.longitude}
@@ -1155,50 +1122,43 @@ export default function EditListing() {
                   }}
                   onLocalityConfirmed={handleLocalityConfirmed}
                 />
-                <div className="flex flex-col items-end pt-4 border-t gap-1">
-                  <Button
-                    type="button"
-                    onClick={handleStep3Continue}
-                    disabled={!listing.addressConfirmed}
-                  >
-                    Save & Continue
-                  </Button>
-                  {!listing.addressConfirmed && (
-                    <p className="text-sm text-muted-foreground">
-                      Confirm your pin location on the map to continue.
-                    </p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              </SectionCard>
+
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  type="button"
+                  onClick={handleStep3Continue}
+                  disabled={!listing.addressConfirmed}
+                >
+                  Save & Continue
+                </Button>
+                {!listing.addressConfirmed && (
+                  <p className="text-sm text-muted-foreground">
+                    Confirm your pin location on the map to continue.
+                  </p>
+                )}
+              </div>
+            </div>
           )}
         </div>
 
         {/* ── Step 4: Draw Boundary (agricultural_land only) ── */}
         {currentStep === 4 && isAgriListing && (
           <div data-testid="step-4-panel">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Draw Plot Boundary
-                </CardTitle>
-                <CardDescription>
-                  Optionally draw the boundary of your agricultural plot on the map.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <BoundaryDrawStep
-                  initialCoords={boundaryCoords}
-                  center={[listing.latitude ?? 13.3442, listing.longitude ?? 74.7451]}
-                  onSave={handleStep4Continue}
-                  onSkip={handleStep4Skip}
-                  declaredArea={listing.landArea}
-                  declaredUnit={listing.landAreaUnit}
-                  computedAreaAcres={listing.computedAreaAcres}
-                />
-              </CardContent>
-            </Card>
+            <SectionCard
+              title="Draw plot boundary"
+              description="Optionally draw the boundary of your agricultural plot on the map."
+            >
+              <BoundaryDrawStep
+                initialCoords={boundaryCoords}
+                center={[listing.latitude ?? 13.3442, listing.longitude ?? 74.7451]}
+                onSave={handleStep4Continue}
+                onSkip={handleStep4Skip}
+                declaredArea={listing.landArea}
+                declaredUnit={listing.landAreaUnit}
+                computedAreaAcres={listing.computedAreaAcres}
+              />
+            </SectionCard>
           </div>
         )}
 
@@ -1240,14 +1200,12 @@ export default function EditListing() {
           )}
 
           {/* Review summary */}
-          <Card className="mb-4">
-            <CardHeader>
-              <CardTitle>Review Your Listing</CardTitle>
-              <CardDescription>
-                Check the details below before submitting for admin review.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <SectionCard
+            className="mb-4"
+            title="Review your listing"
+            description="Check the details below before submitting for admin review."
+            contentClassName="space-y-4"
+          >
               {/* Property Details row */}
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -1331,19 +1289,11 @@ export default function EditListing() {
                   Edit
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+          </SectionCard>
 
           {/* Boundary review — shown for agri listings when a boundary has been drawn */}
           {isAgriListing && (
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Plot Boundary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <SectionCard className="mb-4" title="Plot boundary" contentClassName="space-y-3">
                 {boundaryCoords.length > 0 ? (
                   <>
                     <div
@@ -1372,19 +1322,14 @@ export default function EditListing() {
                 >
                   {boundaryCoords.length > 0 ? 'Edit Boundary' : 'Draw Boundary'}
                 </Button>
-              </CardContent>
-            </Card>
+            </SectionCard>
           )}
 
           {/* POIs — shown when address is confirmed */}
           {listing.addressConfirmed ? (
             <PoiManager listingId={id!} propertyType={listing.propertyType} />
           ) : (
-            <Card className="mb-4">
-              <CardHeader>
-                <CardTitle>Nearby Points of Interest</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <SectionCard className="mb-4" title="Nearby points of interest">
                 <div className="flex flex-col items-center gap-2 py-6 text-center">
                   <MapPin className="h-8 w-8 text-muted-foreground" />
                   <p className="text-sm font-medium">Location not yet confirmed</p>
@@ -1392,23 +1337,21 @@ export default function EditListing() {
                     Confirm your listing's address in step 3 to enable POI suggestions.
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+            </SectionCard>
           )}
 
           {/* Submit for Review (isSubmittable only) */}
           {isSubmittable && (
-            <Card className="border-primary/20 bg-primary/5">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Send className="h-5 w-5 text-primary" />
-                  Ready to Submit?
-                </CardTitle>
-                <CardDescription>
-                  All requirements must be met before submitting for admin review.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <SectionCard
+              title={(
+                <span className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  Ready to submit?
+                </span>
+              )}
+              description="All requirements must be met before submitting for admin review."
+              contentClassName="space-y-4"
+            >
                 <div className="space-y-3">
                   {[
                     {
@@ -1480,8 +1423,7 @@ export default function EditListing() {
                     </p>
                   )}
                 </div>
-              </CardContent>
-            </Card>
+            </SectionCard>
           )}
         </div>
         )}

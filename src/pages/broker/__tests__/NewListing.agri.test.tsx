@@ -124,12 +124,14 @@ function renderPage() {
 }
 
 /**
- * Returns the property-type <select>: it is the first select with data-select-value="empty"
- * on initial render (no value selected yet).
+ * Property type is now a card grid (PropertyTypeCardSelector) rendering each
+ * option as a role="radio" button. Click the card by its accessible label.
  */
-function getPropertyTypeSelect(container: HTMLElement): HTMLSelectElement {
-  // The property type select is the first native select on the page
-  return container.querySelectorAll('select')[0] as HTMLSelectElement;
+async function selectPropertyType(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+): Promise<void> {
+  await user.click(screen.getByRole('radio', { name: label }));
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -142,9 +144,9 @@ beforeEach(() => {
 describe('NewListing — agricultural_land (AC1: agri section renders)', () => {
   it('shows the agri fields section when agricultural_land is selected', async () => {
     const user = userEvent.setup();
-    const { container } = renderPage();
+    renderPage();
 
-    await user.selectOptions(getPropertyTypeSelect(container), 'agricultural_land');
+    await selectPropertyType(user, 'Agricultural Land');
 
     expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
     expect(screen.getByText('Agricultural Land Details')).toBeInTheDocument();
@@ -155,18 +157,18 @@ describe('NewListing — agricultural_land (AC1: agri section renders)', () => {
 describe('NewListing — agricultural_land (AC2: agri section absent for other types)', () => {
   it('does NOT show agri section for land', async () => {
     const user = userEvent.setup();
-    const { container } = renderPage();
+    renderPage();
 
-    await user.selectOptions(getPropertyTypeSelect(container), 'land');
+    await selectPropertyType(user, 'Land');
 
     expect(screen.queryByTestId('agri-fields-section')).not.toBeInTheDocument();
   });
 
   it('does NOT show agri section for apartment', async () => {
     const user = userEvent.setup();
-    const { container } = renderPage();
+    renderPage();
 
-    await user.selectOptions(getPropertyTypeSelect(container), 'apartment');
+    await selectPropertyType(user, 'Apartment');
 
     expect(screen.queryByTestId('agri-fields-section')).not.toBeInTheDocument();
   });
@@ -175,10 +177,10 @@ describe('NewListing — agricultural_land (AC2: agri section absent for other t
 describe('NewListing — agricultural_land (AC3: payload includes waterSource)', () => {
   it('calls createListing.mutate with waterSource when set', async () => {
     const user = userEvent.setup();
-    const { container } = renderPage();
+    renderPage();
 
     // Select agricultural_land
-    await user.selectOptions(getPropertyTypeSelect(container), 'agricultural_land');
+    await selectPropertyType(user, 'Agricultural Land');
 
     // Set a valid price so the form can submit
     const priceField = screen.getByTestId('price-field');

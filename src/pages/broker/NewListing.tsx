@@ -4,7 +4,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCreateListing } from '@/hooks/useBrokerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SectionCard } from '@/components/broker/SectionCard';
+import { ListingPurposeToggle } from '@/components/broker/ListingPurposeToggle';
+import { PropertyTypeCardSelector } from '@/components/broker/PropertyTypeCardSelector';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,7 +23,7 @@ import {
 // Alert removed — commercial types are now fully supported
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { PROPERTY_TYPES, COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
+import { COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 
@@ -170,78 +172,61 @@ export default function NewListing() {
 
   return (
     <AppLayout>
-      <div className="container max-w-2xl py-8 px-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Listing</CardTitle>
-            <CardDescription>
-              Price and property type are required. You'll add photos and location next.
-            </CardDescription>
-          </CardHeader>
-          {/* Step indicator — step 1 only; steps 2–4 are gated until listing is created */}
-          <StepIndicator
-            steps={[
-              {
-                label: 'Describe',
-                isComplete: propertyType !== '' && priceValid,
-              },
-              { label: 'Add Photos', isComplete: false },
-              { label: 'Pin Location', isComplete: false },
-              { label: 'Review & Submit', isComplete: false },
-            ]}
-            currentStep={1}
-            onStepClick={(n) => { if (n <= 1) { /* no-op: only step 1 available */ } }}
-            helperText="Complete step 1 to unlock the remaining steps."
-          />
-          <CardContent className="space-y-6">
-            {/* Property Type */}
-            <div className="space-y-2">
-              <Label htmlFor="propertyType">Property Type *</Label>
-              <Select
-                value={propertyType}
-                onValueChange={(v) => setPropertyType(v as PropertyType)}
-              >
-                <SelectTrigger id="propertyType">
-                  <SelectValue placeholder="Select property type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROPERTY_TYPES.map((pt) => (
-                    <SelectItem key={pt.value} value={pt.value}>
-                      {pt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {hasAttempted && !propertyType && (
-                <p className="text-sm text-destructive">Property type is required.</p>
-              )}
-            </div>
+      <div className="container max-w-2xl py-8 px-4 space-y-6">
+        {/* Page header */}
+        <div>
+          <h1 className="text-2xl font-bold">Create New Listing</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Price and property type are required. You'll add photos and location next.
+          </p>
+        </div>
 
-            {/* Listing Purpose (Sale / Rent) */}
-            {propertyType && (
-              <div className="space-y-2">
-                <Label>Listing Purpose *</Label>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant={listingPurpose === 'sale' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setListingPurpose('sale')}
-                  >
-                    For Sale
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={listingPurpose === 'rent' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setListingPurpose('rent')}
-                  >
-                    For Rent
-                  </Button>
-                </div>
-              </div>
+        {/* Step indicator — step 1 only; steps 2–4 are gated until listing is created */}
+        <StepIndicator
+          steps={[
+            {
+              label: 'Describe',
+              isComplete: propertyType !== '' && priceValid,
+            },
+            { label: 'Add Photos', isComplete: false },
+            { label: 'Pin Location', isComplete: false },
+            { label: 'Review & Submit', isComplete: false },
+          ]}
+          currentStep={1}
+          onStepClick={(n) => { if (n <= 1) { /* no-op: only step 1 available */ } }}
+          helperText="Complete step 1 to unlock the remaining steps."
+        />
+
+        {/* Listing basics */}
+        <SectionCard title="Listing basics">
+          {/* Property Type */}
+          <div className="space-y-2">
+            <Label htmlFor="propertyType">Property Type *</Label>
+            <PropertyTypeCardSelector
+              id="propertyType"
+              value={propertyType}
+              onChange={setPropertyType}
+            />
+            {hasAttempted && !propertyType && (
+              <p className="text-sm text-destructive">Property type is required.</p>
             )}
+          </div>
 
+          {/* Listing Purpose (Sale / Rent) */}
+          {propertyType && (
+            <div className="space-y-2">
+              <Label>Listing Purpose *</Label>
+              <div>
+                <ListingPurposeToggle value={listingPurpose} onChange={setListingPurpose} />
+              </div>
+            </div>
+          )}
+        </SectionCard>
+
+        {propertyType && (
+          <>
+            {/* Property details — size, layout and type-specific fields */}
+            <SectionCard title="Property details">
             {/* Conditional: Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
             {(propertyType === 'land' || propertyType === 'commercial_land'
               || propertyType === 'commercial_building' || propertyType === 'warehouse'
@@ -564,9 +549,10 @@ export default function NewListing() {
               </>
             )}
 
-            {/* Title */}
-            {propertyType && (
-              <>
+            </SectionCard>
+
+            {/* Listing information */}
+            <SectionCard title="Listing information">
                 <div className="space-y-2">
                   <Label htmlFor="title">Title</Label>
                   <Input
@@ -663,28 +649,25 @@ export default function NewListing() {
                     onChange={(e) => setDescription(e.target.value)}
                   />
                 </div>
-              </>
-            )}
+            </SectionCard>
 
             {/* Actions */}
-            {propertyType && (
-              <div className="flex justify-end gap-3 pt-4">
-                <Button variant="outline" onClick={() => navigate('/broker/listings')}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSaveDraft}
-                  disabled={!canSubmit || createListing.isPending}
-                >
-                  {createListing.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  {createListing.isPending ? 'Saving…' : 'Save & Continue'}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => navigate('/broker/listings')}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSaveDraft}
+                disabled={!canSubmit || createListing.isPending}
+              >
+                {createListing.isPending && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {createListing.isPending ? 'Saving…' : 'Save & Continue'}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </AppLayout>
   );

@@ -207,9 +207,8 @@ test('DL1 — full broker listing creation journey', async ({ page }) => {
   await page.goto('/broker/listings/new');
   await page.waitForLoadState('domcontentloaded');
 
-  // Select property type "House"
-  await page.locator('#propertyType').click();
-  await page.getByRole('option', { name: 'House', exact: true }).click();
+  // Select property type "House" (PropertyTypeCardSelector renders cards as role="radio")
+  await page.getByRole('radio', { name: 'House', exact: true }).click();
 
   // Fill title
   await page.locator('#title').fill('E2E Test House — delete me');
