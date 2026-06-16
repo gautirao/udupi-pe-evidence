@@ -181,6 +181,7 @@ public class AreaSummaryService {
                 WHERE status = 'LIVE'
                   AND archived_at IS NULL
                   AND is_duplicate = false
+                  AND LOWER(property_type) != LOWER('agricultural_land')
                 GROUP BY area_key
             ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?

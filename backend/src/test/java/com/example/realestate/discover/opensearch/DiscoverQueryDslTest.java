@@ -24,7 +24,7 @@ class DiscoverQueryDslTest {
     private static DiscoverListingPredicateBuilder.Filters filtersFor(String city) {
         return new DiscoverListingPredicateBuilder.Filters(
                 city, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null
         );
     }
 
@@ -54,7 +54,7 @@ class DiscoverQueryDslTest {
     void textOnlyQuery_emitsMultiMatchMust() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, "apartment", null
+                null, null, null, null, null, null, null, null, null, "apartment", null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -77,7 +77,7 @@ class DiscoverQueryDslTest {
         DiscoverListingPredicateBuilder.Bbox bbox = new DiscoverListingPredicateBuilder.Bbox(13.0, 74.5, 13.5, 75.0);
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, bbox, null, null
+                null, null, null, null, null, null, null, null, bbox, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -105,7 +105,7 @@ class DiscoverQueryDslTest {
     void radiusOnly_emitsGeoDistance() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, 13.3, 74.7, 3.0, null, null, null
+                null, null, null, null, null, 13.3, 74.7, 3.0, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -138,7 +138,7 @@ class DiscoverQueryDslTest {
         DiscoverListingPredicateBuilder.Bbox bbox = new DiscoverListingPredicateBuilder.Bbox(13.0, 74.5, 13.5, 75.0);
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, bbox, "villa", null
+                null, null, null, null, null, null, null, null, bbox, "villa", null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -162,7 +162,7 @@ class DiscoverQueryDslTest {
     void combinedQAndRadius_emitsBothClauses() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, 13.3, 74.7, 2.0, null, "flat", null
+                null, null, null, null, null, 13.3, 74.7, 2.0, null, "flat", null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -245,7 +245,7 @@ class DiscoverQueryDslTest {
     void backOnMarket_emitsExistsAndRangeClauses() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                Boolean.TRUE, null, null, null, null, null, null, null, null, null, null
+                Boolean.TRUE, null, null, null, null, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -296,7 +296,7 @@ class DiscoverQueryDslTest {
     void reraRegistered_emitsExistsReraNumber() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, Boolean.TRUE, null, null, null, null, null, null, null, null
+                null, null, Boolean.TRUE, null, null, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -321,7 +321,7 @@ class DiscoverQueryDslTest {
     void readyToMove_emitsTermPossessionStatusReady() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, Boolean.TRUE, null, null, null, null, null, null, null
+                null, null, null, Boolean.TRUE, null, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -346,7 +346,7 @@ class DiscoverQueryDslTest {
     void blankQ_doesNotEmitMultiMatch() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, "   ", null
+                null, null, null, null, null, null, null, null, null, "   ", null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -489,7 +489,7 @@ class DiscoverQueryDslTest {
         );
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, polygon, null, null, null, null, null, null
+                null, null, null, null, polygon, null, null, null, null, null, null, null
         );
 
         assertThatThrownBy(() -> DiscoverQueryDsl.buildMarkersQuery(filters))
@@ -536,7 +536,7 @@ class DiscoverQueryDslTest {
     void listingPurpose_sale_addsTermClause() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, "sale"
+                null, null, null, null, null, null, null, null, null, null, "sale", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -549,7 +549,7 @@ class DiscoverQueryDslTest {
     void listingPurpose_rent_addsTermClause() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, "rent"
+                null, null, null, null, null, null, null, null, null, null, "rent", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -562,7 +562,7 @@ class DiscoverQueryDslTest {
     void listingPurpose_null_noClause() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null
+                null, null, null, null, null, null, null, null, null, null, null, null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -575,7 +575,7 @@ class DiscoverQueryDslTest {
     void listingPurpose_blank_noClause() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, ""
+                null, null, null, null, null, null, null, null, null, null, "", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
@@ -588,13 +588,63 @@ class DiscoverQueryDslTest {
     void listingPurpose_whitespace_noClause() {
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, "  "
+                null, null, null, null, null, null, null, null, null, null, "  ", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
         List<Object> filter = getFilter(getBool(body));
 
         assertThat(getTermValue(filter, "listing_purpose")).isNull();
+    }
+
+    // -----------------------------------------------------------------------
+    // excludePropertyTypes: must_not wrapped as bool filter entry
+    // -----------------------------------------------------------------------
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void buildBoolQuery_withExcludePropertyTypes_addsMustNotClause() {
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
+                List.of("AGRICULTURAL_LAND")
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        // Expect a filter entry: { "bool": { "must_not": [ { "terms": { "property_type": ["AGRICULTURAL_LAND"] } } ] } }
+        boolean hasMustNotEntry = filter.stream().anyMatch(f -> {
+            Map<String, Object> m = (Map<String, Object>) f;
+            if (!m.containsKey("bool")) return false;
+            Map<String, Object> innerBool = (Map<String, Object>) m.get("bool");
+            if (!innerBool.containsKey("must_not")) return false;
+            List<Object> mustNot = (List<Object>) innerBool.get("must_not");
+            if (mustNot.size() != 1) return false;
+            Map<String, Object> termsClause = (Map<String, Object>) mustNot.get(0);
+            if (!termsClause.containsKey("terms")) return false;
+            Map<String, Object> termsMap = (Map<String, Object>) termsClause.get("terms");
+            return termsMap.containsKey("property_type");
+        });
+        assertThat(hasMustNotEntry).isTrue();
+    }
+
+    @Test
+    void buildBoolQuery_withNullExcludePropertyTypes_noMustNotClause() {
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filtersFor("udupi"));
+        Map<String, Object> bool = getBool(body);
+
+        // There must be no filter entry with a "bool.must_not" wrapping a property_type terms clause
+        List<Object> filter = getFilter(bool);
+        boolean hasMustNotBoolEntry = filter.stream().anyMatch(f -> {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> m = (Map<String, Object>) f;
+            if (!m.containsKey("bool")) return false;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> innerBool = (Map<String, Object>) m.get("bool");
+            return innerBool.containsKey("must_not");
+        });
+        assertThat(hasMustNotBoolEntry).isFalse();
     }
 
     @Test
@@ -615,7 +665,7 @@ class DiscoverQueryDslTest {
         // Confirms shared buildBoolQuery covers the markers path, not just listings
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 "udupi", null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, "rent"
+                null, null, null, null, null, null, null, null, null, null, "rent", null
         );
 
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);

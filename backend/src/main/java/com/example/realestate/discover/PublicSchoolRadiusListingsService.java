@@ -71,7 +71,8 @@ public class PublicSchoolRadiusListingsService {
                 schoolRadiusKm,
                 null,   // bbox
                 null,   // q
-                normPurpose
+                normPurpose,
+                List.of("AGRICULTURAL_LAND")  // excludePropertyTypes — school-first never shows agri
         );
 
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);

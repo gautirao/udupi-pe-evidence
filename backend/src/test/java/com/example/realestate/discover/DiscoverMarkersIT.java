@@ -155,7 +155,7 @@ class DiscoverMarkersIT {
                 null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, null
+                null, null, null, null
         );
     }
 

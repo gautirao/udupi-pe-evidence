@@ -61,7 +61,8 @@ public class DiscoverMarkersController {
             @RequestParam(name = "schoolRadiusKm", required = false) Double schoolRadiusKm,
             @RequestParam(name = "bbox", required = false) String bboxParam,
             @RequestParam(name = "q", required = false) String q,
-            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            @RequestParam(required = false) String excludePropertyType
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -85,6 +86,8 @@ public class DiscoverMarkersController {
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
         Long priceMaxPaise = priceMax != null ? priceMax * 100L : null;
 
+        List<String> excludeList = excludePropertyType != null ? List.of(excludePropertyType) : null;
+
         DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
                 city,
                 propertyTypes,
@@ -104,7 +107,8 @@ public class DiscoverMarkersController {
                 schoolRadiusKm,
                 bbox,
                 (q != null && !q.isBlank()) ? q.trim() : null,
-                (listingPurpose != null && !listingPurpose.isBlank()) ? listingPurpose.trim() : null
+                (listingPurpose != null && !listingPurpose.isBlank()) ? listingPurpose.trim() : null,
+                excludeList
         );
 
         return ResponseEntity.ok()

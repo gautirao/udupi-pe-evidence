@@ -288,7 +288,8 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.schoolRadiusKm(),
                 q.bbox(),
                 q.q(),
-                q.listingPurpose()
+                q.listingPurpose(),
+                null  // excludePropertyTypes — listings path does not apply type exclusion
         );
     }
 }

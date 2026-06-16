@@ -46,8 +46,23 @@ describe('JourneySwitcher', () => {
     render(<JourneySwitcher onSelectJourney={vi.fn()} />);
     expect(screen.getByText('Search Agricultural Land')).toBeInTheDocument();
     expect(
-      screen.getByText('Explore farmland and agricultural plots by area'),
+      screen.getByText('Find farmland by direction, corridor, and distance'),
     ).toBeInTheDocument();
+  });
+
+  it('agri-first card title remains "Search Agricultural Land" (regression guard)', () => {
+    render(<JourneySwitcher onSelectJourney={vi.fn()} />);
+    expect(screen.getByText('Search Agricultural Land')).toBeInTheDocument();
+  });
+
+  it('agri-first card subtitle is updated to corridor-first copy', () => {
+    render(<JourneySwitcher onSelectJourney={vi.fn()} />);
+    expect(
+      screen.getByText('Find farmland by direction, corridor, and distance'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('Explore farmland and agricultural plots by area'),
+    ).not.toBeInTheDocument();
   });
 
   it('clicking agri-first card calls onSelectJourney with "agri-first"', async () => {

@@ -267,6 +267,39 @@ class DiscoverMarkersControllerTest {
         verifyNoInteractions(service);
     }
 
+    // ── excludePropertyType param wiring ─────────────────────────────────────
+
+    @Test
+    void getMarkers_withExcludePropertyType_passesFiltersToService() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .param("excludePropertyType", "agricultural_land")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f ->
+                f.excludePropertyTypes() != null
+                && f.excludePropertyTypes().size() == 1
+                && f.excludePropertyTypes().contains("agricultural_land")
+        ));
+    }
+
+    @Test
+    void getMarkers_withoutExcludePropertyType_noExclusionInFilters() throws Exception {
+        when(service.getMarkers(any())).thenReturn(
+                new DiscoverMarkersResponse("udupi", List.of(), false, 0, 0L, 1000, false));
+
+        mockMvc.perform(get("/api/discover/markers")
+                        .param("city", "udupi")
+                        .with(jwt()))
+                .andExpect(status().isOk());
+
+        verify(service).getMarkers(argThat(f -> f.excludePropertyTypes() == null));
+    }
+
     // ── Cache-Control: no-store (authenticated endpoint) ─────────────────────
 
     @Test

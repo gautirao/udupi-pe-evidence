@@ -1778,7 +1778,7 @@ export default function MapDiscovery() {
               initialZoom={urlState.viewport?.zoom}
               cityCenter={cityCenter}
               cityZoom={cityZoom}
-              areas={mapZoom <= AREA_LAYER_MAX_ZOOM ? discoverAreas : []}
+              areas={mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney ? discoverAreas : []}
               onAreaClick={handleAreaClick}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
               onZoomChange={setMapZoom}

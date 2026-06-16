@@ -67,7 +67,7 @@ export function JourneySwitcher({ onSelectJourney }: JourneySwitcherProps) {
           <div className="min-w-0">
             <p className="text-[15px] font-semibold text-foreground">Search Agricultural Land</p>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Explore farmland and agricultural plots by area
+              Find farmland by direction, corridor, and distance
             </p>
           </div>
         </div>

@@ -1,6 +1,7 @@
 package com.example.realestate.discover;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -40,7 +41,8 @@ public class DiscoverListingPredicateBuilder {
             Double schoolRadiusKm,         // default 2.0 when schoolLat+schoolLon provided
             Bbox bbox,                     // viewport rectangle filter, nullable
             String q,                      // keyword search query; null/blank = no FTS filter
-            String listingPurpose          // 'sale' or 'rent'; null = no filter
+            String listingPurpose,         // 'sale' or 'rent'; null = no filter
+            List<String> excludePropertyTypes  // property types to exclude via NOT IN; null = no exclusion
     ) {}
 
     /**
@@ -235,6 +237,17 @@ public class DiscoverListingPredicateBuilder {
         if (normPurpose != null) {
             sb.append(" AND pl.listing_purpose = ?");
             params.add(normPurpose);
+        }
+
+        // excludePropertyTypes — NOT IN exclusion; null/empty = no exclusion (backward-compatible)
+        if (f.excludePropertyTypes() != null && !f.excludePropertyTypes().isEmpty()) {
+            List<String> placeholders = Collections.nCopies(f.excludePropertyTypes().size(), "?");
+            sb.append(" AND LOWER(pl.property_type) NOT IN (")
+              .append(String.join(", ", placeholders))
+              .append(")");
+            for (String t : f.excludePropertyTypes()) {
+                params.add(t.toLowerCase());
+            }
         }
 
         return new Sql(sb.toString(), params, bboxApplied);

@@ -273,7 +273,8 @@ class ShadowComparisonRunnerTest {
                 null,     // schoolRadiusKm
                 null,     // bbox
                 null,     // q
-                null);    // listingPurpose
+                null,     // listingPurpose
+                null);    // excludePropertyTypes
     }
 
     private static DiscoverMarkersResponse emptyMarkersResponse() {

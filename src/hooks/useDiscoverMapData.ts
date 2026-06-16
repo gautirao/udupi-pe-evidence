@@ -159,6 +159,9 @@ export function useDiscoverMapData({
   // Issue #1371 — isAgriJourney gates both the areas call (below) and the markers call.
   // Declared here (before first use) to keep agriFilters readable.
   const isAgriJourney = journey === 'agri-first';
+  // Issue #1463 — exclude agricultural_land markers from non-agri journeys so they don't
+  // clutter area-first and school-first map views. In agri-first, undefined → no exclusion.
+  const excludePropertyType = isAgriJourney ? undefined : 'agricultural_land';
   // Issue #1372 — in agri-first journey, force propertyTypes to ['agricultural_land']
   // so markerListings contains only agri markers.
   const agriFilters: typeof filters = isAgriJourney
@@ -168,7 +171,7 @@ export function useDiscoverMapData({
     data: filteredMarkersData,
     isLoading: filteredMarkersLoading,
     isFetching: filteredMarkersFetching,
-  } = useDiscoverFilteredMarkers(city, agriFilters, markersEnabled, bbox, debouncedSearch?.trim() || undefined, listingPurpose);
+  } = useDiscoverFilteredMarkers(city, agriFilters, markersEnabled, bbox, debouncedSearch?.trim() || undefined, listingPurpose, excludePropertyType);
 
   // ── Static data ───────────────────────────────────────────────────────────
   const { data: trendsOpts } = useTrendsOptions(city, true, 50);

@@ -115,7 +115,7 @@ class ListingPurposeOpenSearchIT {
         return new DiscoverListingPredicateBuilder.Filters(
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                listingPurpose
+                listingPurpose, null
         );
     }
 

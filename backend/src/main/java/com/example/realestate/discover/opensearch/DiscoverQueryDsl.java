@@ -121,7 +121,8 @@ public final class DiscoverQueryDsl {
                 q.schoolRadiusKm(),
                 q.bbox(),
                 q.q(),
-                q.listingPurpose()
+                q.listingPurpose(),
+                null  // excludePropertyTypes — OS responses don't carry this input param
         );
     }
 
@@ -227,6 +228,11 @@ public final class DiscoverQueryDsl {
                 ? f.listingPurpose().trim() : null;
         if (normPurpose != null) {
             filter.add(term("listing_purpose", normPurpose));
+        }
+
+        // excludePropertyTypes — must_not exclusion wrapped as a bool filter entry (backward-compat)
+        if (f.excludePropertyTypes() != null && !f.excludePropertyTypes().isEmpty()) {
+            filter.add(Map.of("bool", Map.of("must_not", List.of(terms("property_type", f.excludePropertyTypes())))));
         }
 
         Map<String, Object> bool = new LinkedHashMap<>();
