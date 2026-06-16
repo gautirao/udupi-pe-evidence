@@ -1,4 +1,5 @@
 import { Suspense, lazy } from "react";
+import { useAuthCacheSync } from '@/hooks/useAuthCacheSync';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -45,6 +46,12 @@ const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
 const TrustReviewQueue = lazy(() => import("./pages/admin/TrustReviewQueue"));
 
 const queryClient = new QueryClient();
+
+/** Mounts cache-invalidation side-effects that need both QueryClient and AuthContext. */
+function AppCacheSync() {
+  useAuthCacheSync();
+  return null;
+}
 
 function PageLoader() {
   return (
@@ -110,6 +117,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <AppCacheSync />
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/auth" element={<Auth />} />

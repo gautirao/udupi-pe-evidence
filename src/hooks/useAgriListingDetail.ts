@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
+import { listingKeys } from '@/lib/listingQueryKeys';
 
 /**
  * Issue #1374 — fetch full agri listing detail from the public endpoint.
@@ -15,16 +16,19 @@ import type { PublicListingDetail } from '@/pages/ListingDetail';
  *
  * Issue #1454 (anon agri visibility gating) — the backend withholds price /
  * pricePaise / surveyNumber and coarsens lat/lng for anonymous agri callers.
- * The auth tier (isAuthenticated) is therefore part of the cache key: an authed
- * exact-coord/price response must never be served from cache to an anon caller
- * (and vice versa) after a session change.
+ * Issue #1462 — uses listingKeys.public(id, isAuthenticated) so the cached data
+ * is shared with useListingById on the full /listing/:id detail page,
+ * eliminating the duplicate fetch on peek → detail navigation.
  */
 export function useAgriListingDetail(id: string | null | undefined) {
   const { session } = useAuth();
   const isAuthenticated = !!session;
   return useQuery({
-    queryKey: ['agri-listing-detail', id, isAuthenticated] as const,
-    queryFn: () => api.get<PublicListingDetail>(`/api/public/listings/${id}`),
+    queryKey: listingKeys.public(id, isAuthenticated),
+    queryFn: () => {
+      if (!id) throw new Error('[useAgriListingDetail] id is required');
+      return api.get<PublicListingDetail>(`/api/public/listings/${id}`);
+    },
     enabled: !!id,
     staleTime: 5 * 60 * 1000,
   });

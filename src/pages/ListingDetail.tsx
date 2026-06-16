@@ -1,6 +1,7 @@
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { listingKeys } from '@/lib/listingQueryKeys';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -72,20 +73,25 @@ export interface PublicListingDetail extends ListingResponse {
   pricePaise?: number | null;
 }
 
-function useListingById(id: string | undefined, isPreview: boolean, userId?: string) {
+function useListingById(id: string | undefined, isPreview: boolean) {
+  const { session } = useAuth();
+  const isAuthenticated = !!session;
   return useQuery({
-    queryKey: isPreview ? ['listing-detail', id] : ['listing-public', id, userId ?? null],
+    queryKey: isPreview
+      ? listingKeys.preview(id)
+      : listingKeys.public(id, isAuthenticated),
     queryFn: () =>
       isPreview
         ? api.get<PublicListingDetail>(`/api/listings/${id}`)
         : api.get<PublicListingDetail>(`/api/public/listings/${id}`),
     enabled: !!id,
+    staleTime: isPreview ? undefined : 5 * 60 * 1000,
   });
 }
 
 function useListingPriceHistory(id: string | undefined) {
   return useQuery({
-    queryKey: ['listing-price-history', id],
+    queryKey: listingKeys.priceHistory(id),
     queryFn: () => api.get<PriceHistoryEntry[]>(`/api/public/listings/${id}/price-history`),
     enabled: !!id,
   });
@@ -97,7 +103,7 @@ interface TrustPublicResponse {
 
 function useTrustBadges(id: string | undefined) {
   return useQuery({
-    queryKey: ['listing-trust', id],
+    queryKey: listingKeys.trust(id),
     queryFn: () => api.get<TrustPublicResponse>(`/api/listings/${id}/trust`),
     enabled: !!id,
     staleTime: 60_000,
@@ -118,7 +124,7 @@ export default function ListingDetail() {
   const isPreview = searchParams.get('preview') === 'true';
   const { toast } = useToast();
   const { user } = useAuth();
-  const { data: listing, isLoading, error } = useListingById(id, isPreview, user?.id);
+  const { data: listing, isLoading, error } = useListingById(id, isPreview);
   const { data: priceHistory = [] } = useListingPriceHistory(id);
   const { data: trustData } = useTrustBadges(id);
   const [copied, setCopied] = useState(false);
