@@ -191,15 +191,19 @@ describe('Issue #1178 — MapDiscovery group highlight + invalid notice', () => 
     mockUseAuth.mockReturnValue({ user: null, isLoading: false, isAdmin: false, isDealer: false });
   });
 
-  it('AC4: cold-load with valid ?groupId highlights the matching card', async () => {
+  it('AC4: cold-load with valid ?groupId opens Level-2 for that group', async () => {
     renderAt('/discover?city=udupi&journey=area-first&groupId=coastal-homes');
 
-    const selected = await screen.findByTestId('area-group-card-coastal-homes');
-    await waitFor(() => {
-      expect(selected).toHaveAttribute('aria-current', 'true');
-    });
-    expect(selected.className).toContain('border-primary');
-    expect(screen.getByTestId('area-group-card-hill-homes')).not.toHaveAttribute('aria-current');
+    // Level-2 panel renders immediately — valid groupId resolves to coastal-homes group
+    const level2 = await screen.findByTestId('area-group-level2');
+    expect(level2).toBeInTheDocument();
+    // coastal-homes area_keys = [COASTAL_AREA_KEY] → Malpe area row is shown
+    expect(screen.getByTestId('browse-all-area-IN|KA|Udupi|Malpe')).toBeInTheDocument();
+    // Back-to-all button allows returning to the L1 group list
+    expect(screen.getByTestId('area-group-back-to-all')).toBeInTheDocument();
+    // L1 group cards are NOT shown in Level-2
+    expect(screen.queryByTestId('area-group-card-coastal-homes')).not.toBeInTheDocument();
+    // No invalid-group notice (valid groupId)
     expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
   });
 
@@ -221,21 +225,21 @@ describe('Issue #1178 — MapDiscovery group highlight + invalid notice', () => 
     expect(screen.getByTestId('area-group-card-hill-homes')).not.toHaveAttribute('aria-current');
   });
 
-  it('AC2: clicking a different group updates the URL groupId and moves the highlight', async () => {
+  it('AC2: back-to-all from Level-2 returns to the L1 group card list', async () => {
     const user = userEvent.setup();
     renderAt('/discover?city=udupi&journey=area-first&groupId=coastal-homes');
 
-    const coastal = await screen.findByTestId('area-group-card-coastal-homes');
-    await waitFor(() => expect(coastal).toHaveAttribute('aria-current', 'true'));
+    // Level-2 is shown on cold-load (valid groupId)
+    await screen.findByTestId('area-group-level2');
 
-    await user.click(screen.getByTestId('area-group-card-hill-homes'));
+    // Click the back-to-all button
+    await user.click(screen.getByTestId('area-group-back-to-all'));
 
-    await waitFor(() => {
-      expect(currentSearch).toContain('groupId=hill-homes');
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId('area-group-card-hill-homes')).toHaveAttribute('aria-current', 'true');
-    });
-    expect(screen.getByTestId('area-group-card-coastal-homes')).not.toHaveAttribute('aria-current');
+    // L1 group cards are shown again
+    await screen.findByTestId('area-group-card-coastal-homes');
+    expect(screen.getByTestId('area-group-card-hill-homes')).toBeInTheDocument();
+
+    // Level-2 panel is gone
+    expect(screen.queryByTestId('area-group-level2')).not.toBeInTheDocument();
   });
 });

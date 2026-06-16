@@ -100,6 +100,7 @@ vi.mock('@/lib/api', () => ({
 
 // ─── Import component AFTER mocks ─────────────────────────────
 import ListingDetail from '../ListingDetail';
+import { listingKeys } from '@/lib/listingQueryKeys';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -161,14 +162,13 @@ function renderWithListing(listing: ReturnType<typeof makeListing> | null, loadi
   });
 
   // Pre-populate TanStack Query cache to avoid network call.
-  // Query key: ['listing-public', id, userId ?? null] — with mockUser.current
-  // the third element is either the user id or null.
+  // Cache key matches useListingById: listingKeys.public(id, isAuthenticated)
+  // session is always null in this test file → isAuthenticated=false → 'anon' scope
   if (listing !== null) {
-    const userId = mockUser.current?.id ?? null;
-    queryClient.setQueryData(['listing-public', 'listing-123', userId], listing);
+    queryClient.setQueryData(listingKeys.public('listing-123', false), listing);
   }
-  // Pre-populate price history cache with empty array (no price changes by default)
-  queryClient.setQueryData(['listing-price-history', 'listing-123'], []);
+  // Price history key: listingKeys.priceHistory(id)
+  queryClient.setQueryData(listingKeys.priceHistory('listing-123'), []);
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -306,7 +306,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(['listing-public', 'listing-123', null], null);
+    queryClient.setQueryData(listingKeys.public('listing-123', false), null);
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
@@ -321,7 +321,7 @@ describe('ListingDetail — not found state (PR-11.4)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    queryClient.setQueryData(['listing-public', 'listing-123', null], null);
+    queryClient.setQueryData(listingKeys.public('listing-123', false), null);
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
