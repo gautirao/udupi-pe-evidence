@@ -14,24 +14,14 @@
 
 import React from 'react';
 import { formatPrice } from '@/lib/formatters';
-
-// Issue #1458 — label maps for enum values displayed to the user.
-const LAND_CATEGORY_LABELS: Record<string, string> = {
-  FARMLAND: 'Farmland',
-  PLANTATION: 'Plantation',
-  FARM_PLOT: 'Farm plot',
-  AGRICULTURAL_PLOT: 'Agricultural plot',
-  OTHER: 'Other',
-};
-
-const WATER_SOURCE_LABELS: Record<string, string> = {
-  WELL: 'Well',
-  BOREWELL: 'Borewell',
-  POND: 'Pond',
-  STREAM: 'Stream',
-  NOT_AVAILABLE: 'Not available',
-  OTHER: 'Other',
-};
+import {
+  WATER_SOURCE_LABELS,
+  LAND_CATEGORY_LABELS,
+  SOIL_TYPE_LABELS,
+  ROAD_ACCESS_LABELS,
+  CULTIVATION_STATUS_LABELS,
+  OWNERSHIP_TYPE_LABELS,
+} from '@/lib/agriFieldLabels';
 
 export interface AgriSpecRowsProps {
   surveyNumber?: string | null;
@@ -153,10 +143,10 @@ export function AgriSpecRows({
       <FieldRow label="Water source" value={waterSourceValue} testId="agri-water-source" />
       <FieldRow label="Farmhouse available" value={farmhouseValue} testId="agri-farmhouse-available" />
       <FieldRow label="Fencing done" value={fencingValue} testId="agri-fencing-done" />
-      <FieldRow label="Soil type" value={soilType} testId="agri-soil-type" />
-      <FieldRow label="Road access" value={roadAccess} testId="agri-road-access" />
-      <FieldRow label="Cultivation status" value={cultivationStatus} testId="agri-cultivation-status" />
-      <FieldRow label="Ownership type" value={ownershipType} testId="agri-ownership-type" />
+      <FieldRow label="Soil type" value={soilType != null ? (SOIL_TYPE_LABELS[soilType] ?? soilType) : null} testId="agri-soil-type" />
+      <FieldRow label="Road access" value={roadAccess != null ? (ROAD_ACCESS_LABELS[roadAccess] ?? roadAccess) : null} testId="agri-road-access" />
+      <FieldRow label="Cultivation status" value={cultivationStatus != null ? (CULTIVATION_STATUS_LABELS[cultivationStatus] ?? cultivationStatus) : null} testId="agri-cultivation-status" />
+      <FieldRow label="Ownership type" value={ownershipType != null ? (OWNERSHIP_TYPE_LABELS[ownershipType] ?? ownershipType) : null} testId="agri-ownership-type" />
 
       {showBoundaryDisclaimer && (
         <p

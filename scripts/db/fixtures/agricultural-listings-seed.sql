@@ -4,6 +4,7 @@
 -- !! Add-on seed; run AFTER discover-smoke-seed.sql / restore-test-fixture.sh !!
 -- !! All data is fabricated for local Discover development and testing only !!
 -- v2 (2026-06-11): locality-specific realistic titles; ON CONFLICT now updates title/locality.
+-- v3 (2026-06-16): all agri field values normalised to canonical SCREAMING_SNAKE_CASE (V91 parity).
 --
 -- Requires schema through V87 (V84 agri fields, V85 boundary, V86 property_type CHECK,
 --                              V87 regional_area_classifications for the #1408 backfill).
@@ -143,8 +144,8 @@ VALUES
    12500000,
    'IN|KA|Udupi|Brahmavar', true, false, true, NOW(), NOW(),
    5.0, 'acre',
-   'Borewell', 'Red loam', 'Tar road', 'Coconut plantation',
-   'Freehold', '124/3A',
+   'BOREWELL', 'RED_LATERITE', 'TARRED_ROAD', 'COCONUT_PLANTATION',
+   'FREEHOLD', '124/3A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7463 13.4265, 74.7461 13.4233, 74.7497 13.4235, 74.7499 13.4267, 74.7463 13.4265))')),
 
   -- ── Brahmavar #2: 3.5 acre, WITH boundary ──────────────────────────────────
@@ -158,8 +159,8 @@ VALUES
    8750000,
    'IN|KA|Udupi|Brahmavar', true, false, true, NOW(), NOW(),
    3.5, 'acre',
-   'Open well', 'Laterite', 'Mud road', 'Areca plantation',
-   'Inherited', '87/2B',
+   'WELL', 'RED_LATERITE', 'KACHCHA_ROAD', 'ARECA_PLANTATION',
+   'INHERITED', '87/2B',
    ST_GeogFromText('SRID=4326;POLYGON((74.7546 13.4313, 74.7548 13.4287, 74.7574 13.4285, 74.7572 13.4315, 74.7546 13.4313))')),
 
   -- ── Brahmavar #3: 8.0 acre, WITH boundary ──────────────────────────────────
@@ -173,8 +174,8 @@ VALUES
    16000000,
    'IN|KA|Udupi|Brahmavar', true, false, true, NOW(), NOW(),
    8.0, 'acre',
-   'River', 'Alluvial', 'Highway frontage', 'Fallow',
-   'Freehold', '45/1',
+   'RIVER', 'ALLUVIAL', 'HIGHWAY_FRONTAGE', 'FALLOW',
+   'FREEHOLD', '45/1',
    ST_GeogFromText('SRID=4326;POLYGON((74.7578 13.4370, 74.7580 13.4328, 74.7622 13.4330, 74.7620 13.4372, 74.7578 13.4370))')),
 
   -- ── Brahmavar #4: 2.0 acre, NO boundary (NULL) — fallback marker test ──────
@@ -185,8 +186,8 @@ VALUES
    4000000,
    'IN|KA|Udupi|Brahmavar', true, false, true, NOW(), NOW(),
    2.0, 'acre',
-   'Rain-fed', 'Red loam', 'Mud road', 'Cultivated',
-   'Inherited', '210/6C',
+   'RAIN_FED', 'RED_LATERITE', 'KACHCHA_ROAD', 'CULTIVATED',
+   'INHERITED', '210/6C',
    NULL),
 
   -- ── Shirva #1: 4.0 acre, WITH boundary ────────────────────────────────────
@@ -200,8 +201,8 @@ VALUES
    7200000,
    'IN|KA|Udupi|Shirva', true, false, true, NOW(), NOW(),
    4.0, 'acre',
-   'Borewell', 'Alluvial', 'Tar road', 'Cultivated',
-   'Freehold', '312/4A',
+   'BOREWELL', 'ALLUVIAL', 'TARRED_ROAD', 'CULTIVATED',
+   'FREEHOLD', '312/4A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7806 13.1993, 74.7807 13.1965, 74.7834 13.1967, 74.7833 13.1995, 74.7806 13.1993))')),
 
   -- ── Shirva #2: 6.5 acre, WITH boundary ────────────────────────────────────
@@ -215,8 +216,8 @@ VALUES
    14300000,
    'IN|KA|Udupi|Shirva', true, false, true, NOW(), NOW(),
    6.5, 'acre',
-   'Open well', 'Red loam', 'Mud road', 'Coconut plantation',
-   'Inherited', '56/7B',
+   'WELL', 'RED_LATERITE', 'KACHCHA_ROAD', 'COCONUT_PLANTATION',
+   'INHERITED', '56/7B',
    ST_GeogFromText('SRID=4326;POLYGON((74.7860 13.2068, 74.7862 13.2030, 74.7898 13.2032, 74.7896 13.2070, 74.7860 13.2068))')),
 
   -- ── Shirva #3: 1.5 acre, WITH boundary ────────────────────────────────────
@@ -230,8 +231,8 @@ VALUES
    3750000,
    'IN|KA|Udupi|Shirva', true, false, true, NOW(), NOW(),
    1.5, 'acre',
-   'Rain-fed', 'Laterite', 'Tar road', 'Fallow',
-   'Freehold', '99/2C',
+   'RAIN_FED', 'RED_LATERITE', 'TARRED_ROAD', 'FALLOW',
+   'FREEHOLD', '99/2C',
    ST_GeogFromText('SRID=4326;POLYGON((74.7772 13.2107, 74.7773 13.2092, 74.7788 13.2093, 74.7787 13.2108, 74.7772 13.2107))')),
 
   -- ── Padubidri #1: 10.0 acre, WITH boundary ────────────────────────────────
@@ -245,8 +246,8 @@ VALUES
    25000000,
    'IN|KA|Udupi|Padubidri', true, false, true, NOW(), NOW(),
    10.0, 'acre',
-   'River', 'Alluvial', 'Highway frontage', 'Areca plantation',
-   'Freehold', '178/1A',
+   'RIVER', 'ALLUVIAL', 'HIGHWAY_FRONTAGE', 'ARECA_PLANTATION',
+   'FREEHOLD', '178/1A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7797 13.1822, 74.7798 13.1776, 74.7843 13.1778, 74.7842 13.1824, 74.7797 13.1822))')),
 
   -- ── Padubidri #2: 7.0 acre, WITH boundary ─────────────────────────────────
@@ -260,8 +261,8 @@ VALUES
    17500000,
    'IN|KA|Udupi|Padubidri', true, false, true, NOW(), NOW(),
    7.0, 'acre',
-   'Borewell', 'Red loam', 'Tar road', 'Cultivated',
-   'Inherited', '203/5B',
+   'BOREWELL', 'RED_LATERITE', 'TARRED_ROAD', 'CULTIVATED',
+   'INHERITED', '203/5B',
    ST_GeogFromText('SRID=4326;POLYGON((74.7880 13.1898, 74.7882 13.1860, 74.7918 13.1862, 74.7916 13.1900, 74.7880 13.1898))'))
 
 ON CONFLICT (id) DO UPDATE
@@ -349,8 +350,8 @@ VALUES
    9000000,
    'IN|KA|Udupi|Manipal', true, false, true, NOW(), NOW(),
    4.0, 'acre',
-   'Borewell', 'Red loam', 'Tar road', 'Coconut plantation',
-   'Freehold', '201/3B',
+   'BOREWELL', 'RED_LATERITE', 'TARRED_ROAD', 'COCONUT_PLANTATION',
+   'FREEHOLD', '201/3B',
    ST_GeogFromText('SRID=4326;POLYGON((74.7887 13.3523, 74.7886 13.3496, 74.7913 13.3497, 74.7914 13.3524, 74.7887 13.3523))')),
 
   -- ── Manipal #2: 6.5 acre, WITH boundary ───────────────────────────────────
@@ -362,8 +363,8 @@ VALUES
    15600000,
    'IN|KA|Udupi|Manipal', true, false, true, NOW(), NOW(),
    6.5, 'acre',
-   'Open well', 'Laterite', 'Mud road', 'Areca plantation',
-   'Inherited', '88/1A',
+   'WELL', 'RED_LATERITE', 'KACHCHA_ROAD', 'ARECA_PLANTATION',
+   'INHERITED', '88/1A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7966 13.3583, 74.7964 13.3556, 74.7994 13.3558, 74.7996 13.3585, 74.7966 13.3583))')),
 
   -- ── Malpe #1: 5.0 acre, WITH boundary ─────────────────────────────────────
@@ -376,8 +377,8 @@ VALUES
    11000000,
    'IN|KA|Udupi|Malpe', true, false, true, NOW(), NOW(),
    5.0, 'acre',
-   'River', 'Alluvial', 'Highway frontage', 'Cultivated',
-   'Freehold', '67/4C',
+   'RIVER', 'ALLUVIAL', 'HIGHWAY_FRONTAGE', 'CULTIVATED',
+   'FREEHOLD', '67/4C',
    ST_GeogFromText('SRID=4326;POLYGON((74.6957 13.3514, 74.6959 13.3486, 74.6985 13.3488, 74.6983 13.3516, 74.6957 13.3514))')),
 
   -- ── Malpe #2: 3.5 acre, WITH boundary ─────────────────────────────────────
@@ -389,8 +390,8 @@ VALUES
    7000000,
    'IN|KA|Udupi|Malpe', true, false, true, NOW(), NOW(),
    3.5, 'acre',
-   'Rain-fed', 'Red loam', 'Mud road', 'Fallow',
-   'Freehold', '112/2A',
+   'RAIN_FED', 'RED_LATERITE', 'KACHCHA_ROAD', 'FALLOW',
+   'FREEHOLD', '112/2A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7038 13.3582, 74.7040 13.3558, 74.7062 13.3560, 74.7060 13.3584, 74.7038 13.3582))')),
 
   -- ── NorthMidTest #1: 7.0 acre, WITH boundary ──────────────────────────────
@@ -403,8 +404,8 @@ VALUES
    17500000,
    'IN|KA|Udupi|NorthMidTest', true, false, true, NOW(), NOW(),
    7.0, 'acre',
-   'Borewell', 'Laterite', 'Tar road', 'Areca plantation',
-   'Freehold', '334/1A',
+   'BOREWELL', 'RED_LATERITE', 'TARRED_ROAD', 'ARECA_PLANTATION',
+   'FREEHOLD', '334/1A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7381 13.6118, 74.7383 13.6080, 74.7421 13.6082, 74.7419 13.6120, 74.7381 13.6118))')),
 
   -- ── NorthMidTest #2: 4.0 acre, NO boundary (NULL) — far-band fallback test ─
@@ -416,8 +417,8 @@ VALUES
    8000000,
    'IN|KA|Udupi|NorthMidTest', true, false, true, NOW(), NOW(),
    4.0, 'acre',
-   'Open well', 'Red loam', 'Mud road', 'Fallow',
-   'Inherited', '210/5B',
+   'WELL', 'RED_LATERITE', 'KACHCHA_ROAD', 'FALLOW',
+   'INHERITED', '210/5B',
    NULL),
 
   -- ── SouthFarTest #1: 9.0 acre, WITH boundary ──────────────────────────────
@@ -430,8 +431,8 @@ VALUES
    22500000,
    'IN|KA|Udupi|SouthFarTest', true, false, true, NOW(), NOW(),
    9.0, 'acre',
-   'River', 'Alluvial', 'Highway frontage', 'Coconut plantation',
-   'Freehold', '445/2C',
+   'RIVER', 'ALLUVIAL', 'HIGHWAY_FRONTAGE', 'COCONUT_PLANTATION',
+   'FREEHOLD', '445/2C',
    ST_GeogFromText('SRID=4326;POLYGON((74.7381 13.0718, 74.7383 13.0681, 74.7420 13.0683, 74.7418 13.0720, 74.7381 13.0718))')),
 
   -- ── SouthFarTest #2: 5.5 acre, WITH boundary ──────────────────────────────
@@ -443,8 +444,8 @@ VALUES
    11000000,
    'IN|KA|Udupi|SouthFarTest', true, false, true, NOW(), NOW(),
    5.5, 'acre',
-   'Borewell', 'Red loam', 'Tar road', 'Cultivated',
-   'Freehold', '189/7A',
+   'BOREWELL', 'RED_LATERITE', 'TARRED_ROAD', 'CULTIVATED',
+   'FREEHOLD', '189/7A',
    ST_GeogFromText('SRID=4326;POLYGON((74.7437 13.0763, 74.7439 13.0736, 74.7463 13.0738, 74.7461 13.0765, 74.7437 13.0763))')),
 
   -- ── EastFarTest #1: 12.0 acre, WITH boundary ──────────────────────────────
@@ -457,8 +458,8 @@ VALUES
    18000000,
    'IN|KA|Udupi|EastFarTest', true, false, true, NOW(), NOW(),
    12.0, 'acre',
-   'Borewell', 'Black cotton', 'Tar road', 'Cultivated',
-   'Freehold', '78/3A',
+   'BOREWELL', 'BLACK_COTTON', 'TARRED_ROAD', 'CULTIVATED',
+   'FREEHOLD', '78/3A',
    ST_GeogFromText('SRID=4326;POLYGON((75.2479 13.3418, 75.2481 13.3380, 75.2521 13.3382, 75.2519 13.3420, 75.2479 13.3418))')),
 
   -- ── EastFarTest #2: 8.5 acre, WITH boundary ───────────────────────────────
@@ -470,8 +471,8 @@ VALUES
    12750000,
    'IN|KA|Udupi|EastFarTest', true, false, true, NOW(), NOW(),
    8.5, 'acre',
-   'Open well', 'Red loam', 'Mud road', 'Areca plantation',
-   'Inherited', '156/6B',
+   'WELL', 'RED_LATERITE', 'KACHCHA_ROAD', 'ARECA_PLANTATION',
+   'INHERITED', '156/6B',
    ST_GeogFromText('SRID=4326;POLYGON((75.2547 13.3467, 75.2549 13.3431, 75.2573 13.3433, 75.2571 13.3469, 75.2547 13.3467))')),
 
   -- ── Kundapura #1: 5.0 acre, WITH boundary ─────────────────────────────────
@@ -484,8 +485,8 @@ VALUES
    13500000,
    'IN|KA|Udupi|Kundapura', true, false, true, NOW(), NOW(),
    5.0, 'acre',
-   'Borewell', 'Laterite', 'Tar road', 'Coconut plantation',
-   'Freehold', '56/2A',
+   'BOREWELL', 'RED_LATERITE', 'TARRED_ROAD', 'COCONUT_PLANTATION',
+   'FREEHOLD', '56/2A',
    ST_GeogFromText('SRID=4326;POLYGON((74.6867 13.6233, 74.6869 13.6206, 74.6895 13.6208, 74.6893 13.6235, 74.6867 13.6233))')),
 
   -- ── Kundapura #2: 3.5 acre, WITH boundary ─────────────────────────────────
@@ -497,8 +498,8 @@ VALUES
    7875000,
    'IN|KA|Udupi|Kundapura', true, false, true, NOW(), NOW(),
    3.5, 'acre',
-   'Open well', 'Red loam', 'Mud road', 'Areca plantation',
-   'Inherited', '89/4B',
+   'WELL', 'RED_LATERITE', 'KACHCHA_ROAD', 'ARECA_PLANTATION',
+   'INHERITED', '89/4B',
    ST_GeogFromText('SRID=4326;POLYGON((74.6907 13.6273, 74.6909 13.6246, 74.6933 13.6248, 74.6931 13.6275, 74.6907 13.6273))'))
 
 ON CONFLICT (id) DO UPDATE

@@ -117,7 +117,7 @@ def _agri_row(seed_id: str = "agri-001", **overrides) -> dict:
         # Agri-specific fields
         "land_category": "FARMLAND",
         "water_source": "BOREWELL",
-        "soil_type": "LATERITE",
+        "soil_type": "RED_LATERITE",
         "road_access": "TARRED_ROAD",
         "cultivation_status": "CULTIVATED",
         "ownership_type": "FREEHOLD",

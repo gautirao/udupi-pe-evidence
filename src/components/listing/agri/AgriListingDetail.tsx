@@ -53,6 +53,13 @@ import { AreaMarketWidget } from '@/components/listing/AreaMarketWidget';
 import { ListingGallery } from '@/components/listing/ListingGallery';
 import { useNearbySchools } from '@/hooks/useSchoolSearch';
 import { formatPrice, formatArea } from '@/lib/formatters';
+import {
+  WATER_SOURCE_LABELS,
+  SOIL_TYPE_LABELS,
+  ROAD_ACCESS_LABELS,
+  CULTIVATION_STATUS_LABELS,
+  OWNERSHIP_TYPE_LABELS,
+} from '@/lib/agriFieldLabels';
 import { formatListingId } from '@/lib/listing-id';
 import { DISTRICT_TO_CITY_SLUG, DEFAULT_CITY } from '@/lib/localityUtils';
 import { useToast } from '@/hooks/use-toast';
@@ -516,9 +523,9 @@ export function AgriListingDetail({
   if (landAreaDisplay) facts.push({ icon: <Ruler className="h-3.5 w-3.5" />, label: 'Land Area', value: landAreaDisplay });
   if (priceDisplay) facts.push({ icon: <IndianRupee className="h-3.5 w-3.5" />, label: 'Total Price', value: priceDisplay });
   if (perAcreDisplay) facts.push({ icon: <Coins className="h-3.5 w-3.5" />, label: 'Per Acre', value: perAcreDisplay });
-  if (listing.cultivationStatus) facts.push({ icon: <Sprout className="h-3.5 w-3.5" />, label: 'Cultivation', value: listing.cultivationStatus });
-  if (listing.waterSource) facts.push({ icon: <Droplets className="h-3.5 w-3.5" />, label: 'Water Source', value: listing.waterSource });
-  if (listing.roadAccess) facts.push({ icon: <Route className="h-3.5 w-3.5" />, label: 'Road Access', value: listing.roadAccess });
+  if (listing.cultivationStatus) facts.push({ icon: <Sprout className="h-3.5 w-3.5" />, label: 'Cultivation', value: CULTIVATION_STATUS_LABELS[listing.cultivationStatus] ?? listing.cultivationStatus });
+  if (listing.waterSource) facts.push({ icon: <Droplets className="h-3.5 w-3.5" />, label: 'Water Source', value: WATER_SOURCE_LABELS[listing.waterSource] ?? listing.waterSource });
+  if (listing.roadAccess) facts.push({ icon: <Route className="h-3.5 w-3.5" />, label: 'Road Access', value: ROAD_ACCESS_LABELS[listing.roadAccess] ?? listing.roadAccess });
 
   // Anonymous users have price withheld by the backend (#1454). Show a locked
   // price tile in the summary grid instead of silently omitting it.
@@ -627,17 +634,17 @@ export function AgriListingDetail({
               heading="Agriculture Details"
               show={Boolean(listing.waterSource || listing.soilType || listing.cultivationStatus)}
             >
-              <OverviewRow label="Water Source" value={listing.waterSource} />
-              <OverviewRow label="Soil Type" value={listing.soilType} />
-              <OverviewRow label="Cultivation Status" value={listing.cultivationStatus} />
+              <OverviewRow label="Water Source" value={listing.waterSource ? (WATER_SOURCE_LABELS[listing.waterSource] ?? listing.waterSource) : undefined} />
+              <OverviewRow label="Soil Type" value={listing.soilType ? (SOIL_TYPE_LABELS[listing.soilType] ?? listing.soilType) : undefined} />
+              <OverviewRow label="Cultivation Status" value={listing.cultivationStatus ? (CULTIVATION_STATUS_LABELS[listing.cultivationStatus] ?? listing.cultivationStatus) : undefined} />
             </OverviewGroup>
 
             <OverviewGroup
               heading="Access & Ownership"
               show={Boolean(listing.roadAccess || listing.ownershipType)}
             >
-              <OverviewRow label="Road Access" value={listing.roadAccess} />
-              <OverviewRow label="Ownership Type" value={listing.ownershipType} />
+              <OverviewRow label="Road Access" value={listing.roadAccess ? (ROAD_ACCESS_LABELS[listing.roadAccess] ?? listing.roadAccess) : undefined} />
+              <OverviewRow label="Ownership Type" value={listing.ownershipType ? (OWNERSHIP_TYPE_LABELS[listing.ownershipType] ?? listing.ownershipType) : undefined} />
             </OverviewGroup>
 
             {hasBoundaryDisclaimer && (

@@ -510,6 +510,324 @@ describe('EditListing — agri (g) Boolean save: changed farmhouseAvailable and 
   });
 });
 
+// ── (i) Issue #1459 — water source includes RIVER and RAIN_FED options ───────
+
+describe('EditListing — agri (i) #1459 water source has RIVER and RAIN_FED options', () => {
+  it('renders RIVER option in water source select', async () => {
+    mockListingData.current = makeBaseListing({ waterSource: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    // Water source select is the second select in JSX order (after landCategory)
+    const waterSourceSelect = agriSection.querySelectorAll('select')[1] as HTMLSelectElement;
+
+    // RIVER option must be present as a <option value="RIVER">
+    const riverOption = waterSourceSelect.querySelector('option[value="RIVER"]');
+    expect(riverOption).not.toBeNull();
+    expect(riverOption?.textContent).toBe('River');
+  });
+
+  it('renders RAIN_FED option in water source select', async () => {
+    mockListingData.current = makeBaseListing({ waterSource: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const waterSourceSelect = agriSection.querySelectorAll('select')[1] as HTMLSelectElement;
+
+    const rainFedOption = waterSourceSelect.querySelector('option[value="RAIN_FED"]');
+    expect(rainFedOption).not.toBeNull();
+    expect(rainFedOption?.textContent).toBe('Rain-fed');
+  });
+
+  it('selecting RIVER sets waterSource in mutate payload', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({ waterSource: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const waterSourceSelect = agriSection.querySelectorAll('select')[1] as HTMLSelectElement;
+
+    await user.selectOptions(waterSourceSelect, 'RIVER');
+
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+    expect(payload.waterSource).toBe('RIVER');
+  });
+});
+
+// ── (j) Issue #1459 — soil type select uses canonical machine values ───────────
+
+describe('EditListing — agri (j) #1459 soil type canonical select', () => {
+  it('renders RED_LATERITE option with display text "Red laterite" (not "RED_LATERITE")', async () => {
+    mockListingData.current = makeBaseListing({ soilType: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    // soilType is the 5th select (index 4): landCategory[0], waterSource[1], farmhouse[2], fencing[3], soilType[4]
+    const soilTypeSelect = agriSection.querySelectorAll('select')[4] as HTMLSelectElement;
+
+    const redLateriteOption = soilTypeSelect.querySelector('option[value="RED_LATERITE"]');
+    expect(redLateriteOption).not.toBeNull();
+    expect(redLateriteOption?.textContent).toBe('Red laterite');
+  });
+
+  it('soil type select value attribute holds canonical key "RED_LATERITE" when loaded', async () => {
+    mockListingData.current = makeBaseListing({ soilType: 'RED_LATERITE' });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const soilTypeSelect = Array.from(agriSection.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-select-value') === 'RED_LATERITE',
+    ) as HTMLSelectElement;
+
+    expect(soilTypeSelect).toBeTruthy();
+    // The select's value/data-select-value is the machine key, not the display string
+    expect(soilTypeSelect.getAttribute('data-select-value')).toBe('RED_LATERITE');
+  });
+
+  it('selecting RED_LATERITE sends "RED_LATERITE" in mutate payload (not "Red laterite")', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({ soilType: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const soilTypeSelect = agriSection.querySelectorAll('select')[4] as HTMLSelectElement;
+
+    await user.selectOptions(soilTypeSelect, 'RED_LATERITE');
+
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+    expect(payload.soilType).toBe('RED_LATERITE');
+  });
+
+  it('shows a "(legacy)" option for a soil type free-text value not in KNOWN_SOIL_TYPES', async () => {
+    // 'Red loam' is a hypothetical legacy free-text value not in the enum
+    mockListingData.current = makeBaseListing({ soilType: 'Red loam' });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    // The legacy select has data-select-value = 'Red loam'
+    const soilTypeSelect = Array.from(agriSection.querySelectorAll('select')).find(
+      (s) => s.getAttribute('data-select-value') === 'Red loam',
+    ) as HTMLSelectElement;
+
+    expect(soilTypeSelect).toBeTruthy();
+
+    // A legacy option with value="Red loam" and text "Red loam (legacy)" must appear
+    const legacyOption = soilTypeSelect.querySelector('option[value="Red loam"]');
+    expect(legacyOption).not.toBeNull();
+    expect(legacyOption?.textContent).toBe('Red loam (legacy)');
+  });
+});
+
+// ── (k) Issue #1459 — road access select has canonical options ────────────────
+
+describe('EditListing — agri (k) #1459 road access canonical select', () => {
+  it('TARRED_ROAD option has display text "Tarred road"', async () => {
+    mockListingData.current = makeBaseListing({ roadAccess: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    // roadAccess is the 6th select (index 5)
+    const roadAccessSelect = agriSection.querySelectorAll('select')[5] as HTMLSelectElement;
+
+    const tarredOption = roadAccessSelect.querySelector('option[value="TARRED_ROAD"]');
+    expect(tarredOption).not.toBeNull();
+    expect(tarredOption?.textContent).toBe('Tarred road');
+  });
+
+  it('KACHCHA_ROAD option has display text "Kachcha road"', async () => {
+    mockListingData.current = makeBaseListing({ roadAccess: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const roadAccessSelect = agriSection.querySelectorAll('select')[5] as HTMLSelectElement;
+
+    const kachchaOption = roadAccessSelect.querySelector('option[value="KACHCHA_ROAD"]');
+    expect(kachchaOption).not.toBeNull();
+    expect(kachchaOption?.textContent).toBe('Kachcha road');
+  });
+});
+
+// ── (l) Issue #1459 — ownership type select has FREEHOLD and INHERITED ────────
+
+describe('EditListing — agri (l) #1459 ownership type select', () => {
+  it('FREEHOLD option has display text "Freehold"', async () => {
+    mockListingData.current = makeBaseListing({ ownershipType: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    // ownershipType is the 8th select (index 7):
+    // landCategory[0], waterSource[1], farmhouse[2], fencing[3], soilType[4], roadAccess[5], cultivationStatus[6], ownershipType[7]
+    const ownershipSelect = agriSection.querySelectorAll('select')[7] as HTMLSelectElement;
+
+    const freeholdOption = ownershipSelect.querySelector('option[value="FREEHOLD"]');
+    expect(freeholdOption).not.toBeNull();
+    expect(freeholdOption?.textContent).toBe('Freehold');
+  });
+
+  it('INHERITED option has display text "Inherited"', async () => {
+    mockListingData.current = makeBaseListing({ ownershipType: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const ownershipSelect = agriSection.querySelectorAll('select')[7] as HTMLSelectElement;
+
+    const inheritedOption = ownershipSelect.querySelector('option[value="INHERITED"]');
+    expect(inheritedOption).not.toBeNull();
+    expect(inheritedOption?.textContent).toBe('Inherited');
+  });
+
+  it('selecting FREEHOLD sends "FREEHOLD" in mutate payload', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({ ownershipType: null });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    const agriSection = getAgriSection();
+    const ownershipSelect = agriSection.querySelectorAll('select')[7] as HTMLSelectElement;
+
+    await user.selectOptions(ownershipSelect, 'FREEHOLD');
+
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+    expect(payload.ownershipType).toBe('FREEHOLD');
+  });
+});
+
+// ── (m) Issue #1459 — full round-trip for all 8 canonical agri selects ────────
+
+describe('EditListing — agri (m) #1459 full canonical round-trip: 8 agri selects', () => {
+  it('loads all 8 canonical agri values and they appear in mutate payload unchanged', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({
+      landCategory: 'FARMLAND',
+      waterSource: 'RIVER',
+      farmhouseAvailable: true,
+      fencingDone: false,
+      soilType: 'RED_LATERITE',
+      roadAccess: 'TARRED_ROAD',
+      cultivationStatus: 'ARECA_PLANTATION',
+      ownershipType: 'FREEHOLD',
+    });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    // Verify all 8 selects pre-populated correctly
+    const agriSection = getAgriSection();
+    const selectValues = Array.from(agriSection.querySelectorAll('select')).map(
+      (s) => s.getAttribute('data-select-value'),
+    );
+    expect(selectValues).toContain('FARMLAND');
+    expect(selectValues).toContain('RIVER');
+    expect(selectValues).toContain('true');
+    expect(selectValues).toContain('false');
+    expect(selectValues).toContain('RED_LATERITE');
+    expect(selectValues).toContain('TARRED_ROAD');
+    expect(selectValues).toContain('ARECA_PLANTATION');
+    expect(selectValues).toContain('FREEHOLD');
+
+    // Save without changing anything
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+    expect(payload.landCategory).toBe('FARMLAND');
+    expect(payload.waterSource).toBe('RIVER');
+    expect(payload.farmhouseAvailable).toBe(true);
+    expect(payload.fencingDone).toBe(false);
+    expect(payload.soilType).toBe('RED_LATERITE');
+    expect(payload.roadAccess).toBe('TARRED_ROAD');
+    expect(payload.cultivationStatus).toBe('ARECA_PLANTATION');
+    expect(payload.ownershipType).toBe('FREEHOLD');
+  });
+});
+
 // ── (h) Null preserved: unset boolean fields must NOT be coerced to false ───────
 
 describe('EditListing — agri (h) Null preserved: unset farmhouseAvailable and fencingDone not coerced to false', () => {

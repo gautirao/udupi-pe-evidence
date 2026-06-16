@@ -34,6 +34,7 @@ import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -69,6 +70,8 @@ public class ListingController {
 
         String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
+        validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
+                req.cultivationStatus(), req.ownershipType());
         try {
             Listing saved = listingCrudService.createDraft(
                     caller.userId(), req.propertyType(), req.title(),
@@ -133,6 +136,8 @@ public class ListingController {
                                     @PathVariable UUID id,
                                     @Valid @RequestBody UpdateRequest req) {
 
+        validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
+                req.cultivationStatus(), req.ownershipType());
         try {
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
             String updateVideoUrl = applyVideo
@@ -301,6 +306,40 @@ public class ListingController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         }
         // ListingLifecycleException (FAST_RESTORE_NOT_ELIGIBLE) handled by GlobalExceptionHandler → 422
+    }
+
+    // ===== Validation helpers =====
+
+    /**
+     * Validates the 5 free-text agri fields against the canonical option sets in
+     * {@link AgriFieldOptions}.  Null or blank values are always accepted (field not supplied).
+     * A non-blank value that is not a member of the canonical set is rejected with 400.
+     *
+     * <p>Design note: Set&lt;String&gt; membership check is used instead of {@code @Pattern}
+     * because the canonical sets will evolve as new categories are added, and a set constant
+     * is easier to maintain and review than a regex alternation string.
+     *
+     * @throws org.springframework.web.server.ResponseStatusException HTTP 400 on first invalid field
+     */
+    private static void validateAgriFields(String waterSource, String soilType,
+                                           String roadAccess, String cultivationStatus,
+                                           String ownershipType) {
+        rejectIfUnknown("waterSource",       waterSource,       AgriFieldOptions.VALID_WATER_SOURCES);
+        rejectIfUnknown("soilType",          soilType,          AgriFieldOptions.VALID_SOIL_TYPES);
+        rejectIfUnknown("roadAccess",        roadAccess,        AgriFieldOptions.VALID_ROAD_ACCESS_VALUES);
+        rejectIfUnknown("cultivationStatus", cultivationStatus, AgriFieldOptions.VALID_CULTIVATION_STATUSES);
+        rejectIfUnknown("ownershipType",     ownershipType,     AgriFieldOptions.VALID_OWNERSHIP_TYPES);
+    }
+
+    private static void rejectIfUnknown(String fieldName, String value, Set<String> validValues) {
+        if (value != null && !value.isBlank() && !validValues.contains(value)) {
+            String allowed = new java.util.TreeSet<>(validValues).stream()
+                    .collect(java.util.stream.Collectors.joining(", "));
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid value for " + fieldName + ": '" + value + "'. "
+                            + "Allowed values: " + allowed);
+        }
     }
 
     // ===== Response helpers =====

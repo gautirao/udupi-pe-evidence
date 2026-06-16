@@ -36,12 +36,26 @@ import { COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
+import {
+  WATER_SOURCE_LABELS,
+  SOIL_TYPE_LABELS,
+  ROAD_ACCESS_LABELS,
+  CULTIVATION_STATUS_LABELS,
+  OWNERSHIP_TYPE_LABELS,
+  LAND_CATEGORY_LABELS,
+} from '@/lib/agriFieldLabels';
 
 const VIDEO_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|instagram\.com\/(reel|p)\/)[^\s]+/;
 
-// Issue #1458 — known water source enum values; used to detect legacy free-text values.
-const KNOWN_WATER_SOURCES = ['WELL', 'BOREWELL', 'POND', 'STREAM', 'NOT_AVAILABLE', 'OTHER'];
+// Issue #1458 + #1459 — derive canonical value lists from shared label maps to avoid duplication.
+// Any future addition to agriFieldLabels.ts is automatically reflected here.
+const KNOWN_WATER_SOURCES = Object.keys(WATER_SOURCE_LABELS);
+const KNOWN_SOIL_TYPES = Object.keys(SOIL_TYPE_LABELS);
+const KNOWN_ROAD_ACCESS_VALUES = Object.keys(ROAD_ACCESS_LABELS);
+const KNOWN_CULTIVATION_STATUSES = Object.keys(CULTIVATION_STATUS_LABELS);
+const KNOWN_OWNERSHIP_TYPES = Object.keys(OWNERSHIP_TYPE_LABELS);
+const KNOWN_LAND_CATEGORIES = Object.keys(LAND_CATEGORY_LABELS);
 
 function extractYouTubeId(url: string): string | null {
   const shortMatch = url.match(/youtu\.be\/([^?&\s]+)/);
@@ -618,11 +632,13 @@ export default function EditListing() {
                           <SelectValue placeholder="Select land category" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="FARMLAND">Farmland</SelectItem>
-                          <SelectItem value="PLANTATION">Plantation</SelectItem>
-                          <SelectItem value="FARM_PLOT">Farm plot</SelectItem>
-                          <SelectItem value="AGRICULTURAL_PLOT">Agricultural plot</SelectItem>
-                          <SelectItem value="OTHER">Other</SelectItem>
+                          {/* Issue #1459 — legacy free-text fallback (same pattern as waterSource) */}
+                          {landCategory && !KNOWN_LAND_CATEGORIES.includes(landCategory) && (
+                            <SelectItem value={landCategory}>{landCategory} (legacy)</SelectItem>
+                          )}
+                          {Object.entries(LAND_CATEGORY_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>{label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -642,8 +658,10 @@ export default function EditListing() {
                           {waterSource && !KNOWN_WATER_SOURCES.includes(waterSource) && (
                             <SelectItem value={waterSource}>{waterSource} (legacy)</SelectItem>
                           )}
-                          <SelectItem value="WELL">Well</SelectItem>
                           <SelectItem value="BOREWELL">Borewell</SelectItem>
+                          <SelectItem value="WELL">Open well</SelectItem>
+                          <SelectItem value="RIVER">River</SelectItem>
+                          <SelectItem value="RAIN_FED">Rain-fed</SelectItem>
                           <SelectItem value="POND">Pond</SelectItem>
                           <SelectItem value="STREAM">Stream</SelectItem>
                           <SelectItem value="NOT_AVAILABLE">Not available</SelectItem>
@@ -688,9 +706,16 @@ export default function EditListing() {
                           <SelectValue placeholder="Select soil type" />
                         </SelectTrigger>
                         <SelectContent>
-                          {['Red laterite', 'Black cotton', 'Sandy loam', 'Clay', 'Alluvial', 'Other'].map(opt => (
-                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                          ))}
+                          {/* Issue #1459 — legacy free-text fallback, same pattern as waterSource */}
+                          {soilType && !KNOWN_SOIL_TYPES.includes(soilType) && (
+                            <SelectItem value={soilType}>{soilType} (legacy)</SelectItem>
+                          )}
+                          <SelectItem value="RED_LATERITE">Red laterite</SelectItem>
+                          <SelectItem value="BLACK_COTTON">Black cotton</SelectItem>
+                          <SelectItem value="ALLUVIAL">Alluvial</SelectItem>
+                          <SelectItem value="SANDY_LOAM">Sandy loam</SelectItem>
+                          <SelectItem value="CLAY">Clay</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -703,9 +728,15 @@ export default function EditListing() {
                           <SelectValue placeholder="Select road access" />
                         </SelectTrigger>
                         <SelectContent>
-                          {['Tarred road', 'Gravel road', 'Kachcha road', 'No road access', 'Other'].map(opt => (
-                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                          ))}
+                          {/* Issue #1459 — legacy free-text fallback (e.g. old 'Gravel road' values) */}
+                          {roadAccess && !KNOWN_ROAD_ACCESS_VALUES.includes(roadAccess) && (
+                            <SelectItem value={roadAccess}>{roadAccess} (legacy)</SelectItem>
+                          )}
+                          <SelectItem value="TARRED_ROAD">Tarred road</SelectItem>
+                          <SelectItem value="KACHCHA_ROAD">Kachcha road</SelectItem>
+                          <SelectItem value="HIGHWAY_FRONTAGE">Highway frontage</SelectItem>
+                          <SelectItem value="NO_ROAD_ACCESS">No road access</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -718,9 +749,16 @@ export default function EditListing() {
                           <SelectValue placeholder="Select cultivation status" />
                         </SelectTrigger>
                         <SelectContent>
-                          {['Cultivated', 'Fallow', 'Partially cultivated', 'Uncultivated', 'Other'].map(opt => (
-                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                          ))}
+                          {/* Issue #1459 — legacy free-text fallback (e.g. old 'Uncultivated' values) */}
+                          {cultivationStatus && !KNOWN_CULTIVATION_STATUSES.includes(cultivationStatus) && (
+                            <SelectItem value={cultivationStatus}>{cultivationStatus} (legacy)</SelectItem>
+                          )}
+                          <SelectItem value="CULTIVATED">Cultivated</SelectItem>
+                          <SelectItem value="FALLOW">Fallow</SelectItem>
+                          <SelectItem value="ARECA_PLANTATION">Areca plantation</SelectItem>
+                          <SelectItem value="COCONUT_PLANTATION">Coconut plantation</SelectItem>
+                          <SelectItem value="PARTIALLY_CULTIVATED">Partially cultivated</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -733,9 +771,17 @@ export default function EditListing() {
                           <SelectValue placeholder="Select ownership type" />
                         </SelectTrigger>
                         <SelectContent>
-                          {['Patta', 'Survey settlement', 'Katha', 'Revenue', 'Other'].map(opt => (
-                            <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                          ))}
+                          {/* Issue #1459 — legacy free-text fallback */}
+                          {ownershipType && !KNOWN_OWNERSHIP_TYPES.includes(ownershipType) && (
+                            <SelectItem value={ownershipType}>{ownershipType} (legacy)</SelectItem>
+                          )}
+                          <SelectItem value="FREEHOLD">Freehold</SelectItem>
+                          <SelectItem value="INHERITED">Inherited</SelectItem>
+                          <SelectItem value="PATTA">Patta</SelectItem>
+                          <SelectItem value="SURVEY_SETTLEMENT">Survey settlement</SelectItem>
+                          <SelectItem value="KATHA">Katha</SelectItem>
+                          <SelectItem value="REVENUE">Revenue</SelectItem>
+                          <SelectItem value="OTHER">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
