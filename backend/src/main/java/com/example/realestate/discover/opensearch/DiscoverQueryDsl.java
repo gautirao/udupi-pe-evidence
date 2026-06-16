@@ -230,9 +230,14 @@ public final class DiscoverQueryDsl {
             filter.add(term("listing_purpose", normPurpose));
         }
 
-        // excludePropertyTypes — must_not exclusion wrapped as a bool filter entry (backward-compat)
+        // excludePropertyTypes — must_not exclusion wrapped as a bool filter entry (backward-compat).
+        // Values are lowercased to mirror the Postgres LOWER(pl.property_type) NOT IN (...) parity
+        // (DiscoverListingPredicateBuilder), so casing drift between stores cannot diverge (#1541).
         if (f.excludePropertyTypes() != null && !f.excludePropertyTypes().isEmpty()) {
-            filter.add(Map.of("bool", Map.of("must_not", List.of(terms("property_type", f.excludePropertyTypes())))));
+            List<String> excludeLower = f.excludePropertyTypes().stream()
+                    .map(String::toLowerCase)
+                    .toList();
+            filter.add(Map.of("bool", Map.of("must_not", List.of(terms("property_type", excludeLower)))));
         }
 
         Map<String, Object> bool = new LinkedHashMap<>();

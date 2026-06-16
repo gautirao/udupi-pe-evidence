@@ -78,12 +78,19 @@ class MarkersExcludePropertyTypeIT {
     // -----------------------------------------------------------------------
 
     /**
-     * When excludePropertyTypes=["AGRICULTURAL_LAND"], only the RESIDENTIAL doc is returned.
-     * The AGRICULTURAL_LAND doc must be absent.
+     * Casing-drift parity guard (#1541): the index stores lowercase {@code agricultural_land}
+     * (the production case enforced by the {@code chk_listing_property_type} CHECK constraint,
+     * V86, and copied verbatim by opensearch_rebuild.py). A MIXED-CASE exclude param must still
+     * exclude the agri doc, because DiscoverQueryDsl lowercases excludePropertyTypes before
+     * {@code terms()}, mirroring the Postgres {@code LOWER(property_type) NOT IN (...)} behaviour.
+     * Only the non-agri (house) doc remains.
+     *
+     * <p>Before #1541 this would return 2 (no exclusion) because the un-lowercased mixed-case
+     * term would not match the lowercase-stored doc — the exact adapter divergence #1541 closes.
      */
     @Test
-    void excludeAgriLand_returnsOnlyResidentialDoc() throws Exception {
-        DiscoverListingPredicateBuilder.Filters filters = filters(List.of("AGRICULTURAL_LAND"));
+    void excludeAgriLand_mixedCaseInput_returnsOnlyNonAgriDoc() throws Exception {
+        DiscoverListingPredicateBuilder.Filters filters = filters(List.of("Agricultural_Land"));
         Map<String, Object> query = DiscoverQueryDsl.buildMarkersQuery(filters);
 
         int hits = countHits(query);
@@ -132,20 +139,28 @@ class MarkersExcludePropertyTypeIT {
         put(baseUrl + "/" + INDEX, body);
     }
 
-    /** Index one AGRICULTURAL_LAND doc and one RESIDENTIAL doc. Both have status=LIVE. */
+    /**
+     * Index one agricultural_land doc and one house doc. Both have status=LIVE.
+     *
+     * <p>property_type values are LOWERCASE to mirror production: the
+     * {@code chk_listing_property_type} CHECK constraint (V86) permits only lowercase
+     * values ('house','apartment','land',...,'agricultural_land'), and the OpenSearch
+     * indexer (opensearch_rebuild.py) copies the DB value verbatim. Seeding lowercase here
+     * makes this a faithful parity test for the real adapter behaviour.
+     */
     private static void indexDocuments() throws Exception {
         Map<String, Object> agriDoc = Map.of(
                 "id", "test-agri-1",
                 "status", "LIVE",
-                "property_type", "AGRICULTURAL_LAND"
+                "property_type", "agricultural_land"
         );
-        Map<String, Object> residentialDoc = Map.of(
-                "id", "test-residential-1",
+        Map<String, Object> houseDoc = Map.of(
+                "id", "test-house-1",
                 "status", "LIVE",
-                "property_type", "RESIDENTIAL"
+                "property_type", "house"
         );
         put(baseUrl + "/" + INDEX + "/_doc/test-agri-1", MAPPER.writeValueAsString(agriDoc));
-        put(baseUrl + "/" + INDEX + "/_doc/test-residential-1", MAPPER.writeValueAsString(residentialDoc));
+        put(baseUrl + "/" + INDEX + "/_doc/test-house-1", MAPPER.writeValueAsString(houseDoc));
     }
 
     /** Force index refresh so documents are immediately searchable. */

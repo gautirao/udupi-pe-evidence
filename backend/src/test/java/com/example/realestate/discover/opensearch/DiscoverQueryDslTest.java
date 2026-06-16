@@ -630,6 +630,36 @@ class DiscoverQueryDslTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void buildBoolQuery_withMixedCaseExcludePropertyTypes_lowercasesTermsValues() {
+        // Parity guard (#1541): mixed-case input must be lowercased before terms(),
+        // mirroring the Postgres LOWER(pl.property_type) NOT IN (...) exclusion.
+        DiscoverListingPredicateBuilder.Filters filters = new DiscoverListingPredicateBuilder.Filters(
+                "udupi", null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
+                List.of("Agricultural_Land", "PLOT")
+        );
+
+        Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filters);
+        List<Object> filter = getFilter(getBool(body));
+
+        List<String> excludedValues = filter.stream()
+                .map(f -> (Map<String, Object>) f)
+                .filter(m -> m.containsKey("bool"))
+                .map(m -> (Map<String, Object>) m.get("bool"))
+                .filter(b -> b.containsKey("must_not"))
+                .flatMap(b -> ((List<Object>) b.get("must_not")).stream())
+                .map(c -> (Map<String, Object>) c)
+                .filter(c -> c.containsKey("terms"))
+                .map(c -> (Map<String, Object>) c.get("terms"))
+                .filter(t -> t.containsKey("property_type"))
+                .flatMap(t -> ((List<String>) t.get("property_type")).stream())
+                .toList();
+
+        assertThat(excludedValues).containsExactly("agricultural_land", "plot");
+    }
+
+    @Test
     void buildBoolQuery_withNullExcludePropertyTypes_noMustNotClause() {
         Map<String, Object> body = DiscoverQueryDsl.buildMarkersQuery(filtersFor("udupi"));
         Map<String, Object> bool = getBool(body);
