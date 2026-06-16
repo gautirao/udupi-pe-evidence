@@ -93,24 +93,27 @@ class AreaSummaryServiceAgriIT {
         assertThat(manipal.agriAcreage()).isEqualTo(5.0);
     }
 
-    // ── AC2: blended (no filter) is unchanged — counts every approved listing regardless of type ──
+    // ── AC2 (post-#1463): blended (no filter) area-first count EXCLUDES agricultural_land ──
+    //    #1463 added `LOWER(property_type) != LOWER('agricultural_land')` to AREAS_BY_CITY_SQL so the
+    //    area-first journey no longer counts agri toward locality cards. Only non-agri approved
+    //    listings (here: the apartment) are counted; the draft is excluded by the LIVE guard.
 
     @Test
-    @DisplayName("blended count includes the apartment + agri; acreage omitted on blended path")
-    void blendedCount_unchanged_noAcreage() {
-        insertListing(MANIPAL, "agricultural_land", "LIVE", false, false, new BigDecimal("5"), "acre");
-        insertListing(MANIPAL, "apartment", "LIVE", false, false, null, null);
-        // not-counted noise (archived/draft/dup) to prove the blended guards still hold:
+    @DisplayName("blended count excludes agri (#1463) + draft; counts only the apartment; acreage omitted")
+    void blendedCount_excludesAgri_noAcreage() {
+        insertListing(MANIPAL, "agricultural_land", "LIVE", false, false, new BigDecimal("5"), "acre"); // excluded by #1463
+        insertListing(MANIPAL, "apartment", "LIVE", false, false, null, null);                          // counted
+        // not-counted noise (draft) to prove the blended LIVE guard still holds:
         insertListing(MANIPAL, "house", "DRAFT", false, false, null, null);
 
         AreaSummary blended = areaOf(service.getAreasByCity(CITY, null), MANIPAL);
 
-        assertThat(blended.listingCount()).as("agri + apartment, draft excluded").isEqualTo(2L);
+        assertThat(blended.listingCount()).as("agri excluded (#1463), draft excluded → only apartment").isEqualTo(1L);
         assertThat(blended.agriAcreage()).as("acreage not computed on blended path").isNull();
 
         // Single-arg overload is byte-identical to the null-filter path.
         AreaSummary legacy = areaOf(service.getAreasByCity(CITY), MANIPAL);
-        assertThat(legacy.listingCount()).isEqualTo(2L);
+        assertThat(legacy.listingCount()).isEqualTo(1L);
         assertThat(legacy.agriAcreage()).isNull();
     }
 
