@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.ai.PropertyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcOperations;
@@ -72,7 +73,7 @@ public class PublicSchoolRadiusListingsService {
                 null,   // bbox
                 null,   // q
                 normPurpose,
-                List.of("AGRICULTURAL_LAND")  // excludePropertyTypes — school-first never shows agri
+                List.of(PropertyType.AGRICULTURAL_LAND.getValue())  // excludePropertyTypes — school-first never shows agri
         );
 
         DiscoverListingPredicateBuilder.Sql predicate = DiscoverListingPredicateBuilder.build(filters);

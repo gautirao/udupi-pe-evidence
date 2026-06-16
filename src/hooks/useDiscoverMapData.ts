@@ -11,6 +11,7 @@ import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { computeFocusBounds } from '@/lib/mapUtils';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';
 import {
   filteredMarkerToPropertyListing,
   discoverListingToPropertyListing,
@@ -161,11 +162,11 @@ export function useDiscoverMapData({
   const isAgriJourney = journey === 'agri-first';
   // Issue #1463 — exclude agricultural_land markers from non-agri journeys so they don't
   // clutter area-first and school-first map views. In agri-first, undefined → no exclusion.
-  const excludePropertyType = isAgriJourney ? undefined : 'agricultural_land';
+  const excludePropertyType = isAgriJourney ? undefined : AGRICULTURAL_LAND_PROPERTY_TYPE;
   // Issue #1372 — in agri-first journey, force propertyTypes to ['agricultural_land']
   // so markerListings contains only agri markers.
   const agriFilters: typeof filters = isAgriJourney
-    ? { ...filters, propertyTypes: ['agricultural_land'] }
+    ? { ...filters, propertyTypes: [AGRICULTURAL_LAND_PROPERTY_TYPE] }
     : filters;
   const {
     data: filteredMarkersData,
@@ -185,7 +186,7 @@ export function useDiscoverMapData({
   const {
     data: agriAreasResponseData,
     isLoading: isLoadingAgriAreas,
-  } = useDiscoverAreas(isCityValid ? city : '', isAgriJourney ? 'agricultural_land' : undefined);
+  } = useDiscoverAreas(isCityValid ? city : '', isAgriJourney ? AGRICULTURAL_LAND_PROPERTY_TYPE : undefined);
   const agriAreasData: DiscoverArea[] | undefined = isAgriJourney
     ? (agriAreasResponseData?.areas ?? [])
     : undefined;
@@ -199,7 +200,7 @@ export function useDiscoverMapData({
   // The non-agri derivation (single-element filter wins) is left untouched for all
   // other journeys.
   const discoverPropertyType = isAgriJourney
-    ? 'agricultural_land'
+    ? AGRICULTURAL_LAND_PROPERTY_TYPE
     : filters.propertyTypes?.length === 1
     ? filters.propertyTypes[0]
     : undefined;

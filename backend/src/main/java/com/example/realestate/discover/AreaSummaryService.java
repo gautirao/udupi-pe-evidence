@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.ai.PropertyType;
 import com.example.realestate.listing.area.AreaNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -181,13 +182,13 @@ public class AreaSummaryService {
                 WHERE status = 'LIVE'
                   AND archived_at IS NULL
                   AND is_duplicate = false
-                  AND LOWER(property_type) != LOWER('agricultural_land')
+                  AND LOWER(property_type) != LOWER('%s')
                 GROUP BY area_key
             ) pl ON pl.area_key = a.area_key
             WHERE c.slug = ?
               AND array_length(string_to_array(a.area_key, '|'), 1) = 4
             ORDER BY COALESCE(pl.listing_count, 0) DESC, a.name
-            """;
+            """.formatted(PropertyType.AGRICULTURAL_LAND.getValue());
 
     /**
      * Variant of {@link #AREAS_BY_CITY_SQL} that scopes the per-area count subquery to a single

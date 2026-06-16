@@ -11,6 +11,13 @@ export const PROPERTY_TYPES = [
 
 export type PropertyType = (typeof PROPERTY_TYPES)[number]['value'];
 
+/**
+ * Canonical property-type token for agricultural land. Single source for the
+ * discover read-path exclusion/forcing logic so the literal cannot drift across
+ * hook sites (#1542, follow-up to #1463).
+ */
+export const AGRICULTURAL_LAND_PROPERTY_TYPE: PropertyType = 'agricultural_land';
+
 export const COMMERCIAL_TYPES = new Set<string>([
   'commercial',
   'commercial_building',

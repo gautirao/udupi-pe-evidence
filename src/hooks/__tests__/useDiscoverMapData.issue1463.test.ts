@@ -103,7 +103,7 @@ const BASE_PARAMS = {
 // The 7th positional arg to useDiscoverFilteredMarkers is excludePropertyType.
 function getExcludePropertyTypeArg(): string | undefined {
   expect(mockFilteredMarkers).toHaveBeenCalled();
-  return mockFilteredMarkers.mock.calls[0][6] as string | undefined;
+  return mockFilteredMarkers.mock.lastCall?.[6] as string | undefined;
 }
 
 // ─── Tests ─────────────────────────────────────────────────────────────────

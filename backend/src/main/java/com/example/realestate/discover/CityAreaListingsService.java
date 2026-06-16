@@ -1,5 +1,6 @@
 package com.example.realestate.discover;
 
+import com.example.realestate.ai.PropertyType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -117,7 +118,8 @@ public class CityAreaListingsService {
             joinFilterClauses.append("\n                        AND LOWER(pl.property_type) = LOWER(?)");
         }
         // Area-first journey never shows agricultural_land — always excluded unconditionally.
-        joinFilterClauses.append("\n                        AND LOWER(pl.property_type) != LOWER('agricultural_land')");
+        joinFilterClauses.append("\n                        AND LOWER(pl.property_type) != LOWER('"
+                + PropertyType.AGRICULTURAL_LAND.getValue() + "')");
         if (normQ != null) {
             // FTS clause must be in the LEFT JOIN ON clause (not WHERE) so that areas with
             // zero keyword-matching listings still appear in the response with listings:[].
