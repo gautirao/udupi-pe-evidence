@@ -20,17 +20,37 @@ import { formatPrice } from '@/lib/formatters';
 import {
   LAND_CATEGORY_LABELS,
   WATER_SOURCE_LABELS,
+  ROAD_ACCESS_LABELS,
+  SOIL_TYPE_LABELS,
+  CULTIVATION_STATUS_LABELS,
+  OWNERSHIP_TYPE_LABELS,
 } from '@/lib/agriFieldLabels';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 
 // Build the agri spec chips for a listing — omit when the value is null OR false
 // (null != false: a missing field is unknown, an explicit false is a known "no").
+// Issue #1551: extended with new DTO fields (roadAccess, soilType, cultivationStatus,
+// ownershipType). The 4-chip cap + "+N more details" overflow pill is applied at the
+// call site, NOT here, so chip priority order is meaningful: category first,
+// cultivation next (most decision-relevant), then road/soil/water/ownership/booleans.
 function agriChips(item: AgriMapListingItem): string[] {
   const chips: string[] = [];
   if (item.landCategory) chips.push(LAND_CATEGORY_LABELS[item.landCategory] ?? item.landCategory);
+  if (item.cultivationStatus) {
+    chips.push(CULTIVATION_STATUS_LABELS[item.cultivationStatus] ?? item.cultivationStatus);
+  }
+  if (item.roadAccess) {
+    chips.push(ROAD_ACCESS_LABELS[item.roadAccess] ?? item.roadAccess);
+  }
+  if (item.soilType) {
+    chips.push(SOIL_TYPE_LABELS[item.soilType] ?? item.soilType);
+  }
   if (item.waterSource && item.waterSource !== 'NOT_AVAILABLE') {
     chips.push(WATER_SOURCE_LABELS[item.waterSource] ?? item.waterSource);
+  }
+  if (item.ownershipType) {
+    chips.push(OWNERSHIP_TYPE_LABELS[item.ownershipType] ?? item.ownershipType);
   }
   if (item.farmhouseAvailable === true) chips.push('Farmhouse');
   if (item.fencingDone === true) chips.push('Fenced');
@@ -325,7 +345,7 @@ export function AgriGroupLocalityPanel({
                       </span>
                     )}
                     {/* Purpose/type tags row */}
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-muted text-muted-foreground">
                         Agricultural land
                       </span>
@@ -339,6 +359,19 @@ export function AgriGroupLocalityPanel({
                           )}
                         >
                           {item.listingPurpose === 'rent' ? 'For Rent' : 'For Sale'}
+                        </span>
+                      )}
+                      {/* Issue #1551 — compact updated date; omitted when absent */}
+                      {item.updatedAt && (
+                        <span
+                          className="text-[11px] text-muted-foreground"
+                          data-testid="agri-locality-updated-at"
+                        >
+                          Updated{' '}
+                          {new Date(item.updatedAt).toLocaleDateString('en-IN', {
+                            month: 'short',
+                            year: 'numeric',
+                          })}
                         </span>
                       )}
                     </div>

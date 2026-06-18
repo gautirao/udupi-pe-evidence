@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -58,7 +59,12 @@ public class DiscoverAgriMapListingsService {
                 pl.water_source,
                 pl.land_category,
                 pl.farmhouse_available,
-                pl.fencing_done
+                pl.fencing_done,
+                pl.road_access,
+                pl.soil_type,
+                pl.cultivation_status,
+                pl.ownership_type,
+                pl.updated_at
             FROM property_listings pl
             JOIN areas a ON a.area_key = pl.area_key
             JOIN cities c ON c.id = a.city_id
@@ -197,7 +203,14 @@ public class DiscoverAgriMapListingsService {
                         rs.getString("water_source"),
                         rs.getString("land_category"),
                         rs.getObject("farmhouse_available") != null ? rs.getBoolean("farmhouse_available") : null,
-                        rs.getObject("fencing_done") != null ? rs.getBoolean("fencing_done") : null
+                        rs.getObject("fencing_done") != null ? rs.getBoolean("fencing_done") : null,
+                        // #1551: canonical agri fields (non-PII; pass through for anon)
+                        rs.getString("road_access"),
+                        rs.getString("soil_type"),
+                        rs.getString("cultivation_status"),
+                        rs.getString("ownership_type"),
+                        // updated_at — timestamp with time zone; null-safe via getObject
+                        rs.getObject("updated_at", OffsetDateTime.class)
                 ),
                 params
         );
@@ -225,8 +238,17 @@ public class DiscoverAgriMapListingsService {
     }
 
     /**
-     * Anonymous projection (#1454): null pricePaise + coarsened lat/lng.
-     * Zero-PII fields (areaKey, title, boundaryGeoJson, landArea, etc.) are preserved.
+     * Anonymous projection (#1454 / #1551): null pricePaise + coarsened lat/lng.
+     *
+     * <p>Security classification for each field:
+     * <ul>
+     *   <li>pricePaise → null (price is auth-gated)</li>
+     *   <li>latitude / longitude → coarsened to {@value #ANON_COORD_DECIMALS} dp (exact location is auth-gated)</li>
+     *   <li>roadAccess / soilType / cultivationStatus / ownershipType / updatedAt → PASS THROUGH
+     *       (non-PII, non-price, non-coordinate; safe for anonymous callers per Gate F review)</li>
+     *   <li>All other fields → PASS THROUGH (zero-PII: areaKey, title, boundaryGeoJson, landArea, etc.)</li>
+     *   <li>surveyNumber → NOT present in this DTO (detail-only security boundary; excluded from record)</li>
+     * </ul>
      */
     private static AgriMapListingItem toAnonItem(AgriMapListingItem item) {
         return new AgriMapListingItem(
@@ -241,12 +263,18 @@ public class DiscoverAgriMapListingsService {
                 item.landArea(),
                 item.landAreaUnit(),
                 item.computedAreaAcres(),
-                null, // pricePaise withheld from anonymous callers
+                null, // pricePaise withheld from anonymous callers (#1454)
                 item.listingPurpose(),
                 item.waterSource(),
                 item.landCategory(),
                 item.farmhouseAvailable(),
-                item.fencingDone());
+                item.fencingDone(),
+                // #1551 new fields: non-PII, pass through unchanged for anon
+                item.roadAccess(),
+                item.soilType(),
+                item.cultivationStatus(),
+                item.ownershipType(),
+                item.updatedAt());
     }
 
     /**

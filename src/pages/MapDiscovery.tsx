@@ -421,7 +421,7 @@ export default function MapDiscovery() {
     isLoading: isLoadingAgriGroupListings,
     isError: isAgriGroupListingsError,
     refetch: refetchAgriGroupListings,
-  } = useAgriMapListings(urlState.city, selectedGroupAreaKeys, intentListingPurpose);
+  } = useAgriMapListings(urlState.city, selectedGroupAreaKeys, intentListingPurpose, isAuthenticated);
 
   // Issue #1429 — corridor + distance tier label for the agri-group-selected panel header chip.
   // Show "groupName · distanceLabel" when both are selected; fall back to just groupName.

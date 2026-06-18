@@ -108,7 +108,8 @@ class DiscoverAgriMapListingsControllerTest {
                 "{\"type\":\"Polygon\",\"coordinates\":[]}",
                 new BigDecimal("2.5"), "acres",
                 new BigDecimal("2.5"), 5000000L, null,
-                null, null, null, null
+                null, null, null, null,
+                null, null, null, null, null
         );
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
@@ -141,7 +142,8 @@ class DiscoverAgriMapListingsControllerTest {
                 "IN|KA|Udupi|Area1",
                 13.3, 74.7, "agricultural_land", "TestLocality",
                 null, null, null, null, null, null,
-                null, null, null, null
+                null, null, null, null,
+                null, null, null, null, null
         );
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));
@@ -239,12 +241,14 @@ class DiscoverAgriMapListingsControllerTest {
                 "id-1", null, "IN|KA|Udupi|Area1", 13.3, 74.7,
                 "agricultural_land", "Area1", null,
                 null, null, null, null, null,
-                null, null, null, null);
+                null, null, null, null,
+                null, null, null, null, null);
         AgriMapListingItem item2 = new AgriMapListingItem(
                 "id-2", null, "IN|KA|Udupi|Area2", 13.4, 74.8,
                 "agricultural_land", "Area2", null,
                 null, null, null, null, null,
-                null, null, null, null);
+                null, null, null, null,
+                null, null, null, null, null);
 
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item1, item2), false, 250));
@@ -269,7 +273,8 @@ class DiscoverAgriMapListingsControllerTest {
                 13.3, 74.7, "agricultural_land", "Kundapur",
                 null, // boundaryGeoJson = null
                 null, null, null, null, null,
-                null, null, null, null
+                null, null, null, null,
+                null, null, null, null, null
         );
         when(agriMapListingsService.findAgriMapListings(eq("udupi"), anyList(), any(), anyBoolean(), any()))
                 .thenReturn(new AgriMapListingsResponse("udupi", List.of(item), false, 250));

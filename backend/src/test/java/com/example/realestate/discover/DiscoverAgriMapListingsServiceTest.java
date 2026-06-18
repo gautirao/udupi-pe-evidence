@@ -12,6 +12,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -225,7 +227,10 @@ class DiscoverAgriMapListingsServiceTest {
         AgriMapListingItem item = new AgriMapListingItem(
                 "id", "Test Agri Title", "area", 1.0, 2.0, "agricultural_land", "loc",
                 "{}", new BigDecimal("1.0"), "acres", new BigDecimal("1.0"), 100L, "sale",
-                "borewell", "wetland", true, false);
+                "borewell", "wetland", true, false,
+                // #1551 new fields
+                "PAVED", "RED_LATERITE", "CULTIVATED", "SINGLE_OWNER",
+                OffsetDateTime.of(2025, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC));
 
         // Safe fields present
         assertThat(item.id()).isNotNull();
@@ -236,13 +241,15 @@ class DiscoverAgriMapListingsServiceTest {
         assertThat(item.propertyType()).isNotNull();
         assertThat(item.pricePaise()).isNotNull();
 
-        // Record component count — must be exactly 17 (no extra fields)
-        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(17);
+        // Record component count — 22 fields (17 original + 5 added in #1551)
+        assertThat(AgriMapListingItem.class.getRecordComponents()).hasSize(22);
 
-        // Verify no fields named after PII or internal fields
+        // Verify no fields named after PII, internal, or detail-only fields
         var fieldNames = java.util.Arrays.stream(AgriMapListingItem.class.getRecordComponents())
                 .map(c -> c.getName().toLowerCase())
                 .toList();
+        // surveynumber is intentionally absent — it is detail-only and must never appear on this DTO
+        assertThat(fieldNames).doesNotContain("surveynumber");
         assertThat(fieldNames).doesNotContain("seller", "owner", "phone", "email",
                 "rejectionreason", "internalnotes", "adminstatus",
                 "archivedat", "isduplicate", "status");
@@ -415,12 +422,22 @@ class DiscoverAgriMapListingsServiceTest {
                         if (item.fencingDone() != null) {
                             when(rs.getBoolean("fencing_done")).thenReturn(item.fencingDone());
                         }
+                        // #1551: canonical agri fields
+                        when(rs.getString("road_access")).thenReturn(item.roadAccess());
+                        when(rs.getString("soil_type")).thenReturn(item.soilType());
+                        when(rs.getString("cultivation_status")).thenReturn(item.cultivationStatus());
+                        when(rs.getString("ownership_type")).thenReturn(item.ownershipType());
+                        when(rs.getObject("updated_at", OffsetDateTime.class)).thenReturn(item.updatedAt());
                         result.add(rm.mapRow(rs, result.size()));
                     }
                     return result;
                 });
     }
 
+    /**
+     * Convenience helper for tests that do not need to set the #1551 canonical agri fields.
+     * The 5 new fields (roadAccess/soilType/cultivationStatus/ownershipType/updatedAt) default to null.
+     */
     private static AgriMapListingItem agriItem(String id, String title, String areaKey,
                                                Double lat, Double lon,
                                                String propertyType, String locality,
@@ -429,6 +446,8 @@ class DiscoverAgriMapListingsServiceTest {
                                                BigDecimal computedAcres, Long pricePaise) {
         return new AgriMapListingItem(id, title, areaKey, lat, lon, propertyType, locality,
                 boundaryGeoJson, landArea, landAreaUnit, computedAcres, pricePaise,
+                null, null, null, null, null,
+                // #1551 new fields — null by default in this shorthand helper
                 null, null, null, null, null);
     }
 
@@ -576,7 +595,9 @@ class DiscoverAgriMapListingsServiceTest {
                 13.3, 74.7, "agricultural_land", "Kundapur",
                 "{\"type\":\"Polygon\"}", new BigDecimal("3.0"), "acres",
                 new BigDecimal("3.0"), 7500000L, "sale",
-                null, null, null, null);
+                null, null, null, null,
+                // #1551 new fields — null for this test (listingPurpose focus)
+                null, null, null, null, null);
         stubQuery(List.of(source));
 
         AgriMapListingsResponse resp = service.findAgriMapListings(
@@ -648,5 +669,99 @@ class DiscoverAgriMapListingsServiceTest {
 
         // pl.listing_purpose appears in the SELECT clause always; but must NOT appear as a WHERE filter
         assertThat(sqlCaptor.getValue()).doesNotContain("pl.listing_purpose = ?");
+    }
+
+    // ── #1551: new canonical agri fields ─────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1551 authed: new canonical agri fields present when non-null at source")
+    void findAgriMapListings_authenticated_newFieldsPresent() throws SQLException {
+        OffsetDateTime updatedAt = OffsetDateTime.of(2025, 6, 1, 10, 0, 0, 0, ZoneOffset.UTC);
+        AgriMapListingItem source = new AgriMapListingItem(
+                "new-fields-1", "Farm with agri metadata", "IN|KA|Udupi|Area1",
+                13.34091, 74.74215, "agricultural_land", "Shirva",
+                null, new BigDecimal("3.0"), "acres", new BigDecimal("3.0"),
+                8000000L, "sale", "BOREWELL", "wetland", true, false,
+                "PAVED", "RED_LATERITE", "CULTIVATED", "SINGLE_OWNER", updatedAt);
+        stubQuery(List.of(source));
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), true, null);
+
+        AgriMapListingItem returned = resp.listings().get(0);
+        assertThat(returned.roadAccess()).isEqualTo("PAVED");
+        assertThat(returned.soilType()).isEqualTo("RED_LATERITE");
+        assertThat(returned.cultivationStatus()).isEqualTo("CULTIVATED");
+        assertThat(returned.ownershipType()).isEqualTo("SINGLE_OWNER");
+        assertThat(returned.updatedAt()).isEqualTo(updatedAt);
+        // pricePaise and exact coords preserved for authed
+        assertThat(returned.pricePaise()).isEqualTo(8000000L);
+        assertThat(returned.latitude()).isEqualTo(13.34091);
+        assertThat(returned.longitude()).isEqualTo(74.74215);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1551 anon: new canonical agri fields pass through unchanged; price still null, coords coarsened")
+    void findAgriMapListings_anonymous_newFieldsPassThrough() throws SQLException {
+        OffsetDateTime updatedAt = OffsetDateTime.of(2025, 6, 1, 10, 0, 0, 0, ZoneOffset.UTC);
+        AgriMapListingItem source = new AgriMapListingItem(
+                "anon-new-1", "Farm with agri metadata", "IN|KA|Udupi|Area1",
+                13.34091, 74.74215, "agricultural_land", "Shirva",
+                null, new BigDecimal("3.0"), "acres", new BigDecimal("3.0"),
+                8000000L, "sale", "BOREWELL", "wetland", true, false,
+                "PAVED", "RED_LATERITE", "CULTIVATED", "SINGLE_OWNER", updatedAt);
+        stubQuery(List.of(source));
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
+
+        AgriMapListingItem returned = resp.listings().get(0);
+        // New fields pass through for anon (non-PII, non-price, non-coordinate)
+        assertThat(returned.roadAccess()).isEqualTo("PAVED");
+        assertThat(returned.soilType()).isEqualTo("RED_LATERITE");
+        assertThat(returned.cultivationStatus()).isEqualTo("CULTIVATED");
+        assertThat(returned.ownershipType()).isEqualTo("SINGLE_OWNER");
+        assertThat(returned.updatedAt()).isEqualTo(updatedAt);
+        // Auth-gated fields still correctly withheld / coarsened
+        assertThat(returned.pricePaise()).isNull();
+        assertThat(returned.latitude()).isEqualTo(13.34);
+        assertThat(returned.longitude()).isEqualTo(74.74);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @org.junit.jupiter.api.DisplayName("#1551 anon: null source agri fields remain null (omitted by @JsonInclude NON_NULL)")
+    void findAgriMapListings_anonymous_nullNewFields_remainNull() throws SQLException {
+        // Source item has null agri fields — they must not be transformed to non-null
+        AgriMapListingItem source = agriItem("null-fields-1", "Farm", "IN|KA|Udupi|Area1",
+                13.3, 74.7, "agricultural_land", "Malpe", null,
+                null, null, null, 5000000L);
+        stubQuery(List.of(source));
+
+        AgriMapListingsResponse resp = service.findAgriMapListings(
+                "udupi", List.of("IN|KA|Udupi|Area1"), Optional.empty(), false, null);
+
+        AgriMapListingItem returned = resp.listings().get(0);
+        assertThat(returned.roadAccess()).isNull();
+        assertThat(returned.soilType()).isNull();
+        assertThat(returned.cultivationStatus()).isNull();
+        assertThat(returned.ownershipType()).isNull();
+        assertThat(returned.updatedAt()).isNull();
+        // price still null for anon
+        assertThat(returned.pricePaise()).isNull();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("#1551 BASE_SQL: includes all 5 new canonical agri columns")
+    void baseSql_includesNewCanonicalAgriColumns() {
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL).contains("pl.road_access");
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL).contains("pl.soil_type");
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL).contains("pl.cultivation_status");
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL).contains("pl.ownership_type");
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL).contains("pl.updated_at");
+        // surveyNumber must never appear in the SQL
+        assertThat(DiscoverAgriMapListingsService.BASE_SQL).doesNotContain("survey_number");
     }
 }
