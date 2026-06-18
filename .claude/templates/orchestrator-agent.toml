@@ -1,0 +1,78 @@
+# Template — orchestrator-agent.toml
+#
+# Durable record of the live (or last-known) Mode-3 orchestrator teammate identity.
+# Written by the Main Agent to `.claude/handoffs/issue-<N>/orchestrator-agent.toml`
+# immediately after EVERY orchestrator spawn (initial bootstrap in Phase 0.2 AND any
+# rework/resume respawn). It survives Main-session compaction and confirms which
+# teammate to resume. Harness note: SendMessage addresses the BARE teammate name
+# (`orchestrator`) — the full `agent_id` string is rejected as a `to:` value. The
+# `agent_id` (format `<name>@session-<id>`) is the durable identity/audit handle,
+# stable per (name, session); a respawn under the same name reuses it.
+#
+# Lifecycle model (Design B — standing best-effort + durable respawn fallback):
+#   - The orchestrator is ALWAYS Opus. No Sonnet orchestrator, ever.
+#   - It is resumable by `agent_id` while the harness keeps it addressable.
+#   - It is NOT guaranteed to stay alive across long gate/user-approval waits, a
+#     Main-session compaction, or a CLI restart.
+#   - If resume fails, the orchestrator is treated as disposable and a fresh Opus
+#     orchestrator is respawned and re-briefed from durable artefacts. The new
+#     identity OVERWRITES this file (history is preserved in [previous_spawns]).
+#
+# This is workflow bookkeeping under `.claude/` — never product code.
+
+[orchestrator]
+issue            = 0                  # REQUIRED — integer issue number
+name             = "orchestrator"     # REQUIRED — teammate name used at spawn
+subagent_type    = "mode3-orchestrator"  # REQUIRED — never team-lead
+requested_model  = "opus"             # REQUIRED — MUST be "opus"; Sonnet is a hard violation
+agent_id         = ""                 # REQUIRED — the agentId (format a...-...) from the spawn result; used to resume
+spawned_at       = ""                 # REQUIRED — ISO-8601 UTC timestamp of this spawn
+spawn_context    = "phase-0.2-bootstrap"  # REQUIRED — "phase-0.2-bootstrap" | "rework-respawn" | "crash-respawn"
+spawn_kind       = "initial"          # REQUIRED — "initial" | "respawn"
+source_reason    = ""                 # REQUIRED — why this spawn happened (e.g. "bootstrap" | "workdone-review NEEDS_FIXES n=1" | "resume-failed: agentId unaddressable")
+resumable        = true               # OPTIONAL — best-effort liveness hint; disk artefacts remain authoritative regardless
+
+# Append-only history of prior orchestrator identities for this issue (most recent first).
+# Each respawn pushes the superseded [orchestrator] block here before overwriting it.
+[[previous_spawns]]
+agent_id      = ""
+spawned_at    = ""
+spawn_kind    = ""
+source_reason = ""
+retired_reason = ""   # e.g. "resume-failed", "shutdown-approved", "stalled"
+
+# ---------------------------------------------------------------------------
+# Example (initial bootstrap):
+#
+# [orchestrator]
+# issue           = 1551
+# name            = "orchestrator"
+# subagent_type   = "mode3-orchestrator"
+# requested_model = "opus"
+# agent_id        = "a3f9c2-7be1"
+# spawned_at      = "2026-06-18T13:05:00Z"
+# spawn_context   = "phase-0.2-bootstrap"
+# spawn_kind      = "initial"
+# source_reason   = "bootstrap"
+# resumable       = true
+#
+# Example (after a WORKDONE_REVIEW NEEDS_FIXES respawn because resume failed):
+#
+# [orchestrator]
+# issue           = 1551
+# name            = "orchestrator"
+# subagent_type   = "mode3-orchestrator"
+# requested_model = "opus"
+# agent_id        = "a8d104-1cc2"
+# spawned_at      = "2026-06-18T15:40:00Z"
+# spawn_context   = "rework-respawn"
+# spawn_kind      = "respawn"
+# source_reason   = "workdone-review NEEDS_FIXES n=1; resume of a3f9c2-7be1 unaddressable"
+# resumable       = true
+#
+# [[previous_spawns]]
+# agent_id       = "a3f9c2-7be1"
+# spawned_at     = "2026-06-18T13:05:00Z"
+# spawn_kind     = "initial"
+# source_reason  = "bootstrap"
+# retired_reason = "resume-failed"

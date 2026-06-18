@@ -3,13 +3,20 @@
 Tests for verify-mode3-team-invariant.py
 
 Locks the Mode-3 team + orchestrator-model invariants that regressed when the
-Agent-Teams harness migrated to a single implicit team:
+Agent-Teams harness migrated to a single implicit team, plus the Design-B
+lifecycle-continuity invariants (standing best-effort orchestrator + durable
+respawn fallback):
 
 1. Real repo satisfies every invariant (exit 0).
 2. A sonnet orchestrator override is rejected (orchestrator must be Opus).
 3. A reintroduced TeamCreate() dependency is rejected (tool was removed).
 4. A reverted `Task(` specialist-spawn is rejected (spawn tool is now `Agent`).
 5. Dropping the fail-fast / no-silent-fallback language is rejected.
+6. A Sonnet RESPAWN spawn site is rejected (every spawn must be Opus).
+7. Dropping orchestrator-agent.toml identity persistence is rejected.
+8. Dropping the rework disk-before-send rule is rejected.
+9. Dropping "Main Agent MUST NOT author the fix" is rejected.
+10. Dropping the failed-respawn-blocks rule is rejected.
 """
 
 import json
@@ -26,6 +33,10 @@ FILES = [
     ".claude/agents/mode3-orchestrator.md",
     ".claude/mode3/contracts/plan-review.md",
     ".claude/templates/approved-execution-handoff.toml",
+    ".claude/mode3/contracts/main-agent.md",
+    ".claude/mode3/contracts/workdone-review.md",
+    ".claude/mode3/contracts/closeout.md",
+    ".claude/mode3/contracts/notifications.md",
 ]
 
 
@@ -106,6 +117,59 @@ def test_silent_fallback_language_required(tmp_path):
     code, out = run(root)
     assert code == 1
     assert "fail_fast_on_team_failure" in out["failed"]
+
+
+# --- Design-B lifecycle-continuity invariants ---------------------------------
+
+def test_sonnet_respawn_spawn_rejected(tmp_path):
+    # The rework respawn site in main-agent.md must also be Opus — never Sonnet.
+    root = make_copy(tmp_path)
+    mutate(root, ".claude/mode3/contracts/main-agent.md",
+           'subagent_type: "mode3-orchestrator", model: "opus", name: "orchestrator", '
+           'mode: "auto", run_in_background: true, prompt: <rework re-entry brief '
+           'pointing at the durable artefacts>',
+           'subagent_type: "mode3-orchestrator", model: "sonnet", name: "orchestrator", '
+           'mode: "auto", run_in_background: true, prompt: <rework re-entry brief '
+           'pointing at the durable artefacts>')
+    code, out = run(root)
+    assert code == 1
+    assert "all_orchestrator_spawns_opus" in out["failed"]
+
+
+def test_orchestrator_identity_persistence_required(tmp_path):
+    root = make_copy(tmp_path)
+    mutate(root, ".claude/mode3/contracts/main-agent.md",
+           "orchestrator-agent.toml", "orch-identity.toml")
+    code, out = run(root)
+    assert code == 1
+    assert "orchestrator_identity_persisted" in out["failed"]
+
+
+def test_disk_before_send_rule_required(tmp_path):
+    root = make_copy(tmp_path)
+    mutate(root, ".claude/mode3/contracts/main-agent.md",
+           "disk-before-send", "fire-and-forget")
+    code, out = run(root)
+    assert code == 1
+    assert "rework_request_disk_before_send" in out["failed"]
+
+
+def test_main_agent_not_author_fix_required(tmp_path):
+    root = make_copy(tmp_path)
+    mutate(root, ".claude/mode3/contracts/main-agent.md",
+           "MUST NOT author or apply the fix", "may author the fix")
+    code, out = run(root)
+    assert code == 1
+    assert "main_agent_not_author_rework_fix" in out["failed"]
+
+
+def test_failed_respawn_blocks_required(tmp_path):
+    root = make_copy(tmp_path)
+    mutate(root, ".claude/mode3/contracts/main-agent.md",
+           "respawn itself fails", "respawn itself succeeds")
+    code, out = run(root)
+    assert code == 1
+    assert "resume_respawn_failure_blocks" in out["failed"]
 
 
 if __name__ == "__main__":

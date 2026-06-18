@@ -9,7 +9,10 @@
 3. Assemble `.claude/handoffs/issue-<N>/pr-review-request.toml`. For `validation_matrix.level` = `COMPACT`/`FULL`, **include the validation matrix** (`.claude/handoffs/issue-<N>/validation-matrix.md`) as the evidence packet PR_REVIEW consumes; for `NOT_REQUIRED`, include the one-line justification.
 4. **Gate before PR_REVIEW is sent (validation matrix consumption).** PR_REVIEW MUST NOT be submitted/approved while the required matrix is incomplete. PR_REVIEW MUST NOT approve if: the required matrix is missing; its verdict is `REQUEST_CHANGES`; required changes remain; hard safety/failure-mode rows are missing for `FULL`; factual claims are unsupported; or deferred `NOT_PROVEN` items invalidate the PR's main goal. PR_REVIEW MAY approve **with non-blocking follow-ups** when the main goal is proven, deferred items are explicitly out of scope, follow-ups are documented, and no safety rule is violated. Full rules: `.claude/mode3/contracts/validation-matrix.md`.
 5. Invoke `python3 .claude/scripts/openai_gate.py --issue <N> --gate PR_REVIEW --input .claude/handoffs/issue-<N>/pr-review-request.toml`.
-6. On APPROVED → Phase 9. On REVISION_REQUIRED → reroute.
+6. On APPROVED → Phase 9. On REVISION_REQUIRED → rework re-entry (OUTER gate; does not consume the inner specialist 2-cycle counter). Full mechanism: `.claude/mode3/contracts/main-agent.md` → Rework routing. In short:
+   1. **Disk-before-send:** write `.claude/handoffs/issue-<N>/rework-request-pr-review-<n>.toml` (template `.claude/templates/rework-request.toml`) with the PR_REVIEW verdict, concrete required changes, evidence pointers, classification, and `revalidation.rerun` (the required validation + a re-run of PR_REVIEW).
+   2. **Resume the orchestrator by `agent_id`** (`orchestrator-agent.toml`); if unavailable/degraded → **respawn a fresh Opus orchestrator** (`model: "opus"`) briefed from durable artefacts only. **If respawn fails → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and stop.**
+   3. The orchestrator routes the fix to a specialist; **the Main Agent never authors the fix.** Re-run the required validation, then re-run PR_REVIEW.
 
 ---
 
@@ -49,11 +52,12 @@ Main Agent **MUST record** the user's approval message — the exact text, for e
 
 ## Phase 10 — Team cleanup
 
-This harness has no `TeamDelete`; the session's single implicit team is released when the session ends. Release the orchestrator teammate gracefully:
+This harness has no `TeamDelete`; the session's single implicit team is released when the session ends. **Shutdown is explicit and happens ONLY here at Phase 10**, after merge + closeout — never earlier. The orchestrator stands by (best-effort) through every gate and rework cycle until this point. Release it gracefully:
 
-1. `SendMessage({ to: "orchestrator", message: { type: "shutdown_request", reason: "issue <N> complete" } })`.
+1. Read `orchestrator-agent.toml` to confirm the live teammate. `SendMessage({ to: "orchestrator", message: { type: "shutdown_request", reason: "issue <N> complete" } })` — address the **bare name** (the harness rejects the full `agent_id` string; the persisted `agent_id` is the identity handle, not the address). This reaches a teammate that may have completed its last turn and gone dormant.
 2. On `shutdown_response.approve = true` OR timeout (`60s`), consider the teammate released. (Approving shutdown terminates the teammate process.)
-3. Record the teammate shutdown (approval or timeout) in `team-lead-execution-log.md`.
+3. **If no live/resumable orchestrator remains** (no `orchestrator-agent.toml`, unaddressable `agent_id`, or already reaped after a long approval wait): do **NOT** fail the closeout. Log "no live/resumable orchestrator at shutdown; closed on durable artefacts" and proceed — the run's correctness rests on the disk artefacts, not on a live teammate.
+4. Record the teammate shutdown (approval, timeout, or no-live-teammate) in `team-lead-execution-log.md`.
 
 ---
 

@@ -63,6 +63,25 @@ Previously the Main Agent polled `.claude/handoffs/issue-<N>/` files to learn wh
 
 ---
 
+## Rework channel + extended lifecycle events (Design B)
+
+The 12-event catalogue above covers the forward (plan → execute → review) path. Lifecycle continuity (rework after a gate, course correction, resume/respawn) adds the following **best-effort** events. All obey the same dual-channel invariant: the durable artefact is written first; the message is a pointer. None is load-bearing for correctness — a dropped message is recovered via bounded disk reconciliation.
+
+| Name | Direction | Required | Fires at | Backing artefact |
+|---|---|---|---|---|
+| REWORK_REQUEST | M2O | false (disk-authoritative) | Any rework/course-correction (WORKDONE_REVIEW NEEDS_FIXES, PR_REVIEW REVISION_REQUIRED, OpenAI review, user correction, QA/E2E reroute) | `rework-request-<gate>-<n>.toml` |
+| READY | O2M | false | Orchestrator has read assignment/handoff and started | `team-lead-execution-log.md` |
+| IDLE_READY | O2M | false | Orchestrator finished a unit of work / a rework cycle and is standing by | `team-lead-execution-log.md` (or terminal artefact) |
+| REWORK_RECEIVED | O2M | false | Orchestrator ingested a `rework-request-*.toml` and will route it | `team-lead-execution-log.md` (`phase: rework-intake`) |
+| VALIDATION_STARTED / VALIDATION_COMPLETED | O2M | false | Orchestrator drives a qa/e2e validation step | `team-lead-execution-log.md` |
+| SHUTDOWN_RESPONSE | O2M | true (when a shutdown_request was sent) | Phase 10 — reply to the Main Agent's `shutdown_request` | `team-lead-execution-log.md` |
+
+**REWORK_REQUEST (M2O) — disk-before-send is mandatory.** The Main Agent writes `rework-request-<gate>-<n>.toml` **before** sending REWORK_REQUEST. The message body is a concise pointer (rework type + artefact path + expected stage re-entry + "ack required"), never inline TOML. The orchestrator routes the fix from the on-disk artefact, so a lost REWORK_REQUEST never loses the instruction. Full mechanism (resume-by-`agent_id`, respawn-fresh-Opus fallback, brief-from-artefacts, Main-Agent-never-implements, respawn-fail→blocked): `.claude/mode3/contracts/main-agent.md` → **Rework routing**.
+
+**Addressing.** O2M uses `SendMessage({ to: "main", ... })`. M2O addresses the orchestrator by its **bare teammate name** (`SendMessage({ to: "orchestrator", ... })`) — the harness resolves SendMessage by name within the single session team and rejects the full `agent_id` string as a `to:` value. The persisted `agent_id` (`<name>@session-<id>`, in `orchestrator-agent.toml`) is the durable identity/audit handle (stable per `(name, session)`), not the SendMessage address. If the teammate is no longer resumable (e.g. across a CLI restart), the Main Agent respawns a fresh **Opus** orchestrator (never Sonnet) and re-briefs it from durable artefacts.
+
+---
+
 ## Notification payload schema
 
 Every SendMessage notification body IS a `[notification]` TOML block. The **identical block** is also appended to `team-lead-execution-log.md` as a `## <ts> — NOTIFICATION` entry before/with the SendMessage call. This keeps the dual-channel invariant (see below).

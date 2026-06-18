@@ -8,14 +8,23 @@ implicit team (TeamCreate/TeamDelete removed; Task spawn tool renamed to Agent):
 
   1. /mode3-run resolves to the Mode-3 workflow (command file present + routes
      to the `mode3-orchestrator` teammate).
-  2. The Mode-3 workflow establishes a team via exactly one orchestrator-spawn
-     path and does NOT depend on the removed TeamCreate/TeamDelete tools.
+  2. The Mode-3 workflow establishes a team via a Phase-0.2 orchestrator-spawn
+     (bootstrap) and does NOT depend on the removed TeamCreate/TeamDelete tools.
+     (Post-Design-B the run may legitimately RESPAWN the orchestrator for rework,
+     so "exactly one spawn site" is no longer asserted — instead EVERY spawn site
+     must be Opus.)
   3. Team-establishment / probe failure fails fast (blocked.toml) and forbids a
      silent fallback to ad-hoc background subagents.
-  4. The orchestrator model resolves to Opus, never Sonnet — both at the spawn
-     site (command) and in the agent definition + handoff defaults.
+  4. EVERY orchestrator spawn (bootstrap + any rework/resume respawn) resolves to
+     Opus, never Sonnet — at the spawn sites (command + contracts), in the agent
+     definition, and in the handoff defaults.
   5. The orchestrator spawns specialists via the `Agent` tool (not the removed
      `Task` spawn tool).
+  6. Design-B lifecycle continuity is documented: orchestrator identity is
+     persisted (`orchestrator-agent.toml`), rework uses disk-before-send
+     (`rework-request-*.toml`), the resume-then-respawn fallback exists, the Main
+     Agent never authors the rework fix, a failed respawn blocks, and specialists
+     keep their configured models.
 
 Output: compact JSON. Exit 0 = all invariants hold; exit 1 = one or more failed.
 
@@ -34,6 +43,13 @@ CMD = ".claude/commands/mode3-run.md"
 AGENT = ".claude/agents/mode3-orchestrator.md"
 PLAN_REVIEW = ".claude/mode3/contracts/plan-review.md"
 HANDOFF_TMPL = ".claude/templates/approved-execution-handoff.toml"
+MAIN_AGENT = ".claude/mode3/contracts/main-agent.md"
+WORKDONE_REVIEW = ".claude/mode3/contracts/workdone-review.md"
+CLOSEOUT = ".claude/mode3/contracts/closeout.md"
+NOTIFICATIONS = ".claude/mode3/contracts/notifications.md"
+
+# Matches an orchestrator-spawn site: Agent({ ... subagent_type: "mode3-orchestrator" ... })
+SPAWN_RE = re.compile(r'Agent\(\{[^}]*subagent_type:\s*"mode3-orchestrator"[^}]*\}\)')
 
 
 def read(root: Path, rel: str) -> str:
@@ -54,6 +70,10 @@ def run(root: Path) -> Tuple[List[Tuple[str, bool, str]], bool]:
     agent = read(root, AGENT)
     plan_review = read(root, PLAN_REVIEW)
     handoff = read(root, HANDOFF_TMPL)
+    main_agent = read(root, MAIN_AGENT)
+    workdone_review = read(root, WORKDONE_REVIEW)
+    closeout = read(root, CLOSEOUT)
+    notifications = read(root, NOTIFICATIONS)
 
     # 1 — command exists and routes to the Mode-3 orchestrator
     check(checks, "command_present", bool(cmd) and "name: mode3-run" in cmd,
@@ -67,10 +87,22 @@ def run(root: Path) -> Tuple[List[Tuple[str, bool, str]], bool]:
     check(checks, "no_removed_team_tools", no_teamcreate,
           "command does not call removed TeamCreate()/TeamDelete() tools")
 
-    # exactly one orchestrator-spawn site in the command (the team-establishment step)
-    spawn_sites = re.findall(r'Agent\(\{[^}]*subagent_type:\s*"mode3-orchestrator"', cmd)
-    check(checks, "single_team_creation_path", len(spawn_sites) == 1,
-          f"exactly one orchestrator-spawn (team-establishment) path; found {len(spawn_sites)}")
+    # bootstrap orchestrator-spawn site exists in the command (Phase 0.2 team-establishment).
+    # Design B: respawn for rework is legitimate, so we no longer require EXACTLY one
+    # spawn site — only that the bootstrap exists AND every spawn site is Opus (below).
+    cmd_spawns = SPAWN_RE.findall(cmd)
+    check(checks, "bootstrap_spawn_present", len(cmd_spawns) >= 1,
+          f"Phase-0.2 orchestrator bootstrap spawn present in command; found {len(cmd_spawns)}")
+
+    # every orchestrator-spawn site (command + contracts: bootstrap AND rework respawn)
+    # is Opus and never Sonnet.
+    all_spawns: List[str] = []
+    for txt in (cmd, main_agent, closeout, workdone_review):
+        all_spawns.extend(SPAWN_RE.findall(txt))
+    spawns_opus = bool(all_spawns) and all('model: "opus"' in s for s in all_spawns) \
+        and all('"sonnet"' not in s for s in all_spawns)
+    check(checks, "all_orchestrator_spawns_opus", spawns_opus,
+          f"all {len(all_spawns)} orchestrator-spawn site(s) use model: \"opus\" and none use sonnet")
 
     # 3 — fail-fast + no silent fallback
     fail_fast = ("blocked.toml" in cmd
@@ -129,6 +161,36 @@ def run(root: Path) -> Tuple[List[Tuple[str, bool, str]], bool]:
           and "removed from the Claude Code harness" in cmd
           and "teamMateMode" in cmd,
           "migration note is accurate (explicit team tools removed; panes governed by teamMateMode)")
+
+    # 8 — Design-B lifecycle continuity (standing best-effort orchestrator + durable respawn)
+    rework_combined = main_agent + workdone_review + closeout
+
+    check(checks, "respawn_path_documented",
+          "resume-then-respawn" in main_agent and "Respawn a fresh orchestrator" in main_agent,
+          "main-agent contract documents the resume-then-respawn rework path")
+
+    check(checks, "orchestrator_identity_persisted",
+          "orchestrator-agent.toml" in cmd and "orchestrator-agent.toml" in main_agent,
+          "orchestrator identity persisted to orchestrator-agent.toml (spawn + rework brief)")
+
+    check(checks, "rework_request_disk_before_send",
+          "disk-before-send" in main_agent.lower() and "rework-request" in main_agent
+          and "disk-before-send" in workdone_review.lower(),
+          "rework uses disk-before-send (rework-request-*.toml written before SendMessage)")
+
+    check(checks, "main_agent_not_author_rework_fix",
+          "MUST NOT author or apply the fix" in main_agent,
+          "Main Agent is forbidden from authoring/applying the rework fix itself")
+
+    check(checks, "resume_respawn_failure_blocks",
+          "respawn itself fails" in main_agent
+          and "blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)" in main_agent
+          and "AGENT_TEAMS_UNAVAILABLE" in rework_combined,
+          "a failed respawn writes blocked.toml(AGENT_TEAMS_UNAVAILABLE) and stops")
+
+    check(checks, "specialists_keep_models",
+          "Specialists keep their own configured models" in cmd,
+          "specialists keep their configured/default models (orchestrator-only Opus rule)")
 
     all_ok = all(ok for _, ok, _ in checks)
     return checks, all_ok

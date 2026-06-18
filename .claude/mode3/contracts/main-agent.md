@@ -45,11 +45,38 @@ The Main Agent emits the following notifications using its existing SendMessage 
 | Event | Direction | When |
 |---|---|---|
 | PLAN_REVIEW_RESULT | M2O | End of Phase 1 — relay APPROVED or REVISION_REQUIRED verdict to orchestrator. |
+| REWORK_REQUEST | M2O | Any rework/course-correction event — after writing `rework-request-<gate>-<n>.toml` (disk-before-send), point the orchestrator at it. See **Rework routing** below. |
 | PR_REVIEW_REQUIRED | M2O | Phase 8→9 — after PR is created, announce PR_REVIEW is about to run. |
 | USER_MERGE_APPROVAL_REQUIRED | M2U | Phase 10 — PR_REVIEW returns APPROVED_TO_MERGE; run STOPS and asks user for explicit merge approval (CLAUDE.md §10). |
 | RUN_COMPLETE | M2U | Phase 12 — after merge + closeout + main sync/re-index. |
 
 No change to: Main Agent scope policy, file-read budget, or gate ownership (PLAN_REVIEW / WORKDONE_REVIEW / PR_REVIEW remain Main Agent gates).
+
+---
+
+## Rework routing (resume-then-respawn) — canonical procedure
+
+> Loaded whenever a gate or the user sends feedback that requires a fix: WORKDONE_REVIEW `NEEDS_FIXES`, PR_REVIEW `REVISION_REQUIRED`, any other OpenAI/API review feedback, a user course correction, or a QA/E2E false-failure reroute. `workdone-review.md` and `closeout.md` point here for the mechanism; this is the single source of truth.
+
+**Lifecycle model — Design B: standing Opus orchestrator best-effort + durable respawn fallback.** The orchestrator is resumable by `agent_id` while the harness keeps it addressable, but is **not** guaranteed to survive long gate/user-approval waits, a Main-session compaction, or a CLI restart. Mode 3 therefore never depends on a permanently-live orchestrator. Durable artefacts are authoritative; `SendMessage` is preferred but best-effort.
+
+**HARD INVARIANT — the Main Agent MUST NOT author or apply the fix.** A messaging or resume failure is NEVER a licence for the Main Agent to implement the change itself. The fix is always routed through the orchestrator (resumed or freshly respawned) to a specialist.
+
+Canonical steps for every rework event:
+
+1. **Write the durable rework artefact FIRST (disk-before-send).** Before any SendMessage, write `.claude/handoffs/issue-<N>/rework-request-<gate>-<n>.toml` (template: `.claude/templates/rework-request.toml`) capturing: source event/gate, verdict, concrete fix items (reviewer/user findings, NOT a Main-Agent recipe), evidence pointers, scope classification (`in_scope` | `scope_change`), work-type (`product` | `test` | `governance` | `scope`), suspected owner role, validation to re-run, current branch + commit SHA + diff-summary reference. A dropped message can then never lose the instruction.
+2. **Classify before routing.** If `classification.scope = scope_change`, do NOT route silently — write `blocked.toml(reason_code=SCOPE_EXPANSION_REQUIRED | OUT_OF_SCOPE)` and obtain re-approval (re-run PLAN_REVIEW if scope expands). For a **QA/E2E false failure**, if the evidence supports a test-authoring defect route to `qa` / `qa (e2e-authoring)`; **do NOT default a false QA/E2E failure to `frontend-engineer`.**
+3. **Resume the existing orchestrator.** Read `.claude/handoffs/issue-<N>/orchestrator-agent.toml` and confirm the persisted identity. `SendMessage({ to: "orchestrator", ... })` — **address the bare teammate name** (`orchestrator`); the harness resolves SendMessage by name within the single session team and **rejects the full `agent_id` string as a `to:` value**. The persisted `agent_id` (format `<name>@session-<id>`) is the durable identity/audit handle — it confirms you are resuming the same teammate and survives compaction — but the addressable token is the bare name. (Harness note: the `agent_id` is stable per `(name, session)`, so a respawn under the same name reuses the same handle; cross-session — e.g. after a CLI restart — the teammate is gone and step 4 applies.) The message body is concise plain text: rework-request type + artefact path + expected stage re-entry + "ack required". Do NOT put large TOML/JSON in the message body — the artefact on disk is the source of truth.
+4. **Resume-then-respawn fallback.** If the orchestrator cannot be resumed/messaged by `agent_id` (unaddressable, delivery degraded, or the teammate was reaped):
+   - Do NOT implement the fix directly.
+   - Respawn a fresh orchestrator — **always Opus**: `Agent({ subagent_type: "mode3-orchestrator", model: "opus", name: "orchestrator", mode: "auto", run_in_background: true, prompt: <rework re-entry brief pointing at the durable artefacts> })`.
+   - Persist the new identity to `orchestrator-agent.toml` (`spawn_kind = "respawn"`, pushing the retired identity into `[[previous_spawns]]`).
+   - Brief the fresh orchestrator from **durable artefacts only**: `approved-execution-handoff.toml`, `team-lead-execution-log.md`, the latest `validation-matrix.md`, the latest reviewer verdict, the relevant `rework-request-*.toml`, and the current git diff summary + branch/commit state.
+   - **If the respawn itself fails** → write `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and stop. Do not fall back to Main-Agent implementation.
+5. **Orchestrator routes the fix** to a fresh specialist (briefed from canonical artefacts per `team-lead.md`), within the unchanged 2-cycle inner reroute budget, and re-enters the appropriate stage.
+6. **Re-run validation, then re-run the failed gate.** Per the rework artefact's `revalidation.rerun` list (e.g. Phase 7A browser re-validation), then re-submit the gate that emitted the feedback. Inner specialist reroute budget is NOT consumed by these outer-gate cycles.
+
+The orchestrator is treated as **disposable and reconstructible**: whether step 3 (resume) or step 4 (respawn) services the rework, the routing and the durable artefacts are identical. Record in `rework-request-*.toml.delivery.orchestrator_disposition` which path was taken (`resumed-existing` | `respawned-fresh` | `respawn-failed-blocked`).
 
 ---
 
@@ -79,6 +106,8 @@ team-lead-plan.toml
 bug-repro-report.toml
 approved-plan.toml
 approved-execution-handoff.toml
+orchestrator-agent.toml
+rework-request-*.toml
 workdone-candidate.toml
 workflow-context.toml
 mode3-phase-pointer.toml

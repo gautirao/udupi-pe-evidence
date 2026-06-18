@@ -117,8 +117,8 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 | 7C | sha256 mismatch on approved-plan | stop; do not invoke WORKDONE_REVIEW |
 | 7C | scope-lock violation outside `allowed_file_globs` | stop; require explicit scope-change approval |
 | 7C | QA/E2E evidence missing or FAIL, or eval-checklist item not PASS | stop; do not invoke WORKDONE_REVIEW |
-| 7C | WORKDONE_REVIEW REVISION_REQUIRED (NEEDS_FIXES) | halt to user; outer-gate failure, does NOT consume the inner specialist 2-cycle budget. Fix re-enters Phase 7A browser re-validation before re-submitting WORKDONE_REVIEW. |
-| 9 | PR_REVIEW REVISION_REQUIRED | halt to user; same separation as Phase 8 — outer gate, no shared counter with inner specialist loop. |
+| 7C | WORKDONE_REVIEW REVISION_REQUIRED (NEEDS_FIXES) | outer-gate failure; does NOT consume the inner specialist 2-cycle budget. Write `rework-request-workdone-review-<n>.toml` (disk-before-send), resume the orchestrator by `agent_id` (else respawn a fresh Opus orchestrator from durable artefacts), route the fix, re-enter Phase 7A browser re-validation, then re-submit WORKDONE_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
+| 9 | PR_REVIEW REVISION_REQUIRED | outer gate, no shared counter with inner specialist loop. Write `rework-request-pr-review-<n>.toml` (disk-before-send), resume-or-respawn the Opus orchestrator, route the fix, re-run required validation, then re-run PR_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
 | 10 | User declines merge | halt with PR open; do not merge |
 
 ## Artefacts produced under `.claude/handoffs/issue-<N>/`
@@ -127,9 +127,11 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 0b. `team-lead-plan.toml` — written by the Team Lead (orchestrator) in Phase 0.7 after specialist investigation. The implementation plan. Becomes the PLAN_REVIEW input packet. Main Agent does NOT author this.
 0c. `bug-repro-report.toml` — written by the Team Lead (orchestrator, via QA) in Phase 0.7 for bug issues, BEFORE `team-lead-plan.toml`. See `.claude/mode3/contracts/bug-repro.md`.
 1. `approved-execution-handoff.toml` — written by Main Agent (lead) after PLAN_REVIEW APPROVED. Now also carries the `[eval_checklist]` + `[required_evidence]` transcribed from the OpenAI PLAN_REVIEW verdict.
+1b. `orchestrator-agent.toml` — written by Main Agent at every orchestrator spawn (initial bootstrap + any respawn). Durable record of the live/last-known orchestrator identity + `agent_id` for resume; survives compaction/crash. Template: `.claude/templates/orchestrator-agent.toml`.
 2. `team-lead-execution-log.md` — append-only, written by executor after each significant step.
 3. `workdone-candidate.toml` — written by executor on success; QA/E2E gate satisfied.
 4. `blocked.toml` — written by executor on failure or unsafe condition.
+4b. `rework-request-<gate>-<n>.toml` — written by Main Agent (disk-before-send) for every rework/course-correction event before messaging the orchestrator. Authoritative fix-routing brief; lets a resumed OR freshly-respawned orchestrator route the fix from disk alone. Template: `.claude/templates/rework-request.toml`.
 5. `preflight-probe.txt` — written by executor during Phase 4 behavioural sentinel probe.
 6. `product-verification.toml` — written by the product-check specialist during Phase 7A (final browser product verification). Authoritative; the lead reads it from disk to decide the gate outcome.
 7. `product-sweep.toml` — written by the exploratory specialist during Phase 7B (conditional exploratory product sweep) when its triggers fire. Authoritative; the lead reads it from disk to decide the gate outcome. Absent when Phase 7B is skipped.
@@ -161,7 +163,7 @@ Self-report is NOT sufficient. The team must be established AND the probe must s
 
 Steps:
 1. Verify the `Agent` (teammate spawn) and `SendMessage` tools are callable from this session. (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `settings.json` is retained for back-compat but is no longer load-bearing — the implicit team is always available.) If `Agent` is not callable → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and HALT.
-2. If an `orchestrator` teammate is already live for this issue, or `.claude/handoffs/issue-<N>/` already holds in-progress execution artefacts: refuse to silently recreate. Either attach safely (only if previous artefacts are intact and the user explicitly confirms resume) or instruct the user to clear `.claude/handoffs/issue-<N>/` terminal artefacts and re-run `/mode3-run`. Never silently overwrite.
+2. If `.claude/handoffs/issue-<N>/` already holds in-progress execution artefacts: refuse to silently recreate state. If `orchestrator-agent.toml` records a prior teammate, prefer **resume** (`SendMessage({ to: "orchestrator", ... })` by bare name; the persisted `agent_id` confirms identity) over a new bootstrap. If resume is not possible, do not "attach" (the harness has no attach primitive) — **respawn a fresh Opus orchestrator and re-brief it from durable artefacts** per `.claude/mode3/contracts/main-agent.md` → Rework routing, reusing the intact `approved-execution-handoff.toml` + `team-lead-execution-log.md`. Never silently overwrite a non-stale terminal artefact; if a terminal `workdone-candidate.toml`/`blocked.toml` is present and the user has not confirmed resume, surface it and ask. The expected-sentinel value persisted in step 3 makes the bootstrap idempotent across crashes/resumes.
 3. **Lead generates the random suffix locally** (e.g. `python3 -c "import secrets;print(secrets.token_hex(3))"`) and **writes it to disk first**: `.claude/handoffs/issue-<N>/expected-sentinel.txt` containing exactly `PROBE_OK_<N>_<random6>`. The expected value is now durable across crashes and resumes.
 4. Spawn the Orchestrator teammate (this is the team-establishment step):
    `Agent({ subagent_type: "mode3-orchestrator", model: "opus", name: "orchestrator", mode: "auto", run_in_background: true, prompt: <sentinel probe prompt below> })`.
@@ -169,6 +171,7 @@ Steps:
    - `subagent_type` is `mode3-orchestrator` (NOT `team-lead`) — see `.claude/agents/mode3-orchestrator.md`. The teammate `name` is `orchestrator`.
    - `run_in_background: true` makes it a persistent teammate that can SendMessage `main` per the notification contract.
    - **CRITICAL:** `mode: "auto"` auto-approves all tool use without permission prompts, which is required for the orchestrator to proceed with Phase 0.7 investigation without hanging on permission gates.
+   - **Persist identity immediately (durable).** Capture the `agent_id` from the spawn result (format `<name>@session-<id>`) and write `.claude/handoffs/issue-<N>/orchestrator-agent.toml` (template `.claude/templates/orchestrator-agent.toml`) with `spawn_kind = "initial"`, `spawn_context = "phase-0.2-bootstrap"`, `requested_model = "opus"`. This durable record confirms identity for a later resume (the teammate is addressed by its **bare name** `orchestrator` — the harness rejects the full `agent_id` string as a `to:` value) and survives Main-session compaction or crash. Every later respawn overwrites it, retiring the prior identity into `[[previous_spawns]]`. See `.claude/mode3/contracts/main-agent.md` → Rework routing.
    - If the spawn call fails or returns no addressable teammate → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and HALT. Do NOT do the work yourself.
 5. Orchestrator's first instruction is the file-based sentinel probe: invoke `Agent({ subagent_type: "qa-fast", prompt: "Behavioural sentinel probe. Reply with EXACTLY this single line and nothing else: PROBE_OK_<N>_<random6>" })` (with the lead-generated suffix interpolated into the prompt), then `Write` the returned line to `.claude/handoffs/issue-<N>/preflight-probe.txt`.
 6. Lead reads `.claude/handoffs/issue-<N>/preflight-probe.txt` AND `.claude/handoffs/issue-<N>/expected-sentinel.txt` from disk. Pass = both files exist and their contents match exactly. Self-report by the Orchestrator is ignored.
@@ -195,7 +198,7 @@ Main Agent submits the Team Lead's plan to OpenAI PLAN_REVIEW, then materialises
 
 ## Phase 3 — Team lifecycle (already established in 0.2)
 
-The team (implicit session team) was established and the `orchestrator` teammate was spawned during the behavioural probe. Reuse the live `orchestrator` teammate. Do NOT re-spawn a second orchestrator.
+The team (implicit session team) was established and the `orchestrator` teammate was spawned during the behavioural probe. Reuse the live `orchestrator` teammate for the implementation phase; do NOT spawn a second **concurrent** orchestrator during Phase 5 execution. (Rework AFTER a terminal artefact is different: per `.claude/mode3/contracts/main-agent.md` → Rework routing, a later gate fix resumes this teammate by `agent_id`, or — if it is no longer addressable — respawns a fresh Opus orchestrator briefed from durable artefacts. The orchestrator is disposable and reconstructible; it is always Opus.)
 
 ## Phase 4 — Sentinel probe (already passed in 0.2)
 
@@ -215,7 +218,7 @@ Main Agent runs independent browser validation BEFORE WORKDONE_REVIEW (user-visi
 
 ## Phase 8–12 — PR / merge / closeout
 
-Main Agent creates the PR, runs PR_REVIEW, stops for the mandatory user merge approval, cleans up the team, syncs main, and prints the closeout (including the stale-PR/branch safety policy). **Load `.claude/mode3/contracts/closeout.md`.**
+Main Agent creates the PR, runs PR_REVIEW, stops for the mandatory user merge approval, shuts down the orchestrator (by its persisted `agent_id`; closeout proceeds on durable artefacts if no live/resumable teammate remains), syncs main, and prints the closeout (including the stale-PR/branch safety policy). **Load `.claude/mode3/contracts/closeout.md`.** Shutdown happens **only** here at Phase 10 — never earlier; the orchestrator stands by (best-effort) through all gate/rework cycles until then.
 
 ---
 

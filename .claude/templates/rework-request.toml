@@ -1,0 +1,75 @@
+# Template — rework-request-<gate>-<n>.toml
+#
+# Durable, authoritative record of a rework / course-correction instruction. Written
+# by the Main Agent to `.claude/handoffs/issue-<N>/rework-request-<gate>-<n>.toml`
+# BEFORE any SendMessage to the orchestrator (the "disk-before-send" invariant).
+#
+# Filename <gate> values:
+#   rework-request-workdone-review-<n>.toml   — WORKDONE_REVIEW NEEDS_FIXES
+#   rework-request-pr-review-<n>.toml         — PR_REVIEW REVISION_REQUIRED
+#   rework-request-openai-review-<n>.toml     — any other OpenAI/API review feedback
+#   rework-request-user-correction-<n>.toml   — user course correction mid-run
+#   rework-request-qa-reroute-<n>.toml        — QA/E2E false-failure reroute
+# <n> is a monotonically increasing per-gate counter (1, 2, ...).
+#
+# Why disk-first: SendMessage delivery is best-effort and a resumed/fresh orchestrator
+# must be able to route the fix from disk alone. A dropped message NEVER loses the
+# instruction — the artefact is the source of truth; the message is only a pointer.
+#
+# The Main Agent MUST NOT author or apply the fix itself. This artefact briefs the
+# orchestrator (resumed by agent_id, or freshly respawned on Opus) which routes to a
+# specialist. Workflow bookkeeping under `.claude/` — never product code.
+
+[rework_request]
+issue           = 0       # REQUIRED — integer issue number
+gate            = ""      # REQUIRED — "WORKDONE_REVIEW" | "PR_REVIEW" | "OPENAI_REVIEW" | "USER_CORRECTION" | "QA_REROUTE"
+sequence        = 1       # REQUIRED — per-gate counter <n>
+created_at      = ""      # REQUIRED — ISO-8601 UTC timestamp (written before the SendMessage)
+verdict         = ""      # REQUIRED — source verdict, e.g. "NEEDS_FIXES" | "REVISION_REQUIRED" | "FALSE_FAILURE" | "COURSE_CORRECTION"
+source_event    = ""      # REQUIRED — originating event/notification, e.g. "Phase 7C WORKDONE_REVIEW" | "Phase 9 PR_REVIEW" | "user message" | "Phase 7A reroute"
+
+# Concrete, actionable items the orchestrator must route. NOT a Main-Agent-authored
+# implementation recipe — these restate the reviewer/user findings to be fixed.
+[rework_request.fix_items]
+items = [
+  # "WORKDONE_REVIEW: eval_checklist item AC4 marked FAIL — selected-marker copper pin not rendered.",
+]
+
+# Evidence the orchestrator/specialist should read (reviewer verdict files, user message,
+# 7A/7B product evidence, validation matrix). Pointers only; never inline large blobs.
+[rework_request.evidence]
+reviewer_verdict_path = ""   # e.g. ".claude/openai-gates/issue-<N>/workdone-review/verdict-structured.json"
+user_message_quote    = ""   # verbatim user instruction for USER_CORRECTION (one or two lines)
+product_evidence_path = ""   # e.g. ".claude/handoffs/issue-<N>/product-verification.toml"
+validation_matrix_path = ""  # e.g. ".claude/handoffs/issue-<N>/validation-matrix.md"
+
+# Classification drives routing. The orchestrator owns the final routing decision; this
+# is the Main Agent's best-effort classification, not an override of Route-and-Run.
+[rework_request.classification]
+scope          = "in_scope"   # REQUIRED — "in_scope" | "scope_change" (scope_change → blocked.toml + re-approval, do NOT route silently)
+work_type      = "product"    # REQUIRED — "product" | "test" | "governance" | "scope"
+suspected_owner = ""          # REQUIRED — suspected specialist role, e.g. "frontend-engineer" | "backend-engineer" | "qa" | "qa (e2e-authoring)" | "security-reviewer"
+# For QA_REROUTE: if evidence supports a test-authoring defect, route to qa / qa (e2e-authoring).
+# Do NOT default a false QA/E2E failure to frontend-engineer.
+
+# Validation that MUST be re-run after the fix before the failed gate is re-submitted.
+[rework_request.revalidation]
+rerun = [
+  # "Phase 7A browser re-validation",
+  # "unit tests for touched files",
+  # "WORKDONE_REVIEW",
+]
+
+# Branch / commit / diff state captured at rework time (helps a FRESH orchestrator
+# reconstruct context without the original teammate).
+[rework_request.repo_state]
+branch          = ""   # REQUIRED — current git branch
+commit_sha      = ""   # OPTIONAL — current HEAD sha if available
+diff_summary_ref = ""  # OPTIONAL — how to regenerate the diff, e.g. "git diff --name-status origin/main...HEAD"
+
+# How the Main Agent delivered this rework request to the orchestrator.
+[rework_request.delivery]
+orchestrator_disposition = ""  # REQUIRED — "resumed-existing" | "respawned-fresh" | "respawn-failed-blocked"
+resumed_agent_id         = ""  # OPTIONAL — agentId resumed (if resumed-existing)
+respawned_agent_id       = ""  # OPTIONAL — agentId of the fresh Opus orchestrator (if respawned-fresh)
+acknowledged             = false  # set true when orchestrator sends rework_received (best-effort) OR logs intake to team-lead-execution-log.md (authoritative)
