@@ -27,6 +27,7 @@ import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
+import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
@@ -452,8 +453,19 @@ export interface SchoolsInAreaPanelProps {
   activeContextChips?: React.ReactNode;
   /** Issue #1494 — current buy/rent intent for summary/empty-state copy. Default 'buy'. */
   intent?: DiscoverIntent;
+  /**
+   * Card↔marker shared selection. When the id matches a home card, that card renders the
+   * copper selected frame and is scrolled into view (driven from a map home-marker click via
+   * the `listing` URL param). Mirrors AreaSelectedPanel / SchoolSelectedPanel.
+   */
+  selectedListingId?: string | null;
+  /** Card activation callback (URL sync). Usually undefined for residential cards (navigation is primary). */
+  onSelectListing?: (id: string) => void;
+  /** Ephemeral hover/focus signal: card hover highlights the matching map home-marker. */
+  onHoverListing?: (id: string | null) => void;
 }
 export function SchoolsInAreaPanel({
+  selectedArea,
   onStartOver,
   onBack,
   journey,
@@ -469,82 +481,124 @@ export function SchoolsInAreaPanel({
   isAuthenticated = false,
   activeContextChips,
   intent = 'buy',
+  selectedListingId = null,
+  onSelectListing,
+  onHoverListing,
 }: SchoolsInAreaPanelProps) {
   const navigate = useNavigate();
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Top half: the existing schools-in-area surface */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <RealSchoolsInAreaPanel
-          journey={journey ?? 'area-first'}
-          onStartOver={onStartOver || (() => undefined)}
-          onBack={onBack}
-          schools={schools}
-          schoolsLoading={schoolsLoading}
-          schoolsError={schoolsError}
-          onSchoolsRetry={onSchoolsRetry}
-          schoolsFetching={schoolsFetching}
-          onSelectSchool={onSelectSchool}
-          activeContextChips={activeContextChips}
-        />
-      </div>
+  // Issue #1547 parity — scroll the selected home card into view when selection is driven
+  // from the map marker side. Guards the missing-ref case (selected listing filtered out).
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (!selectedListingId) return;
+    const node = cardRefs.current.get(selectedListingId);
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedListingId]);
 
-      {/* Bottom half: property listings in the same area (Issue #1074 Slice A).
-          Mirrors AreaSelectedPanel's listing surface — only rendered when the
-          parent passes areaListings (school-first + areaKey state). */}
-      {(areaListings !== undefined || isLoadingAreaListings) && (
+  const areaLabel = selectedArea?.areaLabel || 'this area';
+  const homesTitle = intent === 'rent' ? 'Rentals' : 'Homes for sale';
+
+  // School-first must EXCLUDE agricultural land (design + #1463). Defensive client-side
+  // guard on top of the backend exclusion: never surface an agri listing in this journey.
+  const homeListings = (areaListings ?? []).filter(
+    (l) => (l.propertyType ?? '').toLowerCase() !== AGRICULTURAL_LAND_PROPERTY_TYPE,
+  );
+
+  // Homes in the same area (Issue #1074 Slice A), restyled to the ReTrends two-column
+  // grid. Rendered as the panel's footerSlot so it lives INSIDE the school panel's single
+  // scroll surface — the whole right panel scrolls as one page (no nested scrollbars).
+  // Buy/Rent-aware wording; agri excluded; card↔marker hover + selected-frame preserved.
+  const homesSection =
+    areaListings !== undefined || isLoadingAreaListings ? (
+      <div className="border-t border-border bg-card" data-testid="schools-in-area-properties">
+        <div className="flex items-baseline justify-between gap-3 border-b border-border px-4 py-2.5">
+          <h3 className="text-sm font-semibold text-foreground">
+            {homesTitle} in {areaLabel}
+          </h3>
+          {!isLoadingAreaListings && (
+            <span className="shrink-0 text-xs text-muted-foreground" data-testid="schools-in-area-homes-count">
+              <span className="font-mono font-semibold tabular-nums text-foreground">
+                {homeListings.length}
+              </span>{' '}
+              {intent === 'rent'
+                ? homeListings.length === 1 ? 'rental available' : 'rentals available'
+                : homeListings.length === 1 ? 'home for sale' : 'homes for sale'}
+            </span>
+          )}
+        </div>
+        {/* Issue #1170 — dim during an in-flight refetch (isFetching) but NOT during the
+            initial skeleton load. No overflow here: the parent scroll surface owns scrolling. */}
         <div
-          className="border-t border-border flex-shrink-0 max-h-[45%] flex flex-col bg-card"
-          data-testid="schools-in-area-properties"
+          className={cn(
+            'transition-opacity duration-150',
+            isFetching && !isLoadingAreaListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
+          )}
         >
-          <div className="px-4 py-2 border-b border-border">
-            <h3 className="text-sm font-semibold text-foreground">
-              Properties for {intent === 'rent' ? 'rent' : 'sale'} in this area
-            </h3>
-          </div>
-          {/* Issue #1170 — mirror AreaSelectedPanel: dim during an in-flight refetch
-              (isFetching) but NOT during the initial skeleton load, so cached responses
-              never flash and the settled empty state stays readable. */}
-          <div
-            className={cn(
-              'flex-1 overflow-y-auto transition-opacity duration-150',
-              isFetching && !isLoadingAreaListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
-            )}
-          >
-            {isLoadingAreaListings ? (
-              <div className="space-y-3 p-4">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} data-testid="listing-skeleton" className="rounded-lg border border-border p-3">
-                    <Skeleton className="w-full h-32 rounded-lg mb-3" />
-                    <Skeleton className="h-4 w-2/3 mb-2" />
-                    <Skeleton className="h-3 w-1/3 mb-2" />
-                  </div>
-                ))}
-              </div>
-            ) : !areaListings || areaListings.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-                <MapPin className="h-6 w-6 text-muted-foreground/40 mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  No properties for {intent === 'rent' ? 'rent' : 'sale'} in this area yet
-                </p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {areaListings.map((listing) => (
+          {isLoadingAreaListings ? (
+            <div className="grid grid-cols-1 gap-3 p-3 2xl:grid-cols-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} data-testid="listing-skeleton" className="rounded-lg border border-border p-3">
+                  <Skeleton className="mb-3 h-32 w-full rounded-lg" />
+                  <Skeleton className="mb-2 h-4 w-2/3" />
+                  <Skeleton className="h-3 w-1/3" />
+                </div>
+              ))}
+            </div>
+          ) : homeListings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center px-4 py-6 text-center">
+              <MapPin className="mb-2 h-6 w-6 text-muted-foreground/40" aria-hidden />
+              <p className="text-sm text-muted-foreground">
+                No {intent === 'rent' ? 'rentals' : 'homes for sale'} in {areaLabel} yet
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 p-3 2xl:grid-cols-2">
+              {homeListings.map((listing) => (
+                <div
+                  key={listing.id}
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(listing.id, node);
+                    else cardRefs.current.delete(listing.id);
+                  }}
+                >
                   <PropertyCard
-                    key={listing.id}
                     listing={listing}
                     isAuthenticated={isAuthenticated}
                     onNavigate={() => navigate(`/listing/${listing.id}`)}
+                    isSelected={selectedListingId === listing.id}
+                    onSelect={onSelectListing}
+                    onHover={onHoverListing}
+                    areaLabel={selectedArea?.areaLabel}
                   />
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    ) : null;
+
+  // Single scroll surface: the school panel owns the only scrollbar; the homes section
+  // renders at the bottom of it via footerSlot.
+  return (
+    <RealSchoolsInAreaPanel
+      journey={journey ?? 'area-first'}
+      onStartOver={onStartOver || (() => undefined)}
+      onBack={onBack}
+      schools={schools}
+      schoolsLoading={schoolsLoading}
+      schoolsError={schoolsError}
+      onSchoolsRetry={onSchoolsRetry}
+      schoolsFetching={schoolsFetching}
+      onSelectSchool={onSelectSchool}
+      activeContextChips={activeContextChips}
+      intent={intent}
+      homesCount={areaListings !== undefined ? homeListings.length : undefined}
+      footerSlot={homesSection}
+    />
   );
 }
 

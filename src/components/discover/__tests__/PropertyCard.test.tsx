@@ -42,6 +42,17 @@ describe('PropertyCard', () => {
     expect(screen.getByText('Sunny Villa')).toBeInTheDocument();
   });
 
+  it('uses the refined hover lift and NOT a teal/green hover wash', () => {
+    renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate: vi.fn() });
+    const card = screen.getByTestId('listing-card');
+    // Premium card surface + hover lift.
+    expect(card.className).toContain('bg-card');
+    expect(card.className).toContain('hover:-translate-y-0.5');
+    expect(card.className).toContain('hover:shadow-md');
+    // No accent (legacy coastal-teal) hover background.
+    expect(card.className).not.toContain('hover:bg-accent');
+  });
+
   it('falls back to type+purpose when title is null', () => {
     renderCard({
       listing: makeListing({ title: null, propertyType: 'apartment', listingPurpose: 'sale' }),
@@ -72,19 +83,26 @@ describe('PropertyCard', () => {
     expect(screen.getByTestId('listing-card')).toBeInTheDocument();
   });
 
-  it('shows Trusted badge for trustTier A', () => {
+  it('shows the Verified trust badge for trustTier A', () => {
     renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
-    expect(screen.getByText('Trusted')).toBeInTheDocument();
+    expect(screen.getByText('Verified')).toBeInTheDocument();
   });
 
-  it('shows Trusted badge for trustTier B', () => {
+  it('shows the Trusted trust badge for trustTier B', () => {
     renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
     expect(screen.getByText('Trusted')).toBeInTheDocument();
   });
 
-  it('does not show Trusted badge for trustTier C', () => {
+  it('shows the Listed trust badge for trustTier C', () => {
     renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+    expect(screen.getByText('Listed')).toBeInTheDocument();
+  });
+
+  it('shows no trust badge when trustTier is null (never invents a tier)', () => {
+    renderCard({ listing: makeListing({ trustTier: null }), isAuthenticated: true, onNavigate: vi.fn() });
+    expect(screen.queryByText('Verified')).not.toBeInTheDocument();
     expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
+    expect(screen.queryByText('Listed')).not.toBeInTheDocument();
   });
 
   it('shows the formatted price when isAuthenticated is true and pricePaise is set', () => {
@@ -139,6 +157,55 @@ describe('PropertyCard', () => {
     });
     expect(screen.getByText('Villa')).toBeInTheDocument();
     expect(screen.getByText('For Rent')).toBeInTheDocument();
+  });
+
+  it('renders the property-type pill when propertyType exists, and omits it when missing', () => {
+    const { rerender } = renderCard({
+      listing: makeListing({ title: 'X', propertyType: 'house' }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('House')).toBeInTheDocument();
+    rerender(
+      <MemoryRouter>
+        <PropertyCard
+          listing={makeListing({ title: 'X', propertyType: null, listingPurpose: null })}
+          isAuthenticated
+          onNavigate={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('House')).not.toBeInTheDocument();
+  });
+
+  it('renders a "View details" button that navigates on click', async () => {
+    const onNavigate = vi.fn();
+    renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate });
+    const btn = screen.getByTestId('listing-view-details');
+    expect(btn).toHaveTextContent('View details');
+    await userEvent.click(btn);
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('builds a richer "sublocality, area" location when areaLabel is provided', () => {
+    renderCard({
+      listing: makeListing({ locality: 'Eshwar Nagar' }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+      areaLabel: 'Manipal',
+    });
+    expect(screen.getByText('Eshwar Nagar, Manipal')).toBeInTheDocument();
+  });
+
+  it('deduplicates the location — never renders "Manipal, Manipal"', () => {
+    renderCard({
+      listing: makeListing({ locality: 'Manipal' }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+      areaLabel: 'manipal',
+    });
+    expect(screen.getByText('Manipal')).toBeInTheDocument();
+    expect(screen.queryByText(/Manipal,\s*Manipal/i)).not.toBeInTheDocument();
   });
 
   it('calls onNavigate when the card is clicked', async () => {

@@ -1,13 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { GraduationCap, ChevronDown, AlertTriangle } from 'lucide-react';
+import { GraduationCap, AlertTriangle, Search, X, MapPin, ChevronRight, ChevronDown, ArrowRight, Home } from 'lucide-react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
-import { useDiscoverUrlState } from '@/hooks/useDiscoverUrlState';
+import { useDiscoverUrlState, type DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+
+/** Buy/Rent-aware noun for the homes count — never the vague "listings". */
+function homesNoun(intent: DiscoverIntent, n: number): string {
+  if (intent === 'rent') return n === 1 ? 'rental available' : 'rentals available';
+  return n === 1 ? 'home for sale' : 'homes for sale';
+}
+
+/** Title-case a kebab slug for display (e.g. "university-belt" → "University Belt"). */
+function prettifySlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/** Map a raw schoolCategory token (primary/secondary/higher_secondary) to a Level label. */
+function levelLabel(category: unknown): string | null {
+  if (typeof category !== 'string' || !category) return null;
+  return category
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
 
 interface SchoolsInAreaPanelProps {
   journey: 'area-first' | 'school-first';
@@ -59,16 +86,38 @@ interface SchoolsInAreaPanelProps {
   onSelectSchool?: (schoolId: string) => void;
   /** Active context chips rendered in the panel header (mirrors SchoolSelectedPanel). */
   activeContextChips?: React.ReactNode;
+  /**
+   * Current buy/rent intent — drives the selected-area summary + section wording
+   * ("homes for sale" vs "rentals available"). Default 'buy'. (Issue #1494 parity.)
+   */
+  intent?: DiscoverIntent;
+  /**
+   * Count of homes in the selected area for the current Buy/Rent mode, surfaced in the
+   * selected-area summary. Sourced from the parent's area-listings query (the same data
+   * that powers the homes grid below) so the number matches what the user can see.
+   * Null/undefined while loading or unknown — the summary falls back to the area's own
+   * listingCount and never fabricates a value.
+   */
+  homesCount?: number | null;
+  /**
+   * Content rendered at the bottom of the panel's single scroll surface (after the school
+   * list). Used by the wrapper to place the "Homes in {area}" grid inside the SAME scroll
+   * container, so the whole right panel scrolls as one page (no nested scrollbars).
+   */
+  footerSlot?: React.ReactNode;
 }
 
 const BOARD_OPTIONS = ['CBSE', 'ICSE', 'State', 'International'];
+// Default-collapsed school count — keeps the panel short and the page hierarchy strong.
+// A "Show all N schools" affordance reveals the rest (mirrors the design source).
+const COLLAPSED_SCHOOLS = 4;
 const CATEGORY_OPTIONS = [
   { value: 'primary', label: 'Primary' },
   { value: 'secondary', label: 'Secondary' },
   { value: 'higher_secondary', label: 'Higher Secondary' },
 ];
 
-export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, schoolsFetching: schoolsFetchingProp, onSelectSchool, activeContextChips }: SchoolsInAreaPanelProps) {
+export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: schoolsProp, schoolsLoading: schoolsLoadingProp, schoolsError: schoolsErrorProp, onSchoolsRetry, schoolsFetching: schoolsFetchingProp, onSelectSchool, activeContextChips, intent = 'buy', homesCount, footerSlot }: SchoolsInAreaPanelProps) {
   const [urlState, urlActions] = useDiscoverUrlState();
   const { data: areasData } = useDiscoverAreas(urlState.city);
   const areas = areasData?.areas ?? [];
@@ -79,6 +128,21 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
     [areas, urlState.areaKey],
   );
   const areaLabel = selectedArea?.name || urlState.areaKey?.split('|').pop() || 'Area';
+
+  // Only the school-first journey gets the redesigned selected-area summary + breadcrumb.
+  // The area-first school-picking sub-step (#1157) reuses this panel and must NOT change.
+  const isSchoolFirst = journey === 'school-first';
+
+  // Breadcrumb context: City › Zone › Area. City + area are derived from the areaKey
+  // (IN|KA|<District>|<Area>); the zone label is the groupId slug, title-cased
+  // ("university-belt" → "University Belt"). Nothing here is fabricated.
+  const areaKeyParts = (urlState.areaKey || '').split('|');
+  const cityLabel = areaKeyParts[2] || prettifySlug(urlState.city || 'Udupi');
+  const zoneLabel = urlState.groupId?.trim() ? prettifySlug(urlState.groupId.trim()) : null;
+
+  // Local, client-side school-name search (composes with the server-side board/level
+  // filters already applied to `schools`). Keeps filtering scoped to this area's list.
+  const [nameQuery, setNameQuery] = useState('');
 
   // When MapDiscovery passes schools as a prop, skip the internal hook call to avoid
   // a duplicate request. The hook is still called (Rules of Hooks require unconditional calls)
@@ -172,6 +236,37 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
     return data?.pages.flatMap((page) => page.schools) || [];
   }, [schoolsProp, data]);
 
+  // Apply the local name search on top of the (server-filtered) school list.
+  const visibleSchools = useMemo(() => {
+    const q = nameQuery.trim().toLowerCase();
+    if (!q) return schools;
+    return schools.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.address || '').toLowerCase().includes(q),
+    );
+  }, [schools, nameQuery]);
+
+  const boardActive = (urlState.filters.boardFilters || []).length > 0;
+  const categoryActive = (urlState.filters.categoryFilters || []).length > 0;
+  const filtersActive = boardActive || categoryActive || nameQuery.trim().length > 0;
+
+  // Collapse the school list to the first few by default to keep the page hierarchy strong.
+  // School-first only (area-first school-picking sub-step #1157 keeps its full list — no regression).
+  // When a search/chip filter is active, show every match (the result set is already narrowed).
+  const [showAllSchools, setShowAllSchools] = useState(false);
+  const canCollapse = isSchoolFirst && !filtersActive && visibleSchools.length > COLLAPSED_SCHOOLS;
+  const shownSchools = !isSchoolFirst || showAllSchools || filtersActive
+    ? visibleSchools
+    : visibleSchools.slice(0, COLLAPSED_SCHOOLS);
+
+  // Summary metrics — real records only, never fabricated. School count prefers the area's
+  // authoritative schoolCount (from useDiscoverAreas); homes count prefers the parent-supplied
+  // homesCount (the same listings shown below), falling back to the area's listingCount.
+  const summarySchoolCount = selectedArea?.schoolCount ?? schools.length;
+  const summaryHomesCount =
+    typeof homesCount === 'number' ? homesCount : (selectedArea?.listingCount ?? 0);
+
   // Handler to toggle board filter
   const handleBoardToggle = (board: string) => {
     const next = (urlState.filters.boardFilters || []).includes(board)
@@ -221,8 +316,9 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
     });
   };
 
-  // Handler to clear filters
+  // Handler to clear filters — resets board/level chips AND the local name search.
   const handleClearFilters = () => {
+    setNameQuery('');
     urlActions.setFiltersLive({
       ...urlState.filters,
       boardFilters: [],
@@ -237,62 +333,193 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
 
   return (
     <div className="flex flex-col h-full bg-background overflow-hidden">
-      {/* Header */}
+      {/* Journey header (sticky). Buy/Rent lives in the left rail; this header carries the
+          school-first identity (journey pill), Start over and Back. */}
       <PanelHeader
-        title={`Schools in ${areaLabel}`}
+        title={isSchoolFirst ? 'Find homes near a school' : `Schools in ${areaLabel}`}
         journey={journey}
         onStartOver={onStartOver}
         onBack={onBack}
-        subtitle="Choose a school to view nearby homes"
         activeContextChips={activeContextChips}
       />
 
-      {/* Board Filter Chips */}
-      <div className="px-4 py-3 border-b flex flex-wrap gap-2">
-        {BOARD_OPTIONS.map((board) => {
-          const isSelected = (urlState.filters.boardFilters || []).includes(board);
-          return (
-            <button
-              key={board}
-              onClick={() => handleBoardToggle(board)}
-              data-testid={`board-chip-${board.toLowerCase()}`}
-              aria-pressed={isSelected}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border text-foreground hover:bg-muted/50'
-              }`}
-            >
-              {board}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Category Filter Chips */}
-      <div className="px-4 py-3 border-b flex flex-wrap gap-2">
-        {CATEGORY_OPTIONS.map(({ value, label }) => {
-          const isSelected = (urlState.filters.categoryFilters || []).includes(value);
-          return (
-            <button
-              key={value}
-              onClick={() => handleCategoryToggle(value)}
-              data-testid={`category-chip-${value}`}
-              aria-pressed={isSelected}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                isSelected
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border text-foreground hover:bg-muted/50'
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* School List or Empty State */}
+      {/* Single scroll surface: selected-area summary → school filters → school list */}
       <div className="flex-1 overflow-y-auto">
+        {/* Selected-area summary (school-first only) — breadcrumb + area title + metrics.
+            The area-first school-picking sub-step (#1157) reuses this panel and skips this. */}
+        {isSchoolFirst && (
+          <div
+            data-testid="selected-area-summary"
+            className="m-4 rounded-xl bg-primary p-5 text-primary-foreground shadow-md"
+          >
+            <nav aria-label="Breadcrumb" className="mb-2.5">
+              <ol className="flex flex-wrap items-center gap-1.5 text-xs text-primary-foreground/60">
+                <li>{cityLabel}</li>
+                {zoneLabel && (
+                  <>
+                    <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
+                    <li>{zoneLabel}</li>
+                  </>
+                )}
+                <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
+                <li className="font-semibold text-primary-foreground/90" aria-current="page">
+                  {areaLabel}
+                </li>
+              </ol>
+            </nav>
+            <div className="flex items-start gap-3">
+              <div className="flex-none flex h-10 w-10 items-center justify-center rounded-lg bg-plum/30">
+                <MapPin className="h-5 w-5 text-primary-foreground" aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <span className="text-[11px] font-bold uppercase tracking-wide text-primary-foreground/60">
+                  Selected area
+                </span>
+                <h2 className="text-xl font-semibold leading-tight">{areaLabel}</h2>
+              </div>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-primary-foreground/75">
+              Choose a school in {areaLabel} to filter homes within reach of it.
+            </p>
+            <div className="mt-4 flex gap-8 border-t border-primary-foreground/15 pt-3">
+              <div>
+                <div
+                  className="font-mono text-xl font-semibold tabular-nums"
+                  data-testid="summary-school-count"
+                >
+                  {summarySchoolCount}
+                </div>
+                <div className="text-xs text-primary-foreground/60">
+                  {summarySchoolCount === 1 ? 'school' : 'schools'}
+                </div>
+              </div>
+              <div>
+                <div
+                  className="font-mono text-xl font-semibold tabular-nums"
+                  data-testid="summary-homes-count"
+                >
+                  {summaryHomesCount}
+                </div>
+                <div className="text-xs text-primary-foreground/60">
+                  {homesNoun(intent, summaryHomesCount)}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* School selection: section title + result count + search + grouped Board/Level chips */}
+        <div className="space-y-3 border-b border-border px-4 pb-3 pt-1">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
+              {isSchoolFirst ? `Find a school in ${areaLabel}` : 'Filter schools'}
+            </h3>
+            <span className="shrink-0 text-xs text-muted-foreground" data-testid="school-result-count">
+              Showing{' '}
+              <span className="font-mono font-semibold tabular-nums text-foreground">
+                {visibleSchools.length}
+              </span>{' '}
+              of {schools.length} {schools.length === 1 ? 'school' : 'schools'}
+            </span>
+          </div>
+
+          {/* Search by school name (client-side, scoped to this area) */}
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              placeholder="Search school name"
+              value={nameQuery}
+              onChange={(e) => setNameQuery(e.target.value)}
+              className="h-9 pl-8 pr-8 text-sm"
+              data-testid="school-search-input"
+              aria-label="Search school name"
+            />
+            {nameQuery && (
+              <button
+                type="button"
+                onClick={() => setNameQuery('')}
+                aria-label="Clear search"
+                data-testid="school-search-clear"
+                className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Board chips */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              Board
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {BOARD_OPTIONS.map((board) => {
+                const isSelected = (urlState.filters.boardFilters || []).includes(board);
+                return (
+                  <button
+                    key={board}
+                    type="button"
+                    onClick={() => handleBoardToggle(board)}
+                    data-testid={`board-chip-${board.toLowerCase()}`}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                      isSelected
+                        ? 'border border-plum bg-plum-tint text-plum shadow-sm'
+                        : 'border border-border bg-card text-foreground hover:bg-muted/50',
+                    )}
+                  >
+                    {board}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Level chips */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+              Level
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORY_OPTIONS.map(({ value, label }) => {
+                const isSelected = (urlState.filters.categoryFilters || []).includes(value);
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => handleCategoryToggle(value)}
+                    data-testid={`category-chip-${value}`}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                      isSelected
+                        ? 'border border-plum bg-plum-tint text-plum shadow-sm'
+                        : 'border border-border bg-card text-foreground hover:bg-muted/50',
+                    )}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Clear filters — surfaced whenever a chip or the search is active */}
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              data-testid="school-clear-filters"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+            >
+              Clear filters <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         {showSkeleton && (
           <div className="p-4 space-y-3">
             {Array(5).fill(0).map((_, i) => (
@@ -305,45 +532,101 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
           </div>
         )}
 
-        {schools.length > 0 && (
-          <div className="space-y-2 p-4">
-            {schools.map((school) => (
-              <div
-                key={school.id}
-                onClick={() => handleSelectSchool(school)}
-                data-testid="school-card"
-                className="p-3 bg-card border border-border rounded-lg cursor-pointer hover:bg-muted/50 hover:shadow-md transition-all"
-              >
-                <div className="flex gap-3">
-                  <GraduationCap className="w-6 h-6 text-muted-foreground flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground truncate">{school.name}</h3>
-                    <p className="text-sm text-muted-foreground truncate">{school.address}</p>
-                    <div className="text-xs text-muted-foreground mt-1 flex gap-2 flex-wrap">
-                      {(school.board || school.boardType) && (
-                        <span>{school.board || school.boardType}</span>
-                      )}
-                      {school.schoolCategory && (
-                        <>
-                          <span>·</span>
-                          <span className="capitalize">
-                            {school.schoolCategory.replace('_', ' ')}
-                          </span>
-                        </>
-                      )}
+        {visibleSchools.length > 0 && (
+          <div className="space-y-2.5 p-4">
+            {shownSchools.map((school) => {
+              const boardText = school.board || school.boardType;
+              const level = levelLabel((school as { schoolCategory?: string }).schoolCategory);
+              // Homes-nearby is only populated on some endpoints (null on /by-area) — never fake it.
+              const nearby = school.nearbyListingCount;
+              return (
+                <div
+                  key={school.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleSelectSchool(school)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelectSchool(school);
+                    }
+                  }}
+                  data-testid="school-card"
+                  className="group cursor-pointer rounded-lg border border-border bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="flex gap-3">
+                    <div className="flex h-10 w-10 flex-none items-center justify-center rounded-md bg-plum-tint">
+                      <GraduationCap className="h-5 w-5 text-plum" aria-hidden />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="truncate font-semibold text-foreground">{school.name}</h3>
+                        <div className="flex flex-none flex-col items-end gap-1">
+                          {boardText && (
+                            <Badge variant="secondary" className="whitespace-nowrap">
+                              {boardText}
+                            </Badge>
+                          )}
+                          {level && (
+                            <span className="whitespace-nowrap rounded-full bg-plum-tint px-2 py-0.5 text-[11px] font-medium text-plum">
+                              {level}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-sm text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 flex-none text-muted-foreground/70" aria-hidden />
+                        <span className="truncate">{school.address}</span>
+                      </p>
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {typeof nearby === 'number' && nearby > 0 ? (
+                            <>
+                              <span className="font-mono font-semibold tabular-nums text-foreground">
+                                {nearby}
+                              </span>{' '}
+                              homes nearby
+                            </>
+                          ) : (
+                            <span className="inline-flex items-center gap-1">
+                              <Home className="h-3.5 w-3.5" aria-hidden />
+                              View nearby homes
+                            </span>
+                          )}
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-sm font-semibold text-primary transition-colors group-hover:text-copper">
+                          View homes <ArrowRight className="h-4 w-4" aria-hidden />
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
-            {hasNextPage && (
+            {/* Collapse / expand the default-shortened list (only when unfiltered) */}
+            {canCollapse && (
+              <button
+                type="button"
+                onClick={() => setShowAllSchools((v) => !v)}
+                data-testid="schools-show-all-toggle"
+                className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-copper"
+              >
+                {showAllSchools ? 'Show fewer' : `Show all ${visibleSchools.length} schools`}
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${showAllSchools ? 'rotate-180' : ''}`}
+                  aria-hidden
+                />
+              </button>
+            )}
+
+            {(showAllSchools || filtersActive) && hasNextPage && !nameQuery && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => fetchNextPage()}
                 disabled={isFetchingNextPage}
-                className="w-full mt-4"
+                className="mt-4 w-full"
               >
                 {isFetchingNextPage ? 'Loading...' : 'Load more schools'}
               </Button>
@@ -374,31 +657,42 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
           </div>
         )}
 
-        {schools.length === 0 && !showSkeleton && !showErrorBlock && (
-          <div className="flex flex-col items-center justify-center h-full px-6 py-12 text-center">
-            <GraduationCap className="w-12 h-12 text-muted-foreground mb-3" />
-            <h3 className="text-lg font-semibold text-foreground">No schools found</h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-6">
-              Try adjusting your filters or pick a different area
+        {visibleSchools.length === 0 && !showSkeleton && !showErrorBlock && (
+          <div
+            data-testid="schools-empty-state"
+            className="flex flex-col items-center justify-center px-6 py-12 text-center"
+          >
+            <GraduationCap className="mb-3 h-12 w-12 text-muted-foreground" aria-hidden />
+            <h3 className="text-lg font-semibold text-foreground">
+              {filtersActive ? 'No schools match these filters.' : 'No schools found'}
+            </h3>
+            <p className="mb-6 mt-1 text-sm text-muted-foreground">
+              {filtersActive
+                ? 'Try another board or level, or clear the filters to see every school in this area.'
+                : 'Try a different area to find schools nearby.'}
             </p>
-            <div className="flex flex-col gap-2 w-full max-w-xs">
+            <div className="flex w-full max-w-xs flex-col gap-2">
               <button
                 onClick={handleClearFilters}
                 data-testid="empty-state-no-schools-clear-filters"
-                className="px-4 py-2 border border-border text-foreground rounded-lg hover:bg-muted/50 text-sm font-medium"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted/50"
               >
                 Clear filters
               </button>
               <button
                 onClick={handlePickDifferentArea}
                 data-testid="empty-state-no-schools-pick-area"
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm font-medium"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Pick a different area
               </button>
             </div>
           </div>
         )}
+
+        {/* Homes section (school-first) renders inside this SAME scroll surface, so the
+            whole right panel scrolls as one page — no nested scrollbars. */}
+        {footerSlot}
       </div>
     </div>
   );

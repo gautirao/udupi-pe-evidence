@@ -325,8 +325,11 @@ describe('DiscoverRightPanel — state machine routing', () => {
     renderPanel(
       <DiscoverRightPanel {...baseProps} panelContent="schools-in-area" selectedArea={area} journey="school-first" />,
     );
-    // Verify the real SchoolsInAreaPanel renders (PanelHeader + board filter chips)
-    expect(screen.getByText(/schools in manipal/i)).toBeInTheDocument();
+    // Verify the real SchoolsInAreaPanel renders (school-first journey header + board chips).
+    // Title is the school-first journey promise; the area context ("Manipal") shows in the
+    // selected-area summary + "Find a school in Manipal" section heading.
+    expect(screen.getByText(/find homes near a school/i)).toBeInTheDocument();
+    expect(screen.getByText(/find a school in manipal/i)).toBeInTheDocument();
     // Verify board filter chips are present
     expect(screen.getByTestId('board-chip-cbse')).toBeInTheDocument();
   });

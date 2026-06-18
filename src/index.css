@@ -53,6 +53,13 @@
     --evergreen-foreground: 0 0% 100%;
     --evergreen-tint: 156 25% 93%;
 
+    /* ReTrends school-journey accent — restrained plum/lavender (#5E5286). Used ONLY for
+       school-first cues (School-first tag, selected board/level chips, selected-area summary,
+       school markers). Never a heavy purple wash. Matches the design-source distance-chip plum. */
+    --plum: 254 24% 42%;
+    --plum-foreground: 0 0% 100%;
+    --plum-tint: 254 35% 95%;
+
     --border: 35 25% 88%;
     --input: 35 25% 88%;
     --ring: 0 0% 40%;
@@ -127,6 +134,11 @@
     --evergreen: 160 52% 42%;
     --evergreen-foreground: 0 0% 100%;
     --evergreen-tint: 160 28% 20%;
+
+    /* School-journey plum — lightened for dark-mode contrast */
+    --plum: 254 40% 68%;
+    --plum-foreground: 0 0% 100%;
+    --plum-tint: 254 24% 22%;
 
     --border: 220 20% 22%;
     --input: 220 20% 22%;

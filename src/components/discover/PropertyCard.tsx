@@ -1,8 +1,9 @@
 import React from 'react';
 import {
-  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Lock, Building2, MapPin,
+  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
 
@@ -17,6 +18,36 @@ export function purposeLabel(p: string | null | undefined): string {
   if (p === 'sale') return 'For Sale';
   if (p === 'rent') return 'For Rent';
   return capitalize(p ?? '');
+}
+
+/**
+ * Trust-tier badge mapping. The backend exposes an opaque letter grade on `trustTier`
+ * (A/B/C). This maps it conservatively to the ReTrends trust vocabulary — A → Verified
+ * (top, evergreen), B → Trusted (calm navy), C → Listed (neutral). Any other / null
+ * value yields no badge (never invent a tier). Documented mapping per request.
+ */
+const TRUST_TIERS: Record<string, { label: string; className: string; icon: typeof ShieldCheck }> = {
+  A: { label: 'Verified', className: 'bg-evergreen text-evergreen-foreground', icon: ShieldCheck },
+  B: { label: 'Trusted', className: 'bg-primary text-primary-foreground', icon: ShieldCheck },
+  C: { label: 'Listed', className: 'bg-muted text-muted-foreground', icon: Shield },
+};
+
+/** Build a deduplicated "Sublocality, Area" location string from real fields only. */
+export function buildLocationText(
+  locality: string | null | undefined,
+  areaLabel: string | null | undefined,
+): string {
+  const seen = new Set<string>();
+  return [locality, areaLabel]
+    .map((p) => (p ?? '').trim())
+    .filter((p) => {
+      if (!p) return false;
+      const k = p.toLowerCase();
+      if (seen.has(k)) return false; // avoid "Manipal, Manipal"
+      seen.add(k);
+      return true;
+    })
+    .join(', ');
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -44,6 +75,13 @@ export interface PropertyCardProps {
    * renders identically (safe for all existing consumers).
    */
   onHover?: (id: string | null) => void;
+  /**
+   * Optional area/locality context (e.g. the selected area "Manipal") appended after the
+   * listing's own `locality` to form a richer "Eshwar Nagar, Manipal" line. Deduplicated,
+   * so an identical locality+area never renders as "Manipal, Manipal". When absent, only
+   * the listing's own locality is shown. Never fabricated.
+   */
+  areaLabel?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -55,8 +93,9 @@ export function PropertyCard({
   isSelected = false,
   onSelect,
   onHover,
+  areaLabel,
 }: PropertyCardProps) {
-  const isTrusted = listing.trustTier === 'A' || listing.trustTier === 'B';
+  const trust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
 
   const handleActivate = () => {
     onSelect?.(listing.id);
@@ -67,6 +106,10 @@ export function PropertyCard({
     ? `${capitalize(listing.propertyType)} ${purposeLabel(listing.listingPurpose)}`
     : purposeLabel(listing.listingPurpose) || 'Property';
 
+  const typeLabel = listing.propertyType ? capitalize(listing.propertyType) : null;
+  const purpose = listing.listingPurpose ? purposeLabel(listing.listingPurpose) : null;
+  const locationText = buildLocationText(listing.locality, areaLabel);
+
   const hasMetadata =
     listing.bedrooms != null ||
     listing.bathrooms != null ||
@@ -75,11 +118,6 @@ export function PropertyCard({
     listing.totalFloors != null ||
     listing.parkingCount != null ||
     listing.furnishingStatus;
-
-  const chips: string[] = [];
-  if (listing.propertyType) chips.push(capitalize(listing.propertyType));
-  if (listing.listingPurpose) chips.push(purposeLabel(listing.listingPurpose));
-  const visibleChips = chips.slice(0, 3);
 
   return (
     <div
@@ -90,7 +128,9 @@ export function PropertyCard({
       aria-pressed={isSelected}
       onClick={handleActivate}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
+        // Only the card itself activates on Enter/Space — keystrokes from the inner
+        // "View details" button bubble up but must not double-fire navigation.
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
           e.preventDefault();
           handleActivate();
         }
@@ -100,131 +140,146 @@ export function PropertyCard({
       onFocus={() => onHover?.(listing.id)}
       onBlur={() => onHover?.(null)}
       className={cn(
-        'group block p-4 cursor-pointer scroll-mt-4 rounded-lg border transition-colors',
+        // Premium ReTrends card: white surface, hairline border, soft warm shadow,
+        // full-bleed image header, hover lift. No teal/green hover wash.
+        'group block cursor-pointer scroll-mt-4 overflow-hidden rounded-xl border bg-card shadow-sm',
+        'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper focus-visible:ring-offset-1',
-        isSelected
-          ? 'border-copper ring-2 ring-copper/40 bg-copper-tint/40'
-          : 'border-transparent hover:bg-accent/50',
+        isSelected ? 'border-copper ring-2 ring-copper/40' : 'border-border',
       )}
     >
-      {/* Image with Trusted badge overlay */}
-      <div className="relative w-full h-44 bg-muted rounded-lg mb-3 overflow-hidden">
+      {/* Image header (full-bleed) with Trusted badge overlay */}
+      <div className="relative h-44 w-full overflow-hidden bg-muted">
         {listing.primaryImageUrl ? (
           <img
             src={listing.primaryImageUrl}
             alt=""
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-muted/60">
+          <div className="flex h-full w-full items-center justify-center bg-muted/60">
             <Building2 className="h-10 w-10 text-muted-foreground/30" />
           </div>
         )}
-        {isTrusted && (
-          <div className="absolute top-2 right-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-evergreen px-2 py-0.5 text-[11px] font-medium text-evergreen-foreground">
-              <ShieldCheck className="h-3 w-3" />
-              Trusted
+        {trust && (
+          <div className="absolute top-2.5 left-2.5">
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium shadow-sm',
+                trust.className,
+              )}
+            >
+              <trust.icon className="h-3 w-3" />
+              {trust.label}
             </span>
           </div>
         )}
       </div>
 
-      {/* Title */}
-      <h3 className="text-base font-bold text-primary line-clamp-2 mb-1 tracking-tight">
-        {listing.title || fallbackTitle}
-      </h3>
+      {/* Body */}
+      <div className="p-4">
+        {/* Price + property-type pill */}
+        <div className="flex items-start justify-between gap-2">
+          {isAuthenticated ? (
+            listing.pricePaise != null ? (
+              <p className="text-lg font-bold tracking-tight text-foreground tabular-nums">
+                {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Price on request</p>
+            )
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">Sign in to view price</span>
+            </div>
+          )}
 
-      {/* Location */}
-      {listing.locality && (
-        <p className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
-          <MapPin className="h-3 w-3 flex-shrink-0" />
-          <span className="truncate">{listing.locality}</span>
-        </p>
-      )}
-
-      {/* Metadata row — render only non-null values */}
-      {hasMetadata && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mb-2">
-          {listing.bedrooms != null && (
-            <span className="flex items-center gap-1">
-              <BedDouble className="h-3.5 w-3.5" />
-              {listing.bedrooms} BHK
+          {typeLabel && (
+            <span className="flex-shrink-0 rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground">
+              {typeLabel}
             </span>
-          )}
-          {listing.bathrooms != null && (
-            <span className="flex items-center gap-1">
-              <Bath className="h-3.5 w-3.5" />
-              {listing.bathrooms}
-            </span>
-          )}
-          {listing.builtArea != null && (
-            <span className="flex items-center gap-1">
-              <Ruler className="h-3.5 w-3.5" />
-              {formatArea(listing.builtArea, listing.builtAreaUnit)}
-            </span>
-          )}
-          {listing.landArea != null && (
-            <span className="flex items-center gap-1">
-              <Ruler className="h-3.5 w-3.5" />
-              {formatArea(listing.landArea, listing.landAreaUnit)}
-            </span>
-          )}
-          {listing.totalFloors != null && (
-            <span>{listing.totalFloors} floors</span>
-          )}
-          {listing.parkingCount != null && (
-            <span>{listing.parkingCount} parking</span>
-          )}
-          {listing.furnishingStatus && (
-            <span>{capitalize(listing.furnishingStatus)}</span>
           )}
         </div>
-      )}
 
-      {/* Divider */}
-      <div className="border-t border-border my-2" />
+        {/* Title */}
+        <h3 className="mt-1.5 line-clamp-2 text-base font-bold tracking-tight text-primary">
+          {listing.title || fallbackTitle}
+        </h3>
 
-      {/* Price + listed date row */}
-      <div className="flex items-center justify-between gap-2">
-        {/* Price — masked for anonymous users */}
-        {isAuthenticated ? (
-          listing.pricePaise != null ? (
-            <p className="text-lg font-bold tracking-tight text-foreground tabular-nums">
-              {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">Price on request</p>
-          )
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-            <span className="text-xs text-muted-foreground">Sign in to view price</span>
-          </div>
-        )}
-
-        {/* Listed date */}
-        {listing.createdAt && (
-          <p className="flex items-center gap-1 text-xs text-muted-foreground flex-shrink-0">
-            <Calendar className="h-3 w-3" />
-            {formatRelativeDate(listing.createdAt)}
+        {/* Location — richer "Sublocality, Area" when available, deduplicated */}
+        {locationText && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">{locationText}</span>
           </p>
         )}
-      </div>
 
-      {/* Tag chips */}
-      {visibleChips.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {visibleChips.map((chip) => (
-            <span
-              key={chip}
-              className="text-xs px-2 py-0.5 bg-muted rounded-full text-muted-foreground"
-            >
-              {chip}
-            </span>
-          ))}
-        </div>
-      )}
+        {/* Specs row — render only non-null values */}
+        {hasMetadata && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground tabular-nums">
+            {listing.bedrooms != null && (
+              <span className="flex items-center gap-1">
+                <BedDouble className="h-3.5 w-3.5" />
+                {listing.bedrooms} BHK
+              </span>
+            )}
+            {listing.bathrooms != null && (
+              <span className="flex items-center gap-1">
+                <Bath className="h-3.5 w-3.5" />
+                {listing.bathrooms}
+              </span>
+            )}
+            {listing.builtArea != null && (
+              <span className="flex items-center gap-1">
+                <Ruler className="h-3.5 w-3.5" />
+                {formatArea(listing.builtArea, listing.builtAreaUnit)}
+              </span>
+            )}
+            {listing.landArea != null && (
+              <span className="flex items-center gap-1">
+                <Ruler className="h-3.5 w-3.5" />
+                {formatArea(listing.landArea, listing.landAreaUnit)}
+              </span>
+            )}
+            {listing.totalFloors != null && <span>{listing.totalFloors} floors</span>}
+            {listing.parkingCount != null && <span>{listing.parkingCount} parking</span>}
+            {listing.furnishingStatus && <span>{capitalize(listing.furnishingStatus)}</span>}
+          </div>
+        )}
+
+        {/* Purpose + listed date */}
+        {(purpose || listing.createdAt) && (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            {purpose && (
+              <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+                {purpose}
+              </span>
+            )}
+            {listing.createdAt && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Calendar className="h-3 w-3" />
+                {formatRelativeDate(listing.createdAt)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* View details CTA — navigates like the card; keyboard accessible. stopPropagation
+            so it doesn't double-fire navigation via the card's own click handler. */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3 w-full"
+          data-testid="listing-view-details"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleActivate();
+          }}
+        >
+          View details
+        </Button>
+      </div>
     </div>
   );
 }

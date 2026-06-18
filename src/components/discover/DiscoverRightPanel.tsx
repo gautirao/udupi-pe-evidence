@@ -1076,6 +1076,12 @@ export function DiscoverRightPanel({
             isAuthenticated={isAuthenticated}
             activeContextChips={activeContextChips}
             intent={intent}
+            // Card↔marker shared state for the school-first homes grid (parity with
+            // AreaSelectedPanel). Hover highlights the matching home-marker; a home-marker
+            // click drives selectedListingId → copper card frame + scroll-into-view.
+            selectedListingId={selectedListingId}
+            onSelectListing={onSelectResultListing}
+            onHoverListing={onHoverResultListing}
           />
         );
 

@@ -51,6 +51,11 @@ export default {
           foreground: "hsl(var(--evergreen-foreground))",
           tint: "hsl(var(--evergreen-tint))",
         },
+        plum: {
+          DEFAULT: "hsl(var(--plum))",
+          foreground: "hsl(var(--plum-foreground))",
+          tint: "hsl(var(--plum-tint))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
