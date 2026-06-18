@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, MapPin, Search, TrendingUp, X, Plus, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -54,6 +54,21 @@ interface AreaSelectedPanelProps {
   onAddSchool?: () => void;
   /** Issue #1494 — current buy/rent intent for summary/empty-state copy. Default 'buy'. */
   intent?: DiscoverIntent;
+  /**
+   * Issue #1547 — id of the currently selected listing (URL/parent-derived, from the
+   * `listing` URL param). Drives the copper selected card frame + scroll-into-view.
+   * Null/undefined = no selection.
+   */
+  selectedListingId?: string | null;
+  /** Issue #1547 — called when a card is activated, to sync the selected marker. */
+  onSelectListing?: (id: string) => void;
+  /**
+   * Issue #1547 — ephemeral hover/focus signal for card→marker highlight.
+   * Called with the listing id on card mouseenter/focus, null on mouseleave/blur.
+   * Lives in ephemeral component state in the parent (MapDiscovery useState) — never
+   * persisted to URL. Resets to null naturally when the panel unmounts on journey switch.
+   */
+  onHoverListing?: (id: string | null) => void;
 }
 
 export function AreaSelectedPanel({
@@ -76,8 +91,24 @@ export function AreaSelectedPanel({
   onSelectJourney,
   onAddSchool,
   intent = 'buy',
+  selectedListingId = null,
+  onSelectListing,
+  onHoverListing,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
+
+  // Issue #1547 — scroll the selected card into view when selection is driven from the
+  // map marker side. Guards the missing-ref case (selected listing not in the rendered
+  // list, e.g. filtered out) so a marker click never crashes or scrolls to nothing.
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (!selectedListingId) return;
+    const node = cardRefs.current.get(selectedListingId);
+    // Guard: scrollIntoView is unavailable in some environments (jsdom) / older browsers.
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedListingId]);
 
   // Compute active property types and bedrooms from current filters
   const activePropertyTypes = useMemo(
@@ -337,14 +368,24 @@ export function AreaSelectedPanel({
                 {intent === 'rent' ? 'rent' : 'sale'} in {selectedArea.areaLabel}
               </p>
             </div>
-            <div className="divide-y divide-border">
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
               {areaListings.map((listing) => (
-                <PropertyCard
+                <div
                   key={listing.id}
-                  listing={listing}
-                  isAuthenticated={isAuthenticated}
-                  onNavigate={() => navigate(`/listing/${listing.id}`)}
-                />
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(listing.id, node);
+                    else cardRefs.current.delete(listing.id);
+                  }}
+                >
+                  <PropertyCard
+                    listing={listing}
+                    isAuthenticated={isAuthenticated}
+                    onNavigate={() => navigate(`/listing/${listing.id}`)}
+                    isSelected={selectedListingId === listing.id}
+                    onSelect={onSelectListing}
+                    onHover={onHoverListing}
+                  />
+                </div>
               ))}
             </div>
           </>

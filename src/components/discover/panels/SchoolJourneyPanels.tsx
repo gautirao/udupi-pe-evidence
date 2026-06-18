@@ -4,7 +4,7 @@
  * SchoolSelectedPanel is the full implementation (S3); other panels remain as
  * stubs until their milestones ship.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ChevronLeft, GraduationCap, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
@@ -589,6 +589,24 @@ export interface SchoolSelectedPanelProps {
   boundedSearchTriggered?: boolean;
   /** Issue #1494 — current buy/rent intent for summary/empty-state copy. Default 'buy'. */
   intent?: DiscoverIntent;
+  /**
+   * Issue #1547 — id of the currently selected listing (URL/parent-derived).
+   * Drives copper selected card frame + scroll-into-view. RISK-3 note: school markers
+   * come from 3 desynced tier sources so card↔marker sync is visual-only (card side);
+   * marker copper highlighting is intentionally NOT wired for school-first.
+   */
+  selectedListingId?: string | null;
+  /**
+   * Issue #1547 — called when a card is activated, for parent to sync state.
+   * Optional; when absent card simply navigates.
+   */
+  onSelectListing?: (id: string) => void;
+  /**
+   * Issue #1547 — ephemeral hover/focus callback for card→marker highlight.
+   * Not safely wirable for school-first (RISK-3), but accepted here to match
+   * the PropertyCard prop shape and enable future wiring.
+   */
+  onHoverListing?: (id: string | null) => void;
 }
 
 export function SchoolSelectedPanel({
@@ -609,8 +627,21 @@ export function SchoolSelectedPanel({
   onBoundedSearch,
   boundedSearchTriggered = false,
   intent = 'buy',
+  selectedListingId = null,
+  onSelectListing,
+  onHoverListing,
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
+
+  // Issue #1547 — scroll selected card into view when selection changes.
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (!selectedListingId) return;
+    const node = cardRefs.current.get(selectedListingId);
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedListingId]);
 
   // Issue #1210: clamp sub-minimum/non-finite radii (e.g. ?radiusKm=0) up to the
   // minimum so the radius control shows a selected button and the empty-state text
@@ -813,14 +844,24 @@ export function SchoolSelectedPanel({
             </div>
           </div>
         ) : (
-          <div className="divide-y divide-border">
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
             {listings.map((listing) => (
-              <PropertyCard
+              <div
                 key={listing.id}
-                listing={listing}
-                isAuthenticated={isAuthenticated}
-                onNavigate={() => navigate(`/listing/${listing.id}`)}
-              />
+                ref={(node) => {
+                  if (node) cardRefs.current.set(listing.id, node);
+                  else cardRefs.current.delete(listing.id);
+                }}
+              >
+                <PropertyCard
+                  listing={listing}
+                  isAuthenticated={isAuthenticated}
+                  onNavigate={() => navigate(`/listing/${listing.id}`)}
+                  isSelected={selectedListingId === listing.id}
+                  onSelect={onSelectListing}
+                  onHover={onHoverListing}
+                />
+              </div>
             ))}
           </div>
         )}

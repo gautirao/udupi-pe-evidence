@@ -11,12 +11,36 @@
  *   - Sorted listing rows (id ascending — stable, deterministic)
  */
 
-import React from 'react';
-import { ArrowLeft, Sprout, AlertCircle } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { ArrowLeft, Sprout, AlertCircle, Lock, Maximize2, Check, MapPin } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatPrice } from '@/lib/formatters';
+import {
+  LAND_CATEGORY_LABELS,
+  WATER_SOURCE_LABELS,
+} from '@/lib/agriFieldLabels';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+
+// Build the agri spec chips for a listing — omit when the value is null OR false
+// (null != false: a missing field is unknown, an explicit false is a known "no").
+function agriChips(item: AgriMapListingItem): string[] {
+  const chips: string[] = [];
+  if (item.landCategory) chips.push(LAND_CATEGORY_LABELS[item.landCategory] ?? item.landCategory);
+  if (item.waterSource && item.waterSource !== 'NOT_AVAILABLE') {
+    chips.push(WATER_SOURCE_LABELS[item.waterSource] ?? item.waterSource);
+  }
+  if (item.farmhouseAvailable === true) chips.push('Farmhouse');
+  if (item.fencingDone === true) chips.push('Fenced');
+  return chips;
+}
+
+function agriPriceLabel(pricePaise: number | null | undefined): string | null {
+  if (pricePaise == null || pricePaise <= 0) return null;
+  return formatPrice(Math.round(pricePaise / 100), 'INR');
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +54,17 @@ export interface AgriGroupLocalityPanelProps {
   onClose: () => void;
   /** Issue #1494 — current buy/rent intent for count label. Default 'buy'. */
   intent?: DiscoverIntent;
+  /**
+   * Issue #1547 — whether the viewer is authenticated. Drives the anon price gate on
+   * the agri card rows (anon: "Sign in to view price" with a Lock; never a rupee value).
+   * Defaults to false (safest: treats unknown viewers as anonymous).
+   */
+  isAuthenticated?: boolean;
+  /**
+   * Issue #1547 — id of the currently selected listing (URL/parent-derived, `listing`
+   * URL param). Drives the copper selected card frame + scroll-into-view.
+   */
+  selectedListingId?: string | null;
 }
 
 // ─── Skeleton row ─────────────────────────────────────────────────────────────
@@ -58,12 +93,27 @@ export function AgriGroupLocalityPanel({
   onSelectListing,
   onClose,
   intent = 'buy',
+  isAuthenticated = false,
+  selectedListingId = null,
 }: AgriGroupLocalityPanelProps) {
   // Sort by id ascending — stable, deterministic order across renders.
   // Spread first to avoid mutating the prop array.
   const sortedListings = [...listings].sort((a, b) => a.id.localeCompare(b.id));
 
   const count = sortedListings.length;
+
+  // Issue #1547 — scroll the selected agri card into view when selection is driven from
+  // the map (marker→peek path #1466). Guards the missing-ref case (selected id not in the
+  // rendered list, e.g. filtered out) so a marker click never crashes or scrolls nowhere.
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (!selectedListingId) return;
+    const node = cardRefs.current.get(selectedListingId);
+    // Guard: scrollIntoView is unavailable in some environments (jsdom) / older browsers.
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedListingId]);
 
   return (
     <div
@@ -98,7 +148,7 @@ export function AgriGroupLocalityPanel({
           )}
         </div>
         <Sprout
-          className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0"
+          className="h-4 w-4 text-evergreen shrink-0"
           aria-hidden="true"
         />
       </div>
@@ -158,36 +208,144 @@ export function AgriGroupLocalityPanel({
         ) : (
           <div
             data-testid="agri-locality-listings-list"
-            className="divide-y divide-border"
+            className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3"
           >
-            {sortedListings.map((item) => (
-              <div
-                key={item.id}
-                data-testid="agri-locality-listing-row"
-                className="px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectListing(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectListing(item.id);
-                  }
-                }}
-              >
-                <p className="text-sm font-medium text-foreground truncate">
-                  {item.title ?? item.locality ?? item.areaKey ?? item.id}
-                </p>
-                {item.landArea != null && item.landAreaUnit && (
-                  <p
-                    className="text-xs text-green-700 dark:text-green-400 mt-0.5"
-                    data-testid="agri-locality-land-area"
-                  >
-                    {item.landArea} {item.landAreaUnit}
+            {sortedListings.map((item) => {
+              const isSelected = selectedListingId === item.id;
+              const priceLabel = agriPriceLabel(item.pricePaise);
+              const chips = agriChips(item);
+              const landArea =
+                item.landArea != null && item.landAreaUnit
+                  ? `${item.landArea} ${item.landAreaUnit}`
+                  : item.computedAreaAcres != null
+                    ? `${item.computedAreaAcres.toFixed(2)} acres`
+                    : null;
+              // Issue #1547 ITEM 1 elevation — RTAgriCard mock:
+              // - Cap chips at 4 visible; show copper-tint "+N more details" pill for overflow
+              // - Land area as mono-font pill with copper Maximize2 icon on subtle bg (not plain text)
+              // - Fact chips: bg-background + border-border (square-ish radius-xs), evergreen check
+              // - Footer: border-top → larger mono price (font-mono text-xl) + purpose tag
+              // - Card elevation: shadow-sm → shadow-lg + -translate-y-0.5 on hover (CSS group trick)
+              const MAX_CHIPS = 4;
+              const visibleChips = chips.slice(0, MAX_CHIPS);
+              const extraChips = chips.length - visibleChips.length;
+
+              return (
+                <div
+                  key={item.id}
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(item.id, node);
+                    else cardRefs.current.delete(item.id);
+                  }}
+                  data-testid="agri-locality-listing-row"
+                  data-selected={isSelected ? 'true' : undefined}
+                  className={cn(
+                    'group block p-3 cursor-pointer scroll-mt-4 rounded-lg border',
+                    'transition-[box-shadow,transform,border-color] duration-200',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper focus-visible:ring-offset-1',
+                    isSelected
+                      ? 'border-copper ring-2 ring-copper/[0.18] shadow-lg'
+                      : 'border-border shadow-sm hover:shadow-lg hover:-translate-y-0.5',
+                  )}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  onClick={() => onSelectListing(item.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelectListing(item.id);
+                    }
+                  }}
+                >
+                  {/* Title */}
+                  <p className="text-base font-bold leading-snug tracking-tight text-foreground truncate">
+                    {item.title ?? item.locality ?? item.areaKey ?? item.id}
                   </p>
-                )}
-              </div>
-            ))}
+
+                  {/* Locality — shown when title exists so they don't duplicate */}
+                  {item.locality && item.title && (
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground mt-1 truncate">
+                      <MapPin className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                      <span className="truncate">{item.locality}</span>
+                    </p>
+                  )}
+
+                  {/* Land area — mono-font pill with copper Maximize icon on subtle bg (RTAgriCard mock) */}
+                  {landArea && (
+                    <div className="mt-2">
+                      <span
+                        className="inline-flex items-center gap-1.5 font-mono text-sm font-semibold text-foreground bg-muted px-2.5 py-1 rounded"
+                        data-testid="agri-locality-land-area"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5 text-copper shrink-0" aria-hidden="true" />
+                        {landArea}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Fact chips — capped at 4; +N overflow pill in copper-tint */}
+                  {chips.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {visibleChips.map((chip) => (
+                        <span
+                          key={chip}
+                          className="inline-flex items-center gap-1 rounded bg-background border border-border px-2 py-0.5 text-[11px] font-medium text-foreground"
+                        >
+                          <Check className="h-3 w-3 text-evergreen shrink-0" aria-hidden="true" />
+                          {chip}
+                        </span>
+                      ))}
+                      {extraChips > 0 && (
+                        <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-copper-tint text-copper-hover dark:text-copper">
+                          +{extraChips} more details
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Footer: border-top → price (mono, larger) + purpose/type tags */}
+                  <div className="mt-3 pt-2.5 border-t border-border">
+                    {/* Price row — anon-gated (Issue #1454/#1547): anon never sees a rupee value */}
+                    {isAuthenticated ? (
+                      priceLabel ? (
+                        <p className="font-mono text-xl font-semibold tracking-tight text-foreground tabular-nums">
+                          {priceLabel}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Price on request</p>
+                      )
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+                        data-testid="agri-locality-price-signin"
+                      >
+                        <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        Sign in to view price
+                      </span>
+                    )}
+                    {/* Purpose/type tags row */}
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-muted text-muted-foreground">
+                        Agricultural land
+                      </span>
+                      {item.listingPurpose != null && (
+                        <span
+                          className={cn(
+                            'inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold',
+                            item.listingPurpose === 'rent'
+                              ? 'bg-copper-tint text-copper-hover dark:text-copper'
+                              : 'bg-evergreen-tint text-evergreen',
+                          )}
+                        >
+                          {item.listingPurpose === 'rent' ? 'For Rent' : 'For Sale'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

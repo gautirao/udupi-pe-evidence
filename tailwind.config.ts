@@ -40,6 +40,17 @@ export default {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
         },
+        copper: {
+          DEFAULT: "hsl(var(--copper))",
+          foreground: "hsl(var(--copper-foreground))",
+          hover: "hsl(var(--copper-hover))",
+          tint: "hsl(var(--copper-tint))",
+        },
+        evergreen: {
+          DEFAULT: "hsl(var(--evergreen))",
+          foreground: "hsl(var(--evergreen-foreground))",
+          tint: "hsl(var(--evergreen-tint))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",

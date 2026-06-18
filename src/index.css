@@ -42,6 +42,17 @@
     --warning: 38 92% 50%;
     --warning-foreground: 220 25% 15%;
 
+    /* ReTrends accent — burnished copper (#B05C3A) for selected/accent states (Issue #1547) */
+    --copper: 18 51% 46%;
+    --copper-foreground: 0 0% 100%;
+    --copper-hover: 18 53% 38%;
+    --copper-tint: 25 39% 92%;
+
+    /* ReTrends verified/positive — muted evergreen (#1F7A5C) for trusted/sale/land-area (Issue #1547) */
+    --evergreen: 160 60% 30%;
+    --evergreen-foreground: 0 0% 100%;
+    --evergreen-tint: 156 25% 93%;
+
     --border: 35 25% 88%;
     --input: 35 25% 88%;
     --ring: 0 0% 40%;
@@ -106,6 +117,16 @@
 
     --warning: 38 85% 55%;
     --warning-foreground: 220 25% 10%;
+
+    /* ReTrends accent/verified — lightened for dark-mode contrast (Issue #1547) */
+    --copper: 18 56% 56%;
+    --copper-foreground: 0 0% 100%;
+    --copper-hover: 18 53% 46%;
+    --copper-tint: 18 30% 24%;
+
+    --evergreen: 160 52% 42%;
+    --evergreen-foreground: 0 0% 100%;
+    --evergreen-tint: 160 28% 20%;
 
     --border: 220 20% 22%;
     --input: 220 20% 22%;

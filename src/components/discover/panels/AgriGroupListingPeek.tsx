@@ -127,8 +127,8 @@ export function AgriGroupListingPeek({
                 className={[
                   'inline-block rounded-full px-2 py-0.5 text-xs font-medium',
                   firstPaintData.listingPurpose === 'rent'
-                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                    : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+                    ? 'bg-copper-tint text-copper-hover dark:text-copper'
+                    : 'bg-evergreen-tint text-evergreen',
                 ].join(' ')}
               >
                 {firstPaintData.listingPurpose === 'rent' ? 'For Rent' : 'For Sale'}
@@ -150,7 +150,7 @@ export function AgriGroupListingPeek({
               className="flex justify-between items-start gap-2"
             >
               <span className="text-sm text-muted-foreground shrink-0">Land area</span>
-              <span className="text-sm text-green-700 dark:text-green-400 text-right font-medium">
+              <span className="text-sm text-evergreen text-right font-medium">
                 {acreage}
               </span>
             </div>

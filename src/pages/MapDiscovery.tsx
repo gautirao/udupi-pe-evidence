@@ -528,6 +528,22 @@ export default function MapDiscovery() {
         state.selectedMaxKm != null
       ) {
         actions.setSelectedListing(listing.id);
+        return;
+      }
+      // Issue #1547 — residential area-first card↔marker sync. A residential marker
+      // click in the area-selected state writes the shared `listing` URL param so the
+      // matching result card highlights (copper selected state) and scrolls into view.
+      // This is scoped to area-first (lowest marker/list desync); school-first markers
+      // come from three desynced tier sources and are intentionally NOT wired here.
+      // derivePanelContent only routes on `listing` when an agri region+maxKm are set,
+      // so writing it here does NOT change residential panel routing.
+      if (
+        listing != null &&
+        state.journey !== 'agri-first' &&
+        state.areaKey != null &&
+        state.schoolId == null
+      ) {
+        actions.setSelectedListing(listing.id);
       }
     },
     [],
@@ -555,6 +571,12 @@ export default function MapDiscovery() {
   // PropertyMap.resetMapTick; MapController's handledTickRef-based guard correctly
   // detects any net increase and triggers the flyTo(cityCenter, cityZoom).
   const [startOverTick, setStartOverTick] = useState(0);
+
+  // Issue #1547 — ephemeral hover/focus id for card→marker highlight.
+  // Lives in component state only — never written to URL. Resets to null on
+  // mouseleave/blur and naturally on journey switch (component re-mounts / panel
+  // unmounts). School-first intentionally NOT wired (RISK-3: 3-tier desynced markers).
+  const [hoveredListingId, setHoveredListingId] = useState<string | null>(null);
 
   // Issue #1160 — school-focus tick for SchoolFocusPanner in PropertyMap.
   // Incremented when the selected school changes (new school ID) or when radiusKm
@@ -1137,11 +1159,24 @@ export default function MapDiscovery() {
     return `${selectedSchoolId}_${urlState.radiusKm ?? 0}_ready`;
   }, [selectedSchoolId, isLoadingAreaListings, schoolListings.length, urlState.radiusKm]);
 
-  // Increment schoolMarkerFocusTick when listingsReadyKey transitions to a new non-null value.
+  // Increment schoolMarkerFocusTick when listingsReadyKey transitions to a NEW non-null value.
   // listingsReadyKey is null when listings are empty or query not settled → Phase-1 SchoolFocusPanner
   // still fires first (handles the school-center focus); this only fires when markers are present.
+  //
+  // Issue #1547 ITEM 6 FIX — bbox-refetch zoom-reset bug:
+  // The original code incremented on every non-null dep-change. listingsReadyKey encodes
+  // `${schoolId}_${radiusKm}_ready`, which is a CONSTANT for a given school+radius selection.
+  // A user zoom-in triggers a bbox refetch → isLoadingAreaListings toggles true → false → the
+  // listingsReadyKey transitions null→same-string again → the tick incremented → SchoolMarkerFocusPanner
+  // re-fired fitBounds(maxZoom=13) and snapped the map back. Fix: track the last KEY that
+  // caused an increment in a ref; only increment when the key is DIFFERENT from the last handled.
+  // This means a new school selection (different schoolId or radiusKm → new key string) still
+  // triggers a fresh fit, but a bbox-driven loading-toggle to the SAME key is a no-op.
+  const lastFittedListingsKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (listingsReadyKey == null) return;
+    if (listingsReadyKey === lastFittedListingsKeyRef.current) return;
+    lastFittedListingsKeyRef.current = listingsReadyKey;
     setSchoolMarkerFocusTick((t) => t + 1);
   }, [listingsReadyKey]);
 
@@ -1674,6 +1709,17 @@ export default function MapDiscovery() {
     return discoverAreas.find((a) => a.areaKey === urlState.areaKey) ?? null;
   }, [urlState.areaKey, discoverAreas]);
 
+  // Issue #1547 ITEM 6 — memoize school marker positions to prevent SchoolMarkerFocusPanner
+  // from re-running its useEffect on every render due to inline array recreation.
+  // schoolListings is already a memoized array; filter+map creates a new identity each render.
+  const schoolMarkerPositions = useMemo(
+    () =>
+      schoolListings
+        .filter((l) => l.lat != null && l.lon != null)
+        .map((l) => ({ lat: l.lat as number, lon: l.lon as number })),
+    [schoolListings],
+  );
+
   if (!isCityValid) return <CityNotSupported city={city} />;
 
   const trendsHref = selectedArea
@@ -1804,9 +1850,7 @@ export default function MapDiscovery() {
                 return r != null ? clampSchoolRadiusKm(r) : r;
               })()}
               schoolMarkerFocusTick={schoolMarkerFocusTick}
-              schoolMarkerPositions={schoolListings
-                .filter((l) => l.lat != null && l.lon != null)
-                .map((l) => ({ lat: l.lat as number, lon: l.lon as number }))}
+              schoolMarkerPositions={schoolMarkerPositions}
               areaRestoreTick={areaRestoreTick}
               areaRestoreLat={areaRestoreArea?.geoCenterLat}
               areaRestoreLon={areaRestoreArea?.geoCenterLon}
@@ -1835,6 +1879,12 @@ export default function MapDiscovery() {
                     }
                   : null
               }
+              // Issue #1547 — copper selected-marker (URL-driven) + ephemeral hover highlight.
+              // selectedListingId = URL param (persistent selection from marker click).
+              // hoveredListingId = ephemeral React state (resets on mouseleave/blur, never URL).
+              // Both flow only to MarkerClusterLayer visual — never to MapController (no flyTo).
+              selectedListingId={urlState.selectedListing}
+              hoveredListingId={hoveredListingId}
             />
           )}
 
@@ -2018,6 +2068,17 @@ export default function MapDiscovery() {
           // Issue #1115 — bounded-search CTA wiring.
           onBoundedSearch={isAuthenticated ? handleBoundedSearch : undefined}
           boundedSearchTriggered={boundedSearchTriggered}
+          // Issue #1547 — shared card↔marker selection (URL/parent-derived via the
+          // `listing` param). selectedListingId drives the copper selected card frame +
+          // scroll-into-view. The selection DRIVER is the map marker (marker→URL, see
+          // handleSelectMarkerListing); the residential card's primary action is
+          // navigation, so onSelectResultListing is intentionally left unwired to avoid
+          // a redundant history PUSH right before navigate.
+          selectedListingId={urlState.selectedListing}
+          // Issue #1547 — ephemeral hover/focus signal for card→marker highlight.
+          // hoveredListingId is ephemeral useState (NOT URL); resets to null on mouseleave/blur
+          // and naturally on journey switch. School-first NOT wired (RISK-3 unsafe tier sources).
+          onHoverResultListing={setHoveredListingId}
           // Issue #1430 — agri-group listing peek wiring.
           onSelectAgriGroupListing={(id) => urlActions.setSelectedListing(id)}
           selectedGroupListingItem={selectedGroupListingItem}

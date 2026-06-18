@@ -121,6 +121,45 @@ const createMarkerIcon = (propertyType: string): L.DivIcon => {
   return icon;
 };
 
+/**
+ * Issue #1547 — copper selected-state marker icon.
+ * Same pin shape as createMarkerIcon but with a copper border + outer ring so
+ * the selected listing's marker is visually distinguished on the map.
+ * Not cached at module level because selection changes at most once at a time
+ * and the icon is created once per MarkerClusterLayer rebuild (not per render).
+ * Copper value grounded in design source: HSL 18 51% 46% → #B05C3A.
+ */
+const COPPER_COLOR = '#B05C3A';
+const createSelectedMarkerIcon = (propertyType: string): L.DivIcon => {
+  const { color } = propertyConfig[propertyType] ?? propertyConfig['other'];
+  return L.divIcon({
+    className: 'custom-marker property-marker property-marker--selected',
+    html: `
+      <div data-testid="property-marker" data-selected="true" style="
+        width: 38px;
+        height: 38px;
+        background-color: ${color};
+        border: 3px solid ${COPPER_COLOR};
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        box-shadow: 0 0 0 3px rgba(176,92,58,0.35), 0 2px 8px rgba(0,0,0,0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div style="
+          transform: rotate(45deg);
+          color: white;
+          font-size: 13px;
+          font-weight: bold;
+        ">${escapeHtml(propertyType[0].toUpperCase())}</div>
+      </div>
+    `,
+    iconSize: [38, 38],
+    iconAnchor: [19, 38],
+  });
+};
+
 export interface SchoolCircle {
   lat: number;
   lon: number;
@@ -291,6 +330,22 @@ interface PropertyMapProps {
    * When null/undefined, falls back to the existing `listings` prop (no regression).
    */
   agriGroupListings?: AgriMapListingItem[] | null;
+  /**
+   * Issue #1547 — ID of the currently selected listing (from the `listing` URL param).
+   * When set, the corresponding residential marker renders with the copper selected-state
+   * icon. Does NOT trigger any camera movement (MapController is not involved).
+   * Only wired to MarkerClusterLayer (residential); agri and school markers unaffected.
+   */
+  selectedListingId?: string | null;
+  /**
+   * Issue #1547 — ephemeral hover/focus id for card→marker highlight.
+   * When set, the matching residential marker renders with the copper selected-state icon.
+   * Distinct from selectedListingId (URL-persisted): this is transient React state that
+   * resets to null on card mouseleave/blur and never survives a journey switch.
+   * Like selectedListingId, flows ONLY to MarkerClusterLayer visual — never to
+   * MapController, so no flyTo / zoom / pan occurs on hover.
+   */
+  hoveredListingId?: string | null;
   /**
    * Issue #1429 — corridor sector overlay for agri corridor-first discovery.
    * When set, renders a non-interactive wedge polygon anchored at cityCenter
@@ -908,9 +963,17 @@ function MapController({
 function MarkerClusterLayer({
   listings,
   onSelectListing,
+  selectedListingId,
+  hoveredListingId,
 }: {
   listings: PropertyListingWithImages[];
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
+  /** Issue #1547 — ID of the currently selected listing (URL-derived). When set, that
+   *  listing's marker renders with the copper selected-state icon; no camera movement. */
+  selectedListingId?: string | null;
+  /** Issue #1547 — ephemeral hover/focus id (React state, NOT URL). When set, the
+   *  matching marker renders with the copper icon; clears on mouseleave/blur. */
+  hoveredListingId?: string | null;
 }) {
   const map = useMap();
 
@@ -946,8 +1009,20 @@ function MarkerClusterLayer({
     const validListings = listings.filter((l) => l.latitude && l.longitude);
 
     validListings.forEach((listing) => {
-      const marker = L.marker([listing.latitude!, listing.longitude!], {
-        icon: createMarkerIcon(listing.property_type),
+      // Issue #1547 — copper icon when id matches the URL-selected listing OR the
+      // ephemeral hover/focus id. Both conditions use the same copper visual;
+      // no flyTo / camera movement occurs for either path.
+      const isHighlighted =
+        listing.id === selectedListingId || listing.id === hoveredListingId;
+      const icon = isHighlighted
+        ? createSelectedMarkerIcon(listing.property_type)
+        : createMarkerIcon(listing.property_type);
+      const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
+
+      // Attach listing-id to the marker element for E2E selectors.
+      marker.on('add', () => {
+        const el = marker.getElement();
+        if (el) el.setAttribute('data-listing-id', listing.id);
       });
 
       marker.on('click', () => {
@@ -962,7 +1037,7 @@ function MarkerClusterLayer({
     return () => {
       map.removeLayer(clusterGroup);
     };
-  }, [listings, map, onSelectListing]);
+  }, [listings, map, onSelectListing, selectedListingId, hoveredListingId]);
 
   return null;
 }
@@ -1006,9 +1081,15 @@ export function buildAgriMarkerLabel(
 function AgriMarkerClusterLayer({
   listings,
   onSelectListing,
+  selectedListingId,
+  hoveredListingId,
 }: {
   listings: PropertyListingWithImages[];
   onSelectListing?: (listing: PropertyListingWithImages | null) => void;
+  /** Issue #1547 — ID of the currently selected agri listing (URL-derived). Renders copper icon. */
+  selectedListingId?: string | null;
+  /** Issue #1547 — ephemeral hover/focus id for agri card→marker highlight. */
+  hoveredListingId?: string | null;
 }) {
   const map = useMap();
 
@@ -1044,8 +1125,17 @@ function AgriMarkerClusterLayer({
     const validListings = listings.filter((l) => l.latitude && l.longitude);
 
     validListings.forEach((listing) => {
-      const marker = L.marker([listing.latitude!, listing.longitude!], {
-        icon: createMarkerIcon(listing.property_type),
+      const isHighlighted =
+        listing.id === selectedListingId || listing.id === hoveredListingId;
+      const icon = isHighlighted
+        ? createSelectedMarkerIcon(listing.property_type)
+        : createMarkerIcon(listing.property_type);
+      const marker = L.marker([listing.latitude!, listing.longitude!], { icon });
+
+      // Attach listing-id to the marker element for E2E selectors.
+      marker.on('add', () => {
+        const el = marker.getElement();
+        if (el) el.setAttribute('data-listing-id', listing.id);
       });
 
       marker.on('click', () => {
@@ -1073,7 +1163,7 @@ function AgriMarkerClusterLayer({
     return () => {
       map.removeLayer(clusterGroup);
     };
-  }, [listings, map, onSelectListing]);
+  }, [listings, map, onSelectListing, selectedListingId, hoveredListingId]);
 
   return null;
 }
@@ -1221,6 +1311,8 @@ export function PropertyMap({
   selectedPolygonListing,
   agriGroupListings,
   sectorOverlay = null,
+  selectedListingId,
+  hoveredListingId,
 }: PropertyMapProps) {
   // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
   // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
@@ -1294,7 +1386,12 @@ export function PropertyMap({
           <>
             {/* Issue #1410: agriLayerListings = adaptAgriMapListingsToMarkers(agriGroupListings)
                 when a regional group is selected; falls back to listings prop otherwise. */}
-            <AgriMarkerClusterLayer listings={agriLayerListings} onSelectListing={onSelectListing} />
+            <AgriMarkerClusterLayer
+              listings={agriLayerListings}
+              onSelectListing={onSelectListing}
+              selectedListingId={selectedListingId}
+              hoveredListingId={hoveredListingId}
+            />
             <AgriPolygonLayer
               listings={agriLayerListings}
               selectedListing={selectedPolygonListing}
@@ -1303,7 +1400,12 @@ export function PropertyMap({
             />
           </>
         ) : (
-          <MarkerClusterLayer listings={listings} onSelectListing={onSelectListing} />
+          <MarkerClusterLayer
+            listings={listings}
+            onSelectListing={onSelectListing}
+            selectedListingId={selectedListingId}
+            hoveredListingId={hoveredListingId}
+          />
         )}
         {areas.length > 0 && (
           <AreaMarkerLayer

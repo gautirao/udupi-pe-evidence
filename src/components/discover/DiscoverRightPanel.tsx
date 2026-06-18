@@ -452,6 +452,26 @@ export interface DiscoverRightPanelProps {
    * Should call urlActions.clearLocality() (REPLACE semantics).
    */
   onClearLocality?: () => void;
+  // ── Card↔marker shared selection (Issue #1547) ─────────────────────────────
+  /**
+   * Id of the currently selected listing (URL/parent-derived, from the `listing` URL
+   * param). Drives the copper selected card frame + scroll-into-view in the
+   * narrowed-results panels. Selection is never card-local state.
+   */
+  selectedListingId?: string | null;
+  /**
+   * Called when a residential result card is activated, so the parent can sync the
+   * selected map marker. Optional — when absent the card simply navigates.
+   */
+  onSelectResultListing?: (id: string) => void;
+  /**
+   * Issue #1547 — ephemeral hover/focus signal from card → map marker.
+   * Called with the listing id on card mouseenter/focus, null on mouseleave/blur.
+   * NOT persisted to URL — lives in ephemeral useState in MapDiscovery.
+   * Only wired for area-first residential; school-first stays unwired (RISK-3:
+   * school markers come from 3 desynced tier sources, making id-to-marker mapping unsafe).
+   */
+  onHoverResultListing?: (id: string | null) => void;
   // ── Agri filters (Issue #1457) ─────────────────────────────────────────────
   /** Currently active acreage min filter (from URL). */
   agriAcresMin?: number;
@@ -555,6 +575,9 @@ export function DiscoverRightPanel({
   selectedLocality = null,
   onSetLocality,
   onClearLocality,
+  selectedListingId = null,
+  onSelectResultListing,
+  onHoverResultListing,
   isLoadingAreaGroupsForSchool = false,
   agriAcresMin,
   agriAcresMax,
@@ -825,6 +848,8 @@ export function DiscoverRightPanel({
               onSelectListing={onSelectAgriGroupListing ?? ((id) => navigate(`/listing/${id}`))}
               onClose={onClearLocality ?? (() => {})}
               intent={intent}
+              isAuthenticated={isAuthenticated}
+              selectedListingId={selectedListingId}
             />
           </>
         );
@@ -945,6 +970,9 @@ export function DiscoverRightPanel({
             onSelectJourney={onSelectJourney}
             onAddSchool={onAddSchool}
             intent={intent}
+            selectedListingId={selectedListingId}
+            onSelectListing={onSelectResultListing}
+            onHoverListing={onHoverResultListing}
           />
         );
 
@@ -1071,6 +1099,8 @@ export function DiscoverRightPanel({
             onBoundedSearch={onBoundedSearch}
             boundedSearchTriggered={boundedSearchTriggered}
             intent={intent}
+            selectedListingId={selectedListingId}
+            onHoverListing={onHoverResultListing}
           />
         );
 

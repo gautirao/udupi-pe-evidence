@@ -192,3 +192,62 @@ describe('AgriGroupLocalityPanel — empty state', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+// ── Issue #1547 — agri card variant: anon price gate (no-leak) + selection ────
+describe('AgriGroupLocalityPanel — anon price gate (no-leak)', () => {
+  // NON-NULL price so the anon assertion cannot false-pass on a missing value.
+  const priced = makeListing('p1', { pricePaise: 7500000 * 100, landArea: 2, landAreaUnit: 'acre' });
+
+  it('anonymous: shows "Sign in to view price" and never a rupee value', () => {
+    const { container } = render(
+      <AgriGroupLocalityPanel {...baseProps} listings={[priced]} isAuthenticated={false} />,
+    );
+    expect(screen.getByTestId('agri-locality-price-signin')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/₹/);
+    expect(container.textContent).not.toMatch(/75,00,000|7,500,000/);
+  });
+
+  it('authenticated: shows the formatted rupee price (same fixture)', () => {
+    const { container } = render(
+      <AgriGroupLocalityPanel {...baseProps} listings={[priced]} isAuthenticated />,
+    );
+    expect(screen.queryByTestId('agri-locality-price-signin')).not.toBeInTheDocument();
+    expect(container.textContent).toMatch(/₹/);
+  });
+
+  it('authenticated with no price: shows "Price on request", no rupee value', () => {
+    const noPrice = makeListing('np', { pricePaise: null });
+    const { container } = render(
+      <AgriGroupLocalityPanel {...baseProps} listings={[noPrice]} isAuthenticated />,
+    );
+    expect(screen.getByText('Price on request')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/₹/);
+  });
+});
+
+describe('AgriGroupLocalityPanel — selected state + chips', () => {
+  it('marks the matching row aria-pressed + data-selected', () => {
+    const listings = [makeListing('a'), makeListing('b')];
+    render(<AgriGroupLocalityPanel {...baseProps} listings={listings} selectedListingId="b" />);
+    const rows = screen.getAllByTestId('agri-locality-listing-row');
+    const selected = rows.find((r) => r.getAttribute('data-selected') === 'true');
+    expect(selected).toBeTruthy();
+    expect(selected).toHaveAttribute('aria-pressed', 'true');
+    // The non-selected row is not marked.
+    expect(rows.filter((r) => r.getAttribute('aria-pressed') === 'true')).toHaveLength(1);
+  });
+
+  it('renders agri spec chips, omitting null/false fields', () => {
+    const listing = makeListing('c', {
+      landCategory: 'FARMLAND',
+      waterSource: 'BOREWELL',
+      farmhouseAvailable: true,
+      fencingDone: false, // false → omitted (null != false)
+    });
+    render(<AgriGroupLocalityPanel {...baseProps} listings={[listing]} />);
+    expect(screen.getByText('Farmland')).toBeInTheDocument();
+    expect(screen.getByText('Borewell')).toBeInTheDocument();
+    expect(screen.getByText('Farmhouse')).toBeInTheDocument();
+    expect(screen.queryByText('Fenced')).not.toBeInTheDocument();
+  });
+});

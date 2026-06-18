@@ -147,4 +147,144 @@ describe('PropertyCard', () => {
     await userEvent.click(screen.getByTestId('listing-card'));
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
+
+  // ── Issue #1547 — anon no-leak (BLOCKING, RISK-2) ──────────────────────────
+  describe('anon price gate (no-leak)', () => {
+    // A clearly-recognisable, NON-NULL price so the assertion cannot false-pass on
+    // a missing/zero value. ₹50,00,000 contains the digit run "50,00,000".
+    const NON_NULL_PRICE = makeListing({ pricePaise: 5000000 * 100 });
+
+    it('never renders a rupee value or digits for anonymous users', () => {
+      const { container } = renderCard({
+        listing: NON_NULL_PRICE,
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText('Sign in to view price')).toBeInTheDocument();
+      // No rupee symbol and no price digit-grouping anywhere in the anon DOM.
+      expect(container.textContent).not.toMatch(/₹/);
+      expect(container.textContent).not.toMatch(/50,00,000|5,000,000/);
+    });
+
+    it('renders the formatted rupee price for authenticated users (same fixture)', () => {
+      const { container } = renderCard({
+        listing: NON_NULL_PRICE,
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
+      // The authed branch DOES show a rupee value for the same non-null fixture.
+      expect(container.textContent).toMatch(/₹/);
+    });
+  });
+
+  // ── Issue #1547 — selected state ───────────────────────────────────────────
+  describe('selected state', () => {
+    it('marks the card aria-pressed + data-selected when isSelected is true', () => {
+      renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate: vi.fn(), isSelected: true });
+      const card = screen.getByTestId('listing-card');
+      expect(card).toHaveAttribute('aria-pressed', 'true');
+      expect(card).toHaveAttribute('data-selected', 'true');
+    });
+
+    it('is not selected by default', () => {
+      renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate: vi.fn() });
+      const card = screen.getByTestId('listing-card');
+      expect(card).toHaveAttribute('aria-pressed', 'false');
+      expect(card).not.toHaveAttribute('data-selected');
+    });
+  });
+
+  // ── Issue #1547 — keyboard a11y (AC10, RISK-6) ─────────────────────────────
+  describe('keyboard accessibility', () => {
+    it('exposes role=button and is focusable (tabIndex 0)', () => {
+      renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate: vi.fn() });
+      const card = screen.getByTestId('listing-card');
+      expect(card).toHaveAttribute('role', 'button');
+      expect(card).toHaveAttribute('tabindex', '0');
+    });
+
+    it('activates onNavigate on Enter', async () => {
+      const onNavigate = vi.fn();
+      renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate });
+      const card = screen.getByTestId('listing-card');
+      card.focus();
+      expect(card).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('activates onNavigate on Space', async () => {
+      const onNavigate = vi.fn();
+      renderCard({ listing: makeListing(), isAuthenticated: true, onNavigate });
+      screen.getByTestId('listing-card').focus();
+      await userEvent.keyboard(' ');
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onSelect (with id) alongside onNavigate when provided', async () => {
+      const onNavigate = vi.fn();
+      const onSelect = vi.fn();
+      renderCard({ listing: makeListing({ id: 'abc' }), isAuthenticated: true, onNavigate, onSelect });
+      await userEvent.click(screen.getByTestId('listing-card'));
+      expect(onSelect).toHaveBeenCalledWith('abc');
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── Issue #1547 — ephemeral hover/focus signal (Option B, card→marker) ──────
+  describe('onHover — ephemeral card→marker signal', () => {
+    it('calls onHover(id) on mouseenter', async () => {
+      const onHover = vi.fn();
+      renderCard({ listing: makeListing({ id: 'h1' }), isAuthenticated: true, onNavigate: vi.fn(), onHover });
+      await userEvent.hover(screen.getByTestId('listing-card'));
+      expect(onHover).toHaveBeenCalledWith('h1');
+    });
+
+    it('calls onHover(null) on mouseleave', async () => {
+      const onHover = vi.fn();
+      renderCard({ listing: makeListing({ id: 'h1' }), isAuthenticated: true, onNavigate: vi.fn(), onHover });
+      const card = screen.getByTestId('listing-card');
+      await userEvent.hover(card);
+      await userEvent.unhover(card);
+      // Last call must be null (the leave signal).
+      expect(onHover).toHaveBeenLastCalledWith(null);
+    });
+
+    it('calls onHover(id) on focus', async () => {
+      const onHover = vi.fn();
+      renderCard({ listing: makeListing({ id: 'h2' }), isAuthenticated: true, onNavigate: vi.fn(), onHover });
+      screen.getByTestId('listing-card').focus();
+      expect(onHover).toHaveBeenCalledWith('h2');
+    });
+
+    it('calls onHover(null) on blur', async () => {
+      const onHover = vi.fn();
+      renderCard({ listing: makeListing({ id: 'h2' }), isAuthenticated: true, onNavigate: vi.fn(), onHover });
+      const card = screen.getByTestId('listing-card');
+      card.focus();
+      card.blur();
+      expect(onHover).toHaveBeenLastCalledWith(null);
+    });
+
+    it('click still calls onNavigate when onHover is provided', async () => {
+      const onNavigate = vi.fn();
+      const onHover = vi.fn();
+      renderCard({ listing: makeListing({ id: 'h3' }), isAuthenticated: true, onNavigate, onHover });
+      await userEvent.click(screen.getByTestId('listing-card'));
+      // Navigation must still fire — hover affordance does not replace click.
+      expect(onNavigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('is a no-op when onHover is not provided (no crash)', async () => {
+      // Regression guard: existing consumers that don't pass onHover must not crash.
+      renderCard({ listing: makeListing({ id: 'h4' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const card = screen.getByTestId('listing-card');
+      // None of these should throw.
+      await userEvent.hover(card);
+      await userEvent.unhover(card);
+      card.focus();
+      card.blur();
+    });
+  });
 });
