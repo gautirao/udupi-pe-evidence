@@ -1,0 +1,36 @@
+<!-- @dsCard group="Colors" viewport="700x170" name="Trust tiers" subtitle="The core ReTrends trust signal: Verified · Trusted · Listed" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin:0; font-family:var(--font-sans); background:var(--background); padding:24px; }
+  .row { display:flex; gap:14px; }
+  .tier { flex:1; background:var(--paper); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; box-shadow:var(--shadow-xs); }
+  .pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:var(--radius-sm); font-size:12px; font-weight:600; }
+  .dot { width:9px; height:9px; border-radius:var(--radius-full); }
+  .desc { font-size:12px; color:var(--text-muted); margin:12px 0 0; line-height:1.5; }
+  .hex { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:8px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="tier">
+      <span class="pill" style="background:var(--trust-verified-bg);color:var(--trust-verified-fg)"><span class="dot" style="background:var(--trust-verified-fg)"></span>Verified</span>
+      <p class="desc">Documents verified, RERA registered, broker checked.</p>
+      <div class="hex">fg #1F7A5C · bg #E8F2EE</div>
+    </div>
+    <div class="tier">
+      <span class="pill" style="background:var(--trust-trusted-bg);color:var(--trust-trusted-fg)"><span class="dot" style="background:var(--trust-trusted-fg)"></span>Trusted</span>
+      <p class="desc">Listed by a verified broker with track record.</p>
+      <div class="hex">fg #26395B · bg #E9ECF2</div>
+    </div>
+    <div class="tier">
+      <span class="pill" style="background:var(--trust-listed-bg);color:var(--trust-listed-fg)"><span class="dot" style="background:var(--trust-listed-fg)"></span>Listed</span>
+      <p class="desc">Standard listing, verification in progress.</p>
+      <div class="hex">fg #4B5563 · bg #F3F4F6</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!-- @dsCard group="Brand" viewport="700x210" name="Logo" subtitle="Clean text wordmark — copper 'Re' + ink 'Trends'" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin:0; font-family:var(--font-sans); background:var(--background); padding:24px; }
+  .row { display:flex; gap:16px; }
+  .panel { flex:1; display:flex; align-items:center; justify-content:center; border-radius:var(--radius-xl); padding:30px; min-height:130px; }
+  .light { background:var(--paper); border:1px solid var(--border); }
+  .dark { background:var(--navy-800); }
+  .wm { display:flex; flex-direction:column; align-items:center; gap:9px; }
+  .word { font-size:34px; font-weight:700; letter-spacing:-0.02em; line-height:1; }
+  .eyebrow { font-size:10px; font-weight:600; letter-spacing:0.22em; text-transform:uppercase; }
+  .rule { display:flex; align-items:center; gap:10px; }
+  .rule .ln { width:26px; height:1px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="panel light">
+      <div class="wm">
+        <div class="word"><span style="color:var(--copper-500)">Re</span><span style="color:var(--navy-800)">Trends</span></div>
+        <div class="rule">
+          <span class="ln" style="background:var(--stone-400)"></span>
+          <span class="eyebrow" style="color:var(--text-muted)">Real Estate Intelligence</span>
+          <span class="ln" style="background:var(--stone-400)"></span>
+        </div>
+      </div>
+    </div>
+    <div class="panel dark">
+      <div class="wm">
+        <div class="word"><span style="color:var(--copper-400)">Re</span><span style="color:#fff">Trends</span></div>
+        <div class="rule">
+          <span class="ln" style="background:rgba(255,255,255,0.3)"></span>
+          <span class="eyebrow" style="color:rgba(255,255,255,0.6)">Real Estate Intelligence</span>
+          <span class="ln" style="background:rgba(255,255,255,0.3)"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

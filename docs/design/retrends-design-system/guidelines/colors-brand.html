@@ -1,0 +1,25 @@
+<!-- @dsCard group="Colors" viewport="700x190" name="Brand palette" subtitle="Ink-navy primary · restrained copper accent · off-white canvas" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin:0; font-family:var(--font-sans); background:var(--background); padding:24px; }
+  .row { display:flex; gap:14px; flex-wrap:wrap; }
+  .sw { width:150px; border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm); }
+  .chip { height:78px; }
+  .meta { background:var(--paper); padding:10px 12px; }
+  .name { font-size:13px; font-weight:600; color:var(--text-strong); }
+  .hex { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:2px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--navy-800)"></div><div class="meta"><div class="name">Primary ink-navy</div><div class="hex">#1B2A45</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--copper-500)"></div><div class="meta"><div class="name">Accent copper</div><div class="hex">#B05C3A</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--canvas-100)"></div><div class="meta"><div class="name">Off-white canvas</div><div class="hex">#F6F5F2</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--paper);border-bottom:1px solid var(--border)"></div><div class="meta"><div class="name">Paper / card</div><div class="hex">#FFFFFF</div></div></div>
+  </div>
+</body>
+</html>

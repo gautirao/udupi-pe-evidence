@@ -1,0 +1,36 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Neutrals" subtitle="Warm paper scale + cool greys for text and lines" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin:0; font-family:var(--font-sans); background:var(--background); padding:24px; }
+  .label { font-size:11px; font-weight:600; letter-spacing:var(--tracking-caps); text-transform:uppercase; color:var(--text-muted); margin:0 0 8px; }
+  .ramp { display:flex; border-radius:var(--radius-md); overflow:hidden; box-shadow:var(--shadow-xs); border:1px solid var(--border); }
+  .cell { flex:1; height:46px; display:flex; align-items:flex-end; justify-content:center; padding-bottom:5px; font-family:var(--font-mono); font-size:9px; }
+  .group { margin-bottom:14px; }
+</style>
+</head>
+<body>
+  <div class="group">
+    <p class="label">Off-white canvas</p>
+    <div class="ramp">
+      <div class="cell" style="background:var(--canvas-100);color:#6B7280">F6F5F2</div>
+      <div class="cell" style="background:var(--canvas-200);color:#6B7280">EEEDE9</div>
+      <div class="cell" style="background:var(--stone-300);color:#6B7280">E6E5E0</div>
+      <div class="cell" style="background:var(--stone-400);color:#4B5563">D7D6D0</div>
+    </div>
+  </div>
+  <div class="group">
+    <p class="label">Slate grey</p>
+    <div class="ramp">
+      <div class="cell" style="background:var(--grey-100);color:#6B7280">F3F4F6</div>
+      <div class="cell" style="background:var(--grey-300);color:#374151">D1D5DB</div>
+      <div class="cell" style="background:var(--grey-500);color:#fff">6B7280</div>
+      <div class="cell" style="background:var(--grey-700);color:#fff">374151</div>
+      <div class="cell" style="background:var(--grey-900);color:#fff">111827</div>
+    </div>
+  </div>
+</body>
+</html>

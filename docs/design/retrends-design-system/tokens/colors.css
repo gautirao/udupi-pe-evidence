@@ -1,0 +1,115 @@
+/* ============================================================
+   ReTrends — Color tokens
+   A premium, data-led palette for a Pan-India real-estate
+   discovery & intelligence platform.
+   Deep ink-navy + warm off-white + slate text, with a restrained
+   copper accent used sparingly for CTAs, selection, alerts and
+   insight signals.
+   ============================================================ */
+
+:root {
+  /* ---- Brand primitives ---- */
+  --navy-900: #0E1626;   /* ink — deepest, headings + CTA bands */
+  --navy-800: #1B2A45;   /* PRIMARY — brand ink-navy */
+  --navy-700: #26395B;   /* primary hover */
+  --navy-600: #34496E;
+  --navy-100: #E9ECF2;   /* navy tint surface */
+
+  /* Accent — restrained burnished copper / terracotta. Use sparingly. */
+  --copper-600: #934B2D; /* hover / pressed */
+  --copper-500: #B05C3A; /* ACCENT */
+  --copper-400: #C2734F;
+  --copper-100: #F2E8E1; /* accent tint */
+
+  /* Gold — optional premium highlight (insight signals, badges). */
+  --gold-600: #8A6A22;
+  --gold-100: #F4EEDD;
+
+  /* ---- Warm off-white neutrals (clean, not rustic) ---- */
+  --canvas-100: #F6F5F2; /* app background — warm off-white */
+  --canvas-200: #EEEDE9;
+  --stone-300:  #E6E5E0; /* muted surface */
+  --stone-400:  #D7D6D0; /* hairline on canvas */
+  --paper:      #FFFFFF; /* cards */
+
+  /* ---- Slate / charcoal greys (text + borders) ---- */
+  --grey-900: #111827;  /* charcoal — strongest text */
+  --grey-700: #374151;  /* body */
+  --grey-600: #4B5563;
+  --grey-500: #6B7280;  /* muted text */
+  --grey-400: #9CA3AF;
+  --grey-300: #D1D5DB;
+  --grey-200: #E5E7EB;
+  --grey-100: #F3F4F6;
+  --grey-50:  #F9FAFB;
+
+  /* ---- Semantic / status hues (muted, professional — no neon) ---- */
+  --evergreen-600: #1F7A5C; /* verified / positive */
+  --evergreen-50:  #E8F2EE;
+  --ochre-600:     #A9741C; /* caution / limited-data */
+  --ochre-50:      #F6EFDE;
+  --brick-600:     #B23A2E; /* destructive / negative */
+  --brick-50:      #F6E9E7;
+
+  /* ============================================================
+     Semantic aliases — reference these in components, not the
+     primitives above.
+     ============================================================ */
+
+  /* Surfaces */
+  --background:        var(--canvas-100);
+  --surface-card:      var(--paper);
+  --surface-muted:     var(--stone-300);
+  --surface-subtle:    var(--canvas-200);
+  --surface-navy:      var(--navy-800);
+  --surface-navy-tint: var(--navy-100);
+  --popover:           var(--paper);
+
+  /* Text */
+  --text-strong:   var(--grey-900);
+  --text-body:     var(--grey-700);
+  --text-muted:    var(--grey-500);
+  --text-on-navy:  #FFFFFF;
+  --text-on-accent:#FFFFFF;
+
+  /* Brand actions */
+  --primary:             var(--navy-800);
+  --primary-hover:       var(--navy-700);
+  --primary-foreground:  #FFFFFF;
+  --accent:              var(--copper-500);
+  --accent-hover:        var(--copper-600);
+  --accent-foreground:   #FFFFFF;
+  --accent-tint:         var(--copper-100);
+  --secondary:           var(--navy-100);
+  --secondary-foreground:var(--navy-800);
+  --secondary-hover:     #DCE0EA;
+
+  /* Lines + inputs */
+  --border:          rgba(17, 24, 39, 0.09);
+  --border-strong:   rgba(17, 24, 39, 0.15);
+  --input-bg:        #F1F0EC;
+  --ring:            var(--navy-800);
+
+  /* Trust tiers (core brand concept) — tied to the brand, not generic blue/green */
+  --trust-verified-fg: var(--evergreen-600);
+  --trust-verified-bg: var(--evergreen-50);
+  --trust-trusted-fg:  var(--navy-700);
+  --trust-trusted-bg:  var(--navy-100);
+  --trust-listed-fg:   var(--grey-600);
+  --trust-listed-bg:   var(--grey-100);
+
+  /* Status feedback */
+  --positive:   var(--evergreen-600);
+  --positive-bg:var(--evergreen-50);
+  --caution:    var(--ochre-600);
+  --caution-bg: var(--ochre-50);
+  --negative:   var(--brick-600);
+  --negative-bg:var(--brick-50);
+
+  /* Data-viz series — professional, muted */
+  --chart-1: var(--copper-500);
+  --chart-2: var(--navy-800);
+  --chart-3: var(--evergreen-600);
+  --chart-4: var(--ochre-600);
+  --chart-5: #5B6B82;
+}

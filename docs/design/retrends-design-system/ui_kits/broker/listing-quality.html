@@ -1,0 +1,80 @@
+<!-- @dsCard group="Broker" viewport="1280x1100" name="Listing quality worklist" subtitle="Broker-facing · fix-my-listings worklist + selected-listing fix panel" -->
+<!-- @startingPoint section="Broker" subtitle="Broker listing-quality worklist — own listings, issues, and per-listing fix checklist" viewport="1280x1100" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReTrends — Broker Listing Quality</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+  html, body { margin: 0; background: var(--background); }
+  body { font-family: var(--font-sans); color: var(--text-strong); }
+  * { box-sizing: border-box; }
+  ::selection { background: var(--accent); color: #fff; }
+
+  /* Portfolio summary cards */
+  .rt-lq-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+  /* Worklist (left) + selected-listing detail panel (right) */
+  .rt-lq-grid  { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; align-items: start; }
+  .rt-lq-panel { position: sticky; top: 20px; }
+
+  /* Quick fixes + cross-links */
+  .rt-lq-quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .rt-lq-cross { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+
+  @media (max-width: 1040px) {
+    .rt-lq-summary { grid-template-columns: repeat(2, 1fr); }
+    .rt-lq-grid    { grid-template-columns: 1fr; }
+    .rt-lq-panel   { position: static; }
+    .rt-lq-cross   { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 600px) {
+    .rt-lq-summary, .rt-lq-quick { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<script src="listing-quality-data.js"></script>
+<script type="text/babel" src="ListingQuality.jsx"></script>
+<script type="text/babel">
+  const { Button, Icon } = window.ReTrendsDesignSystem_f37966;
+
+  function BrokerTopBar() {
+    return (
+      <header style={{ position: "sticky", top: 0, zIndex: 40, background: "var(--paper)", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 24px", height: "60px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <span style={{ fontSize: "20px", fontWeight: 700, letterSpacing: "-0.02em" }}><span style={{ color: "var(--copper-500)" }}>Re</span><span style={{ color: "var(--navy-800)" }}>Trends</span></span>
+            <span style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-full)", padding: "3px 10px" }}>Broker</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <a href="/broker/dashboard" style={{ textDecoration: "none" }}>
+              <Button variant="ghost" size="sm"><Icon name="arrow-right" size={15} style={{ transform: "rotate(180deg)" }} />Back to dashboard</Button>
+            </a>
+            <div style={{ width: "34px", height: "34px", borderRadius: "var(--radius-full)", background: "var(--navy-800)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600, fontSize: "13px" }}>RK</div>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  function App() {
+    return (
+      <div>
+        <BrokerTopBar />
+        <window.RTListingQuality />
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

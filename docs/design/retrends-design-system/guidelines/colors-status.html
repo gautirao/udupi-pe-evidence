@@ -1,0 +1,32 @@
+<!-- @dsCard group="Colors" viewport="700x150" name="Status & chart series" subtitle="Feedback hues + the 5-series data-viz ramp" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { margin:0; font-family:var(--font-sans); background:var(--background); padding:24px; }
+  .label { font-size:11px; font-weight:600; letter-spacing:var(--tracking-caps); text-transform:uppercase; color:var(--text-muted); margin:0 0 8px; }
+  .row { display:flex; gap:10px; margin-bottom:14px; }
+  .tag { display:inline-flex; align-items:center; gap:6px; padding:5px 11px; border-radius:var(--radius-full); font-size:12px; font-weight:600; }
+  .bar { display:flex; gap:8px; }
+  .ser { flex:1; height:40px; border-radius:var(--radius-md); display:flex; align-items:flex-end; justify-content:center; padding-bottom:4px; font-family:var(--font-mono); font-size:9px; color:#fff; }
+</style>
+</head>
+<body>
+  <p class="label">Feedback</p>
+  <div class="row">
+    <span class="tag" style="background:var(--positive-bg);color:var(--positive)">▲ Positive</span>
+    <span class="tag" style="background:var(--caution-bg);color:var(--caution)">● Caution</span>
+    <span class="tag" style="background:var(--negative-bg);color:var(--negative)">▼ Negative</span>
+  </div>
+  <p class="label">Chart series</p>
+  <div class="bar">
+    <div class="ser" style="background:var(--chart-1)">chart-1</div>
+    <div class="ser" style="background:var(--chart-2)">chart-2</div>
+    <div class="ser" style="background:var(--chart-3)">chart-3</div>
+    <div class="ser" style="background:var(--chart-4)">chart-4</div>
+    <div class="ser" style="background:var(--chart-5)">chart-5</div>
+  </div>
+</body>
+</html>
