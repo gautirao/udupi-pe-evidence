@@ -23,7 +23,7 @@ Previously the Main Agent polled `.claude/handoffs/issue-<N>/` files to learn wh
 | 1 | PLAN_READY | O2M | true | End of Phase 0.7 — `team-lead-plan.toml` (and `bug-repro-report.toml` for bugs) written | `team-lead-plan.toml` + `team-lead-execution-log.md` (Stage-A entry) |
 | 2 | PLAN_REVIEW_REQUIRED | O2M | true | End of Phase 0.7, together with/immediately after PLAN_READY | `team-lead-plan.toml` |
 | 3 | PLAN_REVIEW_RESULT | M2O | true | End of Phase 1 — Main Agent relays APPROVED / REVISION_REQUIRED | `approved-execution-handoff.toml` (APPROVED) or PLAN_REVIEW verdict file (REVISION_REQUIRED) |
-| 4 | SPECIALIST_STARTED | O2M | false | Phase 5 — each time orchestrator invokes a specialist via Task | `team-lead-execution-log.md` (specialist-call entry) |
+| 4 | SPECIALIST_STARTED | O2M | false | Phase 5 — each time orchestrator invokes a specialist via Agent | `team-lead-execution-log.md` (specialist-call entry) |
 | 5 | SPECIALIST_DONE | O2M | **true** | Phase 5 — each time a specialist returns a terminal verdict | `team-lead-execution-log.md` (specialist-call entry with result) |
 | 6 | BLOCKED | O2M | **true** | Any phase — orchestrator writes `blocked.toml` | `blocked.toml` |
 | 7 | WORKDONE_CANDIDATE_READY | O2M | true | Phase 6 — orchestrator writes `workdone-candidate.toml` | `workdone-candidate.toml` |
@@ -130,6 +130,16 @@ The Main Agent **ACTS** on received notifications; it does not run an open-ended
 | Not weakened | Bounded fallback is a safety net for missed/dropped notifications; it never bypasses a gate and never substitutes for the disk artefact being authoritative. |
 
 **Numeric bounds (summary):** stall window = 10 min (default) · max reconciliation reads per phase = 3 · after cap → STALL_DETECTED escalation to user.
+
+### Known caveat — SendMessage may degrade in some spawned contexts
+
+`SendMessage` delivery is **best-effort, not guaranteed**. In some spawned contexts (e.g. a background teammate or a child/nested session), `SendMessage` notifications may be **delayed, dropped, or not delivered at all**. This is a known transport limitation of the current harness, not a Mode-3 regression.
+
+Mode-3 is designed to remain correct under this caveat:
+
+- **Disk artefacts are the authoritative source of truth** — every notification is mirrored to disk before/with the send (dual-channel invariant above), so a lost `SendMessage` never loses state.
+- **Bounded fallback polling is the authoritative fallback** — when an expected notification (`next_expected_event`) does not arrive within the stall window, the Main Agent performs the bounded disk reconciliation reads above (≤3 per phase) and proceeds from what it reads on disk.
+- A run therefore **never blocks on `SendMessage` succeeding**: notifications accelerate the happy path; disk + bounded polling guarantee progress and correctness if delivery degrades.
 
 ---
 

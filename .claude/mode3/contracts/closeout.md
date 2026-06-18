@@ -49,10 +49,11 @@ Main Agent **MUST record** the user's approval message — the exact text, for e
 
 ## Phase 10 — Team cleanup
 
-1. `SendMessage({ to: "executor", message: { type: "shutdown_request" } })`.
-2. On executor `shutdown_response.approve = true` OR timeout (`60s`), `TeamDelete()`.
-3. Verify `~/.claude/teams/mode3-<N>/` no longer exists.
-4. If the executor tmux pane is orphaned (lingering after TeamDelete), `tmux kill-pane -t <pane-id>`.
+This harness has no `TeamDelete`; the session's single implicit team is released when the session ends. Release the orchestrator teammate gracefully:
+
+1. `SendMessage({ to: "orchestrator", message: { type: "shutdown_request", reason: "issue <N> complete" } })`.
+2. On `shutdown_response.approve = true` OR timeout (`60s`), consider the teammate released. (Approving shutdown terminates the teammate process.)
+3. Record the teammate shutdown (approval or timeout) in `team-lead-execution-log.md`.
 
 ---
 

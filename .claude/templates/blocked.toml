@@ -15,12 +15,12 @@ schema_version = "1"
 gate = "BLOCKED"
 issue = 0
 blocked_at = "YYYY-MM-DDTHH:MM:SSZ"
-executor_model = "sonnet"
+executor_model = "opus"
 
 # One of the 18 reason codes (15 from base packet + 3 from supplement).
 # Reviewer routing per code is documented in mode3-run.md Phase 6 and Phase 7.
 #
-#   AGENT_TEAMS_UNAVAILABLE     — TeamCreate/spawn failed; Reviewer does NOT call WORKDONE_REVIEW.
+#   AGENT_TEAMS_UNAVAILABLE     — orchestrator teammate spawn failed; Reviewer does NOT call WORKDONE_REVIEW.
 #   TOOL_UNAVAILABLE            — Task not callable on executor; ditto.
 #   SPECIALIST_NOT_ALLOWED      — requested specialist not in approved allowlist.
 #   SPECIALIST_FAILURE          — specialist returned terminal error.

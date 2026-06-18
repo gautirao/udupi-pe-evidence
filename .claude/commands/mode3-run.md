@@ -8,7 +8,20 @@ argument-hint: <issue#>
 
 **Agent Teams is transport; Route-and-Run defines choreography.**
 
-This command runs one issue end-to-end with a single user kick-off and a single user merge approval. Main Agent is the Agent Team lead; one Sonnet `mode3-orchestrator` teammate (top-level Claude Code session, **not** a subagent) coordinates specialists. File artefacts under `.claude/handoffs/issue-<N>/` are authoritative. Plain teammate pane output is **not** authoritative.
+This command runs one issue end-to-end with a single user kick-off and a single user merge approval. Main Agent is the Agent Team lead; one **Opus** `mode3-orchestrator` teammate (a background Agent-Teams teammate spawned into the session's single implicit team) coordinates specialists. File artefacts under `.claude/handoffs/issue-<N>/` are authoritative. Plain teammate pane output is **not** authoritative.
+
+> **HARD INVARIANT — Mode-3 REQUIRES a team.** Execution may not begin until the `orchestrator` teammate has been spawned AND its behavioural sentinel probe has round-tripped through disk (Phase 0.2). If the spawn or the probe fails, the run writes `blocked.toml` and HALTS. The Main Agent MUST NOT perform implementation work itself and MUST NOT silently fall back to ad-hoc background subagents. The orchestrator MUST run on **Opus** (never Sonnet).
+
+### Mode-3 team invariant (binding)
+
+1. `/mode3-run` MUST spawn an **Opus** orchestrator via the `Agent` tool.
+2. That orchestrator is the **team anchor** (it materialises the session's implicit team).
+3. The orchestrator MUST be able to **nested-spawn specialists** via `Agent` (verified by the Phase 0.2 sentinel probe).
+4. The **Main Agent MUST NOT perform implementation work directly** — it owns gates, validation, PR, and merge handoff only.
+5. **Failure to establish or probe the orchestrator MUST block the run** (`blocked.toml(AGENT_TEAMS_UNAVAILABLE | TOOL_UNAVAILABLE)`) — never continue as a plain implementation agent.
+6. All teammate work MUST be **observable** through task transcripts (`tasks/<id>.output`), the append-only `team-lead-execution-log.md`, and `SendMessage` notifications.
+
+> **Harness migration note (not a repo regression).** The explicit `TeamCreate` / `TeamDelete` tools were **removed from the Claude Code harness**; Mode-3 now uses the harness's **single implicit per-session team** (the Main Agent is its lead) and spawns the orchestrator via `Agent`. This repair does **not** re-create the old explicit-team API. Whether teammates render in **separate tmux panes** is governed by the harness `teamMateMode` setting and session context (top-level vs child session) — it is a harness/terminal concern, **not** something this workflow or repo controls. Pane visibility being absent in a given session is therefore not a Mode-3 regression.
 
 > **This file is a thin dispatcher / phase index.** Full phase detail lives in `.claude/.claude/mode3/contracts/*.md`, loaded **on demand** per the phase index below — this keeps per-run token load low without weakening any gate. Semantics are identical to the prior single-file workflow; only the layout changed. Load a contract when its phase fires; do not preload all of them.
 
@@ -140,24 +153,31 @@ If the index is stale and refresh fails: write `blocked.toml(reason_code=INDEX_S
 
 **Indexing is an optimisation, not authority.** If indexed output later conflicts with direct file content or git state, direct file + git state win. Verify suspicious indexed results against a direct read before acting.
 
-### 0.2 — Agent Teams availability + behavioural Task sentinel probe (mandatory)
+### 0.2 — Team establishment + behavioural sentinel probe (mandatory)
 
-Self-report is NOT sufficient. The probe must succeed behaviourally before any real work begins.
+Self-report is NOT sufficient. The team must be established AND the probe must succeed behaviourally before any real work begins.
+
+> **Harness model (current).** This harness exposes a **single implicit team per session**; there is no separate `TeamCreate`/`TeamDelete` tool, and the `Agent` tool's `team_name` parameter is deprecated/ignored. The team is **materialised by spawning the `orchestrator` teammate** via the `Agent` tool (step 3). Teammates spawn — and themselves spawn specialists — with the `Agent` tool (the prior `Task` spawn tool was removed; nested `Agent` spawning is supported). A successfully spawned, addressable `orchestrator` teammate whose sentinel probe round-trips through disk **is** "the team exists" for every later invariant in this workflow.
 
 Steps:
-1. Verify `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set and the `TeamCreate`, `TeamDelete`, `SendMessage` tools are callable from this session.
-2. If a team `mode3-<N>` already exists for this issue: refuse to silently recreate. Either attach safely (only if previous artefacts are intact and the user explicitly confirms resume) or instruct the user to run `TeamDelete` and re-run `/mode3-run`. Never silently overwrite.
-3. `TeamCreate({ team_name: "mode3-<N>", description: "Mode-3 MVP execution for issue <N>", agent_type: "main-agent" })`.
-4. **Lead generates the random suffix locally** (e.g. `python3 -c "import secrets;print(secrets.token_hex(3))"`) and **writes it to disk first**: `.claude/handoffs/issue-<N>/expected-sentinel.txt` containing exactly `PROBE_OK_<N>_<random6>`. The expected value is now durable across crashes and resumes.
-5. Spawn the Orchestrator teammate: `Agent({ subagent_type: "mode3-orchestrator", model: "sonnet", team_name: "mode3-<N>", name: "orchestrator", mode: "auto", prompt: <sentinel probe prompt below> })`. Note: `subagent_type` is `mode3-orchestrator` (NOT `team-lead`) — see `.claude/agents/mode3-orchestrator.md`. The teammate `name` is `orchestrator` (NOT `executor`) so the spawn pattern is unambiguously distinct from the retired team-lead-as-executor pattern. **CRITICAL:** `mode: "auto"` auto-approves all tool use without permission prompts, which is required for the orchestrator to proceed with Phase 0.7 investigation without hanging on permission gates.
-6. Orchestrator's first instruction is the file-based sentinel probe: invoke `Task({ subagent_type: "qa-fast", prompt: "Behavioural sentinel probe. Reply with EXACTLY this single line and nothing else: PROBE_OK_<N>_<random6>" })` (with the lead-generated suffix interpolated into the prompt), then `Write` the returned line to `.claude/handoffs/issue-<N>/preflight-probe.txt`.
-7. Lead reads `.claude/handoffs/issue-<N>/preflight-probe.txt` AND `.claude/handoffs/issue-<N>/expected-sentinel.txt` from disk. Pass = both files exist and their contents match exactly. Self-report by the Orchestrator is ignored.
+1. Verify the `Agent` (teammate spawn) and `SendMessage` tools are callable from this session. (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in `settings.json` is retained for back-compat but is no longer load-bearing — the implicit team is always available.) If `Agent` is not callable → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and HALT.
+2. If an `orchestrator` teammate is already live for this issue, or `.claude/handoffs/issue-<N>/` already holds in-progress execution artefacts: refuse to silently recreate. Either attach safely (only if previous artefacts are intact and the user explicitly confirms resume) or instruct the user to clear `.claude/handoffs/issue-<N>/` terminal artefacts and re-run `/mode3-run`. Never silently overwrite.
+3. **Lead generates the random suffix locally** (e.g. `python3 -c "import secrets;print(secrets.token_hex(3))"`) and **writes it to disk first**: `.claude/handoffs/issue-<N>/expected-sentinel.txt` containing exactly `PROBE_OK_<N>_<random6>`. The expected value is now durable across crashes and resumes.
+4. Spawn the Orchestrator teammate (this is the team-establishment step):
+   `Agent({ subagent_type: "mode3-orchestrator", model: "opus", name: "orchestrator", mode: "auto", run_in_background: true, prompt: <sentinel probe prompt below> })`.
+   - `model: "opus"` is **mandatory** — the orchestrator MUST run on Opus, never Sonnet. (Specialists keep their own configured models; do not override them.)
+   - `subagent_type` is `mode3-orchestrator` (NOT `team-lead`) — see `.claude/agents/mode3-orchestrator.md`. The teammate `name` is `orchestrator`.
+   - `run_in_background: true` makes it a persistent teammate that can SendMessage `main` per the notification contract.
+   - **CRITICAL:** `mode: "auto"` auto-approves all tool use without permission prompts, which is required for the orchestrator to proceed with Phase 0.7 investigation without hanging on permission gates.
+   - If the spawn call fails or returns no addressable teammate → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)` and HALT. Do NOT do the work yourself.
+5. Orchestrator's first instruction is the file-based sentinel probe: invoke `Agent({ subagent_type: "qa-fast", prompt: "Behavioural sentinel probe. Reply with EXACTLY this single line and nothing else: PROBE_OK_<N>_<random6>" })` (with the lead-generated suffix interpolated into the prompt), then `Write` the returned line to `.claude/handoffs/issue-<N>/preflight-probe.txt`.
+6. Lead reads `.claude/handoffs/issue-<N>/preflight-probe.txt` AND `.claude/handoffs/issue-<N>/expected-sentinel.txt` from disk. Pass = both files exist and their contents match exactly. Self-report by the Orchestrator is ignored.
 
 On probe failure:
-- If `Task` is not callable inside the executor → `blocked.toml(reason_code=TOOL_UNAVAILABLE)`; document evidence in `blocked.toml.detail`.
-- If the team could not be created or the executor could not be spawned → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)`.
+- If the orchestrator cannot spawn a specialist via `Agent` (nested spawn not callable in this context) → `blocked.toml(reason_code=TOOL_UNAVAILABLE)`; document evidence in `blocked.toml.detail`.
+- If the team could not be established (orchestrator teammate could not be spawned) → `blocked.toml(reason_code=AGENT_TEAMS_UNAVAILABLE)`.
 
-No silent fallback. If the user wants to proceed via Path C (Main Agent direct orchestration), they must request it explicitly; the run is then logged as Path-C fallback in `team-lead-execution-log.md`. See `.claude/mode3/contracts/main-agent.md` → Fallback: Path C.
+**No silent fallback. Fail fast.** If team establishment or the sentinel probe fails, HALT and report to the user — never continue by having the Main Agent implement the issue or by spawning loose background subagents. If the user wants to proceed via Path C (Main Agent direct orchestration), they must request it **explicitly**; the run is then logged as Path-C fallback in `team-lead-execution-log.md`. See `.claude/mode3/contracts/main-agent.md` → Fallback: Path C.
 
 ---
 
@@ -173,9 +193,9 @@ Main Agent SendMessages the Team Lead pointing to the assignment; the Team Lead 
 
 Main Agent submits the Team Lead's plan to OpenAI PLAN_REVIEW, then materialises the approved plan and builds the execution handoff (transcribing the eval_checklist). **Load `.claude/mode3/contracts/plan-review.md`.**
 
-## Phase 3 — Team lifecycle (already created in 0.2)
+## Phase 3 — Team lifecycle (already established in 0.2)
 
-The team was created and the executor was spawned during the behavioural probe. Reuse `mode3-<N>`. Do NOT recreate.
+The team (implicit session team) was established and the `orchestrator` teammate was spawned during the behavioural probe. Reuse the live `orchestrator` teammate. Do NOT re-spawn a second orchestrator.
 
 ## Phase 4 — Sentinel probe (already passed in 0.2)
 

@@ -79,7 +79,7 @@ This phase writes the **boundary** the Orchestrator must operate within. It does
    - `conditional_gates`: specialists with triggers (e.g. `[{name = "ui-designer", trigger = "ui_design_gate"}, {name = "architect", trigger = "architecture_gate"}, {name = "qa-e2e-authoring", trigger = "qa-fast recommends YES"}]`).
    - `always_forbidden`: non-Route-and-Run agent types (e.g. `["general-purpose", "Plan", "Explore"]`).
    - `skip_authority`: verbatim Route-and-Run citations for when a `mandatory_gate` may be skipped (e.g. `"qa-fast: only via Lean-mode at ROUTE_AND_RUN.md:357-369 if ALL skip conditions hold; code-reviewer: only at ROUTE_AND_RUN.md:472 if risk=low+single-file+no-logic"`).
-7. Set `executor.model = "sonnet"` (MVP default; first 3 dry-runs).
+7. Set `executor.model = "opus"` (the orchestrator/executor teammate MUST run on Opus, never Sonnet). Specialists keep their own configured models — do NOT set a model for them here.
 8. Set authority block all false (`openai_gates`, `chatgpt_contact`, `pr_creation`, `merge`, `scope_change`).
 9. Copy `qa_requirements` from approved plan (unit_tests_required, e2e_tests_required, justifications if NOT_REQUIRED).
 10. Record `indexing.index_command`, `indexing.index_result_summary`, `indexing.indexed_at` from Phase 0.1.

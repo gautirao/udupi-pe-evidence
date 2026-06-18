@@ -29,7 +29,7 @@ branch = "feat/<N>-short-name"
 # block in its place — the top-level `handoff_sha256` field must be present and correct so
 # the handoff→candidate integrity chain is verifiable directly from this field.
 handoff_sha256 = "<hex digest of approved-execution-handoff.toml at completion time>"
-executor_model = "sonnet"
+executor_model = "opus"
 started_at = "YYYY-MM-DDTHH:MM:SSZ"
 finished_at = "YYYY-MM-DDTHH:MM:SSZ"
 

@@ -85,10 +85,11 @@ reason = "<one line — mandatory for NOT_REQUIRED; recommended otherwise>"
 required_artifact = ".claude/handoffs/issue-<N>/validation-matrix.md"  # empty for NOT_REQUIRED
 
 [executor]
-# MVP default model = "sonnet" for the first 3 dry-runs.
-# After 3 successful Sonnet runs, a separate cost-optimisation issue evaluates
-# Haiku. NO silent model escalation.
-model = "sonnet"
+# The executor/orchestrator teammate MUST run on Opus (never Sonnet).
+# This is the model the Main Agent passes to Agent(subagent_type="mode3-orchestrator", model=...).
+# Specialists the orchestrator spawns keep their own configured models — do NOT set them here.
+# NO silent model escalation/downgrade.
+model = "opus"
 allowed_file_globs = [
   # From approved plan files.likely_change.
 ]
