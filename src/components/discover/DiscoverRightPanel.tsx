@@ -1,6 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ChevronLeft, Loader2, Sprout } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MapPin,
+  Route,
+  Sprout,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AreaPoint } from '@/components/map/AreaMarkerLayer';
@@ -27,6 +40,50 @@ import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { AgriFilterValues } from './panels/AgriFiltersPanel';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
+
+// Directional cues are derived purely from the corridor's directionCode (already
+// in the data) — no new fields are introduced. The cardinal letter is the cue;
+// the four primary directions also get a subtle edge arrow on the compass badge.
+const CARDINAL_ARROW: Record<
+  string,
+  { Arrow: typeof ArrowUp; pos: string }
+> = {
+  N: { Arrow: ArrowUp, pos: 'top-1 left-1/2 -translate-x-1/2' },
+  E: { Arrow: ArrowRight, pos: 'right-1 top-1/2 -translate-y-1/2' },
+  S: { Arrow: ArrowDown, pos: 'bottom-1 left-1/2 -translate-x-1/2' },
+  W: { Arrow: ArrowLeft, pos: 'left-1 top-1/2 -translate-y-1/2' },
+};
+
+const BEARING_LABELS: Record<string, string> = {
+  N: 'North',
+  E: 'East',
+  S: 'South',
+  W: 'West',
+  NE: 'North-east',
+  NW: 'North-west',
+  SE: 'South-east',
+  SW: 'South-west',
+};
+
+/** Compass-style badge: the corridor's cardinal letter, with a subtle edge arrow
+ *  for the four primary directions. Decorative — labelled by the card's aria-label. */
+function DirectionBadge({ code }: { code: string }) {
+  const arrow = CARDINAL_ARROW[code];
+  const Arrow = arrow?.Arrow;
+  return (
+    <div
+      aria-hidden="true"
+      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-evergreen/20 bg-evergreen-tint transition-colors group-hover:border-evergreen/40"
+    >
+      {Arrow && arrow && (
+        <Arrow className={cn('absolute h-3 w-3 text-evergreen/70', arrow.pos)} />
+      )}
+      <span className="font-mono text-lg font-bold tracking-tight text-evergreen">
+        {code}
+      </span>
+    </div>
+  );
+}
 
 interface CorridorLandingPanelProps {
   corridorGroups: CorridorGroupData[];
@@ -70,9 +127,16 @@ function CorridorLandingPanel({
           <span>Loading corridors…</span>
         </div>
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-lg border border-border p-4 space-y-2">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
+          <div
+            key={i}
+            className="flex items-center gap-4 rounded-xl border border-border p-4"
+          >
+            <Skeleton className="h-12 w-12 shrink-0 rounded-lg" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3 w-1/4" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-5 w-24 rounded-full" />
+            </div>
           </div>
         ))}
       </div>
@@ -141,8 +205,8 @@ function CorridorLandingPanel({
                 className={[
                   'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   isSelected
-                    ? 'border-green-500 bg-green-500 text-white'
-                    : 'border-border bg-card text-foreground hover:bg-muted/50',
+                    ? 'border-evergreen bg-evergreen text-evergreen-foreground shadow-sm'
+                    : 'border-border bg-card text-foreground hover:border-evergreen/40 hover:bg-evergreen-tint/40',
                 ].join(' ')}
               >
                 {tier.distanceLabel}
@@ -167,7 +231,9 @@ function CorridorLandingPanel({
         data-testid="corridor-landing-empty"
         className="flex flex-col items-center justify-center py-12 px-4 text-center"
       >
-        <Sprout className="h-8 w-8 text-muted-foreground/40 mb-3" aria-hidden="true" />
+        <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-evergreen/20 bg-evergreen-tint">
+          <Sprout className="h-6 w-6 text-evergreen" aria-hidden="true" />
+        </span>
         <p className="text-sm font-medium text-foreground mb-1">No corridors found</p>
         <p className="text-xs text-muted-foreground">Try selecting a different city.</p>
       </div>
@@ -177,33 +243,98 @@ function CorridorLandingPanel({
   return (
     <div
       data-testid="corridor-landing-list"
-      className="flex flex-col gap-2 p-4"
+      className="flex flex-col gap-4 p-4"
       aria-label="Agricultural corridors"
     >
-      <p className="text-xs text-muted-foreground pb-1">Select a corridor to explore:</p>
-      {corridorGroups.map((corridor) => (
-        <button
-          key={corridor.directionCode}
-          type="button"
-          data-testid="corridor-card"
-          onClick={() => onSetRegionWithMaxKm(corridor.directionCode)}
-          className="w-full rounded-lg border border-border bg-card hover:bg-muted/50 px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`Select corridor ${corridor.groupName}`}
-        >
-          <span
-            data-testid="corridor-group-name"
-            className="text-sm font-medium text-foreground block"
-          >
-            {corridor.groupName}
+      {/* Guided step — promotes the next action from a faint line to a clear instruction. */}
+      <div>
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-evergreen text-[11px] font-bold text-evergreen-foreground">
+            1
           </span>
-          {corridor.availableMaxDistances.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              Up to {corridor.availableMaxDistances
-                .reduce((max, t) => Math.max(max, t.maxKm), 0)} km
-            </span>
-          )}
-        </button>
-      ))}
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-evergreen">
+            Choose a direction
+          </span>
+        </div>
+        <h2 className="text-base font-semibold text-foreground">
+          Select a corridor to explore
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          Each corridor groups agricultural land in one direction. Pick the one
+          you want to explore — you can switch corridors anytime.
+        </p>
+      </div>
+
+      {/* Four directional corridor cards. */}
+      <div className="flex flex-col gap-3">
+        {corridorGroups.map((corridor) => {
+          const maxKm = corridor.availableMaxDistances.reduce(
+            (max, t) => Math.max(max, t.maxKm),
+            0,
+          );
+          const bearing =
+            BEARING_LABELS[corridor.directionCode] ?? corridor.directionCode;
+          return (
+            <button
+              key={corridor.directionCode}
+              type="button"
+              data-testid="corridor-card"
+              onClick={() => onSetRegionWithMaxKm(corridor.directionCode)}
+              className="group relative w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-evergreen/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Select corridor ${corridor.groupName}`}
+            >
+              {/* Selection-affordance accent rail (appears on hover/focus). */}
+              <span
+                aria-hidden="true"
+                className="absolute inset-y-0 left-0 w-1 bg-evergreen opacity-0 transition-opacity group-hover:opacity-100"
+              />
+              <div className="flex items-center gap-4 p-4">
+                <DirectionBadge code={corridor.directionCode} />
+                <div className="min-w-0 flex-1">
+                  <span className="block text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    {bearing}
+                  </span>
+                  <span
+                    data-testid="corridor-group-name"
+                    className="mt-0.5 block truncate text-[15px] font-semibold text-foreground"
+                  >
+                    {corridor.groupName}
+                  </span>
+                  {maxKm > 0 && (
+                    <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1">
+                      <Route
+                        className="h-3.5 w-3.5 text-evergreen"
+                        aria-hidden="true"
+                      />
+                      <span className="text-xs font-medium text-foreground">
+                        Up to {maxKm} km
+                      </span>
+                    </span>
+                  )}
+                </div>
+                <span
+                  aria-hidden="true"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:bg-evergreen group-hover:text-evergreen-foreground"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Calm guidance footer — orients the user without inventing data. */}
+      <div className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/50 px-3.5 py-3">
+        <MapPin
+          className="mt-0.5 h-4 w-4 shrink-0 text-evergreen"
+          aria-hidden="true"
+        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Choosing a corridor groups agricultural land along that direction on
+          the map. You can switch corridors anytime.
+        </p>
+      </div>
     </div>
   );
 }

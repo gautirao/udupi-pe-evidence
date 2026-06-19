@@ -1940,10 +1940,15 @@ export default function MapDiscovery() {
           {/* City / area listing count — bottom-right (Issue #1152) */}
           {discoverBadge.visible && discoverBadge.count != null && (
             <div className="absolute bottom-16 right-4 z-[1000]" data-testid="discover-badge">
-              <div className="bg-card/95 rounded-lg px-4 py-2 shadow-sm text-sm border border-border">
-                Showing{' '}
-                <strong>{discoverBadge.count.toLocaleString()}</strong>
-                {' '}properties
+              <div className="flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
+                <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  Showing{' '}
+                  <strong className="font-semibold tabular-nums text-foreground">
+                    {discoverBadge.count.toLocaleString()}
+                  </strong>
+                  {' '}properties
+                </span>
               </div>
             </div>
           )}
