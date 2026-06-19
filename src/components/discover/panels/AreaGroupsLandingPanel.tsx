@@ -1,5 +1,6 @@
 import React from 'react';
-import { ChevronLeft, LayoutGrid, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Layers, MapPin } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
@@ -35,13 +36,75 @@ export type AreaGroupsLandingPanelProps = {
   | { fallbackAreas?: never; onSelectArea?: never }
 );
 
+// ─── Derived-metric helpers ─────────────────────────────────────────────────
+//
+// Truthful aggregation only: per-group "for sale" counts are derived by summing
+// the real DiscoverArea.listingCount of the areas that belong to the group
+// (matched by areaKey) — the same join the Level-2 area list already relies on.
+// When NONE of a group's area_keys resolve to a loaded area (or no areas were
+// supplied at all), the count is reported as null and the figure is simply not
+// shown — never fabricated.
+
+function buildListingIndex(areas: DiscoverArea[]): Map<string, number> {
+  const index = new Map<string, number>();
+  for (const area of areas) {
+    index.set(area.areaKey, area.listingCount);
+  }
+  return index;
+}
+
+function forSaleForKeys(
+  areaKeys: string[],
+  listingIndex: Map<string, number>,
+): number | null {
+  let sum = 0;
+  let matched = 0;
+  for (const key of areaKeys) {
+    const count = listingIndex.get(key);
+    if (count != null) {
+      sum += count;
+      matched += 1;
+    }
+  }
+  return matched > 0 ? sum : null;
+}
+
+// ─── Summary stat tile ──────────────────────────────────────────────────────
+
+interface StatProps {
+  value: number;
+  label: string;
+  accent?: boolean;
+}
+
+function Stat({ value, label, accent = false }: StatProps) {
+  return (
+    <div className="flex flex-col">
+      <span
+        className={cn(
+          'text-lg font-bold leading-none tabular-nums',
+          accent ? 'text-copper' : 'text-foreground',
+        )}
+      >
+        {value}
+      </span>
+      <span className="mt-1 text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
 // ─── Loading skeletons ────────────────────────────────────────────────────────
 
 function GroupCardSkeleton() {
   return (
-    <div className="rounded-lg border border-border p-4 space-y-2">
-      <Skeleton className="h-4 w-2/3" />
-      <Skeleton className="h-3 w-1/2" />
+    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <Skeleton className="h-9 w-9 rounded-lg" />
+        <div className="flex-1 space-y-2">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      </div>
       <Skeleton className="h-3 w-1/3" />
     </div>
   );
@@ -73,27 +136,79 @@ function BrowseAllFallback({ areas, onSelectArea }: BrowseAllFallbackProps) {
 
   return (
     <div className="px-4 py-4">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
         Browse all areas
       </p>
-      <ul className="space-y-1" role="list" aria-label="All areas in city">
+      <ul className="space-y-2" role="list" aria-label="All areas in city">
         {areas.map((area) => (
           <li key={area.areaKey}>
             <button
               type="button"
-              className="w-full flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group w-full flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-3.5 py-3 text-left transition-all hover:border-copper/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => onSelectArea(area.areaKey)}
               aria-label={`Browse ${area.name}, ${area.listingCount} listing${area.listingCount === 1 ? '' : 's'}`}
               data-testid={`browse-all-area-${area.areaKey}`}
             >
-              <span className="font-medium truncate">{area.name}</span>
-              <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                {area.listingCount} listing{area.listingCount === 1 ? '' : 's'}
+              <span className="min-w-0 flex items-center gap-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                  <MapPin className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span className="text-sm font-medium text-foreground truncate">
+                  {area.name}
+                </span>
+              </span>
+              <span className="flex items-center gap-1.5 shrink-0">
+                <span className="text-xs text-muted-foreground">
+                  {area.listingCount} listing{area.listingCount === 1 ? '' : 's'}
+                </span>
+                <ChevronRight
+                  className="h-4 w-4 text-muted-foreground/50 transition-colors group-hover:text-copper"
+                  aria-hidden="true"
+                />
               </span>
             </button>
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// ─── Intro / summary card ──────────────────────────────────────────────────────
+
+interface AreaGroupsIntroProps {
+  groupCount: number;
+  areaCount: number;
+  forSaleCount: number | null;
+}
+
+function AreaGroupsIntro({ groupCount, areaCount, forSaleCount }: AreaGroupsIntroProps) {
+  return (
+    <div
+      className="rounded-xl border border-border bg-card p-4 shadow-sm"
+      data-testid="area-groups-intro"
+    >
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-copper-tint text-copper">
+          <MapPin className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold text-foreground">
+            Explore by neighbourhood
+          </h3>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Start with a neighbourhood group, then narrow down to a local area to
+            see the homes inside it.
+          </p>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-7 border-t border-border pt-3">
+        <Stat value={groupCount} label={groupCount === 1 ? 'group' : 'groups'} />
+        <Stat value={areaCount} label={areaCount === 1 ? 'area' : 'areas'} />
+        {forSaleCount != null && (
+          <Stat value={forSaleCount} label="for sale" accent />
+        )}
+      </div>
     </div>
   );
 }
@@ -105,36 +220,65 @@ interface GroupCardProps {
   onSelect: (groupId: string) => void;
   /** Issue #1178 — highlight this card as the active (deep-linked) group. */
   isSelected: boolean;
+  /**
+   * Derived count of homes for sale across this group's areas. Null when no
+   * area data resolves (never fabricated) — the figure is then omitted.
+   */
+  forSale: number | null;
 }
 
-function GroupCard({ group, onSelect, isSelected }: GroupCardProps) {
+function GroupCard({ group, onSelect, isSelected, forSale }: GroupCardProps) {
   const areaCount = group.area_keys.length;
 
   return (
     <button
       type="button"
-      className={`w-full text-left rounded-lg transition-colors p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={cn(
+        'group w-full text-left rounded-xl p-4 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         isSelected
-          ? 'border-2 border-primary bg-muted'
-          : 'border border-border bg-card hover:bg-muted/50'
-      }`}
+          ? 'border-2 border-primary bg-muted shadow-sm'
+          : 'border border-border bg-card hover:border-copper/40 hover:shadow-sm',
+      )}
       onClick={() => onSelect(group.id)}
       aria-current={isSelected ? 'true' : undefined}
       aria-label={`Select group ${group.name}${group.region_label ? `, ${group.region_label}` : ''}, ${areaCount} area${areaCount === 1 ? '' : 's'}`}
       data-testid={`area-group-card-${group.id}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-sm truncate">{group.name}</p>
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+          <Layers className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-sm text-foreground truncate">{group.name}</p>
+            <span className="shrink-0 text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 font-medium">
+              {areaCount} area{areaCount === 1 ? '' : 's'}
+            </span>
+          </div>
           {group.subtitle && (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{group.subtitle}</p>
           )}
           {group.region_label && (
-            <p className="text-xs text-muted-foreground/70 mt-1">{group.region_label}</p>
+            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              <MapPin className="h-3 w-3" aria-hidden="true" />
+              {group.region_label}
+            </span>
           )}
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 font-medium">
-          {areaCount} area{areaCount === 1 ? '' : 's'}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
+        {forSale != null ? (
+          <span className="text-xs text-muted-foreground">
+            <span className="font-semibold text-copper tabular-nums">{forSale}</span>{' '}
+            home{forSale === 1 ? '' : 's'} for sale
+          </span>
+        ) : (
+          <span />
+        )}
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground transition-colors group-hover:text-copper">
+          Explore group
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
       </div>
     </button>
@@ -199,6 +343,24 @@ export function AreaGroupsLandingPanel({
       )
     : [];
 
+  // Derived, truthful summary + per-group "for sale" figures (see helpers above).
+  // Cheap to compute; bounded by city area count. Distinct area_keys across all
+  // groups so a shared area is never double-counted.
+  const listingIndex = React.useMemo(
+    () => buildListingIndex(fallbackAreas as DiscoverArea[]),
+    [fallbackAreas],
+  );
+  const distinctAreaKeys = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const g of groups) for (const k of g.area_keys) set.add(k);
+    return set;
+  }, [groups]);
+  const totalAreaCount = distinctAreaKeys.size;
+  const totalForSale = React.useMemo(
+    () => forSaleForKeys([...distinctAreaKeys], listingIndex),
+    [distinctAreaKeys, listingIndex],
+  );
+
   return (
     <>
       <PanelHeader
@@ -252,24 +414,38 @@ export function AreaGroupsLandingPanel({
               <div
                 role="status"
                 aria-live="polite"
-                className="rounded-md bg-muted p-3 text-sm text-foreground"
+                className="rounded-lg border border-border bg-muted p-3 text-sm text-foreground"
                 data-testid="area-group-invalid-message"
               >
                 This group is not available. Please select a group below.
               </div>
             )}
-            <div className="flex items-center gap-2 mb-1">
-              <LayoutGrid className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Neighbourhood groups
-              </p>
+
+            <AreaGroupsIntro
+              groupCount={groups.length}
+              areaCount={totalAreaCount}
+              forSaleCount={totalForSale}
+            />
+
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center gap-2">
+                <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Neighbourhood groups
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {groups.length} group{groups.length === 1 ? '' : 's'}
+              </span>
             </div>
+
             {groups.map((group) => (
               <GroupCard
                 key={group.id}
                 group={group}
                 onSelect={onSelectGroup}
                 isSelected={group.id === focusedGroup?.id}
+                forSale={forSaleForKeys(group.area_keys, listingIndex)}
               />
             ))}
           </div>
