@@ -1,7 +1,8 @@
 import React from 'react';
-import { X, Sprout, AlertCircle, SlidersHorizontal } from 'lucide-react';
+import { X, Sprout, AlertCircle, SlidersHorizontal, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import {
   Sheet,
   SheetContent,
@@ -77,11 +78,14 @@ function ListingSkeleton() {
   return (
     <div
       data-testid="agri-group-listing-skeleton"
-      className="rounded-lg border border-border p-3 space-y-2"
+      className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5"
     >
-      <Skeleton className="h-4 w-3/4" />
-      <Skeleton className="h-3 w-1/2" />
-      <Skeleton className="h-3 w-1/3" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-3 w-1/2" />
+        <Skeleton className="h-3 w-1/3" />
+      </div>
+      <Skeleton className="h-4 w-4 rounded-full shrink-0" />
     </div>
   );
 }
@@ -244,160 +248,191 @@ export function AgriGroupSelectedPanel({
 
   const activeFilterCount = activeFilterChips.length;
 
+  const hasActiveFilters =
+    agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null
+    || agriLandCategory != null || agriFarmhouseAvailable != null || agriFencingDone != null || agriWaterSource != null;
+
   return (
     <div
       data-testid="agri-group-selected-panel"
-      className="flex flex-col h-full"
+      className="flex flex-col h-full bg-muted/20"
     >
-      {/* ── Header chip ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border shrink-0">
-        <Sprout className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0" aria-hidden="true" />
-        <span
-          data-testid="agri-group-selected-label"
-          className="text-sm font-medium text-foreground flex-1 truncate"
-        >
-          {groupLabel}
-        </span>
-
-        {/* ── Filters drawer trigger (mirrors area-first AreaSelectedPanel) ──────── */}
-        {/* Icon + "Filters" label + active-filter count so the button itself signals
-            that hidden advanced filters are applied, even with the drawer closed. */}
-        <Sheet>
-          <SheetTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs h-7 px-2 shrink-0"
-              data-testid="agri-filters-trigger"
-            >
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Filters
-              {activeFilterCount > 0 && (
-                <span
-                  data-testid="agri-filters-count"
-                  aria-label={`${activeFilterCount} active filters`}
-                  className="rounded-full bg-primary text-primary-foreground text-[10px] font-semibold px-1.5 py-0.5 leading-none"
-                >
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="right" className="w-80 p-0 overflow-y-auto">
-            <SheetHeader className="sr-only">
-              <SheetTitle>Agricultural land filters</SheetTitle>
-            </SheetHeader>
-            <AgriFiltersPanel
-              acresMin={agriAcresMin}
-              acresMax={agriAcresMax}
-              priceMinRupees={agriPriceMin}
-              priceMaxRupees={agriPriceMax}
-              isAuthenticated={isAuthenticated}
-              onApply={onApplyFilters}
-              onClear={onClearFilters}
-              agriLandCategory={agriLandCategory}
-              agriFarmhouseAvailable={agriFarmhouseAvailable}
-              agriFencingDone={agriFencingDone}
-              agriWaterSource={agriWaterSource}
-            />
-          </SheetContent>
-        </Sheet>
-
+      {/* ── Selected-corridor summary band (ReTrends evergreen) ───────────────── */}
+      <div
+        className="m-4 mb-3 rounded-xl bg-evergreen p-5 text-evergreen-foreground shadow-md shrink-0"
+        data-testid="agri-group-summary-band"
+      >
+        {/* "Change corridor" affordance — resets the selected region */}
         <button
           type="button"
           aria-label="Clear selected region"
           data-testid="agri-group-selected-clear"
           onClick={onClear}
-          className="rounded-full p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="mb-3 flex items-center gap-1 text-xs text-evergreen-foreground/70 hover:text-evergreen-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-evergreen-foreground/40 rounded"
         >
-          <X className="h-4 w-4" aria-hidden="true" />
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+          Change corridor
         </button>
-      </div>
 
-      {/* ── Distance chips (Issue #1445) ─────────────────────────────────────── */}
-      {sortedTiers.length > 0 && (
-        <div className="px-4 py-2 border-b border-border shrink-0">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Distance tiers">
-            {sortedTiers.map((tier) => {
-              const isSelected = selectedMaxKm === tier.maxKm;
-              return (
-                <button
-                  key={tier.maxKm}
-                  type="button"
-                  data-testid={`distance-chip-${tier.maxKm}`}
-                  onClick={() => onSetMaxKm(tier.maxKm)}
-                  aria-pressed={isSelected}
-                  className={[
-                    'rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    isSelected
-                      ? 'border-green-500 bg-green-500 text-white'
-                      : 'border-border bg-card text-foreground hover:bg-muted/50',
-                  ].join(' ')}
-                >
-                  {tier.distanceLabel}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Includes properties at closer distances too.
-          </p>
-        </div>
-      )}
-
-      {/* ── Active advanced-filter chips ─────────────────────────────────────── */}
-      {/* Shown below the distance/context row and above the result summary so the
-          user can see (and individually clear) which hidden drawer filters are on. */}
-      {activeFilterCount > 0 && (
-        <div
-          data-testid="agri-active-filters"
-          className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border shrink-0"
-        >
-          {activeFilterChips.map((chip) => (
-            <span
-              key={chip.key}
-              data-testid="agri-active-filter-chip"
-              className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium"
-            >
-              {chip.label}
-              <button
-                type="button"
-                onClick={chip.clear}
-                data-testid={`agri-active-filter-remove-${chip.key}`}
-                aria-label={`Remove ${chip.label} filter`}
-                className="rounded-full hover:bg-primary/20 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <X className="h-2.5 w-2.5" aria-hidden="true" />
-              </button>
-            </span>
-          ))}
-          <button
-            type="button"
-            onClick={onClearFilters}
-            data-testid="agri-active-filters-clear-all"
-            className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors ml-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-          >
-            Clear all
-          </button>
-        </div>
-      )}
-
-      {/* ── Aggregate count ──────────────────────────────────────────────────── */}
-      {!isLoading && !isError && (
-        <div className="px-4 py-2 border-b border-border bg-green-500/5 shrink-0">
-          <span
-            data-testid="agri-group-listing-count"
-            className="text-sm text-muted-foreground"
-          >
-            {listingCount} agri propert{listingCount === 1 ? 'y' : 'ies'} for {intent === 'rent' ? 'rent' : 'sale'} in this region
+        {/* Eyebrow + Buy/Rent badge */}
+        <div className="mb-1.5 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-evergreen-foreground/70">
+            <Sprout className="h-3.5 w-3.5" aria-hidden="true" />
+            Agricultural land
+          </span>
+          <span className="inline-flex items-center rounded-full border border-evergreen-foreground/20 bg-evergreen-foreground/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-evergreen-foreground/85">
+            {intent === 'rent' ? 'Rent' : 'Buy'}
           </span>
         </div>
-      )}
+
+        {/* Selected corridor name (e.g. "N towards Brahmavar") */}
+        <h2
+          data-testid="agri-group-selected-label"
+          className="text-xl font-bold leading-tight text-evergreen-foreground truncate"
+        >
+          {groupLabel}
+        </h2>
+
+        {/* Authoritative result count for this corridor */}
+        {!isLoading && !isError && (
+          <p className="mt-3">
+            <span
+              data-testid="agri-group-listing-count"
+              className="text-2xl font-extrabold tabular-nums text-evergreen-foreground"
+            >
+              {listingCount}{' '}
+              <span className="text-sm font-semibold text-evergreen-foreground/80">
+                agri propert{listingCount === 1 ? 'y' : 'ies'} for {intent === 'rent' ? 'rent' : 'sale'} in this region
+              </span>
+            </span>
+          </p>
+        )}
+      </div>
+
+      {/* ── Distance + filters controls ──────────────────────────────────────── */}
+      <div className="px-4 pb-3 shrink-0 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Search distance
+          </p>
+
+          {/* Filters drawer trigger — icon + label + active-filter count so the
+              button itself signals that hidden advanced filters are applied. */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs h-7 px-2 shrink-0"
+                data-testid="agri-filters-trigger"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span
+                    data-testid="agri-filters-count"
+                    aria-label={`${activeFilterCount} active filters`}
+                    className="rounded-full bg-evergreen text-evergreen-foreground text-[10px] font-semibold px-1.5 py-0.5 leading-none"
+                  >
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-80 p-0 overflow-y-auto">
+              <SheetHeader className="sr-only">
+                <SheetTitle>Agricultural land filters</SheetTitle>
+              </SheetHeader>
+              <AgriFiltersPanel
+                acresMin={agriAcresMin}
+                acresMax={agriAcresMax}
+                priceMinRupees={agriPriceMin}
+                priceMaxRupees={agriPriceMax}
+                isAuthenticated={isAuthenticated}
+                onApply={onApplyFilters}
+                onClear={onClearFilters}
+                agriLandCategory={agriLandCategory}
+                agriFarmhouseAvailable={agriFarmhouseAvailable}
+                agriFencingDone={agriFencingDone}
+                agriWaterSource={agriWaterSource}
+              />
+            </SheetContent>
+          </Sheet>
+        </div>
+
+        {/* ── Distance chips (Issue #1445) ───────────────────────────────────── */}
+        {sortedTiers.length > 0 && (
+          <div>
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Distance tiers">
+              {sortedTiers.map((tier) => {
+                const isSelected = selectedMaxKm === tier.maxKm;
+                return (
+                  <button
+                    key={tier.maxKm}
+                    type="button"
+                    data-testid={`distance-chip-${tier.maxKm}`}
+                    onClick={() => onSetMaxKm(tier.maxKm)}
+                    aria-pressed={isSelected}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      isSelected
+                        ? 'border-evergreen bg-evergreen text-evergreen-foreground shadow-sm'
+                        : 'border-border bg-card text-muted-foreground hover:border-evergreen/50 hover:text-foreground',
+                    )}
+                  >
+                    {tier.distanceLabel}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Includes properties at closer distances too.
+            </p>
+          </div>
+        )}
+
+        {/* ── Active advanced-filter chips ─────────────────────────────────────── */}
+        {/* Shown below the distance row so the user can see (and individually
+            clear) which hidden drawer filters are on. */}
+        {activeFilterCount > 0 && (
+          <div
+            data-testid="agri-active-filters"
+            className="flex flex-wrap items-center gap-1.5"
+          >
+            {activeFilterChips.map((chip) => (
+              <span
+                key={chip.key}
+                data-testid="agri-active-filter-chip"
+                className="inline-flex items-center gap-1 rounded-full bg-evergreen-tint text-evergreen px-2 py-0.5 text-xs font-medium"
+              >
+                {chip.label}
+                <button
+                  type="button"
+                  onClick={chip.clear}
+                  data-testid={`agri-active-filter-remove-${chip.key}`}
+                  aria-label={`Remove ${chip.label} filter`}
+                  className="rounded-full hover:bg-evergreen/20 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X className="h-2.5 w-2.5" aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={onClearFilters}
+              data-testid="agri-active-filters-clear-all"
+              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors ml-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* ── Body ─────────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          <div className="flex flex-col gap-3 p-4" aria-busy="true">
+          <div className="flex flex-col gap-2 p-4 pt-1" aria-busy="true">
             <ListingSkeleton />
             <ListingSkeleton />
             <ListingSkeleton />
@@ -407,7 +442,9 @@ export function AgriGroupSelectedPanel({
             data-testid="agri-group-error-state"
             className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center"
           >
-            <AlertCircle className="h-8 w-8 text-destructive" aria-hidden="true" />
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+              <AlertCircle className="h-7 w-7 text-destructive" aria-hidden="true" />
+            </div>
             <p className="text-sm text-muted-foreground">
               Could not load listings for this region.
             </p>
@@ -430,21 +467,17 @@ export function AgriGroupSelectedPanel({
           </div>
         ) : !listings || listings.length === 0 ? (
           <div
-            data-testid={
-              (agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null
-                || agriLandCategory != null || agriFarmhouseAvailable != null || agriFencingDone != null || agriWaterSource != null)
-                ? 'agri-filtered-empty-state'
-                : 'agri-group-empty-state'
-            }
+            data-testid={hasActiveFilters ? 'agri-filtered-empty-state' : 'agri-group-empty-state'}
             className="flex flex-col items-center justify-center h-full p-6 gap-3 text-center"
           >
-            <Sprout
-              className="h-8 w-8 text-muted-foreground/40"
-              aria-hidden="true"
-            />
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-evergreen-tint">
+              <Sprout
+                className="h-7 w-7 text-evergreen/60"
+                aria-hidden="true"
+              />
+            </div>
             <p className="text-sm text-muted-foreground">
-              {(agriAcresMin != null || agriAcresMax != null || agriPriceMin != null || agriPriceMax != null
-                || agriLandCategory != null || agriFarmhouseAvailable != null || agriFencingDone != null || agriWaterSource != null)
+              {hasActiveFilters
                 ? 'No agricultural listings match the selected filters.'
                 : `No agricultural land for ${intent === 'rent' ? 'rent' : 'sale'} in this region`}
             </p>
@@ -458,66 +491,77 @@ export function AgriGroupSelectedPanel({
             </button>
           </div>
         ) : (
-          <div
-            data-testid="agri-group-listings-list"
-            className="divide-y divide-border"
-          >
-            {sortedGroups.map(([localityKey, groupListings]) => {
-              // Issue #1486 — sum computedAreaAcres; omit line when no listing has a non-null value.
-              const acreageValues = groupListings
-                .map((l) => l.computedAreaAcres)
-                .filter((v): v is number => v != null);
-              const totalAcreage =
-                acreageValues.length > 0
-                  ? acreageValues.reduce((sum, v) => sum + v, 0)
-                  : null;
+          <div className="px-4 pb-4 pt-1">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
+              Towns in this corridor
+            </p>
+            <div
+              data-testid="agri-group-listings-list"
+              className="flex flex-col gap-2"
+            >
+              {sortedGroups.map(([localityKey, groupListings]) => {
+                // Issue #1486 — sum computedAreaAcres; omit line when no listing has a non-null value.
+                const acreageValues = groupListings
+                  .map((l) => l.computedAreaAcres)
+                  .filter((v): v is number => v != null);
+                const totalAcreage =
+                  acreageValues.length > 0
+                    ? acreageValues.reduce((sum, v) => sum + v, 0)
+                    : null;
 
-              return (
-                <div key={localityKey} data-testid="agri-group-locality-group">
-                  {/* Locality group header — clicking drills into that town's listings */}
-                  <button
-                    type="button"
-                    data-testid="agri-group-locality-btn"
-                    aria-label={`View ${localityKey} properties`}
-                    onClick={() => onSelectLocality?.(localityKey)}
-                    className="w-full flex flex-col px-4 py-2.5 bg-muted/30 hover:bg-muted/60 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <span className="text-sm font-semibold text-foreground truncate">
-                        {localityKey}
-                      </span>
-                      <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                        {groupListings.length}{' '}
-                        agricultural{' '}
-                        {groupListings.length === 1 ? 'property' : 'properties'}
-                      </span>
-                    </div>
-                    {totalAcreage !== null && (
-                      <span
-                        data-testid="agri-group-locality-acreage"
-                        className="text-xs text-muted-foreground mt-0.5"
-                      >
-                        {/* Round to 2dp first to absorb float accumulation (e.g. 2.0000000000000004),
-                            then check if the rounded value is a whole number. */}
-                        {(function () {
-                          const rounded = Math.round(totalAcreage * 100) / 100;
-                          return rounded % 1 === 0
-                            ? `${rounded} acres total`
-                            : `${rounded.toFixed(2)} acres total`;
-                        })()}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
+                return (
+                  <div key={localityKey} data-testid="agri-group-locality-group">
+                    {/* Locality card — clicking drills into that town's listings */}
+                    <button
+                      type="button"
+                      data-testid="agri-group-locality-btn"
+                      aria-label={`View ${localityKey} properties`}
+                      onClick={() => onSelectLocality?.(localityKey)}
+                      className="group w-full flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 text-left transition-all hover:border-evergreen hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span className="text-sm font-semibold text-foreground truncate">
+                            {localityKey}
+                          </span>
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {groupListings.length}{' '}
+                            agricultural{' '}
+                            {groupListings.length === 1 ? 'property' : 'properties'}
+                          </span>
+                        </div>
+                        {totalAcreage !== null && (
+                          <span
+                            data-testid="agri-group-locality-acreage"
+                            className="mt-1 inline-flex items-center rounded-full bg-evergreen-tint px-2 py-0.5 text-xs font-medium text-evergreen"
+                          >
+                            {/* Round to 2dp first to absorb float accumulation (e.g. 2.0000000000000004),
+                                then check if the rounded value is a whole number. */}
+                            {(function () {
+                              const rounded = Math.round(totalAcreage * 100) / 100;
+                              return rounded % 1 === 0
+                                ? `${rounded} acres total`
+                                : `${rounded.toFixed(2)} acres total`;
+                            })()}
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-evergreen"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
       {/* Issue #1460 — non-blocking truncation notice, rendered only when backend capped results. */}
       {truncated && (
-        <p className="text-xs text-muted-foreground mt-2 px-4">
+        <p className="text-xs text-muted-foreground py-2 px-4 border-t border-border shrink-0">
           Showing first {limit} plots. Zoom in or choose a smaller region to narrow results.
         </p>
       )}
