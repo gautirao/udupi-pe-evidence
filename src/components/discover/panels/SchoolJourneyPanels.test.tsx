@@ -12,9 +12,14 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SchoolSelectedPanel } from './SchoolJourneyPanels';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
+
+function makeQC() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
 
 // Minimal listing factory
 function makeListing(id: string): DiscoverCityListingItem {
@@ -47,19 +52,21 @@ const mockSchool: SchoolResult = {
 
 function renderPanel(props: Partial<React.ComponentProps<typeof SchoolSelectedPanel>> = {}) {
   return render(
-    <MemoryRouter>
-      <SchoolSelectedPanel
-        school={mockSchool}
-        listings={[makeListing('l-1'), makeListing('l-2')]}
-        isLoadingListings={false}
-        radiusKm={2}
-        onRadiusChange={vi.fn()}
-        isAuthenticated={true}
-        onStartOver={vi.fn()}
-        intent="buy"
-        {...props}
-      />
-    </MemoryRouter>,
+    <QueryClientProvider client={makeQC()}>
+      <MemoryRouter>
+        <SchoolSelectedPanel
+          school={mockSchool}
+          listings={[makeListing('l-1'), makeListing('l-2')]}
+          isLoadingListings={false}
+          radiusKm={2}
+          onRadiusChange={vi.fn()}
+          isAuthenticated={true}
+          onStartOver={vi.fn()}
+          intent="buy"
+          {...props}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -161,13 +168,14 @@ describe('SchoolSelectedPanel — loading and empty states', () => {
     expect(skeletons.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders empty state message when no listings', () => {
+  it('renders school-radius-empty-state when no listings (ReTrends redesign)', () => {
     renderPanel({ listings: [], isLoadingListings: false });
-    expect(screen.getByTestId('empty-state-message')).toBeDefined();
+    expect(screen.getByTestId('school-radius-empty-state')).toBeDefined();
   });
 
-  it('increase radius button appears in empty state', () => {
-    renderPanel({ listings: [], isLoadingListings: false });
-    expect(screen.getByTestId('increase-radius-btn')).toBeDefined();
+  it('try-radius button appears in empty state when larger radius options exist', () => {
+    // radiusKm=2 → effectiveRadius=2; RADIUS_OPTIONS=[3,5,10] all > 2 → try-radius-5-btn present
+    renderPanel({ listings: [], isLoadingListings: false, radiusKm: 2 });
+    expect(screen.getByTestId('try-radius-5-btn')).toBeDefined();
   });
 });

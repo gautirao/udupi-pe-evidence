@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronLeft, GraduationCap, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, GraduationCap, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,9 +31,351 @@ import { AGRICULTURAL_LAND_PROPERTY_TYPE } from '@/lib/listing-constants';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
+import { haversineKm } from '@/lib/geo';
 
-const RADIUS_OPTIONS = [1, 2, 3, 5] as const;
+// ReTrends redesign: 3/5/10 km replaces 1/2/3/5 km
+const RADIUS_OPTIONS = [3, 5, 10] as const;
 type RadiusKm = (typeof RADIUS_OPTIONS)[number];
+
+// ─── Shared local helpers ─────────────────────────────────────────────────────
+
+/** Buy/Rent-aware noun for the homes count — never the vague "listings". */
+function homesNoun(intent: DiscoverIntent, n: number): string {
+  if (intent === 'rent') return n === 1 ? 'rental available' : 'rentals available';
+  return n === 1 ? 'home for sale' : 'homes for sale';
+}
+
+/** Title-case a kebab slug for display (e.g. "university-belt" → "University Belt"). */
+function prettifySlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
+/**
+ * Snap a raw radiusKm to a supported chip value so exactly one radius chip is always
+ * active. Valid 3/5/10 pass through unchanged. Null/non-finite and legacy out-of-set
+ * values (e.g. 1/2 from older URLs) fall back to the NEAREST option (ties resolve to
+ * the smaller radius), guaranteeing the UI never renders with zero active chips.
+ * Built on clampSchoolRadiusKm so the existing sub-minimum normalisation still applies.
+ */
+function snapRadiusKm(radiusKm: number | null | undefined): RadiusKm {
+  const raw = clampSchoolRadiusKm(radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
+  if ((RADIUS_OPTIONS as readonly number[]).includes(raw)) return raw as RadiusKm;
+  return RADIUS_OPTIONS.reduce<RadiusKm>(
+    (best, opt) => (Math.abs(opt - raw) < Math.abs(best - raw) ? opt : best),
+    RADIUS_OPTIONS[0],
+  );
+}
+
+// ─── Shared sub-components for the redesigned school-radius results panels ────
+
+interface SchoolSummaryBandProps {
+  school: SchoolResult;
+  listings: DiscoverCityListingItem[];
+  intent: DiscoverIntent;
+  /** Breadcrumb: zone slug (groupId) — prettified; null if absent. */
+  groupId?: string | null;
+  /** Breadcrumb: area label (e.g. "Manipal"); null if absent. */
+  areaLabel?: string | null;
+  /** Called when the user clicks "Change school". */
+  onChangeSchool: () => void;
+}
+
+function SchoolSummaryBand({
+  school,
+  listings,
+  intent,
+  groupId,
+  areaLabel,
+  onChangeSchool,
+}: SchoolSummaryBandProps) {
+  const boardDisplay = school.board ?? school.boardType ?? null;
+  const count = listings.length;
+
+  return (
+    <div
+      className="m-4 rounded-xl bg-primary p-5 text-primary-foreground shadow-md"
+      data-testid="school-summary-band"
+    >
+      {/* "Change school" affordance */}
+      <button
+        type="button"
+        onClick={onChangeSchool}
+        className="mb-3 flex items-center gap-1 text-xs text-primary-foreground/70 hover:text-primary-foreground transition-colors"
+        data-testid="change-school-btn"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+        Change school
+      </button>
+
+      {/* Breadcrumb */}
+      {(groupId || areaLabel || school.name) && (
+        <nav aria-label="School breadcrumb" className="mb-2.5">
+          <ol className="flex flex-wrap items-center gap-1.5 text-xs text-primary-foreground/60">
+            {groupId && (
+              <>
+                <li>{prettifySlug(groupId)}</li>
+                <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
+              </>
+            )}
+            {areaLabel && (
+              <>
+                <li>{areaLabel}</li>
+                <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
+              </>
+            )}
+            <li className="font-semibold text-primary-foreground/90" aria-current="page">
+              {school.name}
+            </li>
+          </ol>
+        </nav>
+      )}
+
+      {/* Eyebrow + board badge */}
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-primary-foreground/60">
+          Selected school
+        </span>
+        {boardDisplay && (
+          <span className="inline-flex items-center rounded-full border border-primary-foreground/20 bg-primary-foreground/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground/80">
+            {boardDisplay}
+          </span>
+        )}
+      </div>
+
+      {/* School name */}
+      <h2 className="text-xl font-bold leading-tight text-primary-foreground" data-testid="school-summary-name">
+        {school.name}
+      </h2>
+
+      {/* Address */}
+      {school.address && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-primary-foreground/70">
+          <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {school.address}
+        </p>
+      )}
+
+      {/* Count */}
+      <p className="mt-3 text-2xl font-extrabold tabular-nums text-primary-foreground" data-testid="school-summary-count">
+        {count}{' '}
+        <span className="text-base font-semibold text-primary-foreground/80">
+          {homesNoun(intent, count)}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+interface RadiusChipsProps {
+  effectiveRadius: number;
+  listingCount: number;
+  intent: DiscoverIntent;
+  onRadiusChange: (km: number) => void;
+  /** testid prefix — "radius-btn" for SchoolSelectedPanel, "combined-radius-btn" for AreaSchoolCombinedPanel */
+  testIdPrefix?: string;
+}
+
+function RadiusChips({
+  effectiveRadius,
+  listingCount,
+  intent,
+  onRadiusChange,
+  testIdPrefix = 'radius-btn',
+}: RadiusChipsProps) {
+  const noun = intent === 'rent' ? 'rental' : 'home';
+  return (
+    <div className="px-4 py-3 border-b border-border">
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">
+        Search radius
+      </p>
+      <div className="flex gap-2" role="group" aria-label="Select search radius">
+        {RADIUS_OPTIONS.map((km) => {
+          const isActive = effectiveRadius === km;
+          return (
+            <button
+              key={km}
+              type="button"
+              aria-pressed={isActive}
+              data-testid={`${testIdPrefix}-${km}`}
+              onClick={() => onRadiusChange(km)}
+              className={cn(
+                'flex-1 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
+                isActive
+                  ? 'border-[hsl(var(--plum))] bg-[hsl(var(--plum))] text-white shadow-sm'
+                  : 'border-border bg-card text-muted-foreground hover:border-[hsl(var(--plum))]/50 hover:text-foreground',
+              )}
+            >
+              {km} km
+              {/* Only show count on the active chip — cannot honestly show per-chip
+                  counts for other radii without a separate fetch per radius. */}
+              {isActive && (
+                <span className="ml-1 opacity-80">
+                  · {listingCount} {listingCount === 1 ? noun : `${noun}s`}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+interface RadiusResultHeadingProps {
+  listingCount: number;
+  effectiveRadius: number;
+  intent: DiscoverIntent;
+}
+
+function RadiusResultHeading({ listingCount, effectiveRadius, intent }: RadiusResultHeadingProps) {
+  const headingText =
+    intent === 'rent'
+      ? 'Rentals near this school'
+      : 'Homes for sale near this school';
+
+  return (
+    <div
+      className="flex items-center justify-between px-4 py-2 border-b border-border"
+      data-testid="radius-result-heading"
+    >
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+        {headingText}
+      </p>
+      <p className="text-xs font-semibold tabular-nums text-muted-foreground">
+        <span data-testid="radius-result-count">{listingCount}</span> within {effectiveRadius} km
+      </p>
+    </div>
+  );
+}
+
+interface SchoolRadiusEmptyStateProps {
+  school: SchoolResult | null;
+  areaLabel: string | null;
+  effectiveRadius: number;
+  intent: DiscoverIntent;
+  hasPropertyFilters: boolean;
+  onRadiusChange: (km: number) => void;
+  onClearSchool: () => void;
+  onClearPropertyFilters: () => void;
+}
+
+function SchoolRadiusEmptyState({
+  school,
+  areaLabel,
+  effectiveRadius,
+  intent,
+  hasPropertyFilters,
+  onRadiusChange,
+  onClearSchool,
+  onClearPropertyFilters,
+}: SchoolRadiusEmptyStateProps) {
+  const noun = intent === 'rent' ? 'rentals' : 'homes';
+  // Only offer "Try N km" for radii larger than current.
+  const largerOptions = RADIUS_OPTIONS.filter((km) => km > effectiveRadius);
+
+  return (
+    <div
+      className="flex flex-col items-center justify-center h-full p-6 text-center"
+      data-testid="school-radius-empty-state"
+    >
+      <GraduationCap className="h-8 w-8 text-muted-foreground/40 mb-2" aria-hidden />
+      <p className="text-sm font-semibold text-foreground mb-1">
+        No {noun} found within {effectiveRadius} km{school != null ? ` of ${school.name}` : ''}
+      </p>
+      <p className="text-xs text-muted-foreground mb-4">
+        Try a wider radius or explore the broader area.
+      </p>
+      <div className="flex flex-col gap-2 w-full max-w-xs">
+        {largerOptions.map((km) => (
+          <Button
+            key={km}
+            variant="outline"
+            size="sm"
+            onClick={() => onRadiusChange(km)}
+            data-testid={`try-radius-${km}-btn`}
+          >
+            Try {km} km
+          </Button>
+        ))}
+        {areaLabel && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClearSchool}
+            data-testid="view-all-in-area-btn"
+          >
+            View all {noun} in {areaLabel}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearSchool}
+          data-testid="change-school-empty-btn"
+        >
+          Change school
+        </Button>
+        {hasPropertyFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClearPropertyFilters}
+            data-testid="clear-filters-btn"
+          >
+            Clear property filters
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface MissingCoordsEmptyStateProps {
+  school: SchoolResult;
+  areaLabel: string | null;
+  onClearSchool: () => void;
+}
+
+function MissingCoordsEmptyState({ school, areaLabel, onClearSchool }: MissingCoordsEmptyStateProps) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center h-full p-6 text-center"
+      data-testid="missing-coords-empty-state"
+    >
+      <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" aria-hidden />
+      <p className="text-sm font-semibold text-foreground mb-1">
+        Distance unavailable for {school.name}
+      </p>
+      <p className="text-xs text-muted-foreground mb-4">
+        We can&apos;t calculate distance for this school yet.
+      </p>
+      <div className="flex flex-col gap-2 w-full max-w-xs">
+        {areaLabel && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClearSchool}
+            data-testid="view-all-in-area-missing-coords-btn"
+          >
+            View all homes in {areaLabel}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearSchool}
+          data-testid="choose-another-school-btn"
+        >
+          Choose another school
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Shared placeholder ───────────────────────────────────────────────────────
 
@@ -686,6 +1028,7 @@ export function SchoolSelectedPanel({
   onHoverListing,
 }: SchoolSelectedPanelProps) {
   const navigate = useNavigate();
+  const [urlState] = useDiscoverUrlState();
 
   // Issue #1547 — scroll selected card into view when selection changes.
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
@@ -700,7 +1043,7 @@ export function SchoolSelectedPanel({
   // Issue #1210: clamp sub-minimum/non-finite radii (e.g. ?radiusKm=0) up to the
   // minimum so the radius control shows a selected button and the empty-state text
   // never reads "within 0 km". `??` alone misses 0 (not null/undefined).
-  const effectiveRadius = clampSchoolRadiusKm(radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
+  const effectiveRadius = snapRadiusKm(radiusKm);
 
   // Intentionally scoped to the four filters surfaced in the "Clear filters" chip
   // (price range, bedrooms, property types). Toggle filters (sellerTypes, backOnMarket,
@@ -713,18 +1056,6 @@ export function SchoolSelectedPanel({
     filters.priceMax != null,
   );
 
-  // Cycle to next radius value; stays at 5 if already at max.
-  const nextRadius = (): RadiusKm => {
-    const idx = RADIUS_OPTIONS.indexOf(effectiveRadius as RadiusKm);
-    return idx >= 0 && idx < RADIUS_OPTIONS.length - 1
-      ? RADIUS_OPTIONS[idx + 1]
-      : RADIUS_OPTIONS[RADIUS_OPTIONS.length - 1];
-  };
-
-  const handleIncreaseRadius = () => {
-    onRadiusChange(nextRadius());
-  };
-
   const handleClearPropertyFilters = useCallback(() => {
     if (!onFiltersChange) return;
     onFiltersChange({
@@ -736,7 +1067,22 @@ export function SchoolSelectedPanel({
     });
   }, [filters, onFiltersChange]);
 
-  const isAtMaxRadius = effectiveRadius >= RADIUS_OPTIONS[RADIUS_OPTIONS.length - 1];
+  // "Change school" navigates back (clears schoolId) — onBack is the correct handler.
+  const handleChangeSchool = useCallback(() => {
+    onBack?.();
+  }, [onBack]);
+
+  // Derive area label from URL groupId/areaKey for breadcrumb if available.
+  const groupId = urlState.groupId ?? null;
+  // areaLabel is not directly on urlState — extract from selectedArea if passed via school.areaKey
+  const areaLabelForBreadcrumb: string | null = null; // SchoolSelectedPanel has no selectedArea prop
+
+  // Detect missing school coordinates — listing fetch is disabled without coords so list will be empty.
+  // SchoolResult types latitude/longitude as number, but legacy rows may have null at runtime.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hasMissingCoords =
+    school != null &&
+    ((school.latitude as any) == null || (school.longitude as any) == null);
 
   return (
     <>
@@ -744,7 +1090,7 @@ export function SchoolSelectedPanel({
           chevron before the title — do NOT add a second Back button in the actions
           slot here (Option B from Issue #1143 review: unified affordance position). */}
       <PanelHeader
-        title={school ? school.name : 'School'}
+        title="Find homes near a school"
         journey={journey}
         onStartOver={onStartOver}
         onBack={onBack}
@@ -771,18 +1117,23 @@ export function SchoolSelectedPanel({
         }
       />
 
-      {/* School info — radius is shown via the ActiveContextChips school chip, not here */}
-      {school && (school.board || school.boardType || school.address) && (
-        <div className="px-4 py-3 border-b border-border">
-          {(school.board || school.boardType) && (
-            <p className="text-xs text-muted-foreground mb-0.5">
-              {school.board ?? school.boardType}
-            </p>
-          )}
-          {school.address && (
-            <p className="text-xs text-muted-foreground truncate">{school.address}</p>
-          )}
+      {/* School summary band — skeleton during cold load */}
+      {school == null ? (
+        <div className="m-4 rounded-xl bg-primary/20 p-5 shadow-md" data-testid="school-summary-skeleton">
+          <Skeleton className="h-3 w-24 mb-3 opacity-40" />
+          <Skeleton className="h-6 w-3/4 mb-2 opacity-40" />
+          <Skeleton className="h-3 w-1/2 mb-3 opacity-40" />
+          <Skeleton className="h-8 w-1/3 opacity-40" />
         </div>
+      ) : (
+        <SchoolSummaryBand
+          school={school}
+          listings={listings}
+          intent={intent}
+          groupId={groupId}
+          areaLabel={areaLabelForBreadcrumb}
+          onChangeSchool={handleChangeSchool}
+        />
       )}
 
       {/* Issue #1261 — the anonymous school-radius listing set is now sourced from the
@@ -791,28 +1142,14 @@ export function SchoolSelectedPanel({
           listing set are therefore consistent for anon users, so the prior #1193
           "Showing homes in this area only" limitation note has been removed. */}
 
-      {/* Radius selector */}
-      <div className="px-4 py-3 border-b border-border">
-        <p className="text-xs font-medium text-muted-foreground mb-2">Radius</p>
-        <div className="flex gap-2" role="group" aria-label="Select search radius">
-          {RADIUS_OPTIONS.map((km) => (
-            <Button
-              key={km}
-              variant={effectiveRadius === km ? 'default' : 'outline'}
-              size="sm"
-              className={cn(
-                'h-8 text-xs px-3 flex-1',
-                effectiveRadius === km && 'bg-primary text-primary-foreground',
-              )}
-              onClick={() => onRadiusChange(km)}
-              aria-pressed={effectiveRadius === km}
-              data-testid={`radius-btn-${km}`}
-            >
-              {km} km
-            </Button>
-          ))}
-        </div>
-      </div>
+      {/* Radius chips */}
+      <RadiusChips
+        effectiveRadius={effectiveRadius}
+        listingCount={listings.length}
+        intent={intent}
+        onRadiusChange={onRadiusChange}
+        testIdPrefix="radius-btn"
+      />
 
       {/* Issue #1115 — bounded-search CTA.
           Auth users see a "Search within N km" button before markers are fetched.
@@ -831,11 +1168,7 @@ export function SchoolSelectedPanel({
           </Button>
         </div>
       )}
-      {/* Issue #1115 DEFECT 3 — suppress the count during an in-flight refetch: the
-          listing body is already dimmed (#1170 pattern) but the count would otherwise
-          stay fully visible with a stale number, undermining the "honest count" (AC5).
-          Mirrors the isLoadingListings guard: both hide the label during unsettled state.
-          The condition uses isFetching (available as a prop) consistently with the dim. */}
+      {/* Issue #1115 DEFECT 3 — suppress the count during an in-flight refetch */}
       {isAuthenticated && boundedSearchTriggered && !isLoadingListings && !isFetching && (
         <p
           className="px-4 py-2 text-xs text-muted-foreground border-b border-border"
@@ -846,6 +1179,15 @@ export function SchoolSelectedPanel({
           {intent === 'rent' ? 'rent' : 'sale'} found
           {school ? ` near ${school.name}` : ''}
         </p>
+      )}
+
+      {/* Result heading — only when we have listings or are loaded */}
+      {!isLoadingListings && !hasMissingCoords && listings.length > 0 && (
+        <RadiusResultHeading
+          listingCount={listings.length}
+          effectiveRadius={effectiveRadius}
+          intent={intent}
+        />
       )}
 
       {/* Listing body — Issue #1170: AreaSelectedPanel-style dim on an in-flight
@@ -868,55 +1210,57 @@ export function SchoolSelectedPanel({
               </div>
             ))}
           </div>
+        ) : hasMissingCoords ? (
+          <MissingCoordsEmptyState
+            school={school!}
+            areaLabel={areaLabelForBreadcrumb}
+            onClearSchool={handleChangeSchool}
+          />
         ) : listings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
-            <p className="text-sm text-muted-foreground mb-4" data-testid="empty-state-message">
-              No properties for {intent === 'rent' ? 'rent' : 'sale'} found within {effectiveRadius} km
-              {school ? ` of ${school.name}` : ''}
-            </p>
-            <div className="flex flex-col gap-2 w-full max-w-xs">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleIncreaseRadius}
-                disabled={isAtMaxRadius}
-                data-testid="increase-radius-btn"
-              >
-                Increase radius
-              </Button>
-              {hasPropertyFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearPropertyFilters}
-                  data-testid="clear-filters-btn"
-                >
-                  Clear property filters
-                </Button>
-              )}
-            </div>
-          </div>
+          <SchoolRadiusEmptyState
+            school={school!}
+            areaLabel={areaLabelForBreadcrumb}
+            effectiveRadius={effectiveRadius}
+            intent={intent}
+            hasPropertyFilters={hasPropertyFilters}
+            onRadiusChange={onRadiusChange}
+            onClearSchool={handleChangeSchool}
+            onClearPropertyFilters={handleClearPropertyFilters}
+          />
         ) : (
           <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
-            {listings.map((listing) => (
-              <div
-                key={listing.id}
-                ref={(node) => {
-                  if (node) cardRefs.current.set(listing.id, node);
-                  else cardRefs.current.delete(listing.id);
-                }}
-              >
-                <PropertyCard
-                  listing={listing}
-                  isAuthenticated={isAuthenticated}
-                  onNavigate={() => navigate(`/listing/${listing.id}`)}
-                  isSelected={selectedListingId === listing.id}
-                  onSelect={onSelectListing}
-                  onHover={onHoverListing}
-                />
-              </div>
-            ))}
+            {listings.map((listing) => {
+              // Compute real haversine distance — only when both school and listing have coords.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const distanceKm =
+                school != null &&
+                (school.latitude as any) != null &&
+                (school.longitude as any) != null &&
+                listing.lat != null &&
+                listing.lon != null
+                  ? haversineKm(school.latitude, school.longitude, listing.lat, listing.lon)
+                  : null;
+
+              return (
+                <div
+                  key={listing.id}
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(listing.id, node);
+                    else cardRefs.current.delete(listing.id);
+                  }}
+                >
+                  <PropertyCard
+                    listing={listing}
+                    isAuthenticated={isAuthenticated}
+                    onNavigate={() => navigate(`/listing/${listing.id}`)}
+                    isSelected={selectedListingId === listing.id}
+                    onSelect={onSelectListing}
+                    onHover={onHoverListing}
+                    distanceKm={distanceKm}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -956,6 +1300,20 @@ export interface AreaSchoolCombinedPanelProps {
   journey?: DiscoverJourney | null;
   filtersContent?: React.ReactNode;
   activeContextChips?: React.ReactNode;
+  /** ReTrends redesign — Buy/Rent intent for summary/empty-state copy. Default 'buy'. */
+  intent?: DiscoverIntent;
+  /**
+   * ReTrends redesign — id of the currently selected listing (from `listing` URL param).
+   * Drives the copper selected card frame + scroll-into-view. Mirrors SchoolSelectedPanel.
+   */
+  selectedListingId?: string | null;
+  /** Card activation callback for URL sync. Mirrors SchoolSelectedPanel. */
+  onSelectListing?: (id: string) => void;
+  /**
+   * Ephemeral hover/focus signal for card→marker highlight.
+   * Not safely wirable for school-first (RISK-3), accepted here for prop-shape parity.
+   */
+  onHoverListing?: (id: string | null) => void;
 }
 
 export function AreaSchoolCombinedPanel({
@@ -976,13 +1334,26 @@ export function AreaSchoolCombinedPanel({
   journey,
   filtersContent,
   activeContextChips,
+  intent = 'buy',
+  selectedListingId = null,
+  onSelectListing,
+  onHoverListing,
 }: AreaSchoolCombinedPanelProps) {
   const navigate = useNavigate();
+  const [urlState] = useDiscoverUrlState();
 
-  // Issue #1210: clamp sub-minimum/non-finite radii (e.g. ?radiusKm=0) up to the
-  // minimum so the radius control shows a selected button and the empty-state text
-  // never reads "within 0 km". `??` alone misses 0 (not null/undefined).
-  const effectiveRadius = clampSchoolRadiusKm(radiusKm ?? DEFAULT_SCHOOL_RADIUS_KM);
+  // Issue #1547 — scroll selected card into view when selection changes.
+  const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  useEffect(() => {
+    if (!selectedListingId) return;
+    const node = cardRefs.current.get(selectedListingId);
+    if (node && typeof node.scrollIntoView === 'function') {
+      node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedListingId]);
+
+  // Issue #1210: clamp sub-minimum/non-finite radii up to minimum.
+  const effectiveRadius = snapRadiusKm(radiusKm);
 
   const hasPropertyFilters = Boolean(
     filters.propertyTypes?.length ||
@@ -990,17 +1361,6 @@ export function AreaSchoolCombinedPanel({
     filters.priceMin != null ||
     filters.priceMax != null,
   );
-
-  const nextRadius = (): RadiusKm => {
-    const idx = RADIUS_OPTIONS.indexOf(effectiveRadius as RadiusKm);
-    return idx >= 0 && idx < RADIUS_OPTIONS.length - 1
-      ? RADIUS_OPTIONS[idx + 1]
-      : RADIUS_OPTIONS[RADIUS_OPTIONS.length - 1];
-  };
-
-  const handleIncreaseRadius = () => {
-    onRadiusChange(nextRadius());
-  };
 
   const handleClearPropertyFilters = useCallback(() => {
     if (!onFiltersChange) return;
@@ -1013,24 +1373,22 @@ export function AreaSchoolCombinedPanel({
     });
   }, [filters, onFiltersChange]);
 
-  const isAtMaxRadius = effectiveRadius >= RADIUS_OPTIONS[RADIUS_OPTIONS.length - 1];
-
-  // Derive the human-readable title string. While either dimension is still loading,
-  // fall back gracefully — the title is cosmetic and does not block the listing body.
+  // Derive display values.
   const areaLabel = selectedArea?.areaLabel ?? null;
-  const schoolName = selectedSchool?.name ?? null;
+  const groupId = urlState.groupId ?? null;
 
-  const title =
-    areaLabel && schoolName
-      ? `Homes in ${areaLabel} near ${schoolName}`
-      : 'Area + School';
+  // Detect missing school coordinates — legacy rows may have null at runtime despite number type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const hasMissingCoords =
+    selectedSchool != null &&
+    ((selectedSchool.latitude as any) == null || (selectedSchool.longitude as any) == null);
 
   // Loading skeleton — shown when either dimension is still resolving on cold load.
   if (!selectedArea || !selectedSchool) {
     return (
       <>
         <PanelHeader
-          title="Area + School"
+          title="Find homes near a school"
           journey={journey}
           onStartOver={onStartOver}
           onBack={onBack}
@@ -1050,43 +1408,10 @@ export function AreaSchoolCombinedPanel({
     );
   }
 
-  // Area-scoping chips — placed after the null-guard so they only render when both
-  // selectedArea and selectedSchool are resolved (areaLabel and schoolName are non-null here).
-  const combinedChips = (
-    <div className="flex flex-wrap gap-1" data-testid="combined-chips">
-      {areaLabel && (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-          onClick={onClearArea}
-          aria-label={`Clear area: ${areaLabel}`}
-          data-testid="clear-area-chip"
-        >
-          <MapPin className="h-3 w-3 shrink-0" />
-          {areaLabel}
-          <span aria-hidden="true" className="ml-0.5">×</span>
-        </button>
-      )}
-      {schoolName && (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-          onClick={onClearSchool}
-          aria-label={`Clear school: ${schoolName}`}
-          data-testid="clear-school-chip"
-        >
-          <GraduationCap className="h-3 w-3 shrink-0" />
-          {schoolName}
-          <span aria-hidden="true" className="ml-0.5">×</span>
-        </button>
-      )}
-    </div>
-  );
-
   return (
     <>
       <PanelHeader
-        title={title}
+        title="Find homes near a school"
         journey={journey}
         onStartOver={onStartOver}
         onBack={onBack}
@@ -1113,38 +1438,35 @@ export function AreaSchoolCombinedPanel({
         }
       />
 
-      {/* Dimension chips */}
-      <div className="px-4 py-2 border-b border-border">
-        {combinedChips}
-      </div>
+      {/* Ink-navy school summary band */}
+      <SchoolSummaryBand
+        school={selectedSchool}
+        listings={listings}
+        intent={intent}
+        groupId={groupId}
+        areaLabel={areaLabel}
+        onChangeSchool={onClearSchool}
+      />
 
-      {/* Issue #1261 — the anonymous school-radius listing set is now sourced from the
-          PUBLIC /school-radius-listings endpoint (cross-area ST_DWithin), so the radius
-          circle and the listing set are consistent for anon users. The prior #1193
-          "Showing homes in this area only" limitation note has been removed. */}
+      {/* Issue #1261 — anonymous school-radius listing set is from the PUBLIC endpoint. */}
 
-      {/* Radius selector */}
-      <div className="px-4 py-3 border-b border-border">
-        <p className="text-xs font-medium text-muted-foreground mb-2">Radius</p>
-        <div className="flex gap-2" role="group" aria-label="Select search radius">
-          {RADIUS_OPTIONS.map((km) => (
-            <Button
-              key={km}
-              variant={effectiveRadius === km ? 'default' : 'outline'}
-              size="sm"
-              className={cn(
-                'h-8 text-xs px-3 flex-1',
-                effectiveRadius === km && 'bg-primary text-primary-foreground',
-              )}
-              onClick={() => onRadiusChange(km)}
-              aria-pressed={effectiveRadius === km}
-              data-testid={`combined-radius-btn-${km}`}
-            >
-              {km} km
-            </Button>
-          ))}
-        </div>
-      </div>
+      {/* Radius chips */}
+      <RadiusChips
+        effectiveRadius={effectiveRadius}
+        listingCount={listings.length}
+        intent={intent}
+        onRadiusChange={onRadiusChange}
+        testIdPrefix="combined-radius-btn"
+      />
+
+      {/* Result heading — above the grid, only when loaded with results */}
+      {!isLoadingListings && !hasMissingCoords && listings.length > 0 && (
+        <RadiusResultHeading
+          listingCount={listings.length}
+          effectiveRadius={effectiveRadius}
+          intent={intent}
+        />
+      )}
 
       {/* Listing body — Issue #1170: dim on in-flight refetch, not initial skeleton load. */}
       <div
@@ -1164,45 +1486,61 @@ export function AreaSchoolCombinedPanel({
               </div>
             ))}
           </div>
+        ) : hasMissingCoords ? (
+          <MissingCoordsEmptyState
+            school={selectedSchool}
+            areaLabel={areaLabel}
+            onClearSchool={onClearSchool}
+          />
         ) : listings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
-            <p className="text-sm text-muted-foreground mb-4" data-testid="combined-empty-state-message">
-              No properties found within {effectiveRadius} km
-              {' '}of {selectedSchool.name} in {selectedArea.areaLabel}
-            </p>
-            <div className="flex flex-col gap-2 w-full max-w-xs">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleIncreaseRadius}
-                disabled={isAtMaxRadius}
-                data-testid="combined-increase-radius-btn"
-              >
-                Increase radius
-              </Button>
-              {hasPropertyFilters && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleClearPropertyFilters}
-                  data-testid="combined-clear-filters-btn"
-                >
-                  Clear property filters
-                </Button>
-              )}
-            </div>
-          </div>
+          <SchoolRadiusEmptyState
+            school={selectedSchool}
+            areaLabel={areaLabel}
+            effectiveRadius={effectiveRadius}
+            intent={intent}
+            hasPropertyFilters={hasPropertyFilters}
+            onRadiusChange={onRadiusChange}
+            onClearSchool={onClearSchool}
+            onClearPropertyFilters={handleClearPropertyFilters}
+          />
         ) : (
-          <div className="divide-y divide-border">
-            {listings.map((listing) => (
-              <PropertyCard
-                key={listing.id}
-                listing={listing}
-                isAuthenticated={isAuthenticated}
-                onNavigate={() => navigate(`/listing/${listing.id}`)}
-              />
-            ))}
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
+            {listings.map((listing) => {
+              // Compute real haversine distance — only when both school and listing have coords.
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const distanceKm =
+                (selectedSchool.latitude as any) != null &&
+                (selectedSchool.longitude as any) != null &&
+                listing.lat != null &&
+                listing.lon != null
+                  ? haversineKm(
+                      selectedSchool.latitude,
+                      selectedSchool.longitude,
+                      listing.lat,
+                      listing.lon,
+                    )
+                  : null;
+
+              return (
+                <div
+                  key={listing.id}
+                  ref={(node) => {
+                    if (node) cardRefs.current.set(listing.id, node);
+                    else cardRefs.current.delete(listing.id);
+                  }}
+                >
+                  <PropertyCard
+                    listing={listing}
+                    isAuthenticated={isAuthenticated}
+                    onNavigate={() => navigate(`/listing/${listing.id}`)}
+                    isSelected={selectedListingId === listing.id}
+                    onSelect={onSelectListing}
+                    onHover={onHoverListing}
+                    distanceKm={distanceKm}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

@@ -353,10 +353,10 @@ describe('DiscoverRightPanel — state machine routing', () => {
         onRadiusChange={vi.fn()}
       />,
     );
-    // SchoolSelectedPanel renders — verify radius selector is present
+    // SchoolSelectedPanel renders — verify radius selector is present (RADIUS_OPTIONS=[3,5,10])
     expect(screen.getByTestId('radius-btn-3')).toBeInTheDocument();
-    expect(screen.getByTestId('radius-btn-1')).toBeInTheDocument();
     expect(screen.getByTestId('radius-btn-5')).toBeInTheDocument();
+    expect(screen.getByTestId('radius-btn-10')).toBeInTheDocument();
   });
 
   it('panelContent="area-school-combined" renders AreaSchoolCombinedPanel', () => {

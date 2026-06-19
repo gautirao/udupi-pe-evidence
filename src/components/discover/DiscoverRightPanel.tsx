@@ -1130,6 +1130,10 @@ export function DiscoverRightPanel({
             journey={journey}
             filtersContent={filtersContent}
             activeContextChips={activeContextChips}
+            intent={intent}
+            selectedListingId={selectedListingId}
+            onSelectListing={onSelectResultListing}
+            onHoverListing={onHoverResultListing}
           />
         );
 

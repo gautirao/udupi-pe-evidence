@@ -50,7 +50,7 @@ export function buildLocationText(
     .join(', ');
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface PropertyCardProps {
   listing: DiscoverCityListingItem;
@@ -82,6 +82,13 @@ export interface PropertyCardProps {
    * the listing's own locality is shown. Never fabricated.
    */
   areaLabel?: string;
+  /**
+   * ReTrends redesign — real haversine distance from the selected school to this listing.
+   * When a finite number, renders a plum proximity badge (e.g. "2.2 km from school")
+   * overlaid on the image bottom-left. When null/undefined/non-finite, renders nothing —
+   * never fabricated. Computed by the parent panel from real school + listing coordinates.
+   */
+  distanceKm?: number | null;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -94,6 +101,7 @@ export function PropertyCard({
   onSelect,
   onHover,
   areaLabel,
+  distanceKm,
 }: PropertyCardProps) {
   const trust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
 
@@ -118,6 +126,9 @@ export function PropertyCard({
     listing.totalFloors != null ||
     listing.parkingCount != null ||
     listing.furnishingStatus;
+
+  // Only render distance badge when a real finite value is provided — never fabricate.
+  const showDistanceBadge = distanceKm != null && Number.isFinite(distanceKm);
 
   return (
     <div
@@ -148,7 +159,7 @@ export function PropertyCard({
         isSelected ? 'border-copper ring-2 ring-copper/40' : 'border-border',
       )}
     >
-      {/* Image header (full-bleed) with Trusted badge overlay */}
+      {/* Image header (full-bleed) with trust badge + distance badge overlays */}
       <div className="relative h-44 w-full overflow-hidden bg-muted">
         {listing.primaryImageUrl ? (
           <img
@@ -171,6 +182,15 @@ export function PropertyCard({
             >
               <trust.icon className="h-3 w-3" />
               {trust.label}
+            </span>
+          </div>
+        )}
+        {/* Plum proximity badge — bottom-left, only when real finite distance provided */}
+        {showDistanceBadge && (
+          <div className="absolute bottom-2.5 left-2.5" data-testid="distance-badge">
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium shadow-sm tabular-nums bg-[hsl(var(--plum))] text-white">
+              <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+              {distanceKm!.toFixed(1)} km from school
             </span>
           </div>
         )}

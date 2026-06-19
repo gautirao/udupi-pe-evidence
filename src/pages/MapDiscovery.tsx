@@ -8,6 +8,12 @@ import { PropertyMap, PropertyListingWithImages } from '@/components/map/Propert
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
+import {
+  SchoolJourneyBreadcrumb,
+  SchoolRadiusLegend,
+  isSchoolRadiusOverlayState,
+  prettifyZoneSlug,
+} from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { derivePanelContent } from '@/utils/discoverPanelState';
 import type { DiscoverPanelContent } from '@/utils/discoverPanelState';
@@ -1742,6 +1748,10 @@ export default function MapDiscovery() {
   // These are already available as props in MapDiscovery; just alias them for clarity.
   // CityRestorePanner uses them when cityRestoreTick increments (Back from schools-in-area).
 
+  // Selected-school radius map overlays (full journey breadcrumb + radius legend) only render
+  // when a school is selected AND the panel is school-selected/area-school-combined.
+  const schoolRadiusOverlay = isSchoolRadiusOverlayState(resolvedPanelContent, !!selectedSchool);
+
   return (
     <AppLayout>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
@@ -1888,14 +1898,35 @@ export default function MapDiscovery() {
             />
           )}
 
-          {/* Area indicator overlay — top-left. Shows area > group > city context. */}
+          {/* Top-left context overlay. For the selected-school radius state, show the full
+              resolved journey breadcrumb (City › Zone › Area › School); otherwise the generic
+              area indicator. Rendering one OR the other avoids a duplicate breadcrumb. */}
           <div className="absolute top-4 left-4 z-[1000]">
-            <AreaIndicatorOverlay
-              cityLabel={CITY_CONFIG[city]?.label ?? city}
-              focusedGroup={focusedGroup}
-              selectedArea={selectedArea}
-            />
+            {schoolRadiusOverlay ? (
+              <SchoolJourneyBreadcrumb
+                cityLabel={CITY_CONFIG[city]?.label ?? city}
+                zoneLabel={focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId)}
+                areaLabel={selectedArea?.areaLabel ?? null}
+                schoolName={selectedSchool?.name ?? null}
+              />
+            ) : (
+              <AreaIndicatorOverlay
+                cityLabel={CITY_CONFIG[city]?.label ?? city}
+                focusedGroup={focusedGroup}
+                selectedArea={selectedArea}
+              />
+            )}
           </div>
+
+          {/* Radius legend — bottom-left, raised above the Leaflet zoom control (bottomleft).
+              Only the selected-school radius state; swatches match the real map markers/ring. */}
+          {schoolRadiusOverlay && (
+            <div className="absolute bottom-24 left-4 z-[1000]">
+              <SchoolRadiusLegend
+                radiusKm={clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM)}
+              />
+            </div>
+          )}
 
           {/* City select — top-right */}
           <div className="absolute top-4 right-4 z-[1000] w-44">

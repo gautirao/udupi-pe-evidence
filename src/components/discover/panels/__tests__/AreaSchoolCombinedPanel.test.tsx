@@ -1,13 +1,14 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi } from 'vitest';
 import { AreaSchoolCombinedPanel } from '../SchoolJourneyPanels';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 
-// ── Fixtures ─────────────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const mockArea: AreaPoint = {
   areaKey: 'IN|KA|Udupi|Manipal',
@@ -28,15 +29,28 @@ const mockSchool: SchoolResult = {
   distanceKm: 0.5,
 };
 
-const makeListing = (id: string): DiscoverCityListingItem => ({
+const mockSchoolNoCoords: SchoolResult = {
+  ...mockSchool,
+  latitude: null as unknown as number,
+  longitude: null as unknown as number,
+};
+
+const makeListing = (id: string, overrides: Partial<DiscoverCityListingItem> = {}): DiscoverCityListingItem => ({
   id,
   pricePaise: 5000000 * 100,
   propertyType: 'apartment',
   locality: 'Manipal',
   primaryImageUrl: null,
+  lat: 13.354,
+  lon: 74.791,
+  ...overrides,
 });
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+function makeQC() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
 
 const baseProps = () => ({
   selectedArea: mockArea,
@@ -55,83 +69,88 @@ const baseProps = () => ({
 function renderPanel(props: Partial<React.ComponentProps<typeof AreaSchoolCombinedPanel>> = {}) {
   return render(
     <BrowserRouter>
-      <AreaSchoolCombinedPanel {...baseProps()} {...props} />
+      <QueryClientProvider client={makeQC()}>
+        <AreaSchoolCombinedPanel {...baseProps()} {...props} />
+      </QueryClientProvider>
     </BrowserRouter>,
   );
 }
 
-// ── AC1: Title rendering ──────────────────────────────────────────────────────
+// ── AC1: ReTrends redesign — title is now "Find homes near a school" ──────────
 
-describe('AreaSchoolCombinedPanel — title rendering (AC1)', () => {
-  it('renders "Homes in {area} near {school}" title with both dimensions resolved', () => {
+describe('AreaSchoolCombinedPanel — title rendering (ReTrends redesign)', () => {
+  it('renders "Find homes near a school" title in PanelHeader', () => {
     renderPanel();
     expect(
-      screen.getByRole('heading', { name: 'Homes in Manipal near Manipal Public School' }),
+      screen.getByRole('heading', { name: 'Find homes near a school' }),
     ).toBeInTheDocument();
   });
 
-  it('falls back to "Area + School" title when selectedArea is null', () => {
+  it('shows "Find homes near a school" title when selectedArea is null (skeleton state)', () => {
     renderPanel({ selectedArea: null });
-    expect(screen.getByRole('heading', { name: 'Area + School' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Find homes near a school' })).toBeInTheDocument();
   });
 
-  it('falls back to "Area + School" title when selectedSchool is null', () => {
+  it('shows "Find homes near a school" title when selectedSchool is null (skeleton state)', () => {
     renderPanel({ selectedSchool: null });
-    expect(screen.getByRole('heading', { name: 'Area + School' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Find homes near a school' })).toBeInTheDocument();
   });
 });
 
-// ── AC2: Clear-school chip atomicity ─────────────────────────────────────────
+// ── AC2: Ink-navy school summary band ─────────────────────────────────────────
 
-describe('AreaSchoolCombinedPanel — clear-school chip (AC2)', () => {
-  it('renders the school chip with the school name', () => {
+describe('AreaSchoolCombinedPanel — school summary band (ReTrends redesign)', () => {
+  it('renders school name in the summary band', () => {
     renderPanel();
-    expect(screen.getByTestId('clear-school-chip')).toBeInTheDocument();
-    expect(screen.getByTestId('clear-school-chip')).toHaveTextContent('Manipal Public School');
+    expect(screen.getByTestId('school-summary-name')).toHaveTextContent('Manipal Public School');
   });
 
-  it('calls onClearSchool when the school chip is clicked', () => {
+  it('renders the summary band element', () => {
+    renderPanel();
+    expect(screen.getByTestId('school-summary-band')).toBeInTheDocument();
+  });
+
+  it('renders school board badge when board is present', () => {
+    renderPanel();
+    expect(screen.getByText('CBSE')).toBeInTheDocument();
+  });
+
+  it('renders boardType when board is null', () => {
+    renderPanel({ selectedSchool: { ...mockSchool, board: null, boardType: 'State' } });
+    expect(screen.getByText('State')).toBeInTheDocument();
+  });
+
+  it('omits board badge when both board and boardType are null', () => {
+    renderPanel({ selectedSchool: { ...mockSchool, board: null, boardType: null } });
+    expect(screen.queryByText('CBSE')).not.toBeInTheDocument();
+  });
+
+  it('renders school address when present', () => {
+    renderPanel();
+    expect(screen.getByText('Manipal, Udupi District')).toBeInTheDocument();
+  });
+
+  it('renders count + "homes for sale" label for intent=buy', () => {
+    renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')], intent: 'buy' });
+    expect(screen.getByTestId('school-summary-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('school-summary-count')).toHaveTextContent('homes for sale');
+  });
+
+  it('renders count + "rentals available" label for intent=rent', () => {
+    renderPanel({ listings: [makeListing('l-1')], intent: 'rent' });
+    expect(screen.getByTestId('school-summary-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('school-summary-count')).toHaveTextContent('rental available');
+  });
+
+  it('"Change school" button calls onClearSchool', () => {
     const onClearSchool = vi.fn();
     renderPanel({ onClearSchool });
-    fireEvent.click(screen.getByTestId('clear-school-chip'));
+    fireEvent.click(screen.getByTestId('change-school-btn'));
     expect(onClearSchool).toHaveBeenCalledTimes(1);
   });
-
-  it('does NOT call onClearArea when the school chip is clicked', () => {
-    const onClearSchool = vi.fn();
-    const onClearArea = vi.fn();
-    renderPanel({ onClearSchool, onClearArea });
-    fireEvent.click(screen.getByTestId('clear-school-chip'));
-    expect(onClearArea).not.toHaveBeenCalled();
-  });
 });
 
-// ── AC3: Clear-area chip atomicity ────────────────────────────────────────────
-
-describe('AreaSchoolCombinedPanel — clear-area chip (AC3)', () => {
-  it('renders the area chip with the area label', () => {
-    renderPanel();
-    expect(screen.getByTestId('clear-area-chip')).toBeInTheDocument();
-    expect(screen.getByTestId('clear-area-chip')).toHaveTextContent('Manipal');
-  });
-
-  it('calls onClearArea when the area chip is clicked', () => {
-    const onClearArea = vi.fn();
-    renderPanel({ onClearArea });
-    fireEvent.click(screen.getByTestId('clear-area-chip'));
-    expect(onClearArea).toHaveBeenCalledTimes(1);
-  });
-
-  it('does NOT call onClearSchool when the area chip is clicked', () => {
-    const onClearSchool = vi.fn();
-    const onClearArea = vi.fn();
-    renderPanel({ onClearSchool, onClearArea });
-    fireEvent.click(screen.getByTestId('clear-area-chip'));
-    expect(onClearSchool).not.toHaveBeenCalled();
-  });
-});
-
-// ── Loading / null states ─────────────────────────────────────────────────────
+// ── Loading / null states ──────────────────────────────────────────────────────
 
 describe('AreaSchoolCombinedPanel — loading and null states', () => {
   it('shows skeleton when selectedArea is null (cold-load hydration in progress)', () => {
@@ -151,52 +170,32 @@ describe('AreaSchoolCombinedPanel — loading and null states', () => {
 
   it('does not show listing content while loading', () => {
     renderPanel({ listings: [makeListing('l-1')], isLoadingListings: true });
-    // Skeleton rows shown, not real cards (no empty-state message either)
     expect(screen.getAllByTestId('combined-listing-skeleton')).toHaveLength(3);
-    expect(screen.queryByTestId('combined-empty-state-message')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-radius-empty-state')).not.toBeInTheDocument();
   });
 });
 
-// ── Listing body ──────────────────────────────────────────────────────────────
+// ── Radius chips (ReTrends redesign: [3, 5, 10] km) ─────────────────────────
 
-describe('AreaSchoolCombinedPanel — listing body', () => {
-  it('renders property cards when listings are present', () => {
-    renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')] });
-    expect(screen.queryByTestId('combined-listing-skeleton')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('combined-empty-state-message')).not.toBeInTheDocument();
-  });
-
-  it('renders empty state when listings are empty and not loading', () => {
-    renderPanel({ listings: [], isLoadingListings: false });
-    expect(screen.getByTestId('combined-empty-state-message')).toBeInTheDocument();
-  });
-
-  it('empty state message includes area label and school name', () => {
-    renderPanel({ listings: [], isLoadingListings: false });
-    const msg = screen.getByTestId('combined-empty-state-message');
-    expect(msg).toHaveTextContent('Manipal Public School');
-    expect(msg).toHaveTextContent('Manipal');
-  });
-});
-
-// ── Radius selector ───────────────────────────────────────────────────────────
-
-describe('AreaSchoolCombinedPanel — radius selector', () => {
-  it('renders radius buttons [1, 2, 3, 5]', () => {
+describe('AreaSchoolCombinedPanel — radius chips (ReTrends redesign)', () => {
+  it('renders radius chips [3, 5, 10] only', () => {
     renderPanel();
-    expect(screen.getByTestId('combined-radius-btn-1')).toBeInTheDocument();
-    expect(screen.getByTestId('combined-radius-btn-2')).toBeInTheDocument();
     expect(screen.getByTestId('combined-radius-btn-3')).toBeInTheDocument();
     expect(screen.getByTestId('combined-radius-btn-5')).toBeInTheDocument();
+    expect(screen.getByTestId('combined-radius-btn-10')).toBeInTheDocument();
+    // Old options must not exist
+    expect(screen.queryByTestId('combined-radius-btn-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('combined-radius-btn-2')).not.toBeInTheDocument();
   });
 
-  it('marks the active radius button with aria-pressed=true', () => {
+  it('marks the 3 km chip active (aria-pressed=true) when radiusKm=3', () => {
     renderPanel({ radiusKm: 3 });
     expect(screen.getByTestId('combined-radius-btn-3')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('combined-radius-btn-1')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('combined-radius-btn-5')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('combined-radius-btn-10')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('calls onRadiusChange when a radius button is clicked', () => {
+  it('calls onRadiusChange(5) when the 5 km chip is clicked', () => {
     const onRadiusChange = vi.fn();
     renderPanel({ onRadiusChange, radiusKm: 3 });
     fireEvent.click(screen.getByTestId('combined-radius-btn-5'));
@@ -204,36 +203,145 @@ describe('AreaSchoolCombinedPanel — radius selector', () => {
     expect(onRadiusChange).toHaveBeenCalledTimes(1);
   });
 
-  it('defaults to 3 km when radiusKm is null', () => {
+  it('calls onRadiusChange(10) when the 10 km chip is clicked', () => {
+    const onRadiusChange = vi.fn();
+    renderPanel({ onRadiusChange, radiusKm: 3 });
+    fireEvent.click(screen.getByTestId('combined-radius-btn-10'));
+    expect(onRadiusChange).toHaveBeenCalledWith(10);
+  });
+
+  it('defaults to 3 km active when radiusKm is null', () => {
     renderPanel({ radiusKm: null });
     expect(screen.getByTestId('combined-radius-btn-3')).toHaveAttribute('aria-pressed', 'true');
   });
+
+  it('active chip shows listing count; inactive chips have no fabricated count', () => {
+    renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')], radiusKm: 3 });
+    expect(screen.getByTestId('combined-radius-btn-3')).toHaveTextContent('2');
+    expect(screen.getByTestId('combined-radius-btn-5')).not.toHaveTextContent('home');
+    expect(screen.getByTestId('combined-radius-btn-10')).not.toHaveTextContent('home');
+  });
 });
 
-// ── Empty-state CTAs ──────────────────────────────────────────────────────────
+// ── Result heading ─────────────────────────────────────────────────────────────
 
-describe('AreaSchoolCombinedPanel — empty-state CTAs', () => {
-  it('"Increase radius" button is present when not at max radius', () => {
+describe('AreaSchoolCombinedPanel — result heading', () => {
+  it('shows "Homes for sale near this school" heading (intent=buy) with count and radius', () => {
+    renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')], radiusKm: 3, intent: 'buy' });
+    const heading = screen.getByTestId('radius-result-heading');
+    expect(heading).toHaveTextContent('Homes for sale near this school');
+    expect(heading).toHaveTextContent('2 within 3 km');
+  });
+
+  it('shows "Rentals near this school" heading when intent=rent', () => {
+    renderPanel({ listings: [makeListing('l-1')], radiusKm: 5, intent: 'rent' });
+    const heading = screen.getByTestId('radius-result-heading');
+    expect(heading).toHaveTextContent('Rentals near this school');
+    expect(heading).toHaveTextContent('1 within 5 km');
+  });
+
+  it('does not show result heading when no listings', () => {
+    renderPanel({ listings: [], isLoadingListings: false });
+    expect(screen.queryByTestId('radius-result-heading')).not.toBeInTheDocument();
+  });
+});
+
+// ── Listing body (2-col card grid) ────────────────────────────────────────────
+
+describe('AreaSchoolCombinedPanel — listing body', () => {
+  it('renders property cards when listings are present', () => {
+    renderPanel({ listings: [makeListing('l-1'), makeListing('l-2')] });
+    expect(screen.queryByTestId('combined-listing-skeleton')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-radius-empty-state')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('listing-card')).toHaveLength(2);
+  });
+
+  it('renders selected card with isSelected=true when selectedListingId matches', () => {
+    renderPanel({
+      listings: [makeListing('l-1'), makeListing('l-2')],
+      selectedListingId: 'l-1',
+    });
+    const cards = screen.getAllByTestId('listing-card');
+    expect(cards[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(cards[0]).toHaveAttribute('data-selected', 'true');
+    expect(cards[1]).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('agri guard — panel renders server-provided listings without client filtering', () => {
+    // Agri exclusion is server-side (#1463). Panel renders whatever server returns.
+    const agriListing = makeListing('agri-1', { propertyType: 'agricultural_land' });
+    renderPanel({ listings: [agriListing] });
+    expect(screen.getAllByTestId('listing-card')).toHaveLength(1);
+  });
+});
+
+// ── Empty states (ReTrends redesign) ──────────────────────────────────────────
+
+describe('AreaSchoolCombinedPanel — empty state (ReTrends redesign)', () => {
+  it('renders SchoolRadiusEmptyState with honest copy when listings are empty', () => {
+    renderPanel({ listings: [], isLoadingListings: false, radiusKm: 3 });
+    expect(screen.getByTestId('school-radius-empty-state')).toBeInTheDocument();
+    expect(screen.getByTestId('school-radius-empty-state')).toHaveTextContent('Manipal Public School');
+    expect(screen.getByTestId('school-radius-empty-state')).toHaveTextContent('3 km');
+  });
+
+  it('"Try 5 km" button present when active radius is 3 km', () => {
     renderPanel({ listings: [], radiusKm: 3 });
-    expect(screen.getByTestId('combined-increase-radius-btn')).not.toBeDisabled();
+    expect(screen.getByTestId('try-radius-5-btn')).toBeInTheDocument();
   });
 
-  it('"Increase radius" button is disabled at max radius (5 km)', () => {
-    renderPanel({ listings: [], radiusKm: 5 });
-    expect(screen.getByTestId('combined-increase-radius-btn')).toBeDisabled();
+  it('"Try 10 km" button present when active radius is 3 km', () => {
+    renderPanel({ listings: [], radiusKm: 3 });
+    expect(screen.getByTestId('try-radius-10-btn')).toBeInTheDocument();
   });
 
-  it('"Clear property filters" shows when property filters active and listings empty', () => {
-    renderPanel({ listings: [], filters: { propertyTypes: ['apartment'] } });
-    expect(screen.getByTestId('combined-clear-filters-btn')).toBeInTheDocument();
+  it('at max radius (10 km) no "Try N km" buttons shown', () => {
+    renderPanel({ listings: [], radiusKm: 10 });
+    expect(screen.queryByTestId('try-radius-5-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('try-radius-10-btn')).not.toBeInTheDocument();
   });
 
-  it('"Clear property filters" absent when no property filters active', () => {
+  it('"Try 5 km" calls onRadiusChange(5)', () => {
+    const onRadiusChange = vi.fn();
+    renderPanel({ listings: [], radiusKm: 3, onRadiusChange });
+    fireEvent.click(screen.getByTestId('try-radius-5-btn'));
+    expect(onRadiusChange).toHaveBeenCalledWith(5);
+  });
+
+  it('"View all in area" calls onClearSchool', () => {
+    const onClearSchool = vi.fn();
+    renderPanel({ listings: [], radiusKm: 3, onClearSchool });
+    fireEvent.click(screen.getByTestId('view-all-in-area-btn'));
+    expect(onClearSchool).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Change school" in empty state calls onClearSchool', () => {
+    const onClearSchool = vi.fn();
+    renderPanel({ listings: [], radiusKm: 3, onClearSchool });
+    fireEvent.click(screen.getByTestId('change-school-empty-btn'));
+    expect(onClearSchool).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Clear property filters" shown when filters active + calls onFiltersChange', () => {
+    const onFiltersChange = vi.fn();
+    renderPanel({
+      listings: [],
+      filters: { propertyTypes: ['apartment'] },
+      onFiltersChange,
+    });
+    expect(screen.getByTestId('clear-filters-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('clear-filters-btn'));
+    expect(onFiltersChange).toHaveBeenCalledWith(
+      expect.objectContaining({ propertyTypes: undefined }),
+    );
+  });
+
+  it('"Clear property filters" absent when no filters active', () => {
     renderPanel({ listings: [], filters: {} });
-    expect(screen.queryByTestId('combined-clear-filters-btn')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('clear-filters-btn')).not.toBeInTheDocument();
   });
 
-  it('"Clear property filters" calls onFiltersChange preserving school proximity fields', () => {
+  it('"Clear property filters" preserves school proximity fields on clear', () => {
     const onFiltersChange = vi.fn();
     renderPanel({
       listings: [],
@@ -248,7 +356,7 @@ describe('AreaSchoolCombinedPanel — empty-state CTAs', () => {
       },
       onFiltersChange,
     });
-    fireEvent.click(screen.getByTestId('combined-clear-filters-btn'));
+    fireEvent.click(screen.getByTestId('clear-filters-btn'));
     expect(onFiltersChange).toHaveBeenCalledWith(
       expect.objectContaining({
         propertyTypes: undefined,
@@ -261,49 +369,57 @@ describe('AreaSchoolCombinedPanel — empty-state CTAs', () => {
       }),
     );
   });
+
+  it('renders rent-aware copy in empty state when intent=rent', () => {
+    renderPanel({ listings: [], intent: 'rent' });
+    expect(screen.getByTestId('school-radius-empty-state')).toHaveTextContent('rentals');
+  });
 });
 
-// ── AC4: Area + school intersection rendering ─────────────────────────────────
-//
-// The polygon injection that scopes the API query to the area bbox lives in
-// MapDiscovery (effectiveFilters). At the panel level AC4 is verified by
-// confirming:
-//   (a) listings that satisfy BOTH constraints are rendered, and
-//   (b) the panel does NOT render unscoped listings when selectedArea is null
-//       (already covered by the skeleton tests above — no content path executes).
-//
-// This describe block adds the positive intersection case explicitly.
+// ── Missing-coords empty state ─────────────────────────────────────────────────
 
-describe('AreaSchoolCombinedPanel — AC4 area+school intersection', () => {
+describe('AreaSchoolCombinedPanel — missing-coords state', () => {
+  it('renders MissingCoordsEmptyState when school has null latitude', () => {
+    renderPanel({ selectedSchool: mockSchoolNoCoords, listings: [], isLoadingListings: false });
+    expect(screen.getByTestId('missing-coords-empty-state')).toBeInTheDocument();
+    expect(screen.getByTestId('missing-coords-empty-state')).toHaveTextContent('Manipal Public School');
+  });
+
+  it('"View all homes in area" in missing-coords state calls onClearSchool', () => {
+    const onClearSchool = vi.fn();
+    renderPanel({ selectedSchool: mockSchoolNoCoords, listings: [], isLoadingListings: false, onClearSchool });
+    fireEvent.click(screen.getByTestId('view-all-in-area-missing-coords-btn'));
+    expect(onClearSchool).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Choose another school" in missing-coords state calls onClearSchool', () => {
+    const onClearSchool = vi.fn();
+    renderPanel({ selectedSchool: mockSchoolNoCoords, listings: [], isLoadingListings: false, onClearSchool });
+    fireEvent.click(screen.getByTestId('choose-another-school-btn'));
+    expect(onClearSchool).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── AC4: Area + school intersection rendering (preserved) ────────────────────
+
+describe('AreaSchoolCombinedPanel — area+school intersection', () => {
   it('renders listings that satisfy both area and school constraints', () => {
-    // Simulate the parent passing down pre-filtered intersection results
-    // (both within area bbox AND within school radius).
     const intersectionListings = [makeListing('in-area-near-school-1'), makeListing('in-area-near-school-2')];
     renderPanel({ listings: intersectionListings });
-    // Both cards rendered — no empty state, no skeleton
-    expect(screen.queryByTestId('combined-empty-state-message')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-radius-empty-state')).not.toBeInTheDocument();
     expect(screen.queryByTestId('combined-listing-skeleton')).not.toBeInTheDocument();
     expect(screen.queryByTestId('combined-loading-skeleton')).not.toBeInTheDocument();
   });
 
-  it('shows empty state when intersection is empty (in area but outside school radius)', () => {
-    renderPanel({ listings: [], isLoadingListings: false });
-    expect(screen.getByTestId('combined-empty-state-message')).toBeInTheDocument();
-    // Empty-state message references both dimensions so the user understands the constraint.
-    expect(screen.getByTestId('combined-empty-state-message')).toHaveTextContent('Manipal Public School');
-    expect(screen.getByTestId('combined-empty-state-message')).toHaveTextContent('Manipal');
-  });
-
   it('does not render listing body when selectedArea is null (scoping not yet resolved)', () => {
-    // When selectedArea is null the bbox-polygon has not been injected yet —
-    // the panel must show a skeleton, never unscoped listings.
     renderPanel({ selectedArea: null, listings: [makeListing('unscoped')] });
     expect(screen.getByTestId('combined-loading-skeleton')).toBeInTheDocument();
-    expect(screen.queryByTestId('combined-empty-state-message')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('school-radius-empty-state')).not.toBeInTheDocument();
   });
 });
 
-// ── Issue #1170: in-flight refetch dim (AC2/AC4) ──────────────────────────────
+// ── Issue #1170: in-flight refetch dim ────────────────────────────────────────
+
 describe('AreaSchoolCombinedPanel — in-flight refetch dim (Issue #1170)', () => {
   it('dims the listing body while a refetch is in flight (isFetching && not initial load)', () => {
     const { container } = renderPanel({

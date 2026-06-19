@@ -354,4 +354,79 @@ describe('PropertyCard', () => {
       card.blur();
     });
   });
+
+  // ── ReTrends redesign — distanceKm proximity badge ───────────────────────────
+  describe('distanceKm proximity badge', () => {
+    it('renders "X.X km from school" badge when distanceKm is a finite number', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: 2.2,
+      });
+      expect(screen.getByTestId('distance-badge')).toBeInTheDocument();
+      expect(screen.getByTestId('distance-badge')).toHaveTextContent('2.2 km from school');
+    });
+
+    it('formats distance to one decimal place', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: 1.567,
+      });
+      expect(screen.getByTestId('distance-badge')).toHaveTextContent('1.6 km from school');
+    });
+
+    it('renders nothing when distanceKm is null', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: null,
+      });
+      expect(screen.queryByTestId('distance-badge')).not.toBeInTheDocument();
+    });
+
+    it('renders nothing when distanceKm is undefined (existing consumers unaffected)', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        // distanceKm not provided — tests backward compat
+      });
+      expect(screen.queryByTestId('distance-badge')).not.toBeInTheDocument();
+    });
+
+    it('renders nothing when distanceKm is NaN (non-finite guard)', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: NaN,
+      });
+      expect(screen.queryByTestId('distance-badge')).not.toBeInTheDocument();
+    });
+
+    it('renders nothing when distanceKm is Infinity (non-finite guard)', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: Infinity,
+      });
+      expect(screen.queryByTestId('distance-badge')).not.toBeInTheDocument();
+    });
+
+    it('trust badge and distance badge can both render simultaneously', () => {
+      renderCard({
+        listing: makeListing({ trustTier: 'A', primaryImageUrl: 'https://example.com/img.jpg' }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+        distanceKm: 1.5,
+      });
+      expect(screen.getByText('Verified')).toBeInTheDocument();
+      expect(screen.getByTestId('distance-badge')).toHaveTextContent('1.5 km from school');
+    });
+  });
 });
