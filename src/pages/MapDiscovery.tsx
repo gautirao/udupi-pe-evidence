@@ -5,6 +5,8 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
+import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
+import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
@@ -1100,6 +1102,26 @@ export default function MapDiscovery() {
       .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
   }, [urlState.groupId, focusedGroup, discoverAreas]);
 
+  // School-first overview: dark zone/group label pills positioned truthfully
+  // (group focus point, else member-area bounds-centre; groups with neither are
+  // dropped). Shown ONLY in the school-first browse/landing state (no group/area/
+  // school selected) and only at overview zoom, so they never clutter drill-down
+  // states or other journeys. onSelectZone reuses the existing selectGroup action.
+  const schoolZoneLabels = useMemo<ZoneLabelPoint[]>(() => {
+    if (urlState.journey !== 'school-first') return [];
+    if (urlState.groupId || urlState.areaKey || urlState.schoolId) return [];
+    if (mapZoom > AREA_LAYER_MAX_ZOOM) return [];
+    return computeZoneLabelPoints(areaGroupsData?.groups ?? [], discoverAreas);
+  }, [
+    urlState.journey,
+    urlState.groupId,
+    urlState.areaKey,
+    urlState.schoolId,
+    mapZoom,
+    areaGroupsData,
+    discoverAreas,
+  ]);
+
   // Issue #1152 — derive the correct badge count given area/filter/loading context.
   // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
   // Cycle 7: areaListings re-added (Option B). areaListings comes from useDiscoverCityListings
@@ -1837,6 +1859,8 @@ export default function MapDiscovery() {
               areas={mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney ? discoverAreas : []}
               onAreaClick={handleAreaClick}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
+              schoolZoneLabels={schoolZoneLabels}
+              onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
               onZoomChange={setMapZoom}
               onViewportChange={urlActions.reportViewport}
               onBoundsChange={handleBoundsChange}

@@ -10,6 +10,7 @@ import { PropertyListing, PropertyType, PropertyImage } from '@/hooks/usePropert
 import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
+import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import { ScaleHud } from '@/dev/ScaleHud';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
@@ -356,6 +357,15 @@ interface PropertyMapProps {
     directionCode: 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
     maxKm: 10 | 25 | 50 | 100;
   } | null;
+  /**
+   * School-first only — dark zone/group label pills for the overview map.
+   * Supplied by MapDiscovery (gated to the browse/landing state at overview zoom);
+   * positions are truthful (group focus point or member-area bounds-centre).
+   * Empty/undefined → no zone labels render. Never set for area-first / agri-first.
+   */
+  schoolZoneLabels?: ZoneLabelPoint[];
+  /** Called when a zone label pill is clicked — selects that group (sets groupId). */
+  onSelectZone?: (groupId: string) => void;
 }
 
 /**
@@ -1313,6 +1323,8 @@ export function PropertyMap({
   sectorOverlay = null,
   selectedListingId,
   hoveredListingId,
+  schoolZoneLabels,
+  onSelectZone,
 }: PropertyMapProps) {
   // Issue #1410 — when agriGroupListings is provided (non-null), use the adapted items
   // for AgriMarkerClusterLayer and AgriPolygonLayer instead of the raw `listings` prop.
@@ -1415,6 +1427,9 @@ export function PropertyMap({
             journey={journey}
             selectedSchool={selectedSchool}
           />
+        )}
+        {schoolZoneLabels && schoolZoneLabels.length > 0 && (
+          <SchoolZoneLabelLayer zones={schoolZoneLabels} onZoneClick={onSelectZone} />
         )}
         {showSchoolMarkers && (
           <SchoolMarkerLayer

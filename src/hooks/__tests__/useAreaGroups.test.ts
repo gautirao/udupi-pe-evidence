@@ -34,6 +34,8 @@ describe('normalizeAreaGroupResponse', () => {
       region_label: 'West Coast',
       school_count: 0,
       area_keys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+      focus_lat: 13.35,
+      focus_lon: 74.79,
     });
   });
 
@@ -59,6 +61,8 @@ describe('normalizeAreaGroupResponse', () => {
       region_label: null,
       school_count: 0,
       area_keys: ['IN|KA|Udupi|Area1'],
+      focus_lat: null,
+      focus_lon: null,
     });
   });
 
@@ -226,6 +230,8 @@ describe('normalizeAreaGroupResponse', () => {
       region_label: 'Region 1',
       school_count: 0,
       area_keys: ['area1', 'area2'],
+      focus_lat: null,
+      focus_lon: null,
     });
 
     expect(result.groups[1]).toEqual({
@@ -235,6 +241,8 @@ describe('normalizeAreaGroupResponse', () => {
       region_label: null,
       school_count: 0,
       area_keys: [],
+      focus_lat: null,
+      focus_lon: null,
     });
 
     expect(result.groups[2]).toEqual({
@@ -244,6 +252,8 @@ describe('normalizeAreaGroupResponse', () => {
       region_label: 'Region 2',
       school_count: 0,
       area_keys: ['area3'],
+      focus_lat: null,
+      focus_lon: null,
     });
   });
 
