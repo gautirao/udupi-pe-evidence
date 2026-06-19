@@ -5,6 +5,8 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
+import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
+import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
@@ -13,6 +15,7 @@ import {
   SchoolRadiusLegend,
   isSchoolRadiusOverlayState,
   prettifyZoneSlug,
+  areaKeyToLabel,
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { derivePanelContent } from '@/utils/discoverPanelState';
@@ -1100,6 +1103,26 @@ export default function MapDiscovery() {
       .reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
   }, [urlState.groupId, focusedGroup, discoverAreas]);
 
+  // School-first overview: dark zone/group label pills positioned truthfully
+  // (group focus point, else member-area bounds-centre; groups with neither are
+  // dropped). Shown ONLY in the school-first browse/landing state (no group/area/
+  // school selected) and only at overview zoom, so they never clutter drill-down
+  // states or other journeys. onSelectZone reuses the existing selectGroup action.
+  const schoolZoneLabels = useMemo<ZoneLabelPoint[]>(() => {
+    if (urlState.journey !== 'school-first') return [];
+    if (urlState.groupId || urlState.areaKey || urlState.schoolId) return [];
+    if (mapZoom > AREA_LAYER_MAX_ZOOM) return [];
+    return computeZoneLabelPoints(areaGroupsData?.groups ?? [], discoverAreas);
+  }, [
+    urlState.journey,
+    urlState.groupId,
+    urlState.areaKey,
+    urlState.schoolId,
+    mapZoom,
+    areaGroupsData,
+    discoverAreas,
+  ]);
+
   // Issue #1152 — derive the correct badge count given area/filter/loading context.
   // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
   // Cycle 7: areaListings re-added (Option B). areaListings comes from useDiscoverCityListings
@@ -1748,9 +1771,19 @@ export default function MapDiscovery() {
   // These are already available as props in MapDiscovery; just alias them for clarity.
   // CityRestorePanner uses them when cityRestoreTick increments (Back from schools-in-area).
 
-  // Selected-school radius map overlays (full journey breadcrumb + radius legend) only render
-  // when a school is selected AND the panel is school-selected/area-school-combined.
+  // Selected-school radius map overlays (radius legend) only render when a school is
+  // selected AND the panel is school-selected/area-school-combined.
   const schoolRadiusOverlay = isSchoolRadiusOverlayState(resolvedPanelContent, !!selectedSchool);
+
+  // The journey breadcrumb (City › Zone › Area › School) renders progressively across
+  // ALL school-first drill-down states — zone selected, area selected, and school
+  // selected — not only the radius state. The breadcrumb component omits segments whose
+  // label is null, so a zone-only context reads "Udupi › University Belt" and an
+  // area context reads "Udupi › University Belt › Manipal". Other journeys (area-first,
+  // agri-first) keep the generic AreaIndicatorOverlay.
+  const showSchoolBreadcrumb =
+    urlState.journey === 'school-first' &&
+    (!!urlState.groupId || !!urlState.areaKey || !!selectedArea || !!selectedSchool);
 
   return (
     <AppLayout>
@@ -1837,6 +1870,8 @@ export default function MapDiscovery() {
               areas={mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney ? discoverAreas : []}
               onAreaClick={handleAreaClick}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
+              schoolZoneLabels={schoolZoneLabels}
+              onSelectZone={(groupId) => urlActions.selectGroup(groupId)}
               onZoomChange={setMapZoom}
               onViewportChange={urlActions.reportViewport}
               onBoundsChange={handleBoundsChange}
@@ -1898,15 +1933,16 @@ export default function MapDiscovery() {
             />
           )}
 
-          {/* Top-left context overlay. For the selected-school radius state, show the full
-              resolved journey breadcrumb (City › Zone › Area › School); otherwise the generic
-              area indicator. Rendering one OR the other avoids a duplicate breadcrumb. */}
+          {/* Top-left context overlay. For school-first drill-down states (zone / area /
+              school selected), show the progressively-resolved journey breadcrumb
+              (City › Zone › Area › School); otherwise the generic area indicator.
+              Rendering one OR the other avoids a duplicate breadcrumb. */}
           <div className="absolute top-4 left-4 z-[1000]">
-            {schoolRadiusOverlay ? (
+            {showSchoolBreadcrumb ? (
               <SchoolJourneyBreadcrumb
                 cityLabel={CITY_CONFIG[city]?.label ?? city}
                 zoneLabel={focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId)}
-                areaLabel={selectedArea?.areaLabel ?? null}
+                areaLabel={selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey)}
                 schoolName={selectedSchool?.name ?? null}
               />
             ) : (

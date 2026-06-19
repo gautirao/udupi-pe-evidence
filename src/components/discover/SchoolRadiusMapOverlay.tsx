@@ -30,6 +30,18 @@ export function prettifyZoneSlug(slug: string | null | undefined): string | null
 }
 
 /**
+ * Derive a display label from a composite areaKey (e.g. "IN|KA|Udupi|Manipal" →
+ * "Manipal"). The final pipe-segment is the area name — truthful, the same value
+ * the hydrated AreaPoint.areaLabel carries — so the breadcrumb's area segment can
+ * resolve immediately on a deep link, before async area hydration completes.
+ */
+export function areaKeyToLabel(areaKey: string | null | undefined): string | null {
+  if (!areaKey || !areaKey.trim()) return null;
+  const last = areaKey.split('|').pop();
+  return last && last.trim() ? last.trim() : null;
+}
+
+/**
  * True only for the selected-school radius states (a school IS selected and the panel is
  * school-selected or area-school-combined). Used to gate the overlays so area-first,
  * agri-first, listing detail, etc. never render the school-journey breadcrumb or radius legend.

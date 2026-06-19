@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ChevronLeft, ChevronRight, GraduationCap, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, GraduationCap, Home, Layers, LayoutGrid, MapPin, Search, SlidersHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -436,15 +436,27 @@ function SchoolCard({ school, onClick }: { school: SchoolResult; onClick: () => 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left p-4 bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg hover:border-purple-400 hover:shadow-md transition-all"
+      className="group w-full text-left rounded-xl border border-border bg-card p-4 transition-all hover:border-plum/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <div className="font-semibold text-gray-900">{school.name}</div>
-      <div className="text-sm text-gray-600">{school.address}</div>
-      {school.board && (
-        <Badge variant="outline" className="mt-2 text-xs">
-          {school.board}
-        </Badge>
-      )}
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-plum-tint text-plum">
+          <GraduationCap className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-semibold text-foreground truncate">{school.name}</span>
+            {school.board && (
+              <Badge variant="outline" className="shrink-0 text-xs">
+                {school.board}
+              </Badge>
+            )}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1.5 text-sm text-muted-foreground">
+            <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">{school.address}</span>
+          </div>
+        </div>
+      </div>
     </button>
   );
 }
@@ -468,27 +480,42 @@ function ZoneCard({ group, memberAreas, onClick }: ZoneCardProps) {
       type="button"
       data-testid={`school-zone-card-${group.id}`}
       onClick={onClick}
-      className="w-full text-left p-4 bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-lg hover:border-purple-400 hover:shadow-md transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group w-full text-left rounded-xl border border-border bg-card p-4 transition-all hover:border-plum/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label={`${group.name}: ${totalSchools} school${totalSchools === 1 ? '' : 's'}, ${totalListings} listing${totalListings === 1 ? '' : 's'}, ${areaCount} area${areaCount === 1 ? '' : 's'}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-semibold text-sm text-gray-900 truncate" data-testid="school-zone-card-name">{group.name}</p>
-          {group.subtitle && (
-            <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{group.subtitle}</p>
-          )}
-          <div className="flex items-center gap-3 mt-1.5">
-            <span className="flex items-center gap-1 text-xs text-purple-700">
-              <GraduationCap className="h-3 w-3 shrink-0" aria-hidden="true" />
-              <span data-testid="school-zone-card-school-count">{totalSchools} school{totalSchools === 1 ? '' : 's'}</span>
-            </span>
-            <span className="text-xs text-blue-700" data-testid="school-zone-card-listing-count">
-              {totalListings} listing{totalListings === 1 ? '' : 's'}
+      <div className="flex items-start gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-plum-tint text-plum">
+          <Layers className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-sm text-foreground truncate" data-testid="school-zone-card-name">{group.name}</p>
+            <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid="school-zone-card-area-count">
+              {areaCount} area{areaCount === 1 ? '' : 's'}
             </span>
           </div>
+          {group.subtitle && (
+            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{group.subtitle}</p>
+          )}
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground bg-white/70 rounded-full px-2 py-0.5 font-medium border border-purple-200" data-testid="school-zone-card-area-count">
-          {areaCount} area{areaCount === 1 ? '' : 's'}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <GraduationCap className="h-3.5 w-3.5 shrink-0 text-plum" aria-hidden="true" />
+            <span data-testid="school-zone-card-school-count">
+              <span className="font-semibold text-foreground tabular-nums">{totalSchools}</span> school{totalSchools === 1 ? '' : 's'}
+            </span>
+          </span>
+          <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="school-zone-card-listing-count">
+            <Home className="h-3.5 w-3.5 shrink-0 text-copper" aria-hidden="true" />
+            <span className="font-semibold text-foreground tabular-nums">{totalListings}</span> listing{totalListings === 1 ? '' : 's'}
+          </span>
+        </div>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground transition-colors group-hover:text-plum">
+          Explore zone
+          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
       </div>
     </button>
@@ -499,21 +526,39 @@ function AreaCard({
   area,
   onClick,
 }: {
-  area: { areaKey: string; name: string; schoolCount: number };
+  area: { areaKey: string; name: string; schoolCount: number; listingCount?: number };
   onClick: () => void;
 }) {
+  const hasListings = typeof area.listingCount === 'number';
   return (
     <button
       onClick={onClick}
       data-testid="area-card"
-      className="w-full text-left p-4 bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200 rounded-lg hover:border-blue-400 hover:shadow-md transition-all"
+      className="group w-full text-left rounded-xl border border-border bg-card p-4 transition-all hover:border-plum/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="font-semibold text-gray-900">{area.name}</div>
-          <div className="text-sm text-blue-700 flex items-center gap-1.5 mt-1">
-            <GraduationCap size={14} />
-            {area.schoolCount} schools
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-plum-tint text-plum">
+          <MapPin className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <span className="font-semibold text-foreground truncate">{area.name}</span>
+            <ChevronRight
+              className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-colors group-hover:text-plum"
+              aria-hidden="true"
+            />
+          </div>
+          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <GraduationCap className="h-3.5 w-3.5 shrink-0 text-plum" aria-hidden="true" />
+              <span className="font-semibold text-foreground tabular-nums">{area.schoolCount}</span> school{area.schoolCount === 1 ? '' : 's'}
+            </span>
+            {hasListings && (
+              <span className="flex items-center gap-1">
+                <Home className="h-3.5 w-3.5 shrink-0 text-copper" aria-hidden="true" />
+                <span className="font-semibold text-foreground tabular-nums">{area.listingCount}</span> listing{area.listingCount === 1 ? '' : 's'}
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -5,10 +5,27 @@ import {
   SchoolRadiusLegend,
   isSchoolRadiusOverlayState,
   prettifyZoneSlug,
+  areaKeyToLabel,
 } from '../SchoolRadiusMapOverlay';
 
 const UUID = '23a61c72-1e6a-4499-8eac-9e3eaff55768';
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+describe('areaKeyToLabel', () => {
+  it('extracts the final pipe-segment as the area label', () => {
+    expect(areaKeyToLabel('IN|KA|Udupi|Manipal')).toBe('Manipal');
+    expect(areaKeyToLabel('IN|KA|Udupi|Eshwar Nagar')).toBe('Eshwar Nagar');
+  });
+  it('returns null for blank/missing input', () => {
+    expect(areaKeyToLabel(null)).toBeNull();
+    expect(areaKeyToLabel(undefined)).toBeNull();
+    expect(areaKeyToLabel('')).toBeNull();
+    expect(areaKeyToLabel('   ')).toBeNull();
+  });
+  it('handles a bare label with no pipes', () => {
+    expect(areaKeyToLabel('Manipal')).toBe('Manipal');
+  });
+});
 
 describe('SchoolJourneyBreadcrumb', () => {
   it('renders the full resolved journey City > Zone > Area > School', () => {

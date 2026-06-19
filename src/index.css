@@ -209,6 +209,13 @@
     @apply text-lg;
   }
 
+  /* School-first overview zone label pill — interactive hover lift.
+     !important overrides the inline base transform (translate(-50%,-50%)). */
+  .upt-zone-pill:hover {
+    transform: translate(-50%, -50%) scale(1.04) !important;
+    box-shadow: 0 6px 22px rgba(14, 22, 38, 0.42) !important;
+  }
+
   @keyframes cluster-pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }

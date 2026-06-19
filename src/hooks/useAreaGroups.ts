@@ -10,6 +10,15 @@ export interface AreaGroup {
   region_label: string | null;
   school_count: number;
   area_keys: string[];
+  /**
+   * Optional map-label anchor surfaced from the backend DTO (focusLat/focusLon).
+   * Already returned by /api/discover/area-groups — no API/contract change.
+   * Null when the backend has no focus point; the school-first map then falls
+   * back to a centroid derived from member-area coordinates. Optional so existing
+   * AreaGroup literals (tests/fixtures) remain valid.
+   */
+  focus_lat?: number | null;
+  focus_lon?: number | null;
 }
 
 interface AreaGroupsResponse {
@@ -58,13 +67,16 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
 
   return {
     groups: dto.groups
-      .map((item) => {
+      .map((item): AreaGroup | null => {
         // Safe fallbacks for each field
         const slug = typeof item.slug === 'string' ? item.slug : null;
         const name = typeof item.name === 'string' ? item.name : null;
         const subtitle = item.subtitle ?? null;
         const regionLabel = item.regionLabel ?? null;
         const areaKeysArray = Array.isArray(item.areaKeys) ? item.areaKeys : [];
+        // Surface the (already-returned) focus point for map-label placement.
+        const focusLat = typeof item.focusLat === 'number' ? item.focusLat : null;
+        const focusLon = typeof item.focusLon === 'number' ? item.focusLon : null;
 
         // Require at least name or slug to be present
         if (!name && !slug) {
@@ -78,6 +90,8 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
           region_label: regionLabel,
           school_count: 0,
           area_keys: areaKeysArray,
+          focus_lat: focusLat,
+          focus_lon: focusLon,
         };
       })
       .filter((group): group is AreaGroup => group !== null),
