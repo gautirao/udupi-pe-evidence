@@ -15,6 +15,7 @@ import {
   SchoolRadiusLegend,
   isSchoolRadiusOverlayState,
   prettifyZoneSlug,
+  areaKeyToLabel,
 } from '@/components/discover/SchoolRadiusMapOverlay';
 import { ActiveContextChips } from '@/components/discover/ActiveContextChips';
 import { derivePanelContent } from '@/utils/discoverPanelState';
@@ -1770,9 +1771,19 @@ export default function MapDiscovery() {
   // These are already available as props in MapDiscovery; just alias them for clarity.
   // CityRestorePanner uses them when cityRestoreTick increments (Back from schools-in-area).
 
-  // Selected-school radius map overlays (full journey breadcrumb + radius legend) only render
-  // when a school is selected AND the panel is school-selected/area-school-combined.
+  // Selected-school radius map overlays (radius legend) only render when a school is
+  // selected AND the panel is school-selected/area-school-combined.
   const schoolRadiusOverlay = isSchoolRadiusOverlayState(resolvedPanelContent, !!selectedSchool);
+
+  // The journey breadcrumb (City › Zone › Area › School) renders progressively across
+  // ALL school-first drill-down states — zone selected, area selected, and school
+  // selected — not only the radius state. The breadcrumb component omits segments whose
+  // label is null, so a zone-only context reads "Udupi › University Belt" and an
+  // area context reads "Udupi › University Belt › Manipal". Other journeys (area-first,
+  // agri-first) keep the generic AreaIndicatorOverlay.
+  const showSchoolBreadcrumb =
+    urlState.journey === 'school-first' &&
+    (!!urlState.groupId || !!urlState.areaKey || !!selectedArea || !!selectedSchool);
 
   return (
     <AppLayout>
@@ -1922,15 +1933,16 @@ export default function MapDiscovery() {
             />
           )}
 
-          {/* Top-left context overlay. For the selected-school radius state, show the full
-              resolved journey breadcrumb (City › Zone › Area › School); otherwise the generic
-              area indicator. Rendering one OR the other avoids a duplicate breadcrumb. */}
+          {/* Top-left context overlay. For school-first drill-down states (zone / area /
+              school selected), show the progressively-resolved journey breadcrumb
+              (City › Zone › Area › School); otherwise the generic area indicator.
+              Rendering one OR the other avoids a duplicate breadcrumb. */}
           <div className="absolute top-4 left-4 z-[1000]">
-            {schoolRadiusOverlay ? (
+            {showSchoolBreadcrumb ? (
               <SchoolJourneyBreadcrumb
                 cityLabel={CITY_CONFIG[city]?.label ?? city}
                 zoneLabel={focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId)}
-                areaLabel={selectedArea?.areaLabel ?? null}
+                areaLabel={selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey)}
                 schoolName={selectedSchool?.name ?? null}
               />
             ) : (
