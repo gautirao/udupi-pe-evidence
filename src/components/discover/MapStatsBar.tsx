@@ -1,13 +1,10 @@
-import { PenTool, GraduationCap, X, Info } from 'lucide-react';
+import { PenTool, X, Info } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { PropertyFilters, clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
-import { SchoolResult } from '@/hooks/useSchoolSearch';
-import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
+import { PropertyFilters } from '@/hooks/usePropertyListings';
 
 interface MapStatsBarProps {
   filters: PropertyFilters;
-  selectedSchool: SchoolResult | null;
   onPolygonClear: () => void;
 }
 
@@ -68,9 +65,12 @@ export function MarkersTruncationNotice({
  */
 export function MapStatsBar({
   filters,
-  selectedSchool,
   onPolygonClear,
 }: MapStatsBarProps) {
+  // School context is intentionally NOT shown here — the selected-school journey
+  // breadcrumb (name) and the radius legend (km) already cover it on the map, so a
+  // duplicate school chip was removed. This bar now only surfaces polygon (area-draw)
+  // search state + its clear action.
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000]">
       <Card className="px-3 py-2 bg-card/95 backdrop-blur">
@@ -81,20 +81,6 @@ export function MapStatsBar({
                 <PenTool className="h-4 w-4" />
                 <span className="font-medium">Area search</span>
               </div>
-              <div className="text-muted-foreground">|</div>
-            </>
-          )}
-          {selectedSchool && (
-            <>
-              <div className="flex items-center gap-1.5 text-primary">
-                <GraduationCap className="h-4 w-4" />
-                <span className="font-medium truncate max-w-[150px]">{selectedSchool.name}</span>
-                <span className="text-xs text-muted-foreground">({clampSchoolRadiusKm(filters.schoolRadiusKm ?? DEFAULT_SCHOOL_RADIUS_KM)} km)</span>
-              </div>
-            </>
-          )}
-          {filters.polygon && (
-            <>
               <div className="text-muted-foreground">|</div>
               <Button
                 variant="ghost"

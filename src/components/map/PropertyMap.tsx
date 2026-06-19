@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { MapContainer, TileLayer, useMap, Circle, Marker, Tooltip, Polygon, ZoomControl } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, Circle, Marker, Polygon, ZoomControl } from 'react-leaflet';
 import L from 'leaflet';
 import { escapeHtml } from '@/lib/security';
 import 'leaflet/dist/leaflet.css';
@@ -1459,14 +1459,13 @@ export function PropertyMap({
                 dashArray: '6 4',
               }}
             />
+            {/* School location marker (🎓). The school name is intentionally NOT
+                labelled on the map — the journey breadcrumb overlay already shows it,
+                so a permanent tooltip here would just duplicate it. */}
             <Marker
               position={[schoolCircle.lat, schoolCircle.lon]}
               icon={schoolMarkerIcon}
-            >
-              <Tooltip permanent direction="top" offset={[0, -20]}>
-                <span className="font-medium">{escapeHtml(schoolCircle.name)}</span>
-              </Tooltip>
-            </Marker>
+            />
           </>
         )}
       </MapContainer>

@@ -1970,9 +1970,9 @@ export default function MapDiscovery() {
             </div>
           )}
 
-          {isAuthenticated && (filters.polygon || !!selectedSchool) && (
+          {isAuthenticated && filters.polygon && (
             <MapStatsBar
-              filters={filters} selectedSchool={selectedSchool}
+              filters={filters}
               onPolygonClear={handlePolygonCleared}
             />
           )}
