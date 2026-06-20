@@ -1496,6 +1496,12 @@ export function AreaSchoolCombinedPanel({
         }
       />
 
+      {/* Single continuous scroll region (school-results-polish): only the PanelHeader
+          stays pinned. Summary band, radius chips, result heading and listings scroll
+          together as one column — no nested scroll trap — while the left map stays
+          stable. Mirrors SchoolSelectedPanel; this combined panel is what the canonical
+          school-first URL (areaKey + schoolId both set) actually renders. */}
+      <div className="flex-1 overflow-y-auto" data-testid="combined-selected-scroll">
       {/* Ink-navy school summary band */}
       <SchoolSummaryBand
         school={selectedSchool}
@@ -1526,10 +1532,13 @@ export function AreaSchoolCombinedPanel({
         />
       )}
 
-      {/* Listing body — Issue #1170: dim on in-flight refetch, not initial skeleton load. */}
+      {/* Listing body — Issue #1170: dim on in-flight refetch, not initial skeleton load.
+          Scroll is owned by the parent combined-selected-scroll container, so this
+          wrapper carries only the refetch dim — not its own overflow. */}
       <div
+        data-testid="combined-listings-body"
         className={cn(
-          'flex-1 overflow-y-auto transition-opacity duration-150',
+          'transition-opacity duration-150',
           isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
         )}
       >
@@ -1601,6 +1610,7 @@ export function AreaSchoolCombinedPanel({
             })}
           </div>
         )}
+      </div>
       </div>
     </>
   );
