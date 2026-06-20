@@ -225,7 +225,7 @@ describe('SchoolSelectedPanel', () => {
       isLoadingListings: false,
       isFetching: true,
     });
-    const body = container.querySelector('.flex-1.overflow-y-auto');
+    const body = container.querySelector('[data-testid="school-listings-body"]');
     expect(body).toHaveClass('opacity-50');
     expect(body).toHaveClass('pointer-events-none');
   });
@@ -236,7 +236,7 @@ describe('SchoolSelectedPanel', () => {
       isLoadingListings: true,
       isFetching: true,
     });
-    const body = container.querySelector('.flex-1.overflow-y-auto');
+    const body = container.querySelector('[data-testid="school-listings-body"]');
     expect(body).toHaveClass('opacity-100');
     expect(body).not.toHaveClass('opacity-50');
   });
@@ -247,8 +247,28 @@ describe('SchoolSelectedPanel', () => {
       isLoadingListings: false,
       isFetching: false,
     });
-    const body = container.querySelector('.flex-1.overflow-y-auto');
+    const body = container.querySelector('[data-testid="school-listings-body"]');
     expect(body).toHaveClass('opacity-100');
+  });
+
+  // ── school-results-polish: single continuous scroll region ────────────────────
+
+  it('wraps the summary band, radius chips and listings in one continuous scroll container', () => {
+    const { container } = renderWithReturn({
+      listings: [makeListing('l-1')],
+      isLoadingListings: false,
+      isFetching: false,
+    });
+    const scroll = container.querySelector('[data-testid="school-selected-scroll"]');
+    expect(scroll).toBeTruthy();
+    expect(scroll).toHaveClass('overflow-y-auto');
+    // Summary band and the listings body both live inside the single scroll
+    // container so they scroll together as one column.
+    expect(scroll?.querySelector('[data-testid="school-summary-band"]')).toBeTruthy();
+    expect(scroll?.querySelector('[data-testid="school-listings-body"]')).toBeTruthy();
+    // The inner listings body must NOT own its own scroll (would be a nested trap).
+    const body = container.querySelector('[data-testid="school-listings-body"]');
+    expect(body).not.toHaveClass('overflow-y-auto');
   });
 
   // ── AC4: empty state (ReTrends redesign) ──────────────────────────────────────
