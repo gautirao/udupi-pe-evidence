@@ -1,3 +1,7 @@
+/* ReTrends design-system webfonts — Sans: Plus Jakarta Sans · Serif/display: Fraunces · Mono: Geist Mono.
+   Mapped onto the app theme via tailwind.config.ts fontFamily (per docs/design/retrends-design-system). */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=Geist+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

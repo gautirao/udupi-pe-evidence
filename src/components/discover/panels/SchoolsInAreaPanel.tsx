@@ -375,7 +375,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                 <span className="inline-flex items-center rounded-full bg-copper px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-copper-foreground">
                   Selected area
                 </span>
-                <h2 className="mt-1 text-xl font-semibold leading-tight">{areaLabel}</h2>
+                <h2 className="mt-1 font-serif text-2xl font-semibold leading-tight tracking-tight">{areaLabel}</h2>
               </div>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-primary-foreground/75">

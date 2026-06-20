@@ -61,7 +61,7 @@ export function PanelHeader({
       )}
       {/* Title + optional journey pill */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
-        <h2 className="text-sm font-semibold truncate">{title}</h2>
+        <h2 className="font-serif text-base font-semibold tracking-tight truncate">{title}</h2>
         {journey != null && (
           <span
             className={cn(

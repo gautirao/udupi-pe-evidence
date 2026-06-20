@@ -86,12 +86,16 @@ function ZoneSummaryCard({ group, areaCount, schoolCount, listingCount }: ZoneSu
           <Layers className="h-5 w-5" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-foreground truncate">{group.name}</h3>
-          {group.subtitle && (
-            <span className="mt-1 inline-flex items-center rounded-full bg-plum-tint px-2 py-0.5 text-xs font-medium text-plum">
-              {group.subtitle}
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <h3 className="font-serif text-2xl font-semibold leading-tight tracking-tight text-foreground">
+              {group.name}
+            </h3>
+            {group.subtitle && (
+              <span className="inline-flex items-center rounded-full bg-plum-tint px-2.5 py-0.5 text-xs font-medium text-plum">
+                {group.subtitle}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -209,7 +213,7 @@ function AreaCard({ area, onSelect }: AreaCardProps) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-base font-semibold text-foreground truncate">{area.name}</span>
+            <span className="font-serif text-lg font-semibold leading-tight text-foreground truncate">{area.name}</span>
             {noHomes && (
               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 Schools only
@@ -325,7 +329,7 @@ export function SchoolGroupAreasPanel({
       </div>
 
       <div
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+        className="flex-1 overflow-y-auto bg-background px-4 py-4 space-y-4"
         aria-busy={isLoading}
         aria-label={`Areas in ${group.name}`}
         data-testid="school-group-areas-list"
@@ -349,14 +353,15 @@ export function SchoolGroupAreasPanel({
           </div>
         ) : (
           <>
+            {/* Guided 3-step strip sits ABOVE the zone summary (matches design source). */}
+            <HowSchoolSearchWorks />
+
             <ZoneSummaryCard
               group={group}
               areaCount={groupAreas.length}
               schoolCount={totalSchools}
               listingCount={totalListings}
             />
-
-            <HowSchoolSearchWorks />
 
             <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-2">
