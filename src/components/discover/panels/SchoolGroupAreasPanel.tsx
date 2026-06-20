@@ -320,11 +320,11 @@ export function SchoolGroupAreasPanel({
           size="sm"
           className="flex items-center gap-1 px-0 text-muted-foreground hover:text-foreground"
           onClick={onBack}
-          aria-label="Back to all school zones"
+          aria-label="Back to all area zones"
           data-testid="school-group-areas-back-btn"
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-          <span className="text-sm">{group.name}</span>
+          <span className="text-sm">Back to all area zones</span>
         </Button>
       </div>
 
