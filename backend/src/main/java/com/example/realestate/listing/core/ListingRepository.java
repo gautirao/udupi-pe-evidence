@@ -488,4 +488,78 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
     @Query(nativeQuery = true,
            value = "SELECT ST_Area(ST_GeomFromGeoJSON(:geoJson)::geography)")
     double computeBoundaryAreaSqm(@Param("geoJson") String geoJson);
+
+    // ===== Quality score (#1521) =====
+
+    /**
+     * Direct UPDATE of only the three quality columns on a single listing row.
+     * Called by {@code QualityRecomputeService} inside its own REQUIRES_NEW transaction.
+     *
+     * <p>Using a targeted @Modifying UPDATE instead of going through a listing-save path
+     * prevents reentrancy: the recompute write does NOT trigger another afterCommit hook.
+     *
+     * @param id                 the listing to update
+     * @param qualityScore       overall score in [0,100]; null for insufficient-data
+     * @param qualityBreakdown   canonical JSON or insufficient-data diagnostic JSON
+     * @param qualityComputedAt  timestamp of this computation (never null)
+     */
+    @Modifying
+    @Transactional
+    @Query(nativeQuery = true,
+           value = "UPDATE property_listings "
+                   + "SET quality_score = CAST(:qualityScore AS smallint), "
+                   + "    quality_breakdown = CAST(:qualityBreakdown AS jsonb), "
+                   + "    quality_computed_at = CAST(:qualityComputedAt AS timestamptz) "
+                   + "WHERE id = :id")
+    void updateQualityColumns(
+            @Param("id") UUID id,
+            @Param("qualityScore") Integer qualityScore,
+            @Param("qualityBreakdown") String qualityBreakdown,
+            @Param("qualityComputedAt") java.time.Instant qualityComputedAt);
+
+    /**
+     * Returns the area-median price per cent in paise for the given area key,
+     * from {@code area_stats_latest} (populated by the hourly rollup job).
+     *
+     * <p>The {@code property_type = 'all'} row holds the cross-type aggregate median,
+     * which is the correct comparator for PRICE_SANITY (we compare listing price-per-cent
+     * against all listings in the area, not just the same property type).
+     *
+     * <p>Returns null (Optional.empty) when no stats exist for the area — the caller
+     * then supplies null to QualityScoreInputs, which excludes PRICE_SANITY from the
+     * denominator (INDETERMINATE path).
+     *
+     * @param areaKey the listing's area key
+     * @return the area median price per cent in paise, or empty if unavailable
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT median_price_per_cent_paise "
+                   + "FROM area_stats_latest "
+                   + "WHERE area_key = :areaKey AND property_type = 'all' "
+                   + "LIMIT 1")
+    Optional<Long> findAreaMedianPricePerCentPaise(@Param("areaKey") String areaKey);
+
+    /**
+     * Keyset-paginated query returning LIVE listing IDs for the quality backfill.
+     *
+     * <p>The predicate mirrors {@link #findAllLiveListings}: status='LIVE',
+     * archived_at IS NULL, is_duplicate=false. Keyset paging (id > lastId) avoids
+     * offset-based slowdowns on large tables.
+     *
+     * @param lastId   the last UUID processed in the previous batch (use
+     *                 {@code "00000000-0000-0000-0000-000000000000"} for the first page)
+     * @param batchSize maximum rows to return
+     * @return listing IDs in ascending UUID order
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT id FROM property_listings "
+                   + "WHERE status = 'LIVE' "
+                   + "  AND archived_at IS NULL "
+                   + "  AND is_duplicate = false "
+                   + "  AND id > CAST(:lastId AS uuid) "
+                   + "ORDER BY id ASC "
+                   + "LIMIT :batchSize")
+    List<UUID> findLiveListingIdsAfter(
+            @Param("lastId") String lastId,
+            @Param("batchSize") int batchSize);
 }

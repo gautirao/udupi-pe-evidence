@@ -9,6 +9,7 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.ingestion.ListingIngestionService;
+import com.example.realestate.quality.QualityRecomputeService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class IngestionJobRunnerTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
 
+    @Mock
+    private QualityRecomputeService qualityRecomputeService;
+
     private RawPostService rawPostService;
     private ClassificationService classificationService;
     private ListingIngestionService listingIngestionService;
@@ -57,7 +61,7 @@ class IngestionJobRunnerTest {
         listingIngestionService = new ListingIngestionService(
                 listingRepository, rawPostRepository, geocodingPort,
                 new ObjectMapper(), applicationEventPublisher,
-                deduplicationService);
+                deduplicationService, qualityRecomputeService);
         jobRunner = new IngestionJobRunner(rawPostService, classificationService, listingIngestionService, 10);
     }
 

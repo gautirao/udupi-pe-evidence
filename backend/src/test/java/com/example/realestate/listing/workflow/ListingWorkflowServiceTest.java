@@ -19,6 +19,7 @@ import com.example.realestate.listing.exception.ListingValidationException;
 import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.quality.QualityRecomputeService;
 import com.example.realestate.search.outbox.SearchOutboxWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,6 +78,9 @@ class ListingWorkflowServiceTest {
     @Mock
     private SearchOutboxWriter searchOutboxWriter;
 
+    @Mock
+    private QualityRecomputeService qualityRecomputeService;
+
     // Real ObjectMapper — buildSnapshot exercises actual JSON serialisation
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -91,14 +95,16 @@ class ListingWorkflowServiceTest {
         workflowService = new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
-                imageRepository, objectMapper, bookingCascadeService, false, searchOutboxWriter);
+                imageRepository, objectMapper, bookingCascadeService, false, searchOutboxWriter,
+                qualityRecomputeService);
     }
 
     private ListingWorkflowService workflowServiceCascadeEnabled() {
         return new ListingWorkflowService(
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 proximityDuplicateService, policy, statusHistoryRepository,
-                imageRepository, objectMapper, bookingCascadeService, true, searchOutboxWriter);
+                imageRepository, objectMapper, bookingCascadeService, true, searchOutboxWriter,
+                qualityRecomputeService);
     }
 
     // --- Notification decoupling tests ---

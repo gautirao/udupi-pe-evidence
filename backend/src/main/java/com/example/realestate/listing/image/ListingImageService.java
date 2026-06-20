@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.storage.SupabaseStorageService;
+import com.example.realestate.quality.QualityRecomputeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -31,11 +32,14 @@ class ListingImageService {
 
     private final ListingImageRepository imageRepository;
     private final SupabaseStorageService storageService;
+    private final QualityRecomputeService qualityRecomputeService;
 
     ListingImageService(ListingImageRepository imageRepository,
-                        SupabaseStorageService storageService) {
+                        SupabaseStorageService storageService,
+                        QualityRecomputeService qualityRecomputeService) {
         this.imageRepository = imageRepository;
         this.storageService = storageService;
+        this.qualityRecomputeService = qualityRecomputeService;
     }
 
     /**
@@ -60,10 +64,13 @@ class ListingImageService {
      */
     @Transactional
     public void deleteImage(ListingImage image) {
+        UUID listingId = image.getListingId();
         imageRepository.delete(image);
         // Best-effort Storage delete — non-fatal per IMAGE_UPLOAD_FAILURE_MODES.md §3.
         // DB row is deleted first; orphan cleanup (§5) covers any missed objects.
         storageService.deleteObjectBestEffort(image.getStoragePath());
+        // Recompute quality after image removal — PHOTOS score depends on photo count
+        qualityRecomputeService.recomputeAfterCommit(listingId);
     }
 
     /**
@@ -107,6 +114,8 @@ class ListingImageService {
         }
         imageRepository.saveAll(existingImages);
 
+        // Recompute quality after reorder — PHOTOS band may shift if positions change count visibility
+        qualityRecomputeService.recomputeAfterCommit(listingId);
         return imageRepository.findByListingIdOrderByPositionAsc(listingId);
     }
 }

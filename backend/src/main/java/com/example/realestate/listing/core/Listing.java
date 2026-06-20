@@ -257,6 +257,35 @@ public class Listing {
     @Column(name = "trust_tier", nullable = false, length = 1)
     private String trustTier = "D";
 
+    // --- Listing quality score (#1521) ---
+
+    /**
+     * Weighted quality score in [0, 100]. Null until the #1521 backfill or a
+     * recompute hook populates it. Never write 0 as a fabricated score — null
+     * means "not yet computed"; use honest-null protocol when insufficient data.
+     * Written only by {@code QualityRecomputeService}; never accepted from broker PUT.
+     */
+    @Column(name = "quality_score")
+    private Short qualityScore;
+
+    /**
+     * JSONB breakdown of the quality computation. Either the full canonical JSON
+     * (from {@code QualityScoreService.toCanonicalJson}) or an insufficient-data
+     * diagnostic: {@code {"status":"insufficient_data","missing":[...]}}.
+     * Null until first computation. Written only by {@code QualityRecomputeService}.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "quality_breakdown", columnDefinition = "jsonb")
+    private String qualityBreakdown;
+
+    /**
+     * Timestamp of the last quality score computation. Non-null after first
+     * computation, regardless of whether the result is a score or insufficient_data.
+     * Written only by {@code QualityRecomputeService}.
+     */
+    @Column(name = "quality_computed_at")
+    private Instant qualityComputedAt;
+
     /**
      * Integer ranking score used for search result ordering.
      * Default 0. Computation deferred to RE-148 / TrustTierCalculator.
@@ -1152,6 +1181,32 @@ public class Listing {
 
     public void setSellerType(String sellerType) {
         this.sellerType = sellerType;
+    }
+
+    // --- Quality score getters/setters (#1521) ---
+
+    public Short getQualityScore() {
+        return qualityScore;
+    }
+
+    public void setQualityScore(Short qualityScore) {
+        this.qualityScore = qualityScore;
+    }
+
+    public String getQualityBreakdown() {
+        return qualityBreakdown;
+    }
+
+    public void setQualityBreakdown(String qualityBreakdown) {
+        this.qualityBreakdown = qualityBreakdown;
+    }
+
+    public Instant getQualityComputedAt() {
+        return qualityComputedAt;
+    }
+
+    public void setQualityComputedAt(Instant qualityComputedAt) {
+        this.qualityComputedAt = qualityComputedAt;
     }
 
     @PrePersist

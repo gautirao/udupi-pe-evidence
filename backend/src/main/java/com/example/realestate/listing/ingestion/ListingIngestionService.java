@@ -12,6 +12,7 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingDeduplicationService;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.pricing.PriceParser;
+import com.example.realestate.quality.QualityRecomputeService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -38,6 +39,7 @@ public class ListingIngestionService {
     private final ObjectMapper objectMapper;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ListingDeduplicationService listingDeduplicationService;
+    private final QualityRecomputeService qualityRecomputeService;
 
     public ListingIngestionService(
             ListingRepository listingRepository,
@@ -45,13 +47,15 @@ public class ListingIngestionService {
             GeocodingPort geocodingPort,
             ObjectMapper objectMapper,
             ApplicationEventPublisher applicationEventPublisher,
-            ListingDeduplicationService listingDeduplicationService) {
+            ListingDeduplicationService listingDeduplicationService,
+            QualityRecomputeService qualityRecomputeService) {
         this.listingRepository = listingRepository;
         this.rawPostRepository = rawPostRepository;
         this.geocodingPort = geocodingPort;
         this.objectMapper = objectMapper;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingDeduplicationService = listingDeduplicationService;
+        this.qualityRecomputeService = qualityRecomputeService;
     }
 
     /**
@@ -162,6 +166,8 @@ public class ListingIngestionService {
                 saved.getId(), post.getId(), saved.getPropertyType(),
                 saved.getConfidenceScore(), saved.isValid(), saved.isDuplicate());
 
+        // Trigger quality recompute after the ingestion transaction commits
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 

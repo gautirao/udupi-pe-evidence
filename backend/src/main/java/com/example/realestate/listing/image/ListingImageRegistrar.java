@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.quality.QualityRecomputeService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -49,11 +50,14 @@ class ListingImageRegistrar {
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
+    private final QualityRecomputeService qualityRecomputeService;
 
     ListingImageRegistrar(ListingRepository listingRepository,
-                          ListingImageRepository imageRepository) {
+                          ListingImageRepository imageRepository,
+                          QualityRecomputeService qualityRecomputeService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
+        this.qualityRecomputeService = qualityRecomputeService;
     }
 
     @Transactional(noRollbackFor = {
@@ -101,6 +105,8 @@ class ListingImageRegistrar {
             ListingImage saved = imageRepository.saveAndFlush(image);
             log.info("POST /api/listings/{}/images -> 201 storagePath={} userId={}",
                     listingId, req.storagePath(), callerId);
+            // Recompute quality after image add — PHOTOS score depends on photo count
+            qualityRecomputeService.recomputeAfterCommit(listingId);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(ListingImageController.toResponse(saved));
         } catch (DataIntegrityViolationException e) {

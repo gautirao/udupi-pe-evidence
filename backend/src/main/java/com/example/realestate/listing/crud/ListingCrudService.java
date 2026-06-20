@@ -18,6 +18,7 @@ import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.OwnerListingLimitException;
 import com.example.realestate.poi.PoiQueryProfile;
+import com.example.realestate.quality.QualityRecomputeService;
 import com.example.realestate.search.outbox.SearchOutboxEventType;
 import com.example.realestate.search.outbox.SearchOutboxOperation;
 import com.example.realestate.search.outbox.SearchOutboxWriter;
@@ -62,6 +63,7 @@ public class ListingCrudService {
     private final BadgeInvalidationService badgeInvalidationService;
     private final SearchOutboxWriter searchOutboxWriter;
     private final PolygonBoundaryValidator polygonBoundaryValidator;
+    private final QualityRecomputeService qualityRecomputeService;
 
     public ListingCrudService(
             ListingRepository listingRepository,
@@ -71,7 +73,8 @@ public class ListingCrudService {
             PriceChangeLogRepository priceChangeLogRepository,
             BadgeInvalidationService badgeInvalidationService,
             SearchOutboxWriter searchOutboxWriter,
-            PolygonBoundaryValidator polygonBoundaryValidator) {
+            PolygonBoundaryValidator polygonBoundaryValidator,
+            QualityRecomputeService qualityRecomputeService) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -80,6 +83,7 @@ public class ListingCrudService {
         this.badgeInvalidationService = badgeInvalidationService;
         this.searchOutboxWriter = searchOutboxWriter;
         this.polygonBoundaryValidator = polygonBoundaryValidator;
+        this.qualityRecomputeService = qualityRecomputeService;
     }
 
     /**
@@ -218,6 +222,9 @@ public class ListingCrudService {
                 SearchOutboxOperation.INDEX,
                 saved.getStatus(),
                 saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
+        // Trigger quality recompute after commit (isolation: recompute failure never rolls back
+        // the listing save; runs in its own REQUIRES_NEW transaction after commit completes)
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 
@@ -508,6 +515,9 @@ public class ListingCrudService {
                     saved.getId(), saved.getPropertyType());
         }
 
+        // Trigger quality recompute after commit (any field change may affect score;
+        // runs in its own REQUIRES_NEW transaction, isolated from this write)
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 

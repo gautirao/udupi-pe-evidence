@@ -1,6 +1,7 @@
 package com.example.realestate.listing.image;
 
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.quality.QualityRecomputeService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,11 +33,14 @@ class ListingImageRegistrarTest {
     @Mock
     private ListingImageRepository imageRepository;
 
+    @Mock
+    private QualityRecomputeService qualityRecomputeService;
+
     private ListingImageRegistrar registrar;
 
     @BeforeEach
     void setUp() {
-        registrar = new ListingImageRegistrar(listingRepository, imageRepository);
+        registrar = new ListingImageRegistrar(listingRepository, imageRepository, qualityRecomputeService);
 
         // findByIdWithLock is called at the start of every register() call.
         // Return an empty Optional — the lock is acquired and the result is not used by the method.

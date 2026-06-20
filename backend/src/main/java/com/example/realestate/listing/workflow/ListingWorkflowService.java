@@ -21,6 +21,7 @@ import com.example.realestate.listing.exception.ListingValidationException;
 import com.example.realestate.booking.BookingCascadeService;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.quality.QualityRecomputeService;
 import com.example.realestate.search.outbox.SearchOutboxEventType;
 import com.example.realestate.search.outbox.SearchOutboxOperation;
 import com.example.realestate.search.outbox.SearchOutboxWriter;
@@ -83,6 +84,7 @@ public class ListingWorkflowService {
     private final BookingCascadeService bookingCascadeService;
     private final boolean bookingCascadeEnabled;
     private final SearchOutboxWriter searchOutboxWriter;
+    private final QualityRecomputeService qualityRecomputeService;
 
     public ListingWorkflowService(
             ListingRepository listingRepository,
@@ -95,7 +97,8 @@ public class ListingWorkflowService {
             ObjectMapper objectMapper,
             BookingCascadeService bookingCascadeService,
             @Value("${listing.lifecycle.booking-cascade.enabled:false}") boolean bookingCascadeEnabled,
-            SearchOutboxWriter searchOutboxWriter) {
+            SearchOutboxWriter searchOutboxWriter,
+            QualityRecomputeService qualityRecomputeService) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -109,6 +112,7 @@ public class ListingWorkflowService {
         this.bookingCascadeService = bookingCascadeService;
         this.bookingCascadeEnabled = bookingCascadeEnabled;
         this.searchOutboxWriter = searchOutboxWriter;
+        this.qualityRecomputeService = qualityRecomputeService;
     }
 
     /**
@@ -159,6 +163,8 @@ public class ListingWorkflowService {
 
         log.info("Submitted listing listingId={} by userId={} status=PENDING_REVIEW fromStatus={}",
                 listingId, userId, previousStatus);
+        // Recompute quality on submit — listing is now visible to admin reviewers
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 
@@ -232,6 +238,8 @@ public class ListingWorkflowService {
                 saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Approved listing listingId={} by adminId={} status=LIVE fromStatus={}",
                 listingId, adminUserId, currentStatus);
+        // Recompute quality when listing goes LIVE — trust tier may have been updated by admin
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 
@@ -665,6 +673,8 @@ public class ListingWorkflowService {
                 saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Fast-restored archived listing listingId={} by actorId={} fromStatus={} toStatus=LIVE",
                 listingId, actorId, previousStatus);
+        // Recompute quality on restore to LIVE — listing is now publicly visible again
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 
@@ -746,6 +756,8 @@ public class ListingWorkflowService {
                 saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Restored rejected listing listingId={} by adminId={} fromStatus={} toStatus=LIVE note='{}'",
                 listingId, adminId, currentStatus, moderationNote);
+        // Recompute quality on restore from REJECTED to LIVE
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 
@@ -1018,6 +1030,8 @@ public class ListingWorkflowService {
                 saved.getUpdatedAt() != null ? saved.getUpdatedAt().toInstant() : null);
         log.info("Approved scraped listing listingId={} by adminId={} fromStatus={} toStatus=LIVE",
                 listingId, adminId, currentStatus);
+        // Recompute quality on scraped listing approval to LIVE
+        qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
     }
 

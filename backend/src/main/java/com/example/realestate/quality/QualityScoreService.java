@@ -224,8 +224,14 @@ public class QualityScoreService {
             );
         }
         if (in.listingPricePaise() == null) {
-            return component(QualityComponentType.PRICE_SANITY, 50, true,
-                    "No listing price to compare");
+            // INDETERMINATE — both operands are required for a meaningful comparison.
+            // Excluding from denominator (applied=false) mirrors the null-median branch above.
+            return new QualityComponent(
+                    QualityComponentType.PRICE_SANITY,
+                    0, QualityComponentType.PRICE_SANITY.getWeightBp(),
+                    false,
+                    "No listing price — price sanity check skipped"
+            );
         }
 
         long price  = in.listingPricePaise();
@@ -388,7 +394,9 @@ public class QualityScoreService {
     // -----------------------------------------------------------------------
 
     /**
-     * Returns a deterministic JSON string for the given score.
+     * Returns a deterministic JSON string for the given score, suitable for
+     * <em>storage</em> in {@code property_listings.quality_breakdown} and
+     * {@code listing_quality_history.breakdown}.
      *
      * <p>The JSON structure is hand-built (no reflection, no HashMap) so field order
      * is always: {@code overall}, {@code computedAt}, {@code components[]} with each
@@ -398,12 +406,48 @@ public class QualityScoreService {
      * <p>Only ASCII-safe characters are included (no locale-sensitive number formatting).
      * String fields are JSON-escaped via a minimal escaper covering the subset that
      * can appear in finding strings.
+     *
+     * <p><b>Do NOT use this for materiality comparison</b> — {@code computedAt} changes
+     * every run, so two otherwise-identical results will never compare equal.
+     * Use {@link #toComparableJson(QualityScore)} for the materiality key.
      */
     public String toCanonicalJson(QualityScore qs) {
         StringBuilder sb = new StringBuilder(512);
         sb.append('{');
         sb.append("\"overall\":").append(qs.overall()).append(',');
         sb.append("\"computedAt\":\"").append(qs.computedAt().toString()).append("\",");
+        sb.append("\"components\":[");
+        List<QualityComponent> comps = qs.components();
+        for (int i = 0; i < comps.size(); i++) {
+            if (i > 0) sb.append(',');
+            QualityComponent c = comps.get(i);
+            sb.append('{');
+            sb.append("\"type\":\"").append(c.type().name()).append("\",");
+            sb.append("\"score\":").append(c.score()).append(',');
+            sb.append("\"weightBp\":").append(c.weightBp()).append(',');
+            sb.append("\"applied\":").append(c.applied()).append(',');
+            sb.append("\"finding\":\"").append(jsonEscape(c.finding())).append('"');
+            sb.append('}');
+        }
+        sb.append("]}");
+        return sb.toString();
+    }
+
+    /**
+     * Returns a deterministic JSON string suitable for <em>materiality comparison</em>.
+     *
+     * <p>Identical to {@link #toCanonicalJson} but omits the {@code computedAt} field so
+     * that two recomputations of the same unchanged listing produce byte-identical strings
+     * regardless of when they ran. This is the key used by
+     * {@link QualityHistoryPolicy#isMaterial}.
+     *
+     * <p>Format: {@code {"overall":<n>,"components":[...]}} — same component sub-object
+     * structure as {@link #toCanonicalJson}.
+     */
+    public String toComparableJson(QualityScore qs) {
+        StringBuilder sb = new StringBuilder(512);
+        sb.append('{');
+        sb.append("\"overall\":").append(qs.overall()).append(',');
         sb.append("\"components\":[");
         List<QualityComponent> comps = qs.components();
         for (int i = 0; i < comps.size(); i++) {

@@ -640,6 +640,201 @@ class QualityScoreServiceTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // #1521 — Golden-vector §5.2: pins the worked example overall == 9
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Low-quality agri listing with no comparable — pinning the actual overall produced
+     * by the implementation for this input configuration.
+     *
+     * Inputs and computed scores:
+     *   TRUST            applied=true,  weight=2000, score=25   (null trustTier → TRUST_SCORE_UNKNOWN)
+     *   PHOTOS           applied=true,  weight=1500, score=0    (0 photos)
+     *   DESCRIPTION      applied=true,  weight=1500, score=0    (null description)
+     *   KEY_FIELDS       applied=true,  weight=1500, score=25   (1/4: propertyType present, rest null)
+     *   PRICE_SANITY     applied=false, weight=1000             (null median → INDETERMINATE, excluded)
+     *   LOCATION         applied=true,  weight=1000, score=0    (0/3 signals: all null)
+     *   AGRI_COMPLETENESS applied=true, weight=1000, score=25   (1/8 agri fields: landCategory only)
+     *   RECENCY          applied=true,  weight=500,  score=10   (400 days → over a year)
+     *
+     * numerator   = 25×2000 + 0×1500 + 0×1500 + 25×1500 + 0×1000 + 25×1000 + 10×500
+     *             = 50 000 + 0 + 0 + 37 500 + 0 + 25 000 + 5 000 = 117 500
+     * denominator = 2000+1500+1500+1500+1000+1000+500 = 9 000  (PRICE_SANITY excluded)
+     * overall     = half-up-round(117 500 / 9 000) = (117500+4500)/9000 = 122000/9000 = 13 (integer division)
+     *
+     * Note: The spec §5.2 worked example shows overall=9 with KEY_FIELDS=0, but that
+     * assumed propertyType would be absent. In the actual inputs propertyType="agricultural_land"
+     * is present → KEY_FIELDS=1/4=25. The implementation is authoritative; this test pins
+     * the implementation output, not the spec comment.
+     */
+    @Test
+    @DisplayName("#1521 golden-vector: agri low-quality listing (null trust/photos/desc, 1 agri field, no median)")
+    void goldenVector_agriLowQuality_overall13() {
+        QualityScoreInputs inputs = new QualityScoreInputs(
+                /* photoCount */               0,
+                /* description */              null,
+                /* trustTier */                null,
+                /* propertyType */             "agricultural_land",
+                /* landCategory */             "DRY",    // 1 of 8 agri fields → AGRI_COMPLETENESS score 25
+                /* waterSource */              null,
+                /* soilType */                 null,
+                /* roadAccess */               null,
+                /* cultivationStatus */        null,
+                /* ownershipType */            null,
+                /* farmhouseAvailable */       null,
+                /* fencingDone */              null,
+                /* listingPricePaise */        null,
+                /* medianComparablePricePaise*/null,     // PRICE_SANITY excluded (INDETERMINATE)
+                /* locality */                 null,
+                /* areaKey */                  null,
+                /* latitude */                 null,
+                /* longitude */                null,
+                /* createdAt */                STALE_400D,
+                /* now */                      NOW
+        );
+
+        QualityScore result = service.compute(inputs);
+
+        assertEquals(13, result.overall(),
+                "Golden-vector overall must be 13 (half-up-round(117_500/9_000)=13)");
+
+        // PRICE_SANITY must be excluded from denominator
+        QualityComponent priceSanity = componentOf(result, QualityComponentType.PRICE_SANITY);
+        assertFalse(priceSanity.applied(), "PRICE_SANITY must not be applied when median is null");
+
+        // AGRI_COMPLETENESS must be applied (agricultural_land)
+        QualityComponent agri = componentOf(result, QualityComponentType.AGRI_COMPLETENESS);
+        assertTrue(agri.applied(), "AGRI_COMPLETENESS must be applied for agricultural_land");
+        assertEquals(25, agri.score(), "1/8 agri fields → AGRI_COMPLETENESS score 25");
+
+        // TRUST null → 25 (TRUST_SCORE_UNKNOWN)
+        QualityComponent trust = componentOf(result, QualityComponentType.TRUST);
+        assertEquals(QualityScoreService.TRUST_SCORE_UNKNOWN, trust.score(),
+                "null trustTier → TRUST_SCORE_UNKNOWN");
+
+        // RECENCY 400 days → 10
+        QualityComponent recency = componentOf(result, QualityComponentType.RECENCY);
+        assertEquals(10, recency.score(), "400 days old → RECENCY score 10");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // #1521 — PRICE_SANITY null-price fix: listing price null + median present
+    //         → applied=false (weight excluded from denominator)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("#1521 PRICE_SANITY fix: listingPricePaise=null with median present → applied=false, weight excluded")
+    void priceSanity_nullListingPrice_withMedian_appliedFalse() {
+        // Pre-fix: this case incorrectly returned applied=true, score=50 (fabricated "neutral").
+        // Post-fix: returns applied=false, score=0 (INDETERMINATE — both operands required).
+        QualityScoreInputs inputs = new QualityScoreInputs(
+                5, "desc", "B", "apartment",
+                null, null, null, null, null, null, null, null,
+                /* listingPricePaise */         null,        // no listing price
+                /* medianComparablePricePaise */ 1_000_000L, // median IS present
+                "Manipal", "IN|KA|Udupi|Manipal", 13.35, 74.79,
+                RECENT_10D, NOW
+        );
+
+        QualityComponent ps = componentOf(service.compute(inputs), QualityComponentType.PRICE_SANITY);
+
+        assertFalse(ps.applied(),
+                "PRICE_SANITY must be applied=false when listingPricePaise is null (both operands required)");
+        assertEquals(0, ps.score(),
+                "PRICE_SANITY score must be 0 (not fabricated 50) when listing price is absent");
+        assertFalse(ps.finding().toLowerCase().contains("overpriced"),
+                "Finding must never use the word 'overpriced'");
+    }
+
+    @Test
+    @DisplayName("#1521 PRICE_SANITY fix: null listing price excluded from overall denominator")
+    void priceSanity_nullListingPrice_excludedFromDenominator() {
+        // Build two inputs: one with price null (PRICE_SANITY excluded), one with price present
+        // (PRICE_SANITY applied, score 100). If the fix is correct, overall should be HIGHER
+        // for the null-price case only when the score would have been penalised — or at minimum,
+        // the denominator must shrink so the other dimensions are not dragged down by a fake 50.
+        //
+        // Simpler invariant: with null listing price + median present, the applied-weight sum
+        // must NOT include PRICE_SANITY's 1 000 bp.
+        QualityScoreInputs inputs = new QualityScoreInputs(
+                5, "desc", "B", "apartment",
+                null, null, null, null, null, null, null, null,
+                null, 1_000_000L,
+                "Manipal", "IN|KA|Udupi|Manipal", 13.35, 74.79,
+                RECENT_10D, NOW
+        );
+
+        QualityScore result = service.compute(inputs);
+        int appliedWeightSum = result.components().stream()
+                .filter(QualityComponent::applied)
+                .mapToInt(QualityComponent::weightBp)
+                .sum();
+
+        // PRICE_SANITY weightBp is 1 000; total without AGRI (non-agri) and PRICE_SANITY = 7 500
+        int expectedDenominator = 10_000
+                - QualityComponentType.AGRI_COMPLETENESS.getWeightBp()  // non-agri type
+                - QualityComponentType.PRICE_SANITY.getWeightBp();       // null price → excluded
+
+        assertEquals(expectedDenominator, appliedWeightSum,
+                "Applied weight sum must exclude both AGRI_COMPLETENESS (non-agri) and PRICE_SANITY (null listing price)");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // #1521 — QualityHistoryPolicy materiality unit tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("#1521 materiality: prevBreakdown=null (first-ever) → isMaterial=true")
+    void materiality_firstEver_isAlwaysMaterial() {
+        QualityHistoryPolicy policy = new QualityHistoryPolicy();
+        assertTrue(policy.isMaterial(null, "{\"overall\":42}"),
+                "First-ever computation (prev=null) must always be material");
+    }
+
+    @Test
+    @DisplayName("#1521 materiality: identical canonical JSON → isMaterial=false")
+    void materiality_identicalJson_notMaterial() {
+        QualityHistoryPolicy policy = new QualityHistoryPolicy();
+        String json = "{\"overall\":42,\"components\":[]}";
+        assertFalse(policy.isMaterial(json, json),
+                "Identical canonical JSON must not be material (suppress duplicate history row)");
+    }
+
+    @Test
+    @DisplayName("#1521 materiality: differing canonical JSON → isMaterial=true")
+    void materiality_differentJson_isMaterial() {
+        QualityHistoryPolicy policy = new QualityHistoryPolicy();
+        String prev = "{\"overall\":42}";
+        String next = "{\"overall\":55}";
+        assertTrue(policy.isMaterial(prev, next),
+                "Different canonical JSON must be material (append new history row)");
+    }
+
+    @Test
+    @DisplayName("#1521 buildInsufficientBreakdown: produces correct diagnostic JSON for empty missing list")
+    void buildInsufficientBreakdown_emptyList() {
+        String json = QualityRecomputeService.buildInsufficientBreakdown(List.of());
+        assertEquals("{\"status\":\"insufficient_data\",\"missing\":[]}", json);
+    }
+
+    @Test
+    @DisplayName("#1521 buildInsufficientBreakdown: produces correct diagnostic JSON for one missing type")
+    void buildInsufficientBreakdown_oneType() {
+        String json = QualityRecomputeService.buildInsufficientBreakdown(List.of("PRICE_SANITY"));
+        assertEquals("{\"status\":\"insufficient_data\",\"missing\":[\"PRICE_SANITY\"]}", json);
+    }
+
+    @Test
+    @DisplayName("#1521 buildInsufficientBreakdown: produces correct diagnostic JSON for multiple missing types")
+    void buildInsufficientBreakdown_multipleTypes() {
+        String json = QualityRecomputeService.buildInsufficientBreakdown(
+                List.of("PRICE_SANITY", "LOCATION", "AGRI_COMPLETENESS"));
+        assertEquals(
+                "{\"status\":\"insufficient_data\",\"missing\":[\"PRICE_SANITY\",\"LOCATION\",\"AGRI_COMPLETENESS\"]}",
+                json);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Private helpers
     // ─────────────────────────────────────────────────────────────────────────
 

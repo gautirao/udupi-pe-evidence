@@ -16,6 +16,7 @@ import com.example.realestate.listing.geometry.PolygonBoundaryValidator;
 import com.example.realestate.listing.image.ListingImageRepository;
 import com.example.realestate.listing.workflow.ListingTransitionPolicy;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
+import com.example.realestate.quality.QualityRecomputeService;
 import com.example.realestate.search.outbox.SearchOutboxWriter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -138,15 +139,17 @@ class AgriListingBoundaryJourneyIT {
         SearchOutboxWriter outbox = mock(SearchOutboxWriter.class);
         ProximityDuplicateService proximity = mock(ProximityDuplicateService.class);
         BookingCascadeService bookingCascade = mock(BookingCascadeService.class);
+        QualityRecomputeService qualityRecompute = mock(QualityRecomputeService.class);
 
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
-                priceChangeLogRepository, badge, outbox, validator);
+                priceChangeLogRepository, badge, outbox, validator,
+                qualityRecompute);
 
         workflowService = new ListingWorkflowService(
                 listingRepository, events, ownershipGuard, proximity, policy,
                 statusHistoryRepository, imageRepository, objectMapper,
-                bookingCascade, false, outbox);
+                bookingCascade, false, outbox, qualityRecompute);
     }
 
     /**
