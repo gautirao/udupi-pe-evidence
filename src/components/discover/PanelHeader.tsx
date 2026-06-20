@@ -88,7 +88,6 @@ export function PanelHeader({
           )}
         </div>
       )}
-
       {/* Title + journey pill */}
       <div className="flex items-center gap-2.5 flex-wrap">
         <h1 className="font-['Fraunces',_ui-serif,_Georgia,_serif] text-2xl font-semibold leading-tight tracking-tight text-foreground">

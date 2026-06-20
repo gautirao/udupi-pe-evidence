@@ -973,6 +973,10 @@ export function SchoolsInAreaPanel({
                     onSelect={onSelectListing}
                     onHover={onHoverListing}
                     areaLabel={selectedArea?.areaLabel}
+                    // Demo-only trust badge for design validation — applies a clearly-marked,
+                    // deterministic tier ONLY when the backend trustTier is null (it currently
+                    // is for discovery listings). Removed once real trust tier is populated.
+                    demoTrustFallback
                   />
                 </div>
               ))}

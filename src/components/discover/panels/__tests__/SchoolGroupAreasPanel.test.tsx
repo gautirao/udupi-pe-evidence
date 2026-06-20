@@ -131,10 +131,10 @@ describe('SchoolGroupAreasPanel', () => {
     expect(screen.getByTestId('school-group-areas-empty')).toBeInTheDocument();
   });
 
-  it('renders group name in the Back button label', () => {
+  it('renders "Back to all area zones" in the Back button label', () => {
     renderPanel();
     const backBtn = screen.getByTestId('school-group-areas-back-btn');
-    expect(backBtn).toHaveTextContent('South Zone');
+    expect(backBtn).toHaveTextContent('Back to all area zones');
   });
 
   it('renders the list container with the correct testid', () => {

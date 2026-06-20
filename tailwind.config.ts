@@ -14,6 +14,14 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        // ReTrends design-system families (docs/design/retrends-design-system/tokens).
+        // sans = UI/body · serif/display = editorial headlines · mono = data/metrics.
+        sans: ['"Plus Jakarta Sans"', "ui-sans-serif", "system-ui", "-apple-system", '"Segoe UI"', "sans-serif"],
+        serif: ["Fraunces", "ui-serif", "Georgia", '"Times New Roman"', "serif"],
+        display: ["Fraunces", "ui-serif", "Georgia", '"Times New Roman"', "serif"],
+        mono: ['"Geist Mono"', "ui-monospace", '"SF Mono"', '"Roboto Mono"', "monospace"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

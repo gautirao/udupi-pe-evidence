@@ -352,7 +352,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
         {isSchoolFirst && (
           <div
             data-testid="selected-area-summary"
-            className="m-4 rounded-xl bg-primary p-5 text-primary-foreground shadow-md"
+            className="m-4 rounded-2xl bg-primary p-5 text-primary-foreground shadow-lg ring-1 ring-white/5"
           >
             <nav aria-label="Breadcrumb" className="mb-2.5">
               <ol className="flex flex-wrap items-center gap-1.5 text-xs text-primary-foreground/60">
@@ -374,10 +374,10 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                 <MapPin className="h-5 w-5 text-primary-foreground" aria-hidden />
               </div>
               <div className="min-w-0">
-                <span className="text-[11px] font-bold uppercase tracking-wide text-primary-foreground/60">
+                <span className="inline-flex items-center rounded-full bg-copper px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-copper-foreground">
                   Selected area
                 </span>
-                <h2 className="text-xl font-semibold leading-tight">{areaLabel}</h2>
+                <h2 className="mt-1 font-serif text-2xl font-semibold leading-tight tracking-tight">{areaLabel}</h2>
               </div>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-primary-foreground/75">
@@ -410,8 +410,10 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
           </div>
         )}
 
-        {/* School selection: section title + result count + search + grouped Board/Level chips */}
-        <div className="space-y-3 border-b border-border px-4 pb-3 pt-1">
+        {/* School selection: section title + result count + search + grouped Board/Level chips.
+            ReTrends polish — the search + filter chips live inside one calm, smooth-edged
+            contained card (mirrors the design source) instead of a bare ruled section. */}
+        <div className="space-y-3 px-4 pb-4 pt-2">
           <div className="flex items-baseline justify-between gap-3">
             <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">
               {isSchoolFirst ? `Find a school in ${areaLabel}` : 'Filter schools'}
@@ -425,17 +427,24 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
             </span>
           </div>
 
-          {/* Search by school name (client-side, scoped to this area) */}
+          {isSchoolFirst && (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Narrow by board or level, then pick a school to filter homes within reach of it.
+            </p>
+          )}
+
+          {/* Search by school name (client-side, scoped to this area). Rounded pill + soft
+              shadow for the premium, contained look in the design source. */}
           <div className="relative">
             <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
             />
             <Input
-              placeholder="Search school name"
+              placeholder="Search school name…"
               value={nameQuery}
               onChange={(e) => setNameQuery(e.target.value)}
-              className="h-9 pl-8 pr-8 text-sm"
+              className="h-11 rounded-full border-border bg-card pl-10 pr-10 text-sm shadow-xs focus-visible:ring-plum/40"
               data-testid="school-search-input"
               aria-label="Search school name"
             />
@@ -445,82 +454,85 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                 onClick={() => setNameQuery('')}
                 aria-label="Clear search"
                 data-testid="school-search-clear"
-                className="absolute right-1.5 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
 
-          {/* Board chips */}
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              Board
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {BOARD_OPTIONS.map((board) => {
-                const isSelected = (urlState.filters.boardFilters || []).includes(board);
-                return (
-                  <button
-                    key={board}
-                    type="button"
-                    onClick={() => handleBoardToggle(board)}
-                    data-testid={`board-chip-${board.toLowerCase()}`}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
-                      isSelected
-                        ? 'border border-plum bg-plum-tint text-plum shadow-sm'
-                        : 'border border-border bg-card text-foreground hover:bg-muted/50',
-                    )}
-                  >
-                    {board}
-                  </button>
-                );
-              })}
+          {/* Board + Level filter group — one smooth-edged contained surface */}
+          <div className="space-y-3 rounded-2xl border border-border bg-muted/40 p-4">
+            {/* Board chips */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Board
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {BOARD_OPTIONS.map((board) => {
+                  const isSelected = (urlState.filters.boardFilters || []).includes(board);
+                  return (
+                    <button
+                      key={board}
+                      type="button"
+                      onClick={() => handleBoardToggle(board)}
+                      data-testid={`board-chip-${board.toLowerCase()}`}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                        isSelected
+                          ? 'border border-plum bg-plum-tint text-plum shadow-sm'
+                          : 'border border-border bg-card text-foreground hover:bg-muted/50',
+                      )}
+                    >
+                      {board}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Level chips */}
-          <div className="space-y-1.5">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-              Level
-            </span>
-            <div className="flex flex-wrap gap-2">
-              {CATEGORY_OPTIONS.map(({ value, label }) => {
-                const isSelected = (urlState.filters.categoryFilters || []).includes(value);
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => handleCategoryToggle(value)}
-                    data-testid={`category-chip-${value}`}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
-                      isSelected
-                        ? 'border border-plum bg-plum-tint text-plum shadow-sm'
-                        : 'border border-border bg-card text-foreground hover:bg-muted/50',
-                    )}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
+            {/* Level chips */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Level
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {CATEGORY_OPTIONS.map(({ value, label }) => {
+                  const isSelected = (urlState.filters.categoryFilters || []).includes(value);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => handleCategoryToggle(value)}
+                      data-testid={`category-chip-${value}`}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        'rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                        isSelected
+                          ? 'border border-plum bg-plum-tint text-plum shadow-sm'
+                          : 'border border-border bg-card text-foreground hover:bg-muted/50',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
 
-          {/* Clear filters — surfaced whenever a chip or the search is active */}
-          {filtersActive && (
-            <button
-              type="button"
-              onClick={handleClearFilters}
-              data-testid="school-clear-filters"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-            >
-              Clear filters <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+            {/* Clear filters — surfaced whenever a chip or the search is active */}
+            {filtersActive && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                data-testid="school-clear-filters"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Clear filters <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         {showSkeleton && (
           <div className="p-4 space-y-3">
@@ -554,10 +566,10 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
                     }
                   }}
                   data-testid="school-card"
-                  className="group cursor-pointer rounded-lg border border-border bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="group cursor-pointer rounded-xl border border-border bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:border-plum/30 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex gap-3">
-                    <div className="flex h-10 w-10 flex-none items-center justify-center rounded-md bg-plum-tint">
+                    <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-plum-tint">
                       <GraduationCap className="h-5 w-5 text-plum" aria-hidden />
                     </div>
                     <div className="min-w-0 flex-1">

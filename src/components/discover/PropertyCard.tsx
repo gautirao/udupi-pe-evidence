@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin, Navigation,
+  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin, Heart, Navigation,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,23 @@ const TRUST_TIERS: Record<string, { label: string; className: string; icon: type
   B: { label: 'Trusted', className: 'bg-primary text-primary-foreground', icon: ShieldCheck },
   C: { label: 'Listed', className: 'bg-muted text-muted-foreground', icon: Shield },
 };
+
+/**
+ * DEMO/NON-CONTRACTUAL trust-tier fallback. The discovery listing response DOES expose a
+ * `trustTier` field, but it currently comes back null/empty for discovery-card listings
+ * (the backend does not populate the scoring signal here yet — it is also flagged as an
+ * incidental leak pending a deliberate, centrally-defined contract). To visually validate
+ * the trust-badge affordance against the design mock, callers may opt into this fallback
+ * via `demoTrustFallback`. It derives a STABLE tier from the listing id (deterministic,
+ * never random) so the UI is consistent across renders. This is demo-only UI — it makes
+ * NO verification claim and MUST be removed once the backend populates a real trust tier.
+ * Tracked by the follow-up "expose listing trust tier for discovery listing cards" issue.
+ */
+function demoTrustTierFor(id: string): 'A' | 'B' | 'C' {
+  let sum = 0;
+  for (let i = 0; i < id.length; i += 1) sum += id.charCodeAt(i);
+  return (['A', 'B', 'C'] as const)[sum % 3];
+}
 
 /** Build a deduplicated "Sublocality, Area" location string from real fields only. */
 export function buildLocationText(
@@ -89,6 +106,13 @@ export interface PropertyCardProps {
    * never fabricated. Computed by the parent panel from real school + listing coordinates.
    */
   distanceKm?: number | null;
+  /**
+   * Opt-in DEMO trust badge. When true AND the real `listing.trustTier` is absent, the card
+   * renders a clearly-marked, deterministic demo trust badge (see `demoTrustTierFor`) so the
+   * affordance is visible for design validation. Never overrides a real tier. Default false —
+   * existing consumers (and real backend data) are unaffected. Demo-only, non-contractual.
+   */
+  demoTrustFallback?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -102,8 +126,20 @@ export function PropertyCard({
   onHover,
   areaLabel,
   distanceKm,
+  demoTrustFallback = false,
 }: PropertyCardProps) {
-  const trust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
+  // Prefer the REAL backend trustTier when it maps to a displayable tier (A/B/C). The live
+  // discovery response currently returns tiers outside this vocabulary (e.g. 'D' on seed
+  // data) or null, which yield no badge. Only when there is no displayable real tier AND the
+  // caller opted in do we synthesize a clearly-marked, deterministic demo tier (see above).
+  const realTrust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
+  const isDemoTrust = !realTrust && demoTrustFallback;
+  const trust = realTrust ?? (isDemoTrust ? TRUST_TIERS[demoTrustTierFor(listing.id)] : undefined);
+
+  // Visual-only "save" affordance (heart). Session-local toggle for the affordance feel —
+  // it does NOT persist, hit any API, or touch the user profile. Real save/unsave +
+  // profile persistence is tracked as a separate follow-up issue.
+  const [saved, setSaved] = React.useState(false);
 
   const handleActivate = () => {
     onSelect?.(listing.id);
@@ -172,9 +208,36 @@ export function PropertyCard({
             <Building2 className="h-10 w-10 text-muted-foreground/30" />
           </div>
         )}
+        {/* Save (heart) affordance — top-right. Visual-only: toggles session-local state for
+            feel, but never persists or calls any API. aria-label reflects the toggle state. */}
+        <button
+          type="button"
+          data-testid="listing-save-button"
+          aria-label={saved ? 'Remove saved property' : 'Save property'}
+          aria-pressed={saved}
+          onClick={(e) => {
+            e.stopPropagation();
+            setSaved((v) => !v);
+          }}
+          className={cn(
+            'absolute top-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-full',
+            'bg-white/90 shadow-sm backdrop-blur-sm transition-colors hover:bg-white',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper focus-visible:ring-offset-1',
+          )}
+        >
+          <Heart
+            className={cn(
+              'h-4 w-4 transition-colors',
+              saved ? 'fill-copper text-copper' : 'text-muted-foreground',
+            )}
+            aria-hidden
+          />
+        </button>
         {trust && (
           <div className="absolute top-2.5 left-2.5">
             <span
+              data-testid="trust-badge"
+              data-demo-trust={isDemoTrust ? 'true' : undefined}
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium shadow-sm',
                 trust.className,
