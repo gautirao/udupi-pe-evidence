@@ -1943,7 +1943,11 @@ export default function MapDiscovery() {
                 cityLabel={CITY_CONFIG[city]?.label ?? city}
                 zoneLabel={focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId)}
                 areaLabel={selectedArea?.areaLabel ?? areaKeyToLabel(urlState.areaKey)}
-                schoolName={selectedSchool?.name ?? null}
+                // Source of truth is the URL: only show the school segment when a
+                // schoolId is actually selected. Guards against a stale selectedSchool
+                // (React state lagging a back-to-area navigation) injecting a school
+                // segment while the user is still at area level.
+                schoolName={urlState.schoolId ? (selectedSchool?.name ?? null) : null}
               />
             ) : (
               <AreaIndicatorOverlay

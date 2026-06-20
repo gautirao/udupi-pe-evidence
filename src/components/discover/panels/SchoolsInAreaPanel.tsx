@@ -5,6 +5,7 @@ import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
 import { useDiscoverUrlState, type DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { useDiscoverAreas } from '@/hooks/useDiscoverAreas';
 import { PanelHeader } from '../PanelHeader';
+import { prettifyZoneSlug } from '@/components/discover/SchoolRadiusMapOverlay';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -340,6 +341,7 @@ export function SchoolsInAreaPanel({ journey, onStartOver, onBack, schools: scho
         journey={journey}
         onStartOver={onStartOver}
         onBack={onBack}
+        backLabel={isSchoolFirst && urlState.groupId ? prettifyZoneSlug(urlState.groupId) : areaLabel}
         activeContextChips={activeContextChips}
       />
 

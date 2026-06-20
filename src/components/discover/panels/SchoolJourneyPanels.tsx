@@ -1460,6 +1460,7 @@ export function AreaSchoolCombinedPanel({
           journey={journey}
           onStartOver={onStartOver}
           onBack={onBack}
+          backLabel={selectedArea?.areaLabel ?? undefined}
           activeContextChips={activeContextChips}
         />
         <div className="space-y-3 p-4" data-testid="combined-loading-skeleton">
@@ -1483,6 +1484,7 @@ export function AreaSchoolCombinedPanel({
         journey={journey}
         onStartOver={onStartOver}
         onBack={onBack}
+        backLabel={selectedArea?.areaLabel ?? undefined}
         activeContextChips={activeContextChips}
         actions={
           <>
