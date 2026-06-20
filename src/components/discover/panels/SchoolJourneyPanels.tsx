@@ -96,15 +96,16 @@ function SchoolSummaryBand({
   const count = listings.length;
 
   return (
+    // Ink-navy band per the ReTrends mock (--surface-navy #1b2a45 + white text).
     <div
-      className="m-4 rounded-xl bg-primary p-5 text-primary-foreground shadow-md"
+      className="m-4 rounded-2xl bg-[#1b2a45] p-5 text-white shadow-md"
       data-testid="school-summary-band"
     >
       {/* "Change school" affordance */}
       <button
         type="button"
         onClick={onChangeSchool}
-        className="mb-3 flex items-center gap-1 text-xs text-primary-foreground/70 hover:text-primary-foreground transition-colors"
+        className="mb-3.5 flex items-center gap-1.5 text-[13px] font-semibold text-white/75 hover:text-white transition-colors"
         data-testid="change-school-btn"
       >
         <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
@@ -114,58 +115,71 @@ function SchoolSummaryBand({
       {/* Breadcrumb */}
       {(groupId || areaLabel || school.name) && (
         <nav aria-label="School breadcrumb" className="mb-2.5">
-          <ol className="flex flex-wrap items-center gap-1.5 text-xs text-primary-foreground/60">
+          <ol className="flex flex-wrap items-center gap-1.5 text-xs text-white/55">
             {groupId && (
               <>
                 <li>{prettifySlug(groupId)}</li>
-                <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
+                <ChevronRight className="h-3 w-3 text-white/40" aria-hidden />
               </>
             )}
             {areaLabel && (
               <>
                 <li>{areaLabel}</li>
-                <ChevronRight className="h-3 w-3 text-primary-foreground/40" aria-hidden />
+                <ChevronRight className="h-3 w-3 text-white/40" aria-hidden />
               </>
             )}
-            <li className="font-semibold text-primary-foreground/90" aria-current="page">
+            <li className="font-semibold text-white/90" aria-current="page">
               {school.name}
             </li>
           </ol>
         </nav>
       )}
 
-      {/* Eyebrow + board badge */}
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wide text-primary-foreground/60">
-          Selected school
-        </span>
-        {boardDisplay && (
-          <span className="inline-flex items-center rounded-full border border-primary-foreground/20 bg-primary-foreground/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary-foreground/80">
-            {boardDisplay}
-          </span>
-        )}
+      {/* School identity — plum icon tile + eyebrow/badge + serif name + address */}
+      <div className="flex items-start gap-3.5">
+        <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl bg-[#7e6ba8]">
+          <GraduationCap className="h-[22px] w-[22px] text-white" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          {/* Eyebrow + board badge (copper accent pill, mock tone="accent") */}
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-white/60">
+              Selected school
+            </span>
+            {boardDisplay && (
+              <span className="inline-flex items-center rounded-full bg-[hsl(var(--copper-tint))] px-2.5 py-0.5 text-[11px] font-semibold text-[hsl(var(--copper-hover))]">
+                {boardDisplay}
+              </span>
+            )}
+          </div>
+
+          {/* School name — Fraunces serif headline in white (mock --text-on-navy), not copper */}
+          <h2
+            className="font-['Fraunces',_ui-serif,_Georgia,_serif] text-[22px] font-semibold leading-tight tracking-tight text-white"
+            data-testid="school-summary-name"
+          >
+            {school.name}
+          </h2>
+
+          {/* Address */}
+          {school.address && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-[13px] text-white/70">
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-white/60" aria-hidden />
+              {school.address}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* School name */}
-      <h2 className="text-xl font-bold leading-tight text-primary-foreground" data-testid="school-summary-name">
-        {school.name}
-      </h2>
-
-      {/* Address */}
-      {school.address && (
-        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-primary-foreground/70">
-          <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          {school.address}
-        </p>
-      )}
-
-      {/* Count */}
-      <p className="mt-3 text-2xl font-extrabold tabular-nums text-primary-foreground" data-testid="school-summary-count">
-        {count}{' '}
-        <span className="text-base font-semibold text-primary-foreground/80">
-          {homesNoun(intent, count)}
-        </span>
-      </p>
+      {/* Count — separated by a hairline rule, mono numerals (mock layout) */}
+      <div className="mt-[18px] flex gap-7 border-t border-white/[0.14] pt-4">
+        <div data-testid="school-summary-count">
+          <div className="font-['Geist_Mono',_ui-monospace,_monospace] text-[22px] font-semibold tabular-nums text-white">
+            {count}
+          </div>
+          <div className="text-xs text-white/60">{homesNoun(intent, count)}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1162,6 +1176,11 @@ export function SchoolSelectedPanel({
         }
       />
 
+      {/* Single continuous scroll region (school-results-polish): only the PanelHeader
+          stays pinned. The school summary band, radius chips, bounded-search controls,
+          result heading and the listings all scroll together as one column — no nested
+          scroll trap — while the left map stays stable. */}
+      <div className="flex-1 overflow-y-auto" data-testid="school-selected-scroll">
       {/* School summary band — skeleton during cold load */}
       {school == null ? (
         <div className="m-4 rounded-xl bg-primary/20 p-5 shadow-md" data-testid="school-summary-skeleton">
@@ -1237,10 +1256,13 @@ export function SchoolSelectedPanel({
 
       {/* Listing body — Issue #1170: AreaSelectedPanel-style dim on an in-flight
           refetch (isFetching) but NOT during the initial skeleton load, so cached
-          responses never flash and the settled empty state stays readable/clickable. */}
+          responses never flash and the settled empty state stays readable/clickable.
+          Scroll is owned by the parent school-selected-scroll container, so this
+          wrapper carries only the refetch dim — not its own overflow. */}
       <div
+        data-testid="school-listings-body"
         className={cn(
-          'flex-1 overflow-y-auto transition-opacity duration-150',
+          'transition-opacity duration-150',
           isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
         )}
       >
@@ -1308,6 +1330,7 @@ export function SchoolSelectedPanel({
             })}
           </div>
         )}
+      </div>
       </div>
     </>
   );
@@ -1437,6 +1460,7 @@ export function AreaSchoolCombinedPanel({
           journey={journey}
           onStartOver={onStartOver}
           onBack={onBack}
+          backLabel={selectedArea?.areaLabel ?? undefined}
           activeContextChips={activeContextChips}
         />
         <div className="space-y-3 p-4" data-testid="combined-loading-skeleton">
@@ -1460,6 +1484,7 @@ export function AreaSchoolCombinedPanel({
         journey={journey}
         onStartOver={onStartOver}
         onBack={onBack}
+        backLabel={selectedArea?.areaLabel ?? undefined}
         activeContextChips={activeContextChips}
         actions={
           <>
@@ -1483,6 +1508,12 @@ export function AreaSchoolCombinedPanel({
         }
       />
 
+      {/* Single continuous scroll region (school-results-polish): only the PanelHeader
+          stays pinned. Summary band, radius chips, result heading and listings scroll
+          together as one column — no nested scroll trap — while the left map stays
+          stable. Mirrors SchoolSelectedPanel; this combined panel is what the canonical
+          school-first URL (areaKey + schoolId both set) actually renders. */}
+      <div className="flex-1 overflow-y-auto" data-testid="combined-selected-scroll">
       {/* Ink-navy school summary band */}
       <SchoolSummaryBand
         school={selectedSchool}
@@ -1513,10 +1544,13 @@ export function AreaSchoolCombinedPanel({
         />
       )}
 
-      {/* Listing body — Issue #1170: dim on in-flight refetch, not initial skeleton load. */}
+      {/* Listing body — Issue #1170: dim on in-flight refetch, not initial skeleton load.
+          Scroll is owned by the parent combined-selected-scroll container, so this
+          wrapper carries only the refetch dim — not its own overflow. */}
       <div
+        data-testid="combined-listings-body"
         className={cn(
-          'flex-1 overflow-y-auto transition-opacity duration-150',
+          'transition-opacity duration-150',
           isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
         )}
       >
@@ -1588,6 +1622,7 @@ export function AreaSchoolCombinedPanel({
             })}
           </div>
         )}
+      </div>
       </div>
     </>
   );

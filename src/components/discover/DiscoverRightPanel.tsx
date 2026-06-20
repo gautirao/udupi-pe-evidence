@@ -1318,13 +1318,13 @@ export function DiscoverRightPanel({
 
   return (
     <div
-      className="flex flex-col lg:w-1/2 border-l border-border bg-card overflow-hidden order-2 lg:order-2"
+      className="flex flex-col lg:w-1/2 border-l border-border bg-background overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
       {/* Issue #1494 — Buy/Rent intent selector, always visible at the top of the right
           panel. Left-aligned (Figma) so it sits on the content side, above the journey cards. */}
       {onIntentChange && (
-        <div className="flex items-center justify-start gap-3 px-4 py-3 border-b border-border shrink-0 bg-card">
+        <div className="flex items-center justify-start gap-3 px-4 py-3 border-b border-border/50 shrink-0 bg-background">
           <IntentSelector intent={intent} onIntentChange={onIntentChange} />
         </div>
       )}
