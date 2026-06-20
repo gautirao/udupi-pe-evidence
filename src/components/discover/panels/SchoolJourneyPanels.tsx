@@ -146,8 +146,12 @@ function SchoolSummaryBand({
         )}
       </div>
 
-      {/* School name */}
-      <h2 className="text-xl font-bold leading-tight text-primary-foreground" data-testid="school-summary-name">
+      {/* School name — copper accent per the selected-school mock (warm highlight
+          against the dark summary band). */}
+      <h2
+        className="text-2xl font-extrabold leading-tight text-[hsl(var(--copper))]"
+        data-testid="school-summary-name"
+      >
         {school.name}
       </h2>
 
@@ -1162,6 +1166,11 @@ export function SchoolSelectedPanel({
         }
       />
 
+      {/* Single continuous scroll region (school-results-polish): only the PanelHeader
+          stays pinned. The school summary band, radius chips, bounded-search controls,
+          result heading and the listings all scroll together as one column — no nested
+          scroll trap — while the left map stays stable. */}
+      <div className="flex-1 overflow-y-auto" data-testid="school-selected-scroll">
       {/* School summary band — skeleton during cold load */}
       {school == null ? (
         <div className="m-4 rounded-xl bg-primary/20 p-5 shadow-md" data-testid="school-summary-skeleton">
@@ -1237,10 +1246,13 @@ export function SchoolSelectedPanel({
 
       {/* Listing body — Issue #1170: AreaSelectedPanel-style dim on an in-flight
           refetch (isFetching) but NOT during the initial skeleton load, so cached
-          responses never flash and the settled empty state stays readable/clickable. */}
+          responses never flash and the settled empty state stays readable/clickable.
+          Scroll is owned by the parent school-selected-scroll container, so this
+          wrapper carries only the refetch dim — not its own overflow. */}
       <div
+        data-testid="school-listings-body"
         className={cn(
-          'flex-1 overflow-y-auto transition-opacity duration-150',
+          'transition-opacity duration-150',
           isFetching && !isLoadingListings ? 'opacity-50 pointer-events-none' : 'opacity-100',
         )}
       >
@@ -1308,6 +1320,7 @@ export function SchoolSelectedPanel({
             })}
           </div>
         )}
+      </div>
       </div>
     </>
   );

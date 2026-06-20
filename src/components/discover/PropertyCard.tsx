@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin,
+  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin, Navigation,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -185,11 +185,13 @@ export function PropertyCard({
             </span>
           </div>
         )}
-        {/* Plum proximity badge — bottom-left, only when real finite distance provided */}
+        {/* Proximity badge — bottom-left, only when a real finite distance is provided.
+            Dark ink pill + navigation glyph to match the selected-school mock; the
+            meaning is unchanged (real haversine distance from the selected school). */}
         {showDistanceBadge && (
           <div className="absolute bottom-2.5 left-2.5" data-testid="distance-badge">
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium shadow-sm tabular-nums bg-[hsl(var(--plum))] text-white">
-              <MapPin className="h-3 w-3 shrink-0" aria-hidden />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--primary)/0.92)] px-2.5 py-1 text-[11px] font-semibold shadow-md ring-1 ring-white/15 backdrop-blur-sm tabular-nums text-primary-foreground">
+              <Navigation className="h-3 w-3 shrink-0" aria-hidden />
               {distanceKm!.toFixed(1)} km from school
             </span>
           </div>
