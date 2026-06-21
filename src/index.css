@@ -10,32 +10,37 @@
 
 @layer base {
   :root {
-    /* Udupi property explorer design tokens */
-    --background: 45 20% 97%;
-    --foreground: 220 25% 15%;
+    /* Udupi property explorer design tokens — reconciled to the ReTrends Claude
+       Design source of truth (docs/design/retrends-design-system/tokens). Surfaces =
+       warm off-white canvas; text = ReTrends charcoal. ReTrends HEX → shadcn HSL
+       channel format "H S% L%". */
+    --background: 45 18% 96%; /* ReTrends canvas-100 #F6F5F2 */
+    --foreground: 221 39% 11%; /* ReTrends text-strong / grey-900 #111827 */
 
-    --card: 0 0% 100%;
-    --card-foreground: 220 25% 15%;
+    --card: 0 0% 100%; /* ReTrends surface-card / paper #FFFFFF */
+    --card-foreground: 221 39% 11%; /* ReTrends text-strong #111827 */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 15%;
+    --popover: 0 0% 100%; /* ReTrends popover / paper #FFFFFF */
+    --popover-foreground: 221 39% 11%; /* ReTrends text-strong #111827 */
 
-    /* Action primary */
-    --primary: 244 81% 4%;
-    --primary-foreground: 0 0% 100%;
+    /* Action primary — ReTrends brand ink-navy. Was near-black 244 81% 4%, which
+       visually drifted from the #1B2A45 mock. */
+    --primary: 219 44% 19%; /* ReTrends navy-800 #1B2A45 */
+    --primary-foreground: 0 0% 100%; /* ReTrends primary-foreground #FFFFFF */
 
-    /* Sandy beige secondary */
-    --secondary: 35 30% 90%;
-    --secondary-foreground: 220 25% 15%;
+    /* Secondary surface — ReTrends navy tint. Was sandy beige 35 30% 90%. */
+    --secondary: 220 26% 93%; /* ReTrends navy-100 #E9ECF2 */
+    --secondary-foreground: 219 44% 19%; /* ReTrends navy-800 #1B2A45 */
 
-    --muted: 35 20% 94%;
-    --muted-foreground: 220 15% 45%;
+    --muted: 50 11% 89%; /* ReTrends surface-muted / stone-300 #E6E5E0 */
+    --muted-foreground: 220 9% 46%; /* ReTrends text-muted / grey-500 #6B7280 */
 
-    /* Coastal teal accent */
+    /* shadcn interactive accent — app-specific coastal teal, retained. ReTrends has no
+       teal; its restrained copper brand accent lives in the dedicated --copper token. */
     --accent: 175 45% 40%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 51%;
+    --destructive: 5 59% 44%; /* ReTrends brick-600 #B23A2E (muted, no neon) */
     --destructive-foreground: 0 0% 100%;
 
     /* Success green for valid listings */
@@ -64,9 +69,9 @@
     --plum-foreground: 0 0% 100%;
     --plum-tint: 254 35% 95%;
 
-    --border: 35 25% 88%;
-    --input: 35 25% 88%;
-    --ring: 0 0% 40%;
+    --border: 51 8% 83%; /* ReTrends stone-400 #D7D6D0 (hairline on canvas) */
+    --input: 51 8% 83%; /* tracks --border per shadcn (input border, not ReTrends input-bg fill) */
+    --ring: 219 44% 19%; /* ReTrends --ring / navy-800 #1B2A45 */
 
     --radius: 0.625rem;
 
@@ -88,12 +93,12 @@
     /* Sidebar */
     --sidebar-background: 35 25% 96%;
     --sidebar-foreground: 220 25% 25%;
-    --sidebar-primary: 244 81% 4%;
+    --sidebar-primary: 219 44% 19%; /* tracks --primary → ReTrends navy-800 #1B2A45 */
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 35 30% 92%;
     --sidebar-accent-foreground: 220 25% 15%;
     --sidebar-border: 35 25% 88%;
-    --sidebar-ring: 0 0% 40%;
+    --sidebar-ring: 219 44% 19%; /* tracks --ring → ReTrends navy-800 #1B2A45 */
   }
 
   .dark {
