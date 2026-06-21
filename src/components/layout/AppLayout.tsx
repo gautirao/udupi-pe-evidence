@@ -72,6 +72,7 @@ const brokerNavigation = [
   { name: 'My Listings', href: '/broker/listings', icon: Building2 },
   { name: 'New Listing', href: '/broker/listings/new', icon: Plus },
   { name: 'Bookings', href: '/broker/bookings', icon: CalendarCheck2 },
+  { name: 'Listing Quality', href: '/broker/listing-quality', icon: Sparkles },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 

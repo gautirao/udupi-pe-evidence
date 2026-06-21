@@ -29,6 +29,7 @@ const BrokerSetup = lazy(() => import("./pages/broker/BrokerSetup"));
 const BrokerDashboard = lazy(() => import("./pages/broker/BrokerDashboard"));
 const BrokerListings = lazy(() => import("./pages/broker/BrokerListings"));
 const BrokerBookings = lazy(() => import("./pages/broker/BrokerBookings"));
+const BrokerListingQuality = lazy(() => import("./pages/broker/ListingQuality"));
 const MyBookings = lazy(() => import("./pages/MyBookings"));
 const SavedAreas = lazy(() => import("./pages/SavedAreas"));
 
@@ -184,6 +185,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <BrokerBookings />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/broker/listing-quality"
+                element={
+                  <ProtectedRoute>
+                    <BrokerListingQuality />
                   </ProtectedRoute>
                 }
               />
