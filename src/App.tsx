@@ -44,6 +44,7 @@ const PendingListings = lazy(() => import("./pages/admin/PendingListings"));
 const LocalityNormalizer = lazy(() => import("./pages/admin/LocalityNormalizer"));
 const AuditLog = lazy(() => import("./pages/admin/AuditLog"));
 const TrustReviewQueue = lazy(() => import("./pages/admin/TrustReviewQueue"));
+const Intelligence = lazy(() => import("./pages/admin/Intelligence"));
 
 const queryClient = new QueryClient();
 
@@ -297,6 +298,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requireAdmin>
                     <TrustReviewQueue />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/intelligence"
+                element={
+                  <ProtectedRoute requireAdmin>
+                    <Intelligence />
                   </ProtectedRoute>
                 }
               />
