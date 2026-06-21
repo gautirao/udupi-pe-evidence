@@ -32,6 +32,7 @@ encode the intended look, behaviour, and journey model.
 
 - Source project: **ReTrends Design System** (`PROJECT_TYPE_DESIGN_SYSTEM`), owner `goutham`.
 - Imported: 2026-06-18 via the `DesignSync` read connector (`get_file` per path).
+- Refreshed: 2026-06-21 (see **Refresh log** below).
 - Read-only import. No production source was modified. No app component was overwritten.
 
 ## Not imported (deliberately skipped)
@@ -41,9 +42,53 @@ value as a text design reference (and the bundle would exceed the connector's 25
 text cap):
 
 - `_ds_bundle.js` — compiled/minified component runtime (build artifact, not source).
-- `screenshots/*.png` (3 files) — broker listing-quality screenshots (binary).
-- `uploads/*.png` (5 files) — pasted reference images (binary).
+- `screenshots/*.png` (5 files) — broker listing-quality screenshots (binary).
+- `uploads/*.png` (11 files) — pasted reference images (binary).
 - `.thumbnail` — project thumbnail (binary).
 
 If any of these are needed later (e.g. a screenshot for visual reference), they can be
 pulled individually from the source project.
+
+---
+
+## Refresh log — 2026-06-21
+
+Re-pulled from the source project (`updatedAt` 2026-06-20, i.e. changed after the
+original 2026-06-18 import). Method: `DesignSync.list_files` + `get_file` per path,
+written to disk with the editor.
+
+**Verified unchanged (no re-write needed).** The brand foundation did not change
+between 2026-06-18 and 2026-06-20 — confirmed by byte-comparing local vs remote and
+by diffing the compiled `_ds_manifest.json` token set:
+
+- `tokens/*.css` (colors, typography, spacing, elevation, fonts) and `styles.css`
+- `components/**` specs and `guidelines/**` specimen cards
+- the `discover`, `portal`, `school-discovery`, `school-zone-selected` UI kits
+
+**The 2026-06-20 update was purely additive** — new UI-kit surfaces, no token changes.
+Pulled the new **design-source** (the canonical port-from material):
+
+- `ui_kits/agri-discovery/` — `README.md`, `LANDING-README.md`, `data.js`,
+  `corridor-data.js`, `AgriDiscovery.jsx`, `AgriMap.jsx`, `CorridorDiscovery.jsx`,
+  `CorridorMap.jsx`, `Panel.jsx`, `CorridorPanel.jsx`
+- `ui_kits/area-discovery/` — `README.md`, `data.js`, `AreaDiscovery.jsx`,
+  `AreaCards.jsx`, `AreaMap.jsx`
+- `ui_kits/broker/` — `BrokerDashboard.jsx` (Dashboard v2), `DemandGaps.jsx`
+
+**Deliberately deferred — the "preview layer" (large generated artifacts).** Not yet
+pulled, pending an explicit follow-up pass, because hand-transcribing large generated
+HTML via the read connector is costly and risks corruption. The design intent for each
+is fully captured by the `README.md` + `.jsx` source above.
+
+- New standalone HTML previews: `ui_kits/agri-discovery/index.html`,
+  `ui_kits/agri-discovery/landing.html`, `ui_kits/area-discovery/index.html`,
+  `ui_kits/broker/dashboard-v2.html`, `ui_kits/broker/demand-gaps.html`,
+  `ui_kits/broker/area-intelligence.html`, `ui_kits/broker/broker-prototype.html`
+- `_ds_manifest.json` refresh (the compiled card index — left at its 2026-06-18 state;
+  the new surfaces above are not yet registered in it)
+- Stale-on-remote `ui_kits/broker/index.html` (superseded by `area-intelligence.html`)
+  — left in place locally so no preview shell is removed while its replacements are
+  still deferred.
+
+To complete the preview layer later: pull the 7 HTML files above + the refreshed
+`_ds_manifest.json`, then delete the stale `ui_kits/broker/index.html`.
