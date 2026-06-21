@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+// Issue #1531 — additive LEAD_INTENT telemetry wiring (fire-and-forget; no existing behaviour changed).
+import { useDiscoverTelemetry } from '@/hooks/useDiscoverTelemetry';
 import { addDays, format } from 'date-fns';
 import { AlertCircle, Calendar, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,6 +41,9 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
   const { user } = useAuth();
   const createBooking = useCreateBooking();
 
+  // Issue #1531 — additive LEAD_INTENT telemetry (fire-and-forget; never throws).
+  const { emitLeadIntent } = useDiscoverTelemetry();
+
   const today = new Date();
   const minDate = format(addDays(today, 1), 'yyyy-MM-dd');
   const maxDate = format(addDays(today, 90), 'yyyy-MM-dd');
@@ -60,6 +65,12 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // Issue #1531 — additive LEAD_INTENT telemetry (fire-and-forget; never throws).
+    // Emits at intent moment (form submit), before the booking mutation resolves.
+    // No PII sent: no email/phone/name/userId/raw price. listingId is omitted (not in allow-list).
+    emitLeadIntent();
+
     createBooking.mutate(
       {
         listingId,

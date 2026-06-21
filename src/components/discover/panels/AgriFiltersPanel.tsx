@@ -1,6 +1,8 @@
 // AgriFiltersPanel — acreage + price range + categorical filter controls for agri selected-region view
 // Issue #1457, #1458
+// Issue #1531 — additive FILTER_APPLY telemetry wiring (fire-and-forget; existing onApply unchanged).
 import React, { useState, useEffect } from 'react';
+import { useDiscoverTelemetry, toPriceBand } from '@/hooks/useDiscoverTelemetry';
 import { Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +72,9 @@ export function AgriFiltersPanel({
   agriFencingDone,
   agriWaterSource,
 }: AgriFiltersPanelProps) {
+  // Issue #1531 — telemetry (additive; fire-and-forget; does NOT alter existing onApply path).
+  const { emitFilterApply } = useDiscoverTelemetry();
+
   const [localAcresMin, setLocalAcresMin] = useState(acresMin != null ? String(acresMin) : '');
   const [localAcresMax, setLocalAcresMax] = useState(acresMax != null ? String(acresMax) : '');
   const [localPriceMin, setLocalPriceMin] = useState(priceMinRupees != null ? String(priceMinRupees) : '');
@@ -114,6 +119,7 @@ export function AgriFiltersPanel({
     parsedPriceMin != null && parsedPriceMax != null && parsedPriceMin > parsedPriceMax;
 
   const handleApply = () => {
+    // Existing behaviour — byte-for-byte unchanged.
     onApply({
       agriAcresMin: parsedAcresMin,
       agriAcresMax: parsedAcresMax,
@@ -124,6 +130,19 @@ export function AgriFiltersPanel({
       agriFarmhouseAvailable: localFarmhouse === 'true' ? true : localFarmhouse === 'false' ? false : null,
       agriFencingDone: localFencing === 'true' ? true : localFencing === 'false' ? false : null,
       agriWaterSource: localWaterSource !== NO_FILTER ? localWaterSource : null,
+    });
+
+    // Issue #1531 — additive FILTER_APPLY telemetry (fire-and-forget; never throws).
+    // Only coarse, allow-listed, non-PII fields. Raw price → coarse band; omit if undecidable.
+    // No PII is read or sent (no email/phone/name/userId/precise geo/raw price value).
+    // Allow-listed filter keys: area_key, property_type, listing_purpose, price_band, sort_by, page.
+    // land_category is NOT allow-listed — not sent. price_band sent at top level only (not duplicated in filters).
+    emitFilterApply({
+      property_type: 'agricultural_land',
+      price_band: toPriceBand(isAuthenticated ? parsedPriceMin : undefined),
+      filters: {
+        property_type: 'agricultural_land',
+      },
     });
   };
 

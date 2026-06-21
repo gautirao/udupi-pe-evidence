@@ -71,6 +71,9 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/discover/regional-area-groups").permitAll()
                         // Public agri map listings endpoint — no auth required (#1410)
                         .requestMatchers(HttpMethod.GET, "/api/discover/agri-map-listings").permitAll()
+                        // Anonymous discover_event telemetry ingest — no auth required (#1531)
+                        // PII-free; session_id is client-generated, never linked to auth.users.
+                        .requestMatchers(HttpMethod.POST, "/api/discover/events").permitAll()
                         // Public Trends endpoints — no auth required (#771)
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         .anyRequest().authenticated()
