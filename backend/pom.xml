@@ -250,5 +250,51 @@
                 </plugins>
             </build>
         </profile>
+        <!--
+            Activate with `mvn -Pdemand-signal-it failsafe:integration-test failsafe:verify`.
+            Runs AreaDemandSignalIT tagged @Tag("integration") via failsafe, bypassing the
+            surefire-level <excludedGroups>integration</excludedGroups>. Requires Docker
+            (Testcontainers with postgis/postgis:15-3.4-alpine).
+            Added to support issue #1532.
+        -->
+        <profile>
+            <id>demand-signal-it</id>
+            <build>
+                <plugins>
+                    <!-- Skip surefire entirely under this profile; only failsafe runs. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <argLine>
+                                -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+                                -XX:+EnableDynamicAgentLoading
+                                -Dnet.bytebuddy.experimental=true
+                            </argLine>
+                            <!-- Narrowed include: ONLY AreaDemandSignalIT. -->
+                            <includes>
+                                <include>**/AreaDemandSignalIT.java</include>
+                            </includes>
+                            <groups>integration</groups>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 </project>
