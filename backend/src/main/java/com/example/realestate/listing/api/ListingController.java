@@ -1,6 +1,7 @@
 package com.example.realestate.listing.api;
 
 import com.example.realestate.listing.core.Listing;
+import com.example.realestate.listing.crud.BrokerDashboardService;
 import com.example.realestate.listing.crud.ListingCrudService;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
@@ -56,13 +57,16 @@ public class ListingController {
     private final ListingCrudService listingCrudService;
     private final ListingWorkflowService listingWorkflowService;
     private final ListingResponseMapper listingResponseMapper;
+    private final BrokerDashboardService brokerDashboardService;
 
     public ListingController(ListingCrudService listingCrudService,
                              ListingWorkflowService listingWorkflowService,
-                             ListingResponseMapper listingResponseMapper) {
+                             ListingResponseMapper listingResponseMapper,
+                             BrokerDashboardService brokerDashboardService) {
         this.listingCrudService = listingCrudService;
         this.listingWorkflowService = listingWorkflowService;
         this.listingResponseMapper = listingResponseMapper;
+        this.brokerDashboardService = brokerDashboardService;
     }
 
     @PostMapping
@@ -116,6 +120,25 @@ public class ListingController {
 
         ListingStatsResponse stats = listingCrudService.getListingStats(caller.userId());
         return ResponseEntity.ok(stats);
+    }
+
+    /**
+     * Returns null-safe quality and completeness aggregates for the caller's listings.
+     *
+     * <p>Authentication: 401 when no JWT is present (enforced by CallerInfoResolver).
+     * Authorization: 403 when the JWT subject's role is not in {dealer, broker, admin, user}
+     * (enforced by CallerInfoResolver — mirrors /mine/stats behaviour).
+     *
+     * <p>Ownership: all SQL predicates scope to {@code created_by = caller.userId()}.
+     * The caller's userId is always JWT-derived — never accepted as a request parameter.
+     *
+     * <p>No per-listing quality_breakdown text is exposed in the response (PII safety).
+     */
+    @GetMapping("/mine/quality-summary")
+    public ResponseEntity<?> qualitySummary(CallerInfo caller) {
+
+        BrokerQualitySummaryResponse summary = brokerDashboardService.getQualitySummary(caller.userId());
+        return ResponseEntity.ok(summary);
     }
 
     @GetMapping("/mine")

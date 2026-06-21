@@ -127,3 +127,24 @@ Items resolved or invalidated should be moved to the **Resolved** section with a
 | F-2 | Fixed in RE-169 — removed "Price Reduced" button from MapFilters; added @deprecated on priceReduced field | 2026-03-21 |
 | F-4 | Fixed in RE-174 — applied escapeHtml() to propertyType[0].toUpperCase() in PropertyMap divIcon template | 2026-03-21 |
 | B-21 | Fixed in RE-170 — batch-load images via findByListingIdInOrderByListingIdAscPositionAsc in ListingResponseMapper | 2026-03-21 |
+
+---
+
+## Issue #1523 — Broker Dashboard v2 (ADVISORY-DEFER from code-reviewer, 2026-06-21)
+
+### Backend
+| ID | Source | Description | Risk | Added |
+|----|--------|-------------|------|-------|
+| B-1523-1 | #1523 code-review | `BrokerDashboardService` jsonpath thresholds (60/80/75/50) are `static final int` passed to the native query via `\|\| :param \|\|` concatenation. Safe today (no user reachability), but a future refactor to user-sourced values would be a jsonpath-injection risk. Consider parameterised jsonpath vars (`jsonb_path_exists(col, '$...? (@.score < $t)', jsonb_build_object('t', :t))`) and/or `@Min(0)@Max(100)` on the params. | Low | 2026-06-21 |
+| B-1523-2 | #1523 code-review | `BrokerDashboardService` injected directly into `ListingController` (already ~445 lines; mild fat-controller). When a dedicated `/broker/*` controller emerges, relocate `/mine/quality-summary` there (frontend URL change needed). | Low | 2026-06-21 |
+| B-1523-3 | #1523 code-review | `BrokerQualitySummaryControllerTest` asserts null via `jsonPath(...).isEmpty()`; prefer `.value(IsNull.nullValue())` for intent clarity on next touch. | Very low | 2026-06-21 |
+| B-1523-4 | #1523 security | New `GET /api/listings/mine/quality-summary` runs a multi-aggregate jsonb scan with no per-user rate limit (consistent with current listing CRUD policy). Verify whether a per-user limit is warranted given the heavier jsonb workload. | Low | 2026-06-21 |
+| B-1523-5 | #1523 security | `user`/buyer role is in `ALLOWED_ROLES`, so a buyer hitting the endpoint gets a harmless all-zeros response. Confirm this is intentional (vs blocking like `POST /api/listings`). | Low | 2026-06-21 |
+
+### Frontend
+| ID | Source | Description | Risk | Added |
+|----|--------|-------------|------|-------|
+| F-1523-1 | #1523 code-review | Document the backend invariant `count === 0 when state === 'PENDING'` in `BrokerDashboard.tsx` near the PENDING+count guards, so the double-guard rationale is clear to maintainers. | Very low | 2026-06-21 |
+| F-1523-2 | #1523 code-review | `useBrokerQualitySummary` `staleTime: 60_000` with no cache invalidation on quality-recompute. When #1531 event capture lands, invalidate `QUALITY_SUMMARY_KEY` on recompute-complete. | Low | 2026-06-21 |
+| F-1523-3 | #1523 scope | When #1538 (`/broker/listing-quality`) ships: replace the disabled `<span>` CTA with a real `<Link>`; flip the AC7 test assertion. When #1531/M30 ship: unwire the hard-coded engagement `UNAVAILABLE` / demandGap `LIMITED_DATA` copy to data-driven state. | Low | 2026-06-21 |
+| F-1523-4 | #1523 e2e | E2E smoke `e2e/broker-dashboard-v2.spec.ts` (BD1-BD4) is authored but was NOT_RUN in this worktree (no `BROKER_EMAIL`/`BROKER_PASSWORD` + no live dev stack). Run with creds against a live stack to obtain real E2E evidence. | Med | 2026-06-21 |

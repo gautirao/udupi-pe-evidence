@@ -91,6 +91,9 @@ class ListingControllerTest {
     @MockitoBean
     private UserRoleService userRoleService;
 
+    @MockitoBean
+    private com.example.realestate.listing.crud.BrokerDashboardService brokerDashboardService;
+
     @BeforeEach
     void setUp() {
         reset(listingCrudService, listingWorkflowService, listingImageRepository,

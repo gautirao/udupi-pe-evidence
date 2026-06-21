@@ -39,14 +39,16 @@ test.describe('@smoke broker-authenticated', () => {
     // Must not redirect away from the broker dashboard
     await expect(page).toHaveURL(/\/broker\/dashboard/, { timeout: 8_000 });
 
-    // Page heading must be present
+    // v2 page heading — "Welcome back, {firstName}" replaces the v1 "Broker dashboard" h1
     await expect(
-      page.getByRole('heading', { name: /broker dashboard/i }),
+      page.getByRole('heading', { name: /welcome back/i }),
     ).toBeVisible({ timeout: 8_000 });
 
-    // Quick action buttons must be present
-    await expect(page.getByRole('link', { name: /create new listing/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /view all listings/i })).toBeVisible();
+    // v2 quick action links in the dashboard header (exact names to avoid strict-mode
+    // collisions with nav link and summary card link that share partial text)
+    const main = page.getByRole('main');
+    await expect(main.getByRole('link', { name: 'New Listing', exact: true })).toBeVisible();
+    await expect(main.getByRole('link', { name: 'All Listings', exact: true })).toBeVisible();
   });
 
   // ---------------------------------------------------------------------------
@@ -103,8 +105,10 @@ test('D4 — unauthenticated user cannot access /broker/dashboard', async ({ pag
   // Allow up to 10 s for the redirect to /auth to complete.
   await expect(page).toHaveURL(/\/auth(\?.*)?$/, { timeout: 10_000 });
 
-  // Must not show the broker dashboard content
+  // Must not show the v2 broker dashboard content — the "Welcome back" h1 is
+  // only rendered for authenticated broker sessions; if this is visible it means
+  // the auth guard failed.
   await expect(
-    page.getByRole('heading', { name: /broker dashboard/i }),
+    page.getByRole('heading', { name: /welcome back/i }),
   ).toHaveCount(0);
 });

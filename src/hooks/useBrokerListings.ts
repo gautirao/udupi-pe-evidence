@@ -245,6 +245,64 @@ export function useBrokerListingStats() {
   });
 }
 
+// ── Quality Summary (GET /api/listings/mine/quality-summary) ─────────────────
+
+export type QualityState = 'PENDING' | 'PARTIAL' | 'COMPLETE';
+export type EngagementState = 'UNAVAILABLE';
+export type DemandGapState = 'LIMITED_DATA';
+
+export interface ActionSignalItem {
+  count: number;
+  state: QualityState;
+}
+
+/** Response shape for GET /api/listings/mine/quality-summary */
+export interface BrokerQualitySummaryResponse {
+  portfolio: {
+    activeListings: number;
+    totalListings: number;
+  };
+  quality: {
+    state: QualityState;
+    averageQualityScore: number | null;
+    countComputed: number;
+    countTotal: number;
+    percentageComputed: number | null;
+  };
+  actionSignals: {
+    needsFixes: ActionSignalItem;
+    missingLocation: ActionSignalItem;
+    incomplete: ActionSignalItem;
+    buyerReady: ActionSignalItem;
+  };
+  engagement: {
+    state: EngagementState;
+    views: null;
+    enquiries: null;
+    reason: string;
+  };
+  demandGap: {
+    state: DemandGapState;
+    signal: null;
+    reason: string;
+  };
+}
+
+const QUALITY_SUMMARY_KEY = ['broker-quality-summary'] as const;
+
+/**
+ * Fetches the quality summary for the current broker's portfolio.
+ * GET /api/listings/mine/quality-summary — auth via existing Supabase Bearer JWT.
+ */
+export function useBrokerQualitySummary() {
+  return useQuery({
+    queryKey: QUALITY_SUMMARY_KEY,
+    queryFn: () =>
+      api.get<BrokerQualitySummaryResponse>('/api/listings/mine/quality-summary'),
+    staleTime: 60_000,
+  });
+}
+
 export function useCreateListing() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

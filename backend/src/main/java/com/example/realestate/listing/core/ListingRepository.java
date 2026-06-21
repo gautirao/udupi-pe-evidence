@@ -539,6 +539,76 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
                    + "LIMIT 1")
     Optional<Long> findAreaMedianPricePerCentPaise(@Param("areaKey") String areaKey);
 
+    // ===== Broker quality summary (#1523) =====
+
+    /**
+     * Single-pass aggregate over non-archived listings for a given broker.
+     *
+     * <p>Returns one row with the following scalar columns (all null-safe):
+     * <ol>
+     *   <li>{@code total_count}        — COUNT(*) over all non-archived listings</li>
+     *   <li>{@code computed_count}     — COUNT(quality_score) skips NULLs; equals listings with a score</li>
+     *   <li>{@code avg_score}          — AVG(quality_score) skips NULLs; NULL when no scores exist</li>
+     *   <li>{@code active_count}       — listings in LIVE or PENDING_REVIEW</li>
+     *   <li>{@code needs_fixes_count}  — quality_score IS NOT NULL AND quality_score &lt; 60</li>
+     *   <li>{@code buyer_ready_count}  — quality_score IS NOT NULL AND quality_score &gt;= 80</li>
+     *   <li>{@code missing_loc_count}  — quality_breakdown has a LOCATION component with score &lt; 75</li>
+     *   <li>{@code incomplete_count}   — status='DRAFT' OR quality_breakdown has KEY_FIELDS/PHOTOS/DESCRIPTION
+     *                                    component with score &lt; 50</li>
+     * </ol>
+     *
+     * <p>The jsonpath predicates for {@code missing_loc_count} and {@code incomplete_count} are guarded
+     * with {@code quality_breakdown IS NOT NULL AND jsonb_typeof(quality_breakdown->'components') = 'array'}
+     * so they are safe against NULL, non-object, or missing-components rows.
+     *
+     * <p>Uses {@code jsonb_path_exists(col, path::jsonpath)} instead of the {@code col @? path} operator
+     * so that Spring Data JPA's query parser does not misinterpret the bare {@code ?} in {@code @?} as a
+     * JDBC positional parameter (which would conflict with the named parameters and throw
+     * "Mixing of ? parameters and other forms like ?1 is not supported"). The two forms are semantically
+     * identical: {@code @?} is defined in Postgres as {@code jsonb_path_exists}.
+     *
+     * <p>Ownership is enforced at SQL level: {@code created_by = :userId}.
+     *
+     * @param userId  the broker's UUID (from JWT — never client-supplied)
+     * @return exactly one Object[] row; never null; all elements may be null when there are no listings
+     */
+    @Query(nativeQuery = true,
+           value = """
+                SELECT
+                    COUNT(*)                                                       AS total_count,
+                    COUNT(quality_score)                                           AS computed_count,
+                    AVG(quality_score::numeric)                                    AS avg_score,
+                    COUNT(*) FILTER (WHERE status IN ('LIVE','PENDING_REVIEW'))    AS active_count,
+                    COUNT(*) FILTER (
+                        WHERE quality_score IS NOT NULL
+                          AND quality_score < :needsFixesThreshold)                AS needs_fixes_count,
+                    COUNT(*) FILTER (
+                        WHERE quality_score IS NOT NULL
+                          AND quality_score >= :buyerReadyThreshold)               AS buyer_ready_count,
+                    COUNT(*) FILTER (
+                        WHERE quality_breakdown IS NOT NULL
+                          AND jsonb_typeof(quality_breakdown->'components') = 'array'
+                          AND jsonb_path_exists(quality_breakdown, ('$.components[*] ? (@.type == "LOCATION" && @.score < ' || :missingLocationThreshold || ')')::jsonpath)
+                    )                                                              AS missing_loc_count,
+                    COUNT(*) FILTER (
+                        WHERE status = 'DRAFT'
+                           OR (
+                               quality_breakdown IS NOT NULL
+                               AND jsonb_typeof(quality_breakdown->'components') = 'array'
+                               AND jsonb_path_exists(quality_breakdown, ('$.components[*] ? ((@.type == "KEY_FIELDS" || @.type == "PHOTOS" || @.type == "DESCRIPTION") && @.score < ' || :incompleteThreshold || ')')::jsonpath)
+                           )
+                    )                                                              AS incomplete_count
+                FROM property_listings
+                WHERE created_by = :userId
+                  AND archived_at IS NULL
+                """)
+    List<Object[]> findQualitySummaryForUser(
+            @Param("userId") UUID userId,
+            @Param("needsFixesThreshold") int needsFixesThreshold,
+            @Param("buyerReadyThreshold") int buyerReadyThreshold,
+            @Param("missingLocationThreshold") int missingLocationThreshold,
+            @Param("incompleteThreshold") int incompleteThreshold);
+
     /**
      * Keyset-paginated query returning LIVE listing IDs for the quality backfill.
      *

@@ -45,6 +45,7 @@ export default defineConfig({
         '**/quick-smoke.spec.ts',
         '**/broker-smoke.spec.ts',
         '**/broker-listing-quality.spec.ts',
+        '**/broker-dashboard-v2.spec.ts',
         '**/admin-smoke.spec.ts',
         '**/discover-real-data-smoke.spec.ts',
       ],
