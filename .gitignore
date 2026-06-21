@@ -44,6 +44,7 @@ backend/*.env
 # Allow example/template files that show required env var structure (no real secrets)
 !.env.e2e.example
 !.env.seed.example
+!backend/.env.example
 .claude/settings.local.json
 
 # Playwright test output
