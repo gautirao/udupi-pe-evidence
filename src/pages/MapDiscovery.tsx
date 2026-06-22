@@ -43,6 +43,8 @@ import { cityListingToPropertyListing } from '@/lib/discoverMappers';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
+import { DiscoverConsentBanner } from '@/components/discover/DiscoverConsentBanner';
+import { DiscoverPrivacyToggle } from '@/components/discover/DiscoverPrivacyToggle';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -2231,6 +2233,12 @@ export default function MapDiscovery() {
           city={isCityValid ? city : null}
         />
       )}
+      {/* Issue #1576 — telemetry consent banner (first-visit, undecided state only) */}
+      <DiscoverConsentBanner />
+      {/* Issue #1576 — persistent privacy toggle so users can revoke consent later */}
+      <div className="fixed bottom-4 right-4 z-40">
+        <DiscoverPrivacyToggle />
+      </div>
     </AppLayout>
   );
 }

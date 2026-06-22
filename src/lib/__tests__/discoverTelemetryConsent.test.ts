@@ -15,7 +15,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { isTelemetryConsented, getOrCreateSessionId } from '../discoverTelemetryConsent';
+import {
+  isTelemetryConsented,
+  getOrCreateSessionId,
+  grantTelemetryConsent,
+  revokeTelemetryConsent,
+  getConsentState,
+} from '../discoverTelemetryConsent';
 
 const CONSENT_KEY = 'discover_telemetry_consent';
 const SESSION_KEY = 'discover_telemetry_session_id';
@@ -69,6 +75,91 @@ describe('isTelemetryConsented', () => {
 
     expect(() => isTelemetryConsented()).not.toThrow();
     expect(isTelemetryConsented()).toBe(false);
+  });
+});
+
+describe('grantTelemetryConsent', () => {
+  it('G1: writes exactly "granted" to localStorage', () => {
+    grantTelemetryConsent();
+    expect(localStorage.getItem(CONSENT_KEY)).toBe('granted');
+  });
+
+  it('G2: overwrites any existing value with exactly "granted"', () => {
+    localStorage.setItem(CONSENT_KEY, 'denied');
+    grantTelemetryConsent();
+    expect(localStorage.getItem(CONSENT_KEY)).toBe('granted');
+  });
+
+  it('G3: does not throw when localStorage.setItem throws', () => {
+    vi.spyOn(localStorage, 'setItem').mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError');
+    });
+    expect(() => grantTelemetryConsent()).not.toThrow();
+  });
+});
+
+describe('revokeTelemetryConsent', () => {
+  it('R1: removes the consent key (key absent, not a sentinel value)', () => {
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    revokeTelemetryConsent();
+    expect(localStorage.getItem(CONSENT_KEY)).toBeNull();
+  });
+
+  it('R2: isTelemetryConsented() returns false after revoke', () => {
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    revokeTelemetryConsent();
+    expect(isTelemetryConsented()).toBe(false);
+  });
+
+  it('R3: does not throw when localStorage.removeItem throws', () => {
+    vi.spyOn(localStorage, 'removeItem').mockImplementationOnce(() => {
+      throw new Error('SecurityError');
+    });
+    expect(() => revokeTelemetryConsent()).not.toThrow();
+  });
+
+  it('R4: does not write a sentinel string like "revoked" or "denied"', () => {
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    revokeTelemetryConsent();
+    const stored = localStorage.getItem(CONSENT_KEY);
+    expect(stored).not.toBe('revoked');
+    expect(stored).not.toBe('denied');
+    expect(stored).toBeNull();
+  });
+});
+
+describe('getConsentState', () => {
+  it('GS1: missing key → "undecided"', () => {
+    localStorage.removeItem(CONSENT_KEY);
+    expect(getConsentState()).toBe('undecided');
+  });
+
+  it('GS2: value === "granted" (exact) → "granted"', () => {
+    localStorage.setItem(CONSENT_KEY, 'granted');
+    expect(getConsentState()).toBe('granted');
+  });
+
+  it('GS3: value "Granted" (wrong case) → "denied"', () => {
+    localStorage.setItem(CONSENT_KEY, 'Granted');
+    expect(getConsentState()).toBe('denied');
+  });
+
+  it('GS4: value "denied" → "denied"', () => {
+    localStorage.setItem(CONSENT_KEY, 'denied');
+    expect(getConsentState()).toBe('denied');
+  });
+
+  it('GS5: value "" (empty string) → "denied"', () => {
+    localStorage.setItem(CONSENT_KEY, '');
+    expect(getConsentState()).toBe('denied');
+  });
+
+  it('GS6: localStorage.getItem throws → "undecided" (fail closed, not allowed)', () => {
+    vi.spyOn(localStorage, 'getItem').mockImplementationOnce(() => {
+      throw new Error('SecurityError: access denied');
+    });
+    expect(() => getConsentState()).not.toThrow();
+    expect(getConsentState()).toBe('undecided');
   });
 });
 
