@@ -219,6 +219,6 @@ describe('Issue #1067 R1 — SchoolsInAreaPanel hydrates via api.get', () => {
     expect(options).toEqual({ skipAuth: true });
 
     // Regression: GuidedEntryPanel signature must NOT render.
-    expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
   });
 });

@@ -71,6 +71,7 @@
 
     --border: 51 8% 83%; /* ReTrends stone-400 #D7D6D0 (hairline on canvas) */
     --input: 51 8% 83%; /* tracks --border per shadcn (input border, not ReTrends input-bg fill) */
+    --input-bg: 48 14% 93%; /* ReTrends input-bg #F1F0EC — warm control fill (city/Buy-Rent) */
     --ring: 219 44% 19%; /* ReTrends --ring / navy-800 #1B2A45 */
 
     --radius: 0.625rem;
@@ -151,6 +152,7 @@
 
     --border: 220 20% 22%;
     --input: 220 20% 22%;
+    --input-bg: 220 20% 18%; /* dark-mode warm control fill (tracks muted surface) */
     --ring: 0 0% 44%;
 
     --pin-cluster: 175 55% 50%;
@@ -223,6 +225,14 @@
   .upt-zone-pill:hover {
     transform: translate(-50%, -50%) scale(1.04) !important;
     box-shadow: 0 6px 22px rgba(14, 22, 38, 0.42) !important;
+  }
+
+  /* Discover area-count marker pill — premium ReTrends locality marker (Issue #1588).
+     Lifts + deepens shadow on hover. The inner .area-marker-card has no base transform
+     (the outer wrapper handles centering), so scaling here is safe. */
+  .area-marker-card:hover {
+    transform: scale(1.04);
+    box-shadow: 0 12px 28px rgba(17, 24, 39, 0.18), 0 4px 10px rgba(17, 24, 39, 0.08);
   }
 
   @keyframes cluster-pulse {

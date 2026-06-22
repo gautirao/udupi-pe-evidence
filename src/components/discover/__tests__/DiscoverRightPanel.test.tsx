@@ -38,10 +38,52 @@ describe('DiscoverRightPanel', () => {
   });
 
   it('shows guided-entry state when panelContent="guided-entry"', () => {
-    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} />);
-    expect(screen.getByText('Find properties your way')).toBeInTheDocument();
+    renderPanel(
+      <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />,
+    );
+    expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
+    // Public-landing hero copy (ReTrends mock) replaces the old "Find properties your way".
+    expect(screen.getByText('Find your place in Udupi, your way.')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-school-first')).toBeInTheDocument();
+  });
+
+  it('guided-entry copy is city-dynamic — Bangalore selected shows Bangalore, not Udupi', () => {
+    renderPanel(
+      <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="bangalore" />,
+    );
+    expect(screen.getByText('Find your place in Bangalore, your way.')).toBeInTheDocument();
+    expect(screen.getByText('Discover Bangalore')).toBeInTheDocument();
+    // The mock's hardcoded Udupi copy must NOT leak into another city.
+    expect(
+      screen.queryByText('Find your place in Udupi, your way.'),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Discover Udupi')).not.toBeInTheDocument();
+  });
+
+  it('guided-entry shows a city-empty state when isCityEmpty (no fabricated copy/markers)', () => {
+    renderPanel(
+      <DiscoverRightPanel
+        {...baseProps}
+        panelContent="guided-entry"
+        areas={[]}
+        city="bangalore"
+        totalProperties={0}
+        isCityEmpty
+      />,
+    );
+    const empty = screen.getByTestId('guided-entry-empty-state');
+    expect(empty).toBeInTheDocument();
+    expect(empty).toHaveTextContent('No properties in Bangalore yet');
+    // Journey cards remain available so farmland/school journeys are still reachable.
+    expect(screen.getByTestId('journey-card-agri-first')).toBeInTheDocument();
+  });
+
+  it('guided-entry hides the empty state by default (e.g. while areas load)', () => {
+    renderPanel(
+      <DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} city="udupi" />,
+    );
+    expect(screen.queryByTestId('guided-entry-empty-state')).not.toBeInTheDocument();
   });
 
   it('shows the static agri-landing placeholder when panelContent="agri-landing"', () => {
@@ -469,8 +511,11 @@ describe('DiscoverRightPanel — Buy/Rent intent selector header', () => {
     expect(onIntentChange).toHaveBeenCalledWith('rent');
   });
 
-  it('does not render the intent selector when onIntentChange is absent', () => {
-    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="guided-entry" areas={[]} />);
+  it('does not render the top-strip intent selector when onIntentChange is absent', () => {
+    // The always-on top-strip Buy/Rent control is gated on onIntentChange. Tested on a
+    // non-landing panel (agri-landing) since the public landing (guided-entry) embeds its
+    // own Buy/Rent control inside the hero controls card per the ReTrends mock (#1588).
+    renderPanel(<DiscoverRightPanel {...baseProps} panelContent="agri-landing" areas={[]} />);
     expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
   });
 });

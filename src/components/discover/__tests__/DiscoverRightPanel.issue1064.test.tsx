@@ -68,7 +68,7 @@ describe('Issue #1064 — DiscoverRightPanel area hydration branches', () => {
       );
       expect(screen.getByTestId('discover-area-hydrating')).toBeInTheDocument();
       // GuidedEntryPanel signature element must NOT render (regression guard).
-      expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
     });
 
     it('(b) renders "Area not found" when urlAreaKey set, selectedArea null, isLoadingAreas=false', () => {
@@ -87,7 +87,7 @@ describe('Issue #1064 — DiscoverRightPanel area hydration branches', () => {
       expect(errBox).toHaveTextContent('Area not found');
       expect(errBox).toHaveTextContent(MALPE_AREA_KEY);
       expect(screen.getByRole('button', { name: /back to discover/i })).toBeInTheDocument();
-      expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
     });
 
     it('(c) renders selected-area panel when selectedArea resolves', () => {
@@ -121,7 +121,7 @@ describe('Issue #1064 — DiscoverRightPanel area hydration branches', () => {
           isLoadingAreas={false}
         />,
       );
-      expect(screen.getByText('Find properties your way')).toBeInTheDocument();
+      expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
     });
   });
 
@@ -152,7 +152,7 @@ describe('Issue #1064 — DiscoverRightPanel area hydration branches', () => {
         />,
       );
       expect(screen.getByTestId('discover-area-hydrating')).toBeInTheDocument();
-      expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
     });
 
     it('(b) renders "Area not found" when urlAreaKey set, selectedArea null, isLoadingAreas=false', () => {
@@ -170,7 +170,7 @@ describe('Issue #1064 — DiscoverRightPanel area hydration branches', () => {
         />,
       );
       expect(screen.getByTestId('discover-area-not-found')).toHaveTextContent(MALPE_AREA_KEY);
-      expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
     });
 
     it('(c) renders SchoolsInAreaPanel with school names when selectedArea resolves', () => {

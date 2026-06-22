@@ -174,7 +174,7 @@ describe('DiscoverRightPanel — state machine routing', () => {
     renderPanel(
       <DiscoverRightPanel {...baseProps} panelContent="guided-entry" />,
     );
-    expect(screen.getByText('Find properties your way')).toBeInTheDocument();
+    expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-area-first')).toBeInTheDocument();
     expect(screen.getByTestId('journey-card-school-first')).toBeInTheDocument();
   });
@@ -256,7 +256,7 @@ describe('DiscoverRightPanel — state machine routing', () => {
       />,
     );
     // Defensive fallback: no area resolved yet — show entry screen
-    expect(screen.getByText('Find properties your way')).toBeInTheDocument();
+    expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
   });
 
   it('panelContent="school-browse" renders header, search input, popular schools, and area cards', () => {
@@ -317,7 +317,9 @@ describe('DiscoverRightPanel — state machine routing', () => {
     // Use data-testid selector — more stable than text which can appear in multiple nodes
     screen.getByTestId('area-card').click();
     expect(onSelectAreaKey).toHaveBeenCalledWith('IN|KA|Udupi|Manipal');
-    expect(screen.getByText(/3 schools/i)).toBeInTheDocument();
+    // The school count is split across two sibling spans ("3" + " schools") inside AreaCard —
+    // use a container textContent check rather than getByText which requires a single element.
+    expect(screen.getByTestId('area-card').textContent).toMatch(/3\s+schools/i);
   });
 
   it('panelContent="schools-in-area" with selectedArea renders SchoolsInAreaPanel', () => {
@@ -338,7 +340,7 @@ describe('DiscoverRightPanel — state machine routing', () => {
     renderPanel(
       <DiscoverRightPanel {...baseProps} panelContent="schools-in-area" selectedArea={null} />,
     );
-    expect(screen.getByText('Find properties your way')).toBeInTheDocument();
+    expect(screen.getByTestId('guided-entry-panel')).toBeInTheDocument();
   });
 
   it('panelContent="school-selected" renders SchoolSelectedPanel with radius selector', () => {
@@ -425,8 +427,8 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
       </MemoryRouter>,
     );
     expect(screen.getByText('Select area')).toBeInTheDocument();
-    // Guided-entry headline must NOT appear — wrong panel
-    expect(screen.queryByText('Find properties your way')).not.toBeInTheDocument();
+    // Guided-entry panel must NOT appear — wrong panel
+    expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
   });
 });
 

@@ -159,7 +159,9 @@ describe('Issue #1370 / Figma polish — "Near a school" button removed from all
     await screen.findByTestId('corridor-landing-empty');
 
     // School controls are hidden (absent), not merely disabled.
-    expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();
+    // Exact-match guards the REMOVED map quick-filter button ("Near a school"); it must
+    // NOT collide with the public-landing journey card ("Search near a school", #1588).
+    expect(screen.queryByRole('button', { name: /^near a school$/i })).toBeNull();
   });
 
   it('area-first journey no longer renders the "Near a school" button (removed in Figma polish)', async () => {
@@ -167,13 +169,17 @@ describe('Issue #1370 / Figma polish — "Near a school" button removed from all
 
     // Anchor on the always-present Buy/Rent control so chrome has mounted before asserting.
     await screen.findByTestId('intent-selector');
-    expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();
+    // Exact-match guards the REMOVED map quick-filter button ("Near a school"); it must
+    // NOT collide with the public-landing journey card ("Search near a school", #1588).
+    expect(screen.queryByRole('button', { name: /^near a school$/i })).toBeNull();
   });
 
   it('guided-entry (no journey) no longer renders the "Near a school" button (removed in Figma polish)', async () => {
     renderAt('/discover?city=udupi');
 
     await screen.findByTestId('intent-selector');
-    expect(screen.queryByRole('button', { name: /near a school/i })).toBeNull();
+    // Exact-match guards the REMOVED map quick-filter button ("Near a school"); it must
+    // NOT collide with the public-landing journey card ("Search near a school", #1588).
+    expect(screen.queryByRole('button', { name: /^near a school$/i })).toBeNull();
   });
 });

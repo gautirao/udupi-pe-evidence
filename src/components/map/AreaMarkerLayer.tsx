@@ -61,45 +61,81 @@ interface AreaMarkerLayerProps {
  *   - all other cases → property count badge (existing behaviour)
  *   - Zero counts are intentionally shown ("0 schools", "0 properties").
  */
+// ReTrends palette (literal — divIcon HTML is not processed by Tailwind/CSS-vars).
+const C_PAPER = '#FFFFFF';
+const C_INK = '#111827';
+const C_MUTED = '#6B7280';
+const C_GREY_400 = '#9CA3AF';
+const C_STONE_400 = '#D7D6D0';
+const C_BORDER = 'rgba(17,24,39,0.09)';
+const C_COPPER = '#B05C3A';
+const C_COPPER_HOVER = '#934B2D';
+const C_COPPER_TINT = '#F2E8E1';
+const MONO = `'Geist Mono', ui-monospace, 'SF Mono', monospace`;
+const PILL_SHADOW = '0 4px 10px rgba(17,24,39,0.10), 0 2px 4px rgba(17,24,39,0.05)';
+
+const pinSvg = (color: string) =>
+  `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>`;
+
+const gradCapSvg = (color: string) =>
+  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
+
+/**
+ * Premium ReTrends locality marker (Issue #1588).
+ *
+ * Non-zero areas read as a strong warm-card pill (copper pin + name + copper count chip
+ * + tail). Zero-count areas drop to a quiet muted dashed pill so the map never feels
+ * broken. In school-first (no school picked) the count chip becomes a grey "{n} schools"
+ * badge. Hover lift is handled by the `.area-marker-card:hover` CSS rule (index.css).
+ *
+ * `data-testid="area-marker"` and the count copy are preserved for existing tests.
+ */
 function makeAreaCard(
   area: AreaPoint,
   opacity: number,
   journey?: DiscoverJourney | null,
   selectedSchool?: unknown,
 ): L.DivIcon {
-  let countHtml: string;
-  if (journey === 'school-first' && !selectedSchool && area.schoolCount != null) {
-    const n = area.schoolCount;
-    const label = n === 1 ? '1 school' : `${n.toLocaleString()} schools`;
-    // GraduationCap SVG inline (24×24 stroke icon, matches lucide-react visual)
-    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:middle;margin-right:3px;flex-shrink:0;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>`;
-    countHtml = `<div style="font-size:13px;color:#6b7280;margin-top:3px;display:flex;align-items:center;">${iconSvg}${escapeHtml(label)}</div>`;
+  const label = escapeHtml(area.areaLabel);
+  const isSchoolMode =
+    journey === 'school-first' && !selectedSchool && area.schoolCount != null;
+  const isZero = !isSchoolMode && area.listingCount === 0;
+
+  let html: string;
+
+  if (isZero) {
+    // Quiet muted variant — dashed ring, no tail, de-emphasised.
+    html = `<div data-testid="area-marker" class="area-marker-zero" style="transform:translate(-50%,-50%);font-family:inherit;opacity:${opacity * 0.66};pointer-events:auto;cursor:pointer;">
+      <div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:9999px;background:rgba(255,255,255,0.9);border:1px dashed ${C_STONE_400};white-space:nowrap;">
+        <span style="width:6px;height:6px;border-radius:50%;border:1.5px solid ${C_GREY_400};"></span>
+        <span style="font-size:11.5px;font-weight:600;color:${C_MUTED};">${label}</span>
+        <span style="font-family:${MONO};font-size:10.5px;color:${C_GREY_400};">0 properties</span>
+      </div>
+    </div>`;
   } else {
-    countHtml =
-      area.listingCount != null
-        ? `<div style="font-size:13px;color:#6b7280;margin-top:3px;">${area.listingCount.toLocaleString()} ${area.listingCount === 1 ? 'property' : 'properties'}</div>`
-        : '';
+    let chipHtml: string;
+    if (isSchoolMode) {
+      const n = area.schoolCount as number;
+      const txt = n === 1 ? '1 school' : `${n.toLocaleString()} schools`;
+      chipHtml = `<span style="display:inline-flex;align-items:center;gap:4px;font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:#F3F4F6;color:${C_MUTED};">${gradCapSvg(C_MUTED)}${escapeHtml(txt)}</span>`;
+    } else {
+      const n = area.listingCount ?? 0;
+      const txt = `${n.toLocaleString()} ${n === 1 ? 'property' : 'properties'}`;
+      chipHtml = `<span style="font-family:${MONO};font-size:11px;font-weight:600;padding:1.5px 7px;border-radius:9999px;background:${C_COPPER_TINT};color:${C_COPPER_HOVER};">${escapeHtml(txt)}</span>`;
+    }
+    html = `<div data-testid="area-marker" style="transform:translate(-50%,-118%);font-family:inherit;opacity:${opacity};pointer-events:auto;cursor:pointer;">
+      <div class="area-marker-card" style="display:inline-flex;align-items:center;gap:7px;padding:6px 8px 6px 11px;border-radius:9999px;background:${C_PAPER};border:1px solid ${C_BORDER};box-shadow:${PILL_SHADOW};white-space:nowrap;transition:transform .15s cubic-bezier(.4,0,.2,1),box-shadow .15s;">
+        ${pinSvg(C_COPPER)}
+        <span style="font-size:12.5px;font-weight:700;letter-spacing:-0.01em;color:${C_INK};">${label}</span>
+        ${chipHtml}
+      </div>
+      <div style="width:8px;height:8px;background:${C_PAPER};border-right:1px solid ${C_BORDER};border-bottom:1px solid ${C_BORDER};transform:rotate(45deg);margin:-5px auto 0;box-shadow:${PILL_SHADOW};"></div>
+    </div>`;
   }
 
   return L.divIcon({
     className: 'area-marker',
-    html: `<div data-testid="area-marker" style="
-      display:inline-block;
-      transform:translate(-50%,-50%);
-      background:white;
-      border-radius:12px;
-      padding:10px 16px;
-      box-shadow:0 2px 12px rgba(0,0,0,0.15);
-      white-space:nowrap;
-      cursor:pointer;
-      user-select:none;
-      font-family:inherit;
-      opacity:${opacity};
-      pointer-events:auto;
-    ">
-      <div style="font-weight:700;font-size:15px;color:#111827;line-height:1.2;">${escapeHtml(area.areaLabel)}</div>
-      ${countHtml}
-    </div>`,
+    html,
     iconSize: undefined,
     iconAnchor: [0, 0],
   });

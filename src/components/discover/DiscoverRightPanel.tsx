@@ -630,6 +630,18 @@ export interface DiscoverRightPanelProps {
   intent?: DiscoverIntent;
   /** Issue #1494 — called when user changes buy/rent intent. */
   onIntentChange?: (intent: DiscoverIntent) => void;
+  // ── Public landing controls (Issue #1588) ─────────────────────────────────
+  /** Called when the user changes city from the landing controls card. */
+  onCityChange?: (city: string) => void;
+  /** City-wide live property total — drives the landing's area-card "properties" chip + hero context. */
+  totalProperties?: number;
+  /** Number of areas with at least one listing — drives the landing's area-card "areas" chip. */
+  areasCount?: number;
+  /**
+   * Issue #1588 follow-up — true when the selected city has loaded with zero live
+   * properties. Threaded to GuidedEntryPanel for the city-aware empty-state notice.
+   */
+  isCityEmpty?: boolean;
 }
 
 export function DiscoverRightPanel({
@@ -724,8 +736,25 @@ export function DiscoverRightPanel({
   agriWaterSource = null,
   intent = 'buy',
   onIntentChange,
+  onCityChange,
+  totalProperties = 0,
+  areasCount = 0,
+  isCityEmpty = false,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
+
+  // Issue #1588 — shared props for the public landing (guided-entry) panel + its
+  // two no-areaKey fallbacks. City + intent are the existing URL-state controls.
+  const guidedEntryProps = {
+    onSelectJourney,
+    city,
+    onCityChange: onCityChange ?? (() => undefined),
+    intent,
+    onIntentChange: onIntentChange ?? (() => undefined),
+    totalProperties,
+    areasCount,
+    isCityEmpty,
+  };
 
   // Issue #1531 — PANEL_OPEN telemetry on mount (additive; fire-and-forget; never throws).
   // Only coarse, non-PII fields. Runs once when the panel first renders.
@@ -772,7 +801,7 @@ export function DiscoverRightPanel({
   function renderPanel(): React.ReactNode {
     switch (panelContent) {
       case 'guided-entry':
-        return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+        return <GuidedEntryPanel {...guidedEntryProps} />;
 
       case 'agri-landing':
         // Issue #1429 — corridor-first two-level UX.
@@ -1089,7 +1118,7 @@ export function DiscoverRightPanel({
           if (urlAreaKey) {
             return isLoadingAreas ? renderAreaHydrating() : renderAreaNotFound(urlAreaKey);
           }
-          return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+          return <GuidedEntryPanel {...guidedEntryProps} />;
         }
         return (
           <AreaSelectedPanel
@@ -1191,7 +1220,7 @@ export function DiscoverRightPanel({
           if (urlAreaKey) {
             return isLoadingAreas ? renderAreaHydrating() : renderAreaNotFound(urlAreaKey);
           }
-          return <GuidedEntryPanel onSelectJourney={onSelectJourney} />;
+          return <GuidedEntryPanel {...guidedEntryProps} />;
         }
         return (
           <SchoolsInAreaPanel
@@ -1332,9 +1361,11 @@ export function DiscoverRightPanel({
       className="flex flex-col lg:w-1/2 border-l border-border bg-background overflow-hidden order-2 lg:order-2"
       data-testid="discover-right-panel"
     >
-      {/* Issue #1494 — Buy/Rent intent selector, always visible at the top of the right
-          panel. Left-aligned (Figma) so it sits on the content side, above the journey cards. */}
-      {onIntentChange && (
+      {/* Issue #1494 — Buy/Rent intent selector, visible at the top of the right panel.
+          Left-aligned (Figma) so it sits on the content side, above the journey cards.
+          Issue #1588 — suppressed on the public landing (guided-entry), where Buy/Rent
+          lives inside the hero controls card instead (avoids a duplicate control). */}
+      {onIntentChange && panelContent !== 'guided-entry' && (
         <div className="flex items-center justify-start gap-3 px-4 py-3 border-b border-border/50 shrink-0 bg-background">
           <IntentSelector intent={intent} onIntentChange={onIntentChange} />
         </div>

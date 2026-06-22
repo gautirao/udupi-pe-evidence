@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
-import { AppLayout } from '@/components/layout/AppLayout';
+import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
+import { MapAreaLegend } from '@/components/discover/MapAreaLegend';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
@@ -1787,9 +1788,27 @@ export default function MapDiscovery() {
     urlState.journey === 'school-first' &&
     (!!urlState.groupId || !!urlState.areaKey || !!selectedArea || !!selectedSchool);
 
+  // Issue #1588 — public-landing marker set. The public landing shows ONLY areas that
+  // have live properties — never muted/transparent 0-property markers. A clean, calm
+  // empty map (with the centered empty-state message) is preferred over decorative pins,
+  // so a city with no live properties (e.g. Bangalore) renders no area markers at all.
+  // Drill-down states keep the full area set (unchanged).
+  const isLandingState = resolvedPanelContent === 'guided-entry';
+  const liveAreas = discoverAreas.filter((a) => (a.listingCount ?? 0) > 0);
+  // Issue #1588 follow-up — the selected city has finished loading and has zero live
+  // properties. Gated on !areasLoading so the empty-state notice never flashes during
+  // the load window (when cityTotal is transiently 0). City-scoped: discoverAreas comes
+  // from /api/discover/areas for the current city, so this is true only for the real
+  // selected city, never leaked from another city's data.
+  const cityHasNoListings = !areasLoading && cityTotal === 0;
+  const overviewAreas =
+    mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney
+      ? (isLandingState ? liveAreas : discoverAreas)
+      : [];
+
   return (
-    <AppLayout>
-      <div className="h-[calc(100vh-3.5rem)] flex flex-col lg:flex-row relative">
+    <PublicDiscoverLayout>
+      <div className="h-full flex flex-col lg:flex-row relative">
         <div className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1">
           {showLoader && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
@@ -1858,8 +1877,12 @@ export default function MapDiscovery() {
               focusBounds={agriGroupFocusBounds ?? activeFocusBounds}
               agriGroupListings={(selectedRegion && selectedMaxKm != null) ? filteredAgriListings : null}
               polygon={filters.polygon}
-              onPolygonDrawn={handlePolygonDrawn}
-              onPolygonCleared={handlePolygonCleared}
+              // Issue #1588 — hide the polygon draw tool on the public landing
+              // (guided-entry). PropertyMap only mounts DrawControl when BOTH handlers
+              // are present, so passing undefined here removes the control on the landing
+              // while preserving area-draw search in every drill-down state.
+              onPolygonDrawn={isLandingState ? undefined : handlePolygonDrawn}
+              onPolygonCleared={isLandingState ? undefined : handlePolygonCleared}
               schoolCircle={selectedSchool ? {
                 lat: selectedSchool.latitude, lon: selectedSchool.longitude,
                 // Issue #1210: clamp so the drawn circle reflects the effective (>=1 km) radius.
@@ -1869,7 +1892,7 @@ export default function MapDiscovery() {
               initialZoom={urlState.viewport?.zoom}
               cityCenter={cityCenter}
               cityZoom={cityZoom}
-              areas={mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney ? discoverAreas : []}
+              areas={overviewAreas}
               onAreaClick={handleAreaClick}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
               schoolZoneLabels={schoolZoneLabels}
@@ -1970,17 +1993,33 @@ export default function MapDiscovery() {
             </div>
           )}
 
-          {/* City select — top-right */}
-          <div className="absolute top-4 right-4 z-[1000] w-44">
-            <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
-          </div>
+          {/* City select — top-right. Issue #1588 — hidden on the public landing
+              (guided-entry), where the city control lives in the right-panel hero
+              controls card; restored for every drill-down state. */}
+          {resolvedPanelContent !== 'guided-entry' && (
+            <div className="absolute top-4 right-4 z-[1000] w-44">
+              <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
+            </div>
+          )}
+
+          {/* Area-count legend — bottom-left, public landing only. Shown ONLY when there
+              are actual area markers on the map (hidden entirely on empty cities), and
+              never over the school-radius legend. All landing markers are areas with
+              properties, so only the "Areas with properties" row is shown (Issue #1588). */}
+          {resolvedPanelContent === 'guided-entry' && !schoolRadiusOverlay && overviewAreas.length > 0 && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapAreaLegend showZeroRow={false} />
+            </div>
+          )}
 
           {/* "Near a school" quick-filter button removed (Figma polish) — the school
               journey is reachable via the "Search by school area" card in the right panel.
               NearSchoolSheet stays mounted below but is no longer triggered from here. */}
 
-          {/* City / area listing count — bottom-right (Issue #1152) */}
-          {discoverBadge.visible && discoverBadge.count != null && (
+          {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
+              public landing this is replaced by the centered city-wide summary pill below;
+              kept bottom-right for contextual (area/school/group) drill-down counts. */}
+          {resolvedPanelContent !== 'guided-entry' && discoverBadge.visible && discoverBadge.count != null && (
             <div className="absolute bottom-16 right-4 z-[1000]" data-testid="discover-badge">
               <div className="flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
                 <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -1990,6 +2029,22 @@ export default function MapDiscovery() {
                     {discoverBadge.count.toLocaleString()}
                   </strong>
                   {' '}properties
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Public-landing summary pill — bottom-center, city-wide verified total (Issue #1588). */}
+          {resolvedPanelContent === 'guided-entry' && cityTotal > 0 && (
+            <div className="absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2" data-testid="discover-badge">
+              <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md">
+                <MapPin className="h-[15px] w-[15px] shrink-0 text-[hsl(var(--copper))]" aria-hidden="true" />
+                <span>
+                  Showing{' '}
+                  <strong className="font-mono font-bold tabular-nums text-foreground">
+                    {cityTotal.toLocaleString()}
+                  </strong>
+                  {' '}verified properties across {CITY_CONFIG[city]?.label ?? city}
                 </span>
               </div>
             </div>
@@ -2194,6 +2249,11 @@ export default function MapDiscovery() {
           // Issue #1494 — buy/rent intent selector
           intent={urlState.intent}
           onIntentChange={(newIntent) => urlActions.setIntent(newIntent)}
+          // Issue #1588 — public landing controls (city) + journey-card count chips.
+          onCityChange={handleCityChange}
+          totalProperties={cityTotal}
+          areasCount={discoverAreas.filter((a) => (a.listingCount ?? 0) > 0).length}
+          isCityEmpty={cityHasNoListings}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button
@@ -2239,6 +2299,6 @@ export default function MapDiscovery() {
       <div className="fixed bottom-4 right-4 z-40">
         <DiscoverPrivacyToggle />
       </div>
-    </AppLayout>
+    </PublicDiscoverLayout>
   );
 }

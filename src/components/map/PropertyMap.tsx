@@ -11,7 +11,6 @@ import { DrawControl } from '@/components/map/DrawControl';
 import { AreaMarkerLayer, AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { SchoolMarkerLayer } from '@/components/map/SchoolMarkerLayer';
 import { SchoolZoneLabelLayer, type ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
-import { ScaleHud } from '@/dev/ScaleHud';
 import type { DiscoverJourney } from '@/hooks/useDiscoverUrlState';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { GROUP_BOUNDS_SYNTHETIC_KEY } from '@/utils/discoverGroupBounds';
@@ -1350,9 +1349,9 @@ export function PropertyMap({
         scrollWheelZoom
         zoomControl={false}
       >
-        {/* Zoom +/- moved to bottom-left so it is never hidden behind the top-left
-            "Udupi" area pill (AreaIndicatorOverlay). */}
-        <ZoomControl position="bottomleft" />
+        {/* Zoom +/- sits bottom-right (matches the ReTrends mock) — clear of the
+            top-left "Udupi" pill AND the bottom-left area-count legend (#1588). */}
+        <ZoomControl position="bottomright" />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1443,7 +1442,6 @@ export function PropertyMap({
             selectedSchoolId={selectedSchoolId}
           />
         )}
-        <ScaleHud />
         {onPolygonDrawn && onPolygonCleared && (
           <DrawControl
             polygon={polygon}
