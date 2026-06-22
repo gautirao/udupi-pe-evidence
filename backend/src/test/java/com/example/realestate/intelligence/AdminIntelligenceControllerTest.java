@@ -36,11 +36,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <p>Covers:
  * <ul>
- *   <li>admin caller → 200 with list response</li>
+ *   <li>admin caller → 200 with list response including populated demand fields</li>
  *   <li>non-admin (broker) caller → 403</li>
  *   <li>anonymous/no-JWT → 401 (Spring Security default, before resolver runs)</li>
  *   <li>city filter wired through to service</li>
- *   <li>demand fields (demandEventCount, topGaps) always null in response</li>
+ *   <li>demandEventCount suppressed → null (never 0); topGaps populated from service</li>
+ *   <li>avgQuality null (backfill-incomplete) preserved through serialization</li>
  * </ul>
  */
 @WebMvcTest(
@@ -82,12 +83,15 @@ class AdminIntelligenceControllerTest {
         reset(adminIntelligenceService, userRoleService);
     }
 
-    // ==================== Test 1: admin → 200 with list response ====================
+    // ==================== Test 1: admin → 200 with list response (populated demand fields) ===
 
     @Test
     void getAreas_withAdminRole_returns200WithAreaList() throws Exception {
         when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
 
+        List<AreaTopGap> gaps = List.of(
+                new AreaTopGap("apartment", "sale", "UNDER_5L", "supply_gap", 1.5, "enough_data")
+        );
         AreaIntelligenceResponse row = new AreaIntelligenceResponse(
                 "IN|KA|Udupi|Manipal",
                 "Manipal",
@@ -96,8 +100,8 @@ class AdminIntelligenceControllerTest {
                 30,
                 72.5,
                 "full",
-                null,
-                null
+                42,           // demandEventCount — populated (>= K_ANON_MIN)
+                gaps
         );
         when(adminIntelligenceService.getAreaIntelligence(null)).thenReturn(List.of(row));
 
@@ -107,6 +111,9 @@ class AdminIntelligenceControllerTest {
                 .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
                 .andExpect(jsonPath("$[0].live90dCount").value(35))
                 .andExpect(jsonPath("$[0].confidence").value("full"))
+                .andExpect(jsonPath("$[0].demandEventCount").value(42))
+                .andExpect(jsonPath("$[0].topGaps[0].propertyType").value("apartment"))
+                .andExpect(jsonPath("$[0].topGaps[0].gapScore").value(1.5))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -114,9 +121,42 @@ class AdminIntelligenceControllerTest {
         List<AreaIntelligenceResponse> parsed = objectMapper.readValue(
                 responseBody, new TypeReference<>() {});
         assertThat(parsed).hasSize(1);
-        // demand fields MUST be null — never 0
-        assertThat(parsed.get(0).demandEventCount()).isNull();
-        assertThat(parsed.get(0).topGaps()).isNull();
+        assertThat(parsed.get(0).demandEventCount()).isEqualTo(42);
+        assertThat(parsed.get(0).topGaps()).hasSize(1);
+    }
+
+    // ==================== Test 1b: admin → suppressed demand (null demandEventCount) =========
+
+    @Test
+    void getAreas_withAdminRole_suppressedDemand_demandEventCountNull() throws Exception {
+        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
+        // Service returns null demandEventCount (suppressed) and empty topGaps.
+        AreaIntelligenceResponse row = new AreaIntelligenceResponse(
+                "IN|KA|Udupi|Karkala",
+                "Karkala",
+                "Udupi",
+                12,
+                5,
+                65.0,
+                "limited",
+                null,         // suppressed — NEVER 0
+                List.of()     // no non-suppressed buckets
+        );
+        when(adminIntelligenceService.getAreaIntelligence(null)).thenReturn(List.of(row));
+
+        String responseBody = mockMvc.perform(get("/api/admin/intelligence/areas")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        List<AreaIntelligenceResponse> parsed = objectMapper.readValue(
+                responseBody, new TypeReference<>() {});
+        assertThat(parsed).hasSize(1);
+        assertThat(parsed.get(0).demandEventCount()).isNull();   // suppressed
+        assertThat(parsed.get(0).topGaps()).isEmpty();
     }
 
     // ==================== Test 2: non-admin → 403 ====================
@@ -183,16 +223,18 @@ class AdminIntelligenceControllerTest {
                 "Udupi",
                 12,
                 0,
-                null,   // avgQualityScore null — backfill not yet run for this area
+                null,      // avgQualityScore null — backfill not yet run for this area
                 "limited",
-                null,
-                null
+                null,      // demandEventCount null — suppressed (< K_ANON_MIN)
+                List.of()  // topGaps empty list — contract says never null
         );
         when(adminIntelligenceService.getAreaIntelligence(null)).thenReturn(List.of(backfillIncompleteRow));
 
         String responseBody = mockMvc.perform(get("/api/admin/intelligence/areas")
                         .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].topGaps").isArray())
+                .andExpect(jsonPath("$[0].topGaps").isEmpty())
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -202,5 +244,6 @@ class AdminIntelligenceControllerTest {
         assertThat(parsed).hasSize(1);
         assertThat(parsed.get(0).avgQualityScore()).isNull();
         assertThat(parsed.get(0).scoredListingCount()).isZero();
+        assertThat(parsed.get(0).topGaps()).isEmpty();   // must serialize as [] not null
     }
 }

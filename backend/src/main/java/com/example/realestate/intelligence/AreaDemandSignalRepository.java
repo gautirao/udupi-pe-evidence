@@ -210,4 +210,97 @@ public interface AreaDemandSignalRepository
     int updateDemandScore(@Param("demandScore") java.math.BigDecimal demandScore,
                           @Param("citySlug") String citySlug,
                           @Param("areaKey") String areaKey);
+
+    /**
+     * Return per-area demand event totals from the LATEST 30-day rollup run.
+     *
+     * <p>Reads PERSISTED {@code area_demand_signal} rows — does NOT re-derive from
+     * {@code discover_event} or {@code property_listings}. Uses a subquery to pin
+     * {@code period_start} to the single latest run for {@code window_days = 30}
+     * so multiple historical runs do not double-count.
+     *
+     * <p>ONE SQL statement, no N+1. The secondary index
+     * {@code idx_area_demand_signal_city_area (city_slug, area_key)} is used.
+     *
+     * <p>Both suppressed (gap_score IS NULL) and non-suppressed rows contribute to the
+     * total — suppression is applied at the area level in {@link AdminIntelligenceService}
+     * using {@link AggregationConstants#K_ANON_MIN}.
+     *
+     * @return one row per (city_slug, area_key) in the latest 30d window;
+     *         empty list when no data has been rolled up yet
+     */
+    @Query(value = """
+            SELECT
+                ads.city_slug                                              AS "citySlug",
+                ads.area_key                                               AS "areaKey",
+                SUM(ads.search_count + ads.panel_open_count
+                    + ads.lead_intent_count)                               AS "demandEventTotal"
+            FROM area_demand_signal ads
+            WHERE ads.window_days  = 30
+              AND ads.period_start = (
+                  SELECT MAX(period_start)
+                  FROM area_demand_signal
+                  WHERE window_days = 30
+              )
+            GROUP BY ads.city_slug, ads.area_key
+            ORDER BY ads.city_slug, ads.area_key
+            """,
+            nativeQuery = true)
+    List<AreaDemandSummaryRow> findDemandTotalsByLatestWindow30();
+
+    /**
+     * Return the top-3 non-suppressed gap buckets per area from the LATEST 30-day rollup run.
+     *
+     * <p>Reads PERSISTED {@code area_demand_signal} rows only. Excludes suppressed buckets
+     * ({@code gap_score IS NULL}). Orders by {@code gap_score DESC} with a stable tie-break
+     * on {@code (property_type, listing_purpose, budget_band)} to ensure deterministic output
+     * when multiple buckets share the same gap_score.
+     *
+     * <p>Uses a windowed {@code ROW_NUMBER()} sub-select to pick at most 3 rows per
+     * {@code (city_slug, area_key)} in ONE SQL statement — no N+1.
+     *
+     * @return at most 3 rows per (city_slug, area_key) in the latest 30d window;
+     *         empty list when no non-suppressed buckets exist
+     */
+    @Query(value = """
+            SELECT
+                rn.city_slug       AS "citySlug",
+                rn.area_key        AS "areaKey",
+                rn.property_type   AS "propertyType",
+                rn.listing_purpose AS "listingPurpose",
+                rn.budget_band     AS "budgetBand",
+                rn.signal_type     AS "signalType",
+                rn.gap_score       AS "gapScore",
+                rn.confidence      AS "confidence"
+            FROM (
+                SELECT
+                    ads.city_slug,
+                    ads.area_key,
+                    ads.property_type,
+                    ads.listing_purpose,
+                    ads.budget_band,
+                    ads.signal_type,
+                    ads.gap_score,
+                    ads.confidence,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ads.city_slug, ads.area_key
+                        ORDER BY ads.gap_score DESC,
+                                 ads.property_type,
+                                 ads.listing_purpose,
+                                 ads.budget_band
+                    ) AS rn
+                FROM area_demand_signal ads
+                WHERE ads.window_days  = 30
+                  AND ads.period_start = (
+                      SELECT MAX(period_start)
+                      FROM area_demand_signal
+                      WHERE window_days = 30
+                  )
+                  AND ads.gap_score IS NOT NULL
+            ) rn
+            WHERE rn.rn <= 3
+            ORDER BY rn.city_slug, rn.area_key, rn.rn
+            """,
+            nativeQuery = true)
+    List<AreaTopGapRow> findTop3GapsByLatestWindow30();
 }

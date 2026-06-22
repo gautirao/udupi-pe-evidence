@@ -286,9 +286,10 @@
                                 -XX:+EnableDynamicAgentLoading
                                 -Dnet.bytebuddy.experimental=true
                             </argLine>
-                            <!-- Narrowed include: ONLY AreaDemandSignalIT. -->
+                            <!-- Narrowed include: AreaDemandSignalIT + AreaDemandSummaryIT (#1536). -->
                             <includes>
                                 <include>**/AreaDemandSignalIT.java</include>
+                                <include>**/AreaDemandSummaryIT.java</include>
                             </includes>
                             <groups>integration</groups>
                         </configuration>

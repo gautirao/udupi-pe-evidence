@@ -18,8 +18,10 @@ import static org.mockito.Mockito.when;
  * <ul>
  *   <li>parseDistrict — normal, malformed (fewer than 3 segments), blank segment, null</li>
  *   <li>avgQualityScore null-coercion guard — scoredCount=0 yields null avgQuality, not 0</li>
- *   <li>demand fields always null in mapped response</li>
+ *   <li>demandEventCount suppression at K_ANON_MIN boundary (9 → null, 10 → present)</li>
+ *   <li>topGaps mapped from repository rows; empty list when area absent from signal table</li>
  *   <li>confidence label derives from live90dCount via AreaConfidence.classify()</li>
+ *   <li>avgQuality/confidence/live90d mapping unchanged by demand population</li>
  * </ul>
  */
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +29,9 @@ class AdminIntelligenceServiceTest {
 
     @Mock
     private AreaIntelligenceRepository areaIntelligenceRepository;
+
+    @Mock
+    private AreaDemandSignalRepository areaDemandSignalRepository;
 
     @InjectMocks
     private AdminIntelligenceService service;
@@ -88,14 +93,92 @@ class AdminIntelligenceServiceTest {
     }
 
     @Test
-    void getAreaIntelligence_demandFieldsAlwaysNull() {
+    void getAreaIntelligence_noSignalData_demandEventCountNullAndTopGapsEmpty() {
+        // No demand signal data at all: both repo methods return empty lists (Mockito default).
         AreaIntelligenceRow row = buildRow("IN|KA|Udupi|Manipal", "Manipal", 35L, 30L, 72.5);
         when(areaIntelligenceRepository.findLive90dAggregates()).thenReturn(List.of(row));
 
         List<AreaIntelligenceResponse> result = service.getAreaIntelligence(null);
 
         assertThat(result.get(0).demandEventCount()).isNull();
-        assertThat(result.get(0).topGaps()).isNull();
+        assertThat(result.get(0).topGaps()).isEmpty();  // empty list, never null
+    }
+
+    @Test
+    void getAreaIntelligence_demandTotal9_suppressedToNull() {
+        // demand total = 9 < K_ANON_MIN(10) → demandEventCount must be null
+        AreaIntelligenceRow row = buildRow("IN|KA|Udupi|Manipal", "Manipal", 35L, 30L, 72.5);
+        when(areaIntelligenceRepository.findLive90dAggregates()).thenReturn(List.of(row));
+        when(areaDemandSignalRepository.findDemandTotalsByLatestWindow30())
+                .thenReturn(List.of(buildSummaryRow("udupi", "IN|KA|Udupi|Manipal", 9L)));
+        when(areaDemandSignalRepository.findTop3GapsByLatestWindow30()).thenReturn(List.of());
+
+        List<AreaIntelligenceResponse> result = service.getAreaIntelligence(null);
+
+        assertThat(result.get(0).demandEventCount()).isNull();   // suppressed — NEVER 0
+        assertThat(result.get(0).topGaps()).isEmpty();
+    }
+
+    @Test
+    void getAreaIntelligence_demandTotal10_notSuppressed() {
+        // demand total = 10 == K_ANON_MIN → demandEventCount must be 10
+        AreaIntelligenceRow row = buildRow("IN|KA|Udupi|Manipal", "Manipal", 35L, 30L, 72.5);
+        when(areaIntelligenceRepository.findLive90dAggregates()).thenReturn(List.of(row));
+        when(areaDemandSignalRepository.findDemandTotalsByLatestWindow30())
+                .thenReturn(List.of(buildSummaryRow("udupi", "IN|KA|Udupi|Manipal", 10L)));
+        when(areaDemandSignalRepository.findTop3GapsByLatestWindow30()).thenReturn(List.of());
+
+        List<AreaIntelligenceResponse> result = service.getAreaIntelligence(null);
+
+        assertThat(result.get(0).demandEventCount()).isEqualTo(10);
+        assertThat(result.get(0).topGaps()).isEmpty();
+    }
+
+    @Test
+    void getAreaIntelligence_topGapsMappedCorrectly() {
+        AreaIntelligenceRow row = buildRow("IN|KA|Udupi|Manipal", "Manipal", 35L, 30L, 72.5);
+        when(areaIntelligenceRepository.findLive90dAggregates()).thenReturn(List.of(row));
+        when(areaDemandSignalRepository.findDemandTotalsByLatestWindow30())
+                .thenReturn(List.of(buildSummaryRow("udupi", "IN|KA|Udupi|Manipal", 50L)));
+        when(areaDemandSignalRepository.findTop3GapsByLatestWindow30())
+                .thenReturn(List.of(
+                        buildGapRow("udupi", "IN|KA|Udupi|Manipal", "apartment", "sale", "UNDER_5L",
+                                "supply_gap", 1.5, "enough_data"),
+                        buildGapRow("udupi", "IN|KA|Udupi|Manipal", "apartment", "rent", "5L_20L",
+                                "information_gap", 0.8, "limited_data")
+                ));
+
+        List<AreaIntelligenceResponse> result = service.getAreaIntelligence(null);
+
+        AreaIntelligenceResponse resp = result.get(0);
+        assertThat(resp.demandEventCount()).isEqualTo(50);
+        assertThat(resp.topGaps()).hasSize(2);
+        AreaTopGap gap0 = resp.topGaps().get(0);
+        assertThat(gap0.propertyType()).isEqualTo("apartment");
+        assertThat(gap0.listingPurpose()).isEqualTo("sale");
+        assertThat(gap0.budgetBand()).isEqualTo("UNDER_5L");
+        assertThat(gap0.signalType()).isEqualTo("supply_gap");
+        assertThat(gap0.gapScore()).isEqualTo(1.5);
+        assertThat(gap0.confidence()).isEqualTo("enough_data");
+    }
+
+    @Test
+    void getAreaIntelligence_avgQualityAndConfidenceUnchangedByDemandData() {
+        // Verify avgQuality / confidence / live90d are not perturbed when demand data is present.
+        AreaIntelligenceRow row = buildRow("IN|KA|Udupi|Karkala", "Karkala", 12L, 0L, null);
+        when(areaIntelligenceRepository.findLive90dAggregates()).thenReturn(List.of(row));
+        when(areaDemandSignalRepository.findDemandTotalsByLatestWindow30())
+                .thenReturn(List.of(buildSummaryRow("udupi", "IN|KA|Udupi|Karkala", 25L)));
+        when(areaDemandSignalRepository.findTop3GapsByLatestWindow30()).thenReturn(List.of());
+
+        List<AreaIntelligenceResponse> result = service.getAreaIntelligence(null);
+
+        AreaIntelligenceResponse resp = result.get(0);
+        assertThat(resp.avgQualityScore()).isNull();      // unchanged — must be null, NOT 0
+        assertThat(resp.scoredListingCount()).isZero();
+        assertThat(resp.live90dCount()).isEqualTo(12);
+        assertThat(resp.confidence()).isEqualTo("limited"); // 12 → LIMITED
+        assertThat(resp.demandEventCount()).isEqualTo(25);  // present (>= K_ANON_MIN)
     }
 
     @Test
@@ -159,6 +242,31 @@ class AdminIntelligenceServiceTest {
             @Override public Long getLive90dCount() { return live90dCount; }
             @Override public Long getScoredCount() { return scoredCount; }
             @Override public Double getAvgQuality() { return avgQuality; }
+        };
+    }
+
+    private static AreaDemandSummaryRow buildSummaryRow(String citySlug, String areaKey,
+                                                         Long demandEventTotal) {
+        return new AreaDemandSummaryRow() {
+            @Override public String getCitySlug() { return citySlug; }
+            @Override public String getAreaKey() { return areaKey; }
+            @Override public Long getDemandEventTotal() { return demandEventTotal; }
+        };
+    }
+
+    private static AreaTopGapRow buildGapRow(String citySlug, String areaKey,
+                                              String propertyType, String listingPurpose,
+                                              String budgetBand, String signalType,
+                                              double gapScore, String confidence) {
+        return new AreaTopGapRow() {
+            @Override public String getCitySlug() { return citySlug; }
+            @Override public String getAreaKey() { return areaKey; }
+            @Override public String getPropertyType() { return propertyType; }
+            @Override public String getListingPurpose() { return listingPurpose; }
+            @Override public String getBudgetBand() { return budgetBand; }
+            @Override public String getSignalType() { return signalType; }
+            @Override public Double getGapScore() { return gapScore; }
+            @Override public String getConfidence() { return confidence; }
         };
     }
 }

@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Intelligence from '../Intelligence';
@@ -58,6 +58,15 @@ vi.mock('@/components/notifications/NotificationBell', () => ({
 
 type Confidence = 'full' | 'limited' | 'insufficient';
 
+interface AreaTopGap {
+  propertyType: string;
+  listingPurpose: string;
+  budgetBand: string;
+  signalType: string;
+  gapScore: number;
+  confidence: string;
+}
+
 interface AreaRow {
   areaKey: string;
   areaLabel: string | null;
@@ -67,7 +76,7 @@ interface AreaRow {
   avgQualityScore: number | null;
   confidence: Confidence;
   demandEventCount: number | null;
-  topGaps: string | null;
+  topGaps: AreaTopGap[] | null;
 }
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -285,5 +294,217 @@ describe('Intelligence page — multi-row rendering', () => {
     expect(screen.getByText('Full')).toBeInTheDocument();
     expect(screen.getByText('Limited')).toBeInTheDocument();
     expect(screen.getAllByText('Insufficient').length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ─── New demand column tests (M30 backend now live) ───────────────────────────
+
+function makeGap(overrides: Partial<AreaTopGap> = {}): AreaTopGap {
+  return {
+    propertyType: 'apartment',
+    listingPurpose: 'rent',
+    budgetBand: '10k-20k',
+    signalType: 'search',
+    gapScore: 8.5,
+    confidence: 'full',
+    ...overrides,
+  };
+}
+
+describe('Intelligence page — demand events cell', () => {
+  it('renders the number when demandEventCount is non-null', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ demandEventCount: 42 }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Full');
+    const cell = screen.getByTestId('cell-demand-events');
+    expect(cell).toHaveTextContent('42');
+    expect(cell).not.toHaveTextContent('—');
+  });
+
+  it('renders "—" (not "0") when demandEventCount is null', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ demandEventCount: null }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Full');
+    const cell = screen.getByTestId('cell-demand-events');
+    expect(cell).toHaveTextContent('—');
+    expect(cell).not.toHaveTextContent('0');
+  });
+});
+
+describe('Intelligence page — top gaps cell', () => {
+  it('renders "—" when topGaps is null', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ topGaps: null }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Full');
+    const cell = screen.getByTestId('cell-top-gaps');
+    expect(cell).toHaveTextContent('—');
+  });
+
+  it('renders "—" when topGaps is an empty array', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ topGaps: [] }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Full');
+    const cell = screen.getByTestId('cell-top-gaps');
+    expect(cell).toHaveTextContent('—');
+  });
+
+  it('renders gap fields when topGaps has entries', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({
+        topGaps: [
+          makeGap({ budgetBand: '10k-20k', propertyType: 'apartment', signalType: 'search', gapScore: 8.5 }),
+        ],
+      }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Full');
+    const cell = screen.getByTestId('cell-top-gaps');
+    expect(cell).toHaveTextContent('10k-20k');
+    expect(cell).toHaveTextContent('apartment');
+    expect(cell).toHaveTextContent('search');
+    expect(cell).toHaveTextContent('8.5');
+    expect(cell).not.toHaveTextContent('—');
+  });
+
+  it('renders up to 3 gaps and does not crash with more than 3 entries', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({
+        topGaps: [
+          makeGap({ budgetBand: 'band-A', gapScore: 9.0 }),
+          makeGap({ budgetBand: 'band-B', gapScore: 8.0 }),
+          makeGap({ budgetBand: 'band-C', gapScore: 7.0 }),
+          makeGap({ budgetBand: 'band-D', gapScore: 6.0 }),
+        ],
+      }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Full');
+    const cell = screen.getByTestId('cell-top-gaps');
+    // band-A, band-B, band-C rendered; band-D must not appear
+    expect(cell).toHaveTextContent('band-A');
+    expect(cell).toHaveTextContent('band-B');
+    expect(cell).toHaveTextContent('band-C');
+    expect(cell).not.toHaveTextContent('band-D');
+  });
+});
+
+describe('Intelligence page — insufficient data (suppressed row)', () => {
+  it('shows "—" in BOTH demand cells when demandEventCount is null and topGaps is null', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ demandEventCount: null, topGaps: null, confidence: 'insufficient' }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('Insufficient');
+    const eventsCell = screen.getByTestId('cell-demand-events');
+    const gapsCell = screen.getByTestId('cell-top-gaps');
+    expect(eventsCell).toHaveTextContent('—');
+    expect(eventsCell).not.toHaveTextContent('0');
+    expect(gapsCell).toHaveTextContent('—');
+  });
+});
+
+describe('Intelligence page — sort by demandEventCount', () => {
+  it('sorts ascending with nulls last', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ areaKey: 'area-A', areaLabel: 'A', demandEventCount: null }),
+      makeRow({ areaKey: 'area-B', areaLabel: 'B', demandEventCount: 10 }),
+      makeRow({ areaKey: 'area-C', areaLabel: 'C', demandEventCount: 5 }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('A');
+
+    const btn = screen.getByRole('button', { name: /sort by demand events/i });
+    // First click → desc (default when changing key)
+    fireEvent.click(btn);
+    // Second click → asc
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      const cells = screen.getAllByTestId('cell-demand-events');
+      // Asc: 5, 10, null(last)
+      expect(cells[0]).toHaveTextContent('5');
+      expect(cells[1]).toHaveTextContent('10');
+      expect(cells[2]).toHaveTextContent('—');
+    });
+  });
+
+  it('sorts descending with nulls last', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ areaKey: 'area-A', areaLabel: 'A', demandEventCount: null }),
+      makeRow({ areaKey: 'area-B', areaLabel: 'B', demandEventCount: 10 }),
+      makeRow({ areaKey: 'area-C', areaLabel: 'C', demandEventCount: 5 }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('A');
+
+    const btn = screen.getByRole('button', { name: /sort by demand events/i });
+    // First click → desc
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      const cells = screen.getAllByTestId('cell-demand-events');
+      // Desc: 10, 5, null(last)
+      expect(cells[0]).toHaveTextContent('10');
+      expect(cells[1]).toHaveTextContent('5');
+      expect(cells[2]).toHaveTextContent('—');
+    });
+  });
+});
+
+describe('Intelligence page — sort by topGapScore', () => {
+  it('sorts ascending by max gapScore with nulls last', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ areaKey: 'area-A', areaLabel: 'AreaA', topGaps: null }),
+      makeRow({ areaKey: 'area-B', areaLabel: 'AreaB', topGaps: [makeGap({ gapScore: 9.0 }), makeGap({ gapScore: 5.0 })] }),
+      makeRow({ areaKey: 'area-C', areaLabel: 'AreaC', topGaps: [makeGap({ gapScore: 3.0 })] }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('AreaA');
+
+    const btn = screen.getByRole('button', { name: /sort by top gap score/i });
+    // First click → desc; second click → asc
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      // In asc order: area-C (max 3.0), area-B (max 9.0), area-A (null, last)
+      const rows = screen.getAllByTestId('cell-top-gaps');
+      // area-C has gapScore 3.0
+      expect(rows[0]).toHaveTextContent('3.0');
+      // area-B has gapScore 9.0
+      expect(rows[1]).toHaveTextContent('9.0');
+      // area-A is null → '—'
+      expect(rows[2]).toHaveTextContent('—');
+    });
+  });
+
+  it('sorts descending by max gapScore with nulls last', async () => {
+    mockApiGet.mockResolvedValueOnce([
+      makeRow({ areaKey: 'area-A', areaLabel: 'AreaA', topGaps: null }),
+      makeRow({ areaKey: 'area-B', areaLabel: 'AreaB', topGaps: [makeGap({ gapScore: 9.0 })] }),
+      makeRow({ areaKey: 'area-C', areaLabel: 'AreaC', topGaps: [makeGap({ gapScore: 3.0 })] }),
+    ]);
+    renderIntelligence();
+    await screen.findByText('AreaA');
+
+    const btn = screen.getByRole('button', { name: /sort by top gap score/i });
+    // First click → desc
+    fireEvent.click(btn);
+
+    await waitFor(() => {
+      // In desc order: area-B (9.0), area-C (3.0), area-A (null, last)
+      const rows = screen.getAllByTestId('cell-top-gaps');
+      expect(rows[0]).toHaveTextContent('9.0');
+      expect(rows[1]).toHaveTextContent('3.0');
+      expect(rows[2]).toHaveTextContent('—');
+    });
   });
 });

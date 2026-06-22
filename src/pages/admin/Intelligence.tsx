@@ -17,6 +17,15 @@ import { api } from '@/lib/api';
 
 type Confidence = 'full' | 'limited' | 'insufficient';
 
+interface AreaTopGap {
+  propertyType: string;
+  listingPurpose: string;
+  budgetBand: string;
+  signalType: string;
+  gapScore: number;
+  confidence: string;
+}
+
 interface AreaIntelligenceRow {
   areaKey: string;
   areaLabel: string | null;
@@ -26,10 +35,10 @@ interface AreaIntelligenceRow {
   avgQualityScore: number | null;
   confidence: Confidence;
   demandEventCount: number | null;
-  topGaps: string | null;
+  topGaps: AreaTopGap[] | null;
 }
 
-type SortKey = 'live90dCount' | 'avgQualityScore';
+type SortKey = 'live90dCount' | 'avgQualityScore' | 'demandEventCount' | 'topGapScore';
 type SortDir = 'asc' | 'desc';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -106,6 +115,18 @@ export default function Intelligence() {
       if (sortKey === 'avgQualityScore') {
         return compareNullLast(a.avgQualityScore, b.avgQualityScore, sortDir);
       }
+      if (sortKey === 'demandEventCount') {
+        return compareNullLast(a.demandEventCount, b.demandEventCount, sortDir);
+      }
+      if (sortKey === 'topGapScore') {
+        const aScore = (a.topGaps && a.topGaps.length > 0)
+          ? Math.max(...a.topGaps.map((g) => g.gapScore ?? 0))
+          : null;
+        const bScore = (b.topGaps && b.topGaps.length > 0)
+          ? Math.max(...b.topGaps.map((g) => g.gapScore ?? 0))
+          : null;
+        return compareNullLast(aScore, bScore, sortDir);
+      }
       // live90dCount is always a number
       return sortDir === 'asc'
         ? a.live90dCount - b.live90dCount
@@ -137,7 +158,8 @@ export default function Intelligence() {
         </div>
         <p className="text-sm text-muted-foreground mb-6">
           Admin-only quality + confidence view per area. Demand columns are
-          unpopulated until M30 and render "—".
+          populated from demand-signal data; "—" indicates areas with
+          insufficient signal (below k-anonymity threshold).
         </p>
 
         {/* City filter */}
@@ -230,8 +252,24 @@ export default function Intelligence() {
                       Avg quality{sortIndicator('avgQualityScore')}
                     </button>
                   </TableHead>
-                  <TableHead>Demand events</TableHead>
-                  <TableHead>Top gaps</TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => toggleSort('demandEventCount')}
+                      className="text-left font-medium hover:text-foreground focus:outline-none"
+                      aria-label="Sort by demand events"
+                    >
+                      Demand events{sortIndicator('demandEventCount')}
+                    </button>
+                  </TableHead>
+                  <TableHead>
+                    <button
+                      onClick={() => toggleSort('topGapScore')}
+                      className="text-left font-medium hover:text-foreground focus:outline-none"
+                      aria-label="Sort by top gap score"
+                    >
+                      Top gaps{sortIndicator('topGapScore')}
+                    </button>
+                  </TableHead>
                   <TableHead>Confidence</TableHead>
                 </TableRow>
               </TableHeader>
@@ -277,11 +315,33 @@ export default function Intelligence() {
                         : <span className="text-muted-foreground italic text-xs">unavailable</span>}
                     </TableCell>
 
-                    {/* Demand events — always null this milestone */}
-                    <TableCell className="text-muted-foreground" data-testid="cell-demand-events">—</TableCell>
+                    {/* Demand events — null = suppressed (k-anon) */}
+                    <TableCell className="tabular-nums" data-testid="cell-demand-events">
+                      {row.demandEventCount !== null
+                        ? row.demandEventCount
+                        : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
 
-                    {/* Top gaps — always null this milestone */}
-                    <TableCell className="text-muted-foreground" data-testid="cell-top-gaps">—</TableCell>
+                    {/* Top gaps — null or empty = suppressed */}
+                    <TableCell data-testid="cell-top-gaps">
+                      {row.topGaps && row.topGaps.length > 0
+                        ? (
+                          <ul className="space-y-0.5">
+                            {row.topGaps.slice(0, 3).map((gap, i) => (
+                              <li key={i} className="text-xs leading-tight">
+                                <span className="font-medium">{gap.budgetBand}</span>
+                                {' · '}{gap.propertyType}
+                                {' · '}{gap.signalType}
+                                {' '}
+                                <span className="text-muted-foreground">
+                                  ({(gap.gapScore ?? 0).toFixed(1)})
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )
+                        : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
 
                     {/* Confidence badge */}
                     <TableCell>{confidenceBadge(row.confidence)}</TableCell>
