@@ -352,6 +352,12 @@ export interface DiscoverRightPanelProps {
   panelContent: DiscoverPanelContent;
   /** City identifier — passed to SchoolBrowsePanel to avoid a redundant useDiscoverUrlState call inside the panel. */
   city?: string;
+  /**
+   * Issue #1595 — human-readable city label (e.g. "Udupi"). Forwarded to the area-first
+   * selected-group drill-down for its breadcrumb + "Choose an area in {city}" heading.
+   * Falls back to `city` when omitted.
+   */
+  cityLabel?: string;
   areas: AreaPoint[];
   selectedArea?: AreaPoint | null;
   areaListings?: DiscoverCityListingItem[];
@@ -647,6 +653,7 @@ export interface DiscoverRightPanelProps {
 export function DiscoverRightPanel({
   panelContent,
   city = '',
+  cityLabel,
   areas: _areas,
   selectedArea,
   areaListings = [],
@@ -1090,6 +1097,7 @@ export function DiscoverRightPanel({
               onStartOver={onStartOver}
               groupId={groupId}
               onClearGroup={onClearGroup}
+              cityLabel={cityLabel ?? city}
               fallbackAreas={discoverAreas}
               onSelectArea={onSelectAreaKey}
             />
@@ -1103,6 +1111,7 @@ export function DiscoverRightPanel({
             onStartOver={onStartOver}
             groupId={groupId}
             onClearGroup={onClearGroup}
+            cityLabel={cityLabel ?? city}
           />
         );
 

@@ -11,6 +11,7 @@ import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
+import { MapGroupBreadcrumb } from '@/components/discover/MapGroupBreadcrumb';
 import {
   SchoolJourneyBreadcrumb,
   SchoolRadiusLegend,
@@ -1806,6 +1807,13 @@ export default function MapDiscovery() {
       ? (isLandingState ? liveAreas : discoverAreas)
       : [];
 
+  // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
+  // no specific area selected yet). Drives the mock-aligned map chrome for this step:
+  // the city switcher is hidden, the "verified properties in {group}" pill is centred
+  // at the bottom, and the Areas legend is shown.
+  const isSelectedGroupState =
+    resolvedPanelContent === 'area-groups-landing' && !!focusedGroup && !selectedArea;
+
   return (
     <PublicDiscoverLayout>
       <div className="h-full flex flex-col lg:flex-row relative">
@@ -1963,7 +1971,15 @@ export default function MapDiscovery() {
               (City › Zone › Area › School); otherwise the generic area indicator.
               Rendering one OR the other avoids a duplicate breadcrumb. */}
           <div className="absolute top-4 left-4 z-[1000]">
-            {showSchoolBreadcrumb ? (
+            {isSelectedGroupState ? (
+              // Issue #1595 (Option A) — the area-first selected-group step shows the
+              // dynamic City › Group breadcrumb here on the map (mock placement),
+              // replacing the generic area-indicator card for this state only.
+              <MapGroupBreadcrumb
+                cityLabel={CITY_CONFIG[city]?.label ?? city}
+                groupName={focusedGroup?.name ?? ''}
+              />
+            ) : showSchoolBreadcrumb ? (
               <SchoolJourneyBreadcrumb
                 cityLabel={CITY_CONFIG[city]?.label ?? city}
                 zoneLabel={focusedGroup?.name ?? prettifyZoneSlug(urlState.groupId)}
@@ -1995,8 +2011,10 @@ export default function MapDiscovery() {
 
           {/* City select — top-right. Issue #1588 — hidden on the public landing
               (guided-entry), where the city control lives in the right-panel hero
-              controls card; restored for every drill-down state. */}
-          {resolvedPanelContent !== 'guided-entry' && (
+              controls card; restored for every drill-down state. Issue #1595 — also
+              hidden on the area-first selected-group step (not part of the approved
+              mock); city remains switchable from the landing via Start over. */}
+          {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && (
             <div className="absolute top-4 right-4 z-[1000] w-44">
               <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
             </div>
@@ -2012,6 +2030,14 @@ export default function MapDiscovery() {
             </div>
           )}
 
+          {/* Issue #1595 — the area-first selected-group drill-down shows the same
+              "Areas" legend, since its map surfaces member-area markers with counts. */}
+          {isSelectedGroupState && !schoolRadiusOverlay && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapAreaLegend showZeroRow={false} />
+            </div>
+          )}
+
           {/* "Near a school" quick-filter button removed (Figma polish) — the school
               journey is reachable via the "Search by school area" card in the right panel.
               NearSchoolSheet stays mounted below but is no longer triggered from here. */}
@@ -2020,16 +2046,40 @@ export default function MapDiscovery() {
               public landing this is replaced by the centered city-wide summary pill below;
               kept bottom-right for contextual (area/school/group) drill-down counts. */}
           {resolvedPanelContent !== 'guided-entry' && discoverBadge.visible && discoverBadge.count != null && (
-            <div className="absolute bottom-16 right-4 z-[1000]" data-testid="discover-badge">
-              <div className="flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
+            <div
+              className={
+                // Issue #1595 — on the selected-group step the pill is centred at the
+                // bottom of the map (mock parity), clear of the zoom controls (bottom-right),
+                // attribution, legend (bottom-left), and mobile controls. Every other
+                // drill-down context keeps the compact bottom-right placement.
+                isSelectedGroupState
+                  ? 'absolute bottom-6 left-1/2 z-[1000] -translate-x-1/2'
+                  : 'absolute bottom-16 right-4 z-[1000]'
+              }
+              data-testid="discover-badge"
+            >
+              <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card/95 px-4 py-2 text-sm text-muted-foreground shadow-sm backdrop-blur-sm">
                 <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>
-                  Showing{' '}
-                  <strong className="font-semibold tabular-nums text-foreground">
-                    {discoverBadge.count.toLocaleString()}
-                  </strong>
-                  {' '}properties
-                </span>
+                {/* Issue #1595 — in the selected-group drill-down the footer pill names the
+                    group and marks the count as verified ("Showing 8 verified properties in
+                    University Belt"); every other context keeps the plain "N properties". */}
+                {resolvedPanelContent === 'area-groups-landing' && focusedGroup && !selectedArea ? (
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {discoverBadge.count.toLocaleString()}
+                    </strong>
+                    {' '}verified properties in {focusedGroup.name}
+                  </span>
+                ) : (
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {discoverBadge.count.toLocaleString()}
+                    </strong>
+                    {' '}properties
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -2100,6 +2150,7 @@ export default function MapDiscovery() {
           selectedMarkerListing={selectedMarkerListing}
           onClearAgriSelection={() => setSelectedMarkerListing(null)}
           city={city}
+          cityLabel={CITY_CONFIG[city]?.label ?? city}
           journey={urlState.journey}
           activeContextChips={activeContextChips}
           areas={discoverAreas}

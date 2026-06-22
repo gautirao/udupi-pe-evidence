@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
+import { getAreaGroupContent } from '@/lib/discoverGroupContent';
 
 interface AreaIndicatorOverlayProps {
   /** Human-readable city label (e.g. "Udupi / Manipal"). */
@@ -53,6 +54,14 @@ export function AreaIndicatorOverlay({
   }
 
   if (focusedGroup) {
+    // Data-driven subtitle: backend subtitle first, then a safe frontend metadata
+    // fallback (region label) for known groups, then a conservative generic string.
+    // Never a single hardcoded group-specific descriptor (Issue #1595).
+    const groupSubtitle =
+      focusedGroup.subtitle?.trim() ||
+      focusedGroup.region_label?.trim() ||
+      getAreaGroupContent(focusedGroup.id)?.regionLabel ||
+      'Neighbourhood group';
     return (
       <Card
         className={cn(
@@ -68,8 +77,8 @@ export function AreaIndicatorOverlay({
             {focusedGroup.name}
           </span>
         </div>
-        <span className="text-xs text-muted-foreground mt-0.5 ml-5 leading-none">
-          {focusedGroup.subtitle ?? 'browsing region'}
+        <span className="text-xs text-muted-foreground mt-0.5 ml-5 leading-none truncate max-w-[180px]">
+          {groupSubtitle}
         </span>
       </Card>
     );

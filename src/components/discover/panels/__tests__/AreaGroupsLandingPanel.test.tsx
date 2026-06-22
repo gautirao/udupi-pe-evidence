@@ -193,16 +193,15 @@ describe('AreaGroupsLandingPanel — Level-2 (valid resolved groupId) area list 
         onSelectArea={vi.fn()}
       />,
     );
-    // 2 area_keys in group, 2 present in allAreas
-    const rows = screen.getAllByRole('button', { name: /Browse/ });
-    // Filter to area-row buttons (data-testid browse-all-area-*)
-    const areaRows = rows.filter((b) =>
-      b.getAttribute('data-testid')?.startsWith('browse-all-area-'),
-    );
+    // 2 area_keys in group, 2 present in allAreas. Locality cards carry the
+    // `browse-all-area-*` testid (active = <button>, zero-property = muted <div>).
+    const areaRows = screen
+      .getByTestId('area-group-level2')
+      .querySelectorAll('[data-testid^="browse-all-area-"]');
     expect(areaRows).toHaveLength(2);
   });
 
-  it('renders area name and listing count in Level-2 rows', () => {
+  it('renders area name and property count in Level-2 locality cards', () => {
     renderPanel(
       <AreaGroupsLandingPanel
         {...baseProps}
@@ -214,9 +213,14 @@ describe('AreaGroupsLandingPanel — Level-2 (valid resolved groupId) area list 
       />,
     );
     expect(screen.getByText('Koramangala')).toBeInTheDocument();
-    expect(screen.getByText('23 listings')).toBeInTheDocument();
     expect(screen.getByText('HSR Layout')).toBeInTheDocument();
-    expect(screen.getByText('7 listings')).toBeInTheDocument();
+    // Count + "properties" label live in separate nodes — assert on the card content.
+    const koramangala = screen.getByTestId('browse-all-area-IN|KA|Bengaluru|Koramangala');
+    expect(koramangala).toHaveTextContent('23');
+    expect(koramangala).toHaveTextContent(/properties/i);
+    const hsr = screen.getByTestId('browse-all-area-IN|KA|Bengaluru|HSR');
+    expect(hsr).toHaveTextContent('7');
+    expect(hsr).toHaveTextContent(/properties/i);
   });
 
   it('AC3 area-row click → onSelectArea called with canonical areaKey', async () => {
@@ -283,7 +287,7 @@ describe('AreaGroupsLandingPanel — Level-2 (valid resolved groupId) area list 
     expect(screen.queryByTestId('area-group-back-to-all')).not.toBeInTheDocument();
   });
 
-  it('group name shown in the "up to all groups" back button label', () => {
+  it('"back to all groups" affordance uses the redesigned label (Issue #1595)', () => {
     renderPanel(
       <AreaGroupsLandingPanel
         {...baseProps}
@@ -295,8 +299,9 @@ describe('AreaGroupsLandingPanel — Level-2 (valid resolved groupId) area list 
         onClearGroup={vi.fn()}
       />,
     );
-    // Button text contains the group name
-    expect(screen.getByTestId('area-group-back-to-all')).toHaveTextContent('South Zone');
+    expect(screen.getByTestId('area-group-back-to-all')).toHaveTextContent(
+      'Back to all neighbourhood groups',
+    );
   });
 
   it('graceful empty state when group area_keys are absent from discoverAreas', () => {

@@ -156,12 +156,14 @@ export function AreaMarkerLayer({
     const effectFocusedSet = focusedGroupAreas ? new Set(focusedGroupAreas) : null;
 
     for (const area of areas) {
-      const opacity = effectFocusedSet
-        ? (effectFocusedSet.has(area.areaKey) ? 1.0 : 0.3)
-        : 1.0;
+      // Issue #1595 — when a group is focused, render ONLY its member areas. Non-member
+      // areas are hidden entirely (previously dimmed to 0.3), so the map stays focused on
+      // the selected group's context with no confusing ghost/shadow markers for unrelated
+      // areas. Members always render at full opacity.
+      if (effectFocusedSet && !effectFocusedSet.has(area.areaKey)) continue;
       const marker = L.marker(
         [area.geo_center_lat, area.geo_center_lon],
-        { icon: makeAreaCard(area, opacity, journey, selectedSchool) }
+        { icon: makeAreaCard(area, 1.0, journey, selectedSchool) }
       );
 
       marker.on('click', () => {

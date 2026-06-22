@@ -114,7 +114,9 @@ describe('AreaMarkerLayer — focusedGroupAreas prop', () => {
     }
   });
 
-  it('renders non-member markers at opacity 0.3 when focusedGroupAreas is provided', () => {
+  // Issue #1595 — when a group is focused, non-member areas are HIDDEN entirely
+  // (no ghost/shadow markers), so only the group's member markers render.
+  it('hides non-member markers when focusedGroupAreas is provided', () => {
     render(
       <AreaMarkerLayer
         areas={[AREA_A, AREA_B, AREA_C]}
@@ -122,21 +124,16 @@ describe('AreaMarkerLayer — focusedGroupAreas prop', () => {
       />,
     );
 
-    expect(capturedDivIconCalls).toHaveLength(3);
-
-    // area-a is in the focused set → full opacity
-    const aHtml = capturedDivIconCalls.find((c) => c.html.includes('area-a'))?.html ?? '';
+    // Only the single member area renders; area-b and area-c are not drawn at all.
+    expect(capturedDivIconCalls).toHaveLength(1);
+    const aHtml = capturedDivIconCalls[0].html;
+    expect(aHtml).toContain('area-a');
     expect(extractOpacity(aHtml)).toBe('1');
-
-    // area-b and area-c are not → dimmed
-    const bHtml = capturedDivIconCalls.find((c) => c.html.includes('area-b'))?.html ?? '';
-    expect(extractOpacity(bHtml)).toBe('0.3');
-
-    const cHtml = capturedDivIconCalls.find((c) => c.html.includes('area-c'))?.html ?? '';
-    expect(extractOpacity(cHtml)).toBe('0.3');
+    expect(capturedDivIconCalls.some((c) => c.html.includes('area-b'))).toBe(false);
+    expect(capturedDivIconCalls.some((c) => c.html.includes('area-c'))).toBe(false);
   });
 
-  it('renders all markers dimmed when focusedGroupAreas is empty array', () => {
+  it('renders no markers when focusedGroupAreas is an empty array', () => {
     render(
       <AreaMarkerLayer
         areas={[AREA_A, AREA_B]}
@@ -144,13 +141,11 @@ describe('AreaMarkerLayer — focusedGroupAreas prop', () => {
       />,
     );
 
-    expect(capturedDivIconCalls).toHaveLength(2);
-    for (const call of capturedDivIconCalls) {
-      expect(extractOpacity(call.html)).toBe('0.3');
-    }
+    // No member areas → nothing to focus on → no markers at all.
+    expect(capturedDivIconCalls).toHaveLength(0);
   });
 
-  it('dimmed markers have pointer-events:auto (remain clickable)', () => {
+  it('does not render a non-member marker at all (no ghost marker)', () => {
     render(
       <AreaMarkerLayer
         areas={[AREA_B]}
@@ -158,10 +153,7 @@ describe('AreaMarkerLayer — focusedGroupAreas prop', () => {
       />,
     );
 
-    expect(capturedDivIconCalls).toHaveLength(1);
-    const html = capturedDivIconCalls[0].html;
-    expect(html).toContain('pointer-events:auto');
-    expect(extractOpacity(html)).toBe('0.3');
+    expect(capturedDivIconCalls).toHaveLength(0);
   });
 
   it('full-opacity markers also have pointer-events:auto', () => {

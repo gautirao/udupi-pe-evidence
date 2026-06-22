@@ -1,9 +1,9 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Layers, MapPin } from 'lucide-react';
+import { ChevronRight, Layers, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PanelHeader } from '../PanelHeader';
+import { AreaGroupSelectedPanel } from './AreaGroupSelectedPanel';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 
@@ -31,6 +31,12 @@ export type AreaGroupsLandingPanelProps = {
    * When omitted the affordance is not rendered (safe for contexts without group support).
    */
   onClearGroup?: () => void;
+  /**
+   * Issue #1595 — human-readable city label (e.g. "Udupi") used by the Level-2
+   * selected-group drill-down for the breadcrumb + "Choose an area in {city}" heading.
+   * Falls back to a neutral label when omitted so non-city contexts (tests) render cleanly.
+   */
+  cityLabel?: string;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -294,6 +300,7 @@ export function AreaGroupsLandingPanel({
   onStartOver,
   groupId = null,
   onClearGroup,
+  cityLabel = 'this city',
   fallbackAreas = [],
   onSelectArea,
 }: AreaGroupsLandingPanelProps) {
@@ -361,6 +368,25 @@ export function AreaGroupsLandingPanel({
     [distinctAreaKeys, listingIndex],
   );
 
+  // ── Level 2: resolved group → rich selected-group drill-down (Issue #1595) ────
+  // Owns its own header (breadcrumb + "Choose an area in {city}") and scroll body,
+  // so it renders as a full-height sibling rather than inside the group-list scroller.
+  if (showLevel2) {
+    return (
+      <div data-testid="area-group-level2" className="flex flex-1 flex-col overflow-hidden">
+        <AreaGroupSelectedPanel
+          group={focusedGroup as AreaGroup}
+          areas={level2Areas}
+          cityLabel={cityLabel}
+          onBack={onClearGroup}
+          onStartOver={onStartOver}
+          // onSelectArea cast: safe — showLevel2 guarantees it is defined (see comment above).
+          onSelectArea={onSelectArea as (areaKey: string) => void}
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       <PanelHeader
@@ -379,33 +405,6 @@ export function AreaGroupsLandingPanel({
             {[0, 1, 2, 3].map((i) => (
               <GroupCardSkeleton key={i} />
             ))}
-          </div>
-        ) : showLevel2 ? (
-          // ── Level 2: resolved group → show that group's area rows ──────────────
-          <div data-testid="area-group-level2" className="flex flex-col">
-            {/* "Up to all groups" back affordance */}
-            {onClearGroup && (
-              <div className="px-4 pt-3 pb-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex items-center gap-1 px-0 text-muted-foreground hover:text-foreground"
-                  onClick={onClearGroup}
-                  aria-label="Back to all groups"
-                  data-testid="area-group-back-to-all"
-                >
-                  <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-                  <span className="text-sm">
-                    {(focusedGroup as AreaGroup).name}
-                  </span>
-                </Button>
-              </div>
-            )}
-            {/* onSelectArea cast: safe — showLevel2 guarantees it is defined (see comment above). */}
-            <BrowseAllFallback
-              areas={level2Areas}
-              onSelectArea={onSelectArea as (areaKey: string) => void}
-            />
           </div>
         ) : groups.length > 0 ? (
           // ── Level 1: no resolved group (or invalid groupId) → show group cards ─

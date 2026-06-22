@@ -57,7 +57,7 @@ describe('AreaIndicatorOverlay', () => {
     expect(screen.getByText('Near city centre')).toBeInTheDocument();
   });
 
-  it('falls back to "browsing region" when group has no subtitle', () => {
+  it('falls back to a conservative generic subtitle when no metadata is available', () => {
     render(
       <AreaIndicatorOverlay
         cityLabel="Udupi / Manipal"
@@ -65,7 +65,28 @@ describe('AreaIndicatorOverlay', () => {
         selectedArea={null}
       />,
     );
-    expect(screen.getByText('browsing region')).toBeInTheDocument();
+    // No backend subtitle/region and no adapter entry → generic, never group-specific.
+    expect(screen.getByText('Neighbourhood group')).toBeInTheDocument();
+  });
+
+  it('uses frontend metadata adapter region label when backend subtitle is absent (Issue #1595)', () => {
+    render(
+      <AreaIndicatorOverlay
+        cityLabel="Udupi / Manipal"
+        focusedGroup={{
+          id: 'university-belt',
+          name: 'University Belt',
+          subtitle: null,
+          region_label: null,
+          school_count: 0,
+          area_keys: [],
+        }}
+        selectedArea={null}
+      />,
+    );
+    expect(screen.getByText('University Belt')).toBeInTheDocument();
+    // Adapter fallback region label for the known group.
+    expect(screen.getByText('Central Udupi')).toBeInTheDocument();
   });
 
   it('renders area state (highest priority) when an area is selected', () => {
