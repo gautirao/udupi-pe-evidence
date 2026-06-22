@@ -79,6 +79,7 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 
 | Phase | Actor | What | Contract to load |
 |---|---|---|---|
+| 0.0 | Main Agent | **Duplicate-run preflight guard** (worktree/branch/lock/process scan; one active run per issue; lock acquire) | inline below (always) + `.claude/mode3/contracts/main-agent.md` → Duplicate-run guard |
 | 0.1 | Main Agent | Repo index check | inline below (always) |
 | 0.2 | Main Agent | Agent Teams + sentinel probe (spawns Team Lead) | inline below (always) |
 | 0.6 | Main Agent | Write lightweight `team-lead-assignment.toml` | `.claude/mode3/contracts/main-agent.md` |
@@ -102,6 +103,8 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 
 | Phase | Stop condition | Next state |
 |---|---|---|
+| 0.0 | An existing active run is detected for the same issue (lock file, `issue-<N>` worktree/branch, or live session/process) and the user has NOT explicitly authorised a second attempt | **Do NOT create a new worktree or lock.** Print every detected path/branch/session, then ask the user to continue / clean up / archive / start an explicit second attempt. Halt until the user chooses. |
+| 0.0 | Duplicate **writers** detected mid-run for the same issue (two sessions writing decision/plan/PLAN_REVIEW/issue-body/PR/branch artefacts) | **Freeze immediately:** stop background agents, preserve all artefacts (no overwrite), report the conflict, ask the user which run is authoritative. Do not proceed until adjudicated. |
 | 0 | Agent Teams unavailable / probe fail | `blocked.toml(AGENT_TEAMS_UNAVAILABLE \| TOOL_UNAVAILABLE)`; report to user |
 | 0 | Repo index unavailable / stale unrecoverable | `blocked.toml(INDEX_UNAVAILABLE \| INDEX_STALE)` |
 | 0.7 | Bug `status = NOT_REPRODUCED` and no OpenAI exception / user authorisation | no speculative fix; diagnostic/test/comment/follow-up only; halt to user |
@@ -120,6 +123,10 @@ Main Agent: PR / PR_REVIEW (consumes the matrix) / merge gate / closeout / loop 
 | 7C | WORKDONE_REVIEW REVISION_REQUIRED (NEEDS_FIXES) | outer-gate failure; does NOT consume the inner specialist 2-cycle budget. Write `rework-request-workdone-review-<n>.toml` (disk-before-send), resume the orchestrator by `agent_id` (else respawn a fresh Opus orchestrator from durable artefacts), route the fix, re-enter Phase 7A browser re-validation, then re-submit WORKDONE_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
 | 9 | PR_REVIEW REVISION_REQUIRED | outer gate, no shared counter with inner specialist loop. Write `rework-request-pr-review-<n>.toml` (disk-before-send), resume-or-respawn the Opus orchestrator, route the fix, re-run required validation, then re-run PR_REVIEW. Main Agent never authors the fix. See `main-agent.md` → Rework routing. |
 | 10 | User declines merge | halt with PR open; do not merge |
+
+## Run lock — `.claude/active-runs/issue-<N>.lock`
+
+Written by the Main Agent in **Phase 0.0** the moment a run is authorised; it is the single source of truth for "issue `<N>` already has an active run". Template: `.claude/templates/active-run-lock.toml`. Contents: issue number, branch name, worktree path, main-agent session name, orchestrator name (once spawned), started timestamp, selected ports, current phase, and whether second-attempt mode was explicitly approved. The Main Agent updates `current_phase` (and `orchestrator_name`/`selected_ports` as they become known) as the run advances. It is removed only at closeout per the cleanup rule (`.claude/mode3/contracts/closeout.md` → Run-lock cleanup). Lock files are runtime state and are git-ignored (`.claude/active-runs/.gitignore`).
 
 ## Artefacts produced under `.claude/handoffs/issue-<N>/`
 
@@ -144,6 +151,41 @@ File artefacts are authoritative. SendMessage is for notifications only. Lead de
 ---
 
 ## Phase 0 — Pre-flight (always inline; runs every time)
+
+### 0.0 — Duplicate-run preflight guard (mandatory; runs FIRST, before 0.1)
+
+> **One issue → one active run.** This guard exists because two concurrent sessions/worktrees on the **same** issue (incident #1534) produced conflicting PATH_B/PATH_C decisions, duplicated artefacts, and GitHub-issue confusion. A second active run for the same issue is **forbidden** unless the user explicitly authorises it. Full contract: `.claude/mode3/contracts/main-agent.md` → **Duplicate-run guard & single-writer decision-file policy**.
+
+Before anything else in a `/mode3-run <N>` invocation, the Main Agent MUST scan for an existing active run for issue `<N>`:
+
+1. **Worktrees** — `git worktree list` (and `git worktree list --porcelain`); flag any worktree whose path contains `issue-<N>` (`issue-<N>`, not a longer number — match on a word boundary so `15` never matches `150`).
+2. **Branches** — `git branch --list "*issue-<N>*"` and `git branch -r --list "*issue-<N>*"`; flag matches.
+3. **Lock file** — `.claude/active-runs/issue-<N>.lock` (and any `issue-<N>-attempt-*.lock`).
+4. **Live sessions/processes (best-effort)** — tmux sessions/windows whose name contains the issue number, and known Mode-3/orchestrator process names if discoverable. Best-effort only; absence of tooling here never *grants* a second run — it just means this signal is unavailable.
+
+**If ANY active run/worktree/branch/lock is found:** STOP before creating a new worktree or lock. Print the detected paths / branches / sessions verbatim, then ask the user whether to:
+- **continue** the existing run (resume from its lock + handoff artefacts per Phase 0.2 resume),
+- **clean it up** (report-first per `closeout.md`; destructive cleanup needs explicit approval),
+- **archive** it, or
+- **start an explicit second attempt** (see the second-attempt rule below).
+
+Do not proceed, and do not create a new worktree/lock, until the user chooses.
+
+**If NO active run is found:** acquire the lock — write `.claude/active-runs/issue-<N>.lock` from `.claude/templates/active-run-lock.toml` with issue number, branch name, worktree path, main-agent session name, started timestamp, selected ports, `current_phase = "0.0"`, and `second_attempt_approved = false`. Set `orchestrator_name` once the orchestrator is spawned in Phase 0.2; advance `current_phase` as the run progresses. The lock is the authoritative "this issue is active" record for any sibling session running this same guard.
+
+**Second-attempt rule.** A second concurrent active run for issue `<N>` is forbidden UNLESS the user explicitly says, in substance, **"Start a second independent attempt for issue `<N>`."** When (and only when) approved:
+- the new branch and worktree MUST carry a clear suffix — `issue-<N>-attempt-2` (then `-attempt-3`, …);
+- the new lock is `.claude/active-runs/issue-<N>-attempt-2.lock` with `second_attempt_approved = true` and `attempt = 2`;
+- the original run's lock/artefacts are left intact (never overwritten).
+
+**Single-writer decision-file rule.** For a given issue, only the authoritative run may write any of: user decision files, plan files (`team-lead-plan.toml`), `PLAN_REVIEW` packets, GitHub issue bodies, PR descriptions, or branch pushes. If duplicate writers are detected mid-run (e.g. a second session/orchestrator touching these), the Main Agent MUST **freeze immediately**: stop background agents, preserve all artefacts without overwriting, report the conflict, and ask the user which run is authoritative. See `.claude/mode3/contracts/main-agent.md` → Duplicate-run guard.
+
+**Worktree run hygiene (ports · credentials · shared DB).** Any new worktree/session that may run frontend/backend/local tests MUST follow `.claude/mode3/contracts/main-agent.md` → **Worktree run hygiene**:
+- **Unique ports** — pick a frontend/backend port pair not used by any other active Claude/worktree session. **Before** using them, check `lsof -i :<backendPort>` and `lsof -i :<frontendPort>`; if either is occupied, choose a different pair and report it. Record the chosen pair in `selected_ports` in the run lock and surface it in the visible checkpoint report.
+- **Credentials from the main workspace only** — source env solely from `/Users/gouthamrao/projects/udupi-property-explorer/.env` / `/Users/gouthamrao/projects/udupi-property-explorer/.env.e2e` (prefer `.env.e2e` for E2E credentials; use `.env` only when the run specifically needs normal local backend credentials). Never commit `.env`/`.env.e2e`, never copy credentials into tracked files, never print credentials in logs/reports; if a worktree needs env access use an untracked local copy, a symlink, or an explicit reference, and confirm both env files remain git-ignored.
+- **Shared-DB safety** — never run unmerged Flyway migrations against hosted/shared Supabase; use Testcontainers / a local ephemeral DB for migration/integration validation. If a requested live smoke would apply an unmerged migration to shared Supabase, stop with `NEEDS_USER_DECISION` — do not fabricate a green live-smoke result.
+
+**Verification:** `python3 .claude/scripts/verify-mode3-duplicate-run-guard.py` fails (exit 1) when two active worktrees/locks exist for the same issue without an approved second attempt, and statically asserts this guard, the lock mechanism, the second-attempt rule, the single-writer rule, and the closeout cleanup rule are all still documented.
 
 ### 0.1 — JCode Munch / RTK repo index check (mandatory)
 

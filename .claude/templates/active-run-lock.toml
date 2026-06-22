@@ -1,0 +1,29 @@
+# Mode-3 run lock — TEMPLATE
+#
+# Written by the Main Agent in /mode3-run Phase 0.0 the moment a run is
+# authorised (after the duplicate-run scan comes back clean). It is the
+# authoritative "issue <N> already has an active run" record that any sibling
+# session's Phase-0.0 guard checks.
+#
+# Path:   .claude/active-runs/issue-<N>.lock
+#         .claude/active-runs/issue-<N>-attempt-2.lock   (approved 2nd attempt)
+#
+# Lifecycle: acquired in Phase 0.0; current_phase / orchestrator_name /
+# selected_ports updated as the run advances; removed only at closeout per
+# .claude/mode3/contracts/closeout.md -> Phase 10.5 Run-lock cleanup
+# (PR merged or issue abandoned AND worktree + branch cleaned-or-preserved AND
+# final status reported). Lock files are runtime state and are git-ignored.
+#
+# Replace every <...> placeholder. Keep this file as a template only — do NOT
+# commit a populated lock.
+
+issue            = "<N>"                       # the GitHub issue number, e.g. "1534"
+branch           = "<branch>"                  # e.g. "issue-1534-broker-demand-gaps" or "issue-1534-attempt-2-..."
+worktree_path    = "<abs-worktree-path>"       # absolute worktree path, or the main checkout path
+main_agent_session = "<session-name-or-id>"    # the Main Agent's session identifier
+orchestrator_name  = ""                        # filled in at Phase 0.2 once the orchestrator teammate is spawned
+started_at       = "<ISO-8601>"                # e.g. "2026-06-22T10:35:00Z"
+selected_ports   = []                          # reserved dev/E2E ports, e.g. [5183, 8083]
+current_phase    = "0.0"                        # advanced as the run progresses: "0.0" -> ... -> "12"
+second_attempt_approved = false                 # true ONLY for a user-authorised second attempt
+attempt          = 1                            # 1 = primary run; 2+ = approved second attempt

@@ -61,6 +61,19 @@ This harness has no `TeamDelete`; the session's single implicit team is released
 
 ---
 
+## Phase 10.5 — Run-lock cleanup
+
+The Phase-0.0 run lock (`.claude/active-runs/issue-<N>.lock`, or `issue-<N>-attempt-K.lock` for an approved second attempt) records that the issue has an active run. Releasing it too early would let a sibling session start a duplicate run while this one is still finishing; never releasing it would permanently block legitimate future runs. **Remove the lock only after ALL of the following hold:**
+
+1. the **PR is merged** (or the issue was explicitly **abandoned** by the user — record which);
+2. the **worktree** is cleaned/removed **or explicitly preserved** by user choice (report-first per the Stale PR and branch safety policy below — destructive worktree removal needs explicit approval);
+3. the **branch** is cleaned **or explicitly preserved** (the only branch the run may delete without a fresh prompt is the feature branch it created and merged this run);
+4. the **final status is reported** in the Phase 12 closeout summary.
+
+Until all four hold, the lock stays in place. If the run halts **without** merging (blocked, user-declined merge, or abandoned), leave the lock unless the user explicitly authorises release — a stale-but-present lock fails safe (it forces the next invocation through the Phase 0.0 continue/clean-up/archive prompt) whereas a prematurely-deleted lock silently re-opens the duplicate-run hole. Record the lock disposition (removed / preserved-by-user / left-for-blocked-run) in `team-lead-execution-log.md` and the closeout summary.
+
+---
+
 ## Phase 11 — Main sync + re-index
 
 1. `git checkout main`.
@@ -76,6 +89,9 @@ Print a one-screen summary:
 - PR URL and merged sha.
 - Final index status (timestamp + summary).
 - Team cleanup confirmation.
+- **Run-lock disposition** — `removed` (all four Phase-10.5 conditions met) / `preserved-by-user` / `left-for-blocked-run`, with the lock path.
+- **Selected ports** — the frontend/backend port pair this run reserved (from the run lock's `selected_ports`); surfaced in the visible checkpoint report per `.claude/mode3/contracts/main-agent.md` → Worktree run hygiene.
+- **Credentials source** — confirmation that any local-validation credentials came only from the main-workspace `.env` / `.env.e2e` and that both remain git-ignored (no credentials committed, copied to tracked files, or printed).
 - `team-lead-execution-log.md` path for the audit trail.
 - Token telemetry (planner Opus tokens, executor Sonnet tokens, reviewer Opus tokens) if available.
 - "Ready for next issue."

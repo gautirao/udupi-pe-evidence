@@ -1,0 +1,6 @@
+# Run locks are ephemeral runtime state — never commit them.
+*.lock
+
+# Keep the directory scaffolding tracked.
+!.gitignore
+!README.md

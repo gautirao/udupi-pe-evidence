@@ -131,6 +131,100 @@ This authorisation is scoped to workflow artefacts under `.claude/` only. It nev
 
 ---
 
+## Duplicate-run guard & single-writer decision-file policy
+
+> Loaded at `/mode3-run` Phase 0.0 (the dispatcher runs the scan inline; this is the full contract). Origin: incident #1534, where two sessions/worktrees ran the **same** issue concurrently and produced conflicting PATH_B/PATH_C decisions, duplicated artefacts, and a tampered decision file. **One issue → one active run.**
+
+### Run lock — `.claude/active-runs/issue-<N>.lock`
+
+The lock is the authoritative "issue `<N>` already has an active run" record. The Main Agent (the only writer of a run's lock) acquires it in Phase 0.0 immediately after the duplicate-run scan comes back clean, from template `.claude/templates/active-run-lock.toml`. Required fields:
+
+- `issue` — the issue number
+- `branch` — the run's branch name
+- `worktree_path` — absolute worktree path (or the main checkout)
+- `main_agent_session` — the Main Agent's session name/id
+- `orchestrator_name` — the spawned orchestrator teammate name (filled in at Phase 0.2; empty until then)
+- `started_at` — ISO-8601 start timestamp
+- `selected_ports` — the dev/E2E ports reserved for this run (see the parallel-worktree port rule)
+- `current_phase` — advanced by the Main Agent as the run progresses (`"0.0"` → … → `"12"`)
+- `second_attempt_approved` — `true` only for an explicitly user-authorised second attempt
+- `attempt` — `1` for the primary run, `2`+ for approved second attempts
+
+Lock files are **runtime state**, git-ignored via `.claude/active-runs/.gitignore`; only the directory scaffolding (`README.md`, `.gitignore`) is tracked.
+
+### Preflight scan (Phase 0.0)
+
+Before any other Phase-0 work, scan for an existing active run for the same issue: `git worktree list` paths containing `issue-<N>` (word-boundary match so `15` ≠ `150`), `git branch --list "*issue-<N>*"` (local + remote), `.claude/active-runs/issue-<N>.lock` (+ any `issue-<N>-attempt-*.lock`), and — best-effort — tmux sessions/processes naming the issue. If **anything** is found, do NOT create a new worktree/lock: print the detected paths/branches/sessions and ask the user to **continue / clean up / archive / start an explicit second attempt**. Best-effort signals being unavailable never authorises a second run on their own.
+
+### Second-attempt rule
+
+A second **concurrent** active run for an issue is forbidden unless the user explicitly authorises it, in substance: **"Start a second independent attempt for issue `<N>`."** A gate verdict, prior approval, or silence is NOT authorisation (cf. CLAUDE.md §10 — gate verdict ≠ user approval). When approved:
+
+- branch + worktree carry a clear suffix: `issue-<N>-attempt-2` (`-attempt-3`, …);
+- the new lock is `.claude/active-runs/issue-<N>-attempt-2.lock` with `second_attempt_approved = true`, `attempt = 2`;
+- the original run's lock and artefacts are preserved, never overwritten.
+
+### Single-writer decision-file rule
+
+For a given issue, **only the authoritative run** may write any of these:
+
+- user decision files,
+- plan files (`team-lead-plan.toml`),
+- `PLAN_REVIEW` packets,
+- GitHub issue bodies,
+- PR descriptions,
+- branch pushes.
+
+If duplicate writers are detected mid-run for the same issue (a second session or a divergent/rogue orchestrator touching any of the above), the Main Agent MUST **freeze immediately**:
+
+1. **freeze** — stop accepting new work for the issue;
+2. **stop background agents** — halt the orchestrator and any specialists for this issue;
+3. **preserve artefacts** — never overwrite; if a file was already tampered, keep both the suspect and the last-known-good copy;
+4. **report the conflict** — list the competing writers, the affected files, and the divergence;
+5. **ask the user which run is authoritative** — do not auto-resolve; resume only after the user designates the authoritative run.
+
+This codifies the #1534 remedy: the Main Agent holds **exclusive** authority over the decision/plan/issue-body/PR artefacts; a second writer is an integrity incident, not a merge to reconcile.
+
+### Worktree run hygiene (ports · credentials · shared DB)
+
+Any new worktree/session spun up for an issue that may run the frontend, backend, or local tests MUST observe the following. The chosen ports and the credential source are recorded in the run lock and surfaced in the visible checkpoint report.
+
+**Unique ports.** Sibling Claude/worktree sessions run concurrently, so a fixed port pair collides.
+
+- Select a **unique** frontend/backend port pair for the issue — one not already used by another active Claude/worktree session (cross-check other run locks' `selected_ports`).
+- **Before** binding, verify each is free: `lsof -i :<backendPort>` and `lsof -i :<frontendPort>`.
+- If either port is occupied, choose a different pair and **report** the change.
+- Do **not** reuse ports already taken by another active session.
+- Record the chosen pair in the run lock's `selected_ports`, and **mention the selected ports in the visible checkpoint report**.
+
+**Credentials from the main workspace only.** When credentials are required for local validation, a worktree run uses credentials **only** from the main workspace:
+
+- `/Users/gouthamrao/projects/udupi-property-explorer/.env`
+- `/Users/gouthamrao/projects/udupi-property-explorer/.env.e2e`
+
+Rules:
+- Do **not** commit `.env` or `.env.e2e`.
+- Do **not** copy credentials into tracked files.
+- Do **not** print credentials in logs or reports.
+- If a worktree needs env access, use a safe **untracked local copy, symlink, or explicit reference** only.
+- **Confirm the env files remain git-ignored** before and after the run.
+- Prefer **`.env.e2e`** for E2E credentials; use **`.env`** only when the run specifically needs normal local backend credentials.
+
+(The worktree env-injection mechanics for browser/E2E validation are in `.claude/mode3/contracts/browser-validation.md`; this section governs *where credentials may come from*, not how the stack is launched.)
+
+**Shared-DB safety.** The hosted Supabase database is a shared resource.
+
+- **Never** run unmerged Flyway migrations against hosted/shared Supabase.
+- Use **Testcontainers / a local ephemeral DB** for migration/integration validation.
+- If a requested live smoke would apply an unmerged migration to shared Supabase, **stop with `NEEDS_USER_DECISION`**.
+- Do **not** fabricate a green live-smoke result; report `TEST_ENV_FAILURE` / `INCONCLUSIVE` per CLAUDE.md §11 instead.
+
+### Verification
+
+`python3 .claude/scripts/verify-mode3-duplicate-run-guard.py` (a) statically asserts this policy, the lock mechanism, the second-attempt rule, the single-writer freeze, and the closeout cleanup rule remain documented, and (b) scans `.claude/active-runs/` and `git worktree list` and **fails (exit 1) when two active worktrees/locks exist for the same issue** without an approved second attempt.
+
+---
+
 ## Main-Agent Scope Policy
 
 **The Main Agent is a gatekeeper and coordinator, not an implementer or primary diagnostician.**
