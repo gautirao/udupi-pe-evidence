@@ -15,6 +15,23 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAreaOverview } from '@/hooks/useAreaOverview';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
+import { useAreaIntelligence } from '@/hooks/useAreaIntelligence';
+import { AreaGuide } from '@/components/area/AreaGuide';
+
+// ─── Q1 = Option A (default): area-guide is THE default /trends experience ────
+// The buyer area-guide (AC2–AC16) is what every user sees on /trends, including
+// bare visits with no params.
+//
+// Render decision (evaluated top-to-bottom):
+//   shouldRenderGuide = (full pipe areaKey present) OR (no areaKey yet)
+//   • Full pipe areaKey  → guide with real area data (settled)
+//   • No areaKey         → guide skeleton while useTrendsOptions resolves a default;
+//                          self-populate effect then writes the key to URL (→ full pipe branch)
+//   • noCityAreas        → guide clean city-level no-data state (NOT legacy dashboard)
+//   • Edge case: non-pipe areaKey in URL (e.g. "?areaKey=foo") → legacy #771 fallback
+//
+// The legacy #771 market-trends view is intentionally NOT the default. It remains
+// reachable only for the non-pipe-areaKey edge case and is dead code for normal flows.
 
 function LoadingSkeleton() {
   return (
@@ -42,6 +59,14 @@ export default function Trends() {
   const urlAreaKeys = rawAreaKeys.slice(0, 3); // cap at 3
   const selectedKey = urlAreaKeys[0] ?? '';
 
+  // Q1=Option A: guide is DEFAULT for all normal /trends visits.
+  // isAreaGuideMode: full pipe areaKey is present → guide has a real area to display.
+  // shouldRenderGuide: either a full areaKey OR no areaKey yet (resolving default).
+  //   • No areaKey → guide skeleton immediately; self-populate effect writes key → flips to guide.
+  //   • Non-pipe areaKey (edge case, not a valid production URL) → legacy #771 fallback.
+  const isAreaGuideMode = selectedKey.includes('|');
+  const shouldRenderGuide = isAreaGuideMode || selectedKey === '';
+
   const [timeRange, setTimeRange] = useState('6m');
   const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981'];
 
@@ -60,8 +85,10 @@ export default function Trends() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional mount-only: normalizes initial URL before interaction
   }, []);
 
-  // Fetch backend defaults only when URL has no areaKeys
-  const { data: optionsData, isLoading: optionsLoading } = useTrendsOptions(city, urlAreaKeys.length === 0);
+  // Fetch backend defaults when URL has no areaKeys (for default area resolution) OR when in area
+  // guide mode (so CompareNearbyAreas has safe area options — B4 fix).
+  // shouldRenderGuide implies we always need defaults for the guide path.
+  const { data: optionsData, isLoading: optionsLoading } = useTrendsOptions(city, urlAreaKeys.length === 0 || isAreaGuideMode);
 
   // When no URL areaKeys and defaults arrive: write canonical URL so selectedKey derives correctly.
   // Keys that were previously removed due to an API error are excluded to prevent a re-fetch loop:
@@ -81,16 +108,33 @@ export default function Trends() {
     }
   }, [optionsData, city]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Area data for currently selected key
+  // ── Area Intelligence hook (AC1) ────────────────────────────────────────────
+  // Always called with city + selectedKey. The hook's own enabled guard
+  // (citySlug.length > 0 && areaKey.length > 0) suppresses the request when
+  // no areaKey is present (bare /trends). This avoids conditional hook calls.
+  const {
+    data: areaIntelligenceData,
+    isLoading: areaIntelligenceLoading,
+    isError: areaIntelligenceError,
+  } = useAreaIntelligence(city, selectedKey);
+
+  // Derive nearby options from existing trends defaults (Q3=Option A: safe source)
+  const nearbyAreaOptions = (optionsData?.defaultAreas ?? []).map(a => ({
+    areaKey: a.areaKey,
+    areaLabel: a.areaKey.split('|').pop() ?? a.areaKey,
+  }));
+
+  // ── #771 legacy hook (always called — Rules of Hooks; enabled=false for empty key) ─
+  // Area data for the currently selected key. enabled: areaKey.length > 0 guards empty string.
+  // Only used in the legacy flow (shouldRenderGuide=false edge case: non-pipe areaKey in URL).
   const { data, isLoading, isError } = useAreaOverview(selectedKey);
 
-  // Invalid areaKey silent recovery:
+  // Invalid areaKey silent recovery for legacy flow:
   // When the selected (first) key returns an error, record it in lastRemovedKeyRef so
   // the defaults effect will not re-populate it, then remove it from the URL.
-  // If remaining is empty, write a city-only URL so urlAreaKeys.length becomes 0
-  // which re-enables useTrendsOptions — the defaults effect will then populate
-  // only non-errored keys (guarded by lastRemovedKeyRef), breaking any loop.
+  // Guard: only fires in the non-guide edge case (selectedKey present but not a full pipe key).
   useEffect(() => {
+    if (shouldRenderGuide) return; // guide path handles its own error state
     if (!isError || !selectedKey) return;
     lastRemovedKeyRef.current = selectedKey;
     const remaining = urlAreaKeys.filter(k => k !== selectedKey);
@@ -99,9 +143,43 @@ export default function Trends() {
     remaining.forEach(k => params.append('areaKey', k));
     setSearchParams(params, { replace: true });
   // Intentional: only fire when the error state or selected key changes.
-  // Including city/urlAreaKeys/setSearchParams would cause looping re-runs.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isError, selectedKey]);
+  }, [isError, selectedKey, shouldRenderGuide]);
+
+  // ── Default: buyer area-guide for all normal /trends visits ─────────────────
+  // noCityAreas: options request settled, city has zero configured areas.
+  // In this case areaIntelligence request is suppressed (selectedKey='', enabled=false).
+  const noCityAreas =
+    !optionsLoading
+    && selectedKey === ''
+    && optionsData !== undefined
+    && (optionsData.defaultAreas ?? []).length === 0;
+
+  // Guide loading: options still resolving a default area (no areaKey yet) OR areaIntelligence in-flight.
+  // noCityAreas bypasses this — show the clean city-level no-data state instead.
+  const guideIsLoading = !noCityAreas && (areaIntelligenceLoading || (selectedKey === '' && optionsLoading));
+
+  if (shouldRenderGuide) {
+    const cityLabel = city.charAt(0).toUpperCase() + city.slice(1);
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <AreaGuide
+          citySlug={city}
+          cityLabel={cityLabel}
+          areaKey={selectedKey}
+          isLoading={guideIsLoading}
+          isError={isAreaGuideMode ? areaIntelligenceError : false}
+          data={isAreaGuideMode ? areaIntelligenceData : undefined}
+          nearbyAreaOptions={nearbyAreaOptions}
+          noCityAreas={noCityAreas}
+        />
+      </div>
+    );
+  }
+
+  // ── Legacy #771 market-trends flow ────────────────────────────────────────────
+  // Reached only for non-pipe areaKey in URL (edge case; not a normal production URL).
+  // shouldRenderGuide=false means selectedKey is non-empty and not a full pipe key.
 
   // Dropdown change: selected area moves to position 0, others retained; URL updated
   const handleAreaChange = (newKey: string) => {
@@ -155,44 +233,9 @@ export default function Trends() {
       ]
     : [];
 
-  // No area selected and options fetch has settled (not loading).
-  // Two sub-cases determined by whether the backend returned any defaults:
-  //   • defaultAreas empty → city has no trend data at all ("No areas available")
-  //   • defaultAreas non-empty but defaults effect hasn't written the URL yet,
-  //     or lastRemovedKeyRef blocked all defaults → invite the user to choose ("Select an area")
-  // Collapsing into one guard with an inner branch prevents silent mis-render if
-  // order of the two checks were ever swapped during refactoring.
-  if (!selectedKey && !optionsLoading) {
-    const noAreasAvailable = optionsData !== undefined && (optionsData.defaultAreas ?? []).length === 0;
-    return (
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <MapPin className="h-10 w-10 text-muted-foreground" />
-          {noAreasAvailable ? (
-            <>
-              <p className="text-lg font-medium text-foreground">No areas available</p>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Trend data is not yet available for this city. Explore properties on the map instead.
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="text-lg font-medium text-foreground">Select an area to explore</p>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Choose a locality from the map to see price trends and market insights.
-              </p>
-            </>
-          )}
-          <Button asChild variant="default" size="sm">
-            <Link to={`/discover?city=${city}`}>Explore on Map</Link>
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Waiting for defaults or in-flight request
-  if (!selectedKey || isLoading) {
+  // In the legacy edge case: if selectedKey is set but data is loading/missing, show legacy skeleton.
+  // (selectedKey='' cannot reach here — shouldRenderGuide catches it above.)
+  if (isLoading) {
     return <LoadingSkeleton />;
   }
 
