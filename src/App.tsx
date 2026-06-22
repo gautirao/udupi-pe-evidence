@@ -32,6 +32,7 @@ const BrokerBookings = lazy(() => import("./pages/broker/BrokerBookings"));
 const BrokerListingQuality = lazy(() => import("./pages/broker/ListingQuality"));
 const BrokerPreferences = lazy(() => import("./pages/broker/Preferences"));
 const BrokerDemandGaps = lazy(() => import("./pages/broker/BrokerDemandGaps"));
+const BrokerAreaInsights = lazy(() => import("./pages/broker/BrokerAreaInsights"));
 const MyBookings = lazy(() => import("./pages/MyBookings"));
 const SavedAreas = lazy(() => import("./pages/SavedAreas"));
 
@@ -211,6 +212,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <BrokerDemandGaps />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/broker/areas/:citySlug/:areaKey"
+                element={
+                  <ProtectedRoute>
+                    <BrokerAreaInsights />
                   </ProtectedRoute>
                 }
               />

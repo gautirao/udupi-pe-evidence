@@ -632,4 +632,78 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
     List<UUID> findLiveListingIdsAfter(
             @Param("lastId") String lastId,
             @Param("batchSize") int batchSize);
+
+    // ===== Broker area-insights (#1530) — ADD-ONLY, BROKER-SCOPED, LIVE-ONLY =====
+    // IDOR contract: every query MUST filter created_by = :brokerId (JWT-derived, never client-supplied).
+    // Scraped exclusion (AC7): status='LIVE' AND raw_post_id IS NULL — no status IN ('SCRAPED','LIVE').
+
+    /**
+     * Counts the broker's own LIVE, non-archived, non-duplicate, non-scraped listings in
+     * the given area.
+     *
+     * <p>Predicate per [idor_enforcement.predicates].liveListingsInArea:
+     * {@code created_by=:brokerId AND status='LIVE' AND area_key=:areaKey
+     * AND raw_post_id IS NULL AND archived_at IS NULL AND is_duplicate=false}
+     *
+     * @param brokerId JWT-resolved broker UUID — never client-supplied
+     * @param areaKey  area to scope the count to
+     * @return count of qualifying LIVE listings; 0 when none
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT COUNT(*) FROM property_listings "
+                   + "WHERE created_by    = CAST(:brokerId AS uuid) "
+                   + "  AND status        = 'LIVE' "
+                   + "  AND area_key      = :areaKey "
+                   + "  AND raw_post_id   IS NULL "
+                   + "  AND archived_at   IS NULL "
+                   + "  AND is_duplicate  = false")
+    int countBrokerLiveListingsInArea(
+            @Param("brokerId") UUID brokerId,
+            @Param("areaKey") String areaKey);
+
+    /**
+     * Counts the broker's own LIVE area listings where quality_score IS NOT NULL AND below threshold.
+     *
+     * <p>Predicate per [idor_enforcement.predicates].listingsNeedingAttention:
+     * same as liveListingsInArea PLUS {@code quality_score IS NOT NULL AND quality_score < :needsAttentionMax}.
+     * NULL quality_score = unscored; excluded (NOT counted as needing attention).
+     *
+     * @param brokerId          JWT-resolved broker UUID — never client-supplied
+     * @param areaKey           area to scope the count to
+     * @param needsAttentionMax quality score threshold (exclusive upper bound); pass
+     *                          {@link com.example.realestate.intelligence.BrokerAreaInsightsService#QUALITY_NEEDS_ATTENTION_MAX}
+     * @return count of qualifying listings; 0 when none
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT COUNT(*) FROM property_listings "
+                   + "WHERE created_by    = CAST(:brokerId AS uuid) "
+                   + "  AND status        = 'LIVE' "
+                   + "  AND area_key      = :areaKey "
+                   + "  AND raw_post_id   IS NULL "
+                   + "  AND archived_at   IS NULL "
+                   + "  AND is_duplicate  = false "
+                   + "  AND quality_score IS NOT NULL "
+                   + "  AND quality_score < :needsAttentionMax")
+    int countBrokerListingsNeedingAttention(
+            @Param("brokerId") UUID brokerId,
+            @Param("areaKey") String areaKey,
+            @Param("needsAttentionMax") int needsAttentionMax);
+
+    /**
+     * Counts distinct qualifying area_demand_signal rows for the given area with
+     * {@code confidence != 'insufficient_data'}.
+     *
+     * <p>Used to derive {@code opportunitiesToAct}: qualifying signals MINUS the broker's
+     * own capturing LIVE listings (computed in the service). This query is area-scoped only —
+     * no broker identity — consistent with the SHARED demand-signal model.
+     *
+     * @param areaKey area to scope the signal count to
+     * @return count of qualifying demand signals; 0 when none
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT COUNT(DISTINCT (area_key, property_type, listing_purpose, budget_band)) "
+                   + "FROM area_demand_signal "
+                   + "WHERE area_key   = :areaKey "
+                   + "  AND confidence != 'insufficient_data'")
+    int countQualifyingDemandSignalsForArea(@Param("areaKey") String areaKey);
 }

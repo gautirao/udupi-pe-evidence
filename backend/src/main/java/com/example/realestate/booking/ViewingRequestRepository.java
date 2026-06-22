@@ -63,4 +63,38 @@ public interface ViewingRequestRepository extends JpaRepository<ViewingRequest, 
 
     @Query(value = "SELECT p.full_name FROM public.profiles p WHERE p.user_id = :userId", nativeQuery = true)
     Optional<String> findFullNameByUserId(@Param("userId") UUID userId);
+
+    // ===== Broker area-insights (#1530) — ADD-ONLY, BROKER-SCOPED =====
+    // IDOR contract: broker_id AND created_by both pinned to :brokerId (defense in depth).
+    // Scraped exclusion (AC7): pl.status='LIVE' AND pl.raw_post_id IS NULL.
+
+    /**
+     * Counts viewing_requests (enquiries) on the broker's own LIVE area listings.
+     *
+     * <p>Predicate per [idor_enforcement.predicates].enquiriesOnBrokerListings:
+     * {@code vr.broker_id=:brokerId AND pl.created_by=:brokerId AND pl.status='LIVE'
+     * AND pl.area_key=:areaKey AND pl.raw_post_id IS NULL AND pl.archived_at IS NULL
+     * AND pl.is_duplicate=false}
+     *
+     * <p>Both {@code vr.broker_id} and {@code pl.created_by} are pinned to {@code :brokerId}
+     * for defense in depth — one cannot widen scope without the other.
+     *
+     * @param brokerId JWT-resolved broker UUID — never client-supplied
+     * @param areaKey  area to scope the count to (via the joined listing's area_key)
+     * @return count of qualifying enquiries; 0 when none
+     */
+    @Query(nativeQuery = true,
+           value = "SELECT COUNT(*) "
+                   + "FROM viewing_requests vr "
+                   + "JOIN property_listings pl ON pl.id = vr.listing_id "
+                   + "WHERE vr.broker_id    = CAST(:brokerId AS uuid) "
+                   + "  AND pl.created_by   = CAST(:brokerId AS uuid) "
+                   + "  AND pl.status       = 'LIVE' "
+                   + "  AND pl.area_key     = :areaKey "
+                   + "  AND pl.raw_post_id  IS NULL "
+                   + "  AND pl.archived_at  IS NULL "
+                   + "  AND pl.is_duplicate = false")
+    int countEnquiriesOnBrokerAreaListings(
+            @Param("brokerId") UUID brokerId,
+            @Param("areaKey") String areaKey);
 }
