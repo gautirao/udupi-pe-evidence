@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 // Issue #1531 — additive LEAD_INTENT telemetry wiring (fire-and-forget; no existing behaviour changed).
 import { useDiscoverTelemetry } from '@/hooks/useDiscoverTelemetry';
@@ -28,6 +28,14 @@ interface RequestViewingModalProps {
   listingId: string;
   open: boolean;
   onClose: () => void;
+  /**
+   * Optional preferred date (yyyy-MM-dd) to seed the form when the modal opens —
+   * lets the sidebar date pills carry the buyer's pick into the modal.
+   * Purely additive: the 90-day window + fixed slot contract is unchanged (D3-A).
+   */
+  initialDate?: string;
+  /** Optional time slot (from TIME_SLOTS) to pre-select when the modal opens. */
+  initialTime?: string;
 }
 
 /**
@@ -37,7 +45,7 @@ interface RequestViewingModalProps {
  * - Form: future date (min: tomorrow, max: 90 days) + time slot + optional message.
  * - Calls POST /api/bookings via useCreateBooking hook.
  */
-export function RequestViewingModal({ listingId, open, onClose }: RequestViewingModalProps) {
+export function RequestViewingModal({ listingId, open, onClose, initialDate, initialTime }: RequestViewingModalProps) {
   const { user } = useAuth();
   const createBooking = useCreateBooking();
 
@@ -51,6 +59,21 @@ export function RequestViewingModal({ listingId, open, onClose }: RequestViewing
   const [requestedDate, setRequestedDate] = useState('');
   const [requestedTimeSlot, setRequestedTimeSlot] = useState('');
   const [requesterMessage, setRequesterMessage] = useState('');
+
+  // Seed the preferred date from the sidebar pill selection when the modal opens.
+  // Bounded to the existing [minDate, maxDate] window so the contract is preserved.
+  useEffect(() => {
+    if (open && initialDate && initialDate >= minDate && initialDate <= maxDate) {
+      setRequestedDate(initialDate);
+    }
+  }, [open, initialDate, minDate, maxDate]);
+
+  // Seed the preferred time slot from the sidebar time chip selection.
+  useEffect(() => {
+    if (open && initialTime && TIME_SLOTS.includes(initialTime)) {
+      setRequestedTimeSlot(initialTime);
+    }
+  }, [open, initialTime]);
 
   function resetForm() {
     setRequestedDate('');

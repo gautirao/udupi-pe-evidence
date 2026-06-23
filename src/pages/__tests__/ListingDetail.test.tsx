@@ -205,8 +205,8 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
       builtAreaUnit: 'sqft',
       price_per_cent_paise: null,
     }));
-    // ₹3,200,000 / 1000 sqft = ₹3,200 / sqft
-    expect(screen.getByText(/3,200.*sqft/)).toBeInTheDocument();
+    // ₹3,200,000 / 1000 sqft = ₹3,200 / sq ft
+    expect(screen.getByText(/3,200.*sq\s+ft/)).toBeInTheDocument();
   });
 
   it('shows price-per-sqft for house with built_area (sqft) + price', () => {
@@ -217,8 +217,8 @@ describe('ListingDetail — price-per-unit (PR-11.4)', () => {
       builtAreaUnit: 'sqft',
       price_per_cent_paise: null,
     }));
-    // ₹2,000,000 / 800 sqft = ₹2,500 / sqft
-    expect(screen.getByText(/2,500.*sqft/)).toBeInTheDocument();
+    // ₹2,000,000 / 800 sqft = ₹2,500 / sq ft
+    expect(screen.getByText(/2,500.*sq\s+ft/)).toBeInTheDocument();
   });
 
   it('does NOT show per-unit line for land without price_per_cent_paise', () => {
@@ -404,9 +404,10 @@ describe('ListingDetail — anonymous teaser (RE-189)', () => {
     expect(screen.getByRole('heading', { level: 1, name: /Land in Udupi/ })).toBeInTheDocument();
   });
 
-  it('shows "Sign in to view full details" CTA for anonymous users', () => {
+  it('shows sign-in CTA for anonymous users', () => {
     renderWithListing(makeTeaserListing());
-    expect(screen.getByText('Sign in to view full details', { selector: 'p' })).toBeInTheDocument();
+    // Sidebar SignInGateCard renders the description as a <p>; copy updated in #1617 redesign.
+    expect(screen.getByText('Sign in to request a viewing or contact the lister', { selector: 'p' })).toBeInTheDocument();
   });
 
   it('does not render the Posted Date section when createdAt is absent', () => {
@@ -711,7 +712,8 @@ describe('ListingDetail — residential redesign smoke', () => {
       imageCount: 1,
     }));
     expect(screen.getByRole('button', { name: /share listing/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /save listing/i })).toBeInTheDocument();
+    // Use testid to target the gallery overlay save button specifically (sidebar also has a save button).
+    expect(screen.getByTestId('gallery-save-btn')).toBeInTheDocument();
   });
 
   it('does not crash and still renders the title when price, coords and description are absent', () => {

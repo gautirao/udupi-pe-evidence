@@ -21,9 +21,29 @@ export const LOCALITY_CAP = 3;
 /** Maps the district segment (pipe-index 2) of an areaKey to its URL city slug. */
 export const DISTRICT_TO_CITY_SLUG: Record<string, string> = {
   Bengaluru: 'bangalore',
+  Kundapur: 'kundapur',
   Mangalore: 'mangalore',
   Udupi: 'udupi',
 };
+
+/**
+ * Case-folded lookup table derived once at module load.
+ * Keys are lowercased district names; values are city slugs.
+ * Allows district segments arriving in any case ('kundapur', 'KUNDAPUR', 'Kundapur')
+ * to resolve correctly.
+ */
+const DISTRICT_TO_CITY_SLUG_FOLDED: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(DISTRICT_TO_CITY_SLUG).map(([k, v]) => [k.toLowerCase(), v]),
+);
+
+/**
+ * Resolve a district string (any case) to its URL city slug.
+ * Returns undefined if the district is null, undefined, or not mapped.
+ */
+export function districtToCitySlug(district: string | null | undefined): string | undefined {
+  if (!district) return undefined;
+  return DISTRICT_TO_CITY_SLUG_FOLDED[district.toLowerCase()];
+}
 
 // === Shared Locality Toggle ===
 /**
@@ -70,7 +90,7 @@ export function filterByCity<T extends { areaKey: string | null }>(
     if (sep < 0) return false;
     return (
       item.areaKey.slice(0, sep) === 'district' &&
-      DISTRICT_TO_CITY_SLUG[item.areaKey.slice(sep + 1)] === citySlug
+      districtToCitySlug(item.areaKey.slice(sep + 1)) === citySlug
     );
   });
 }

@@ -2,6 +2,17 @@ import { Ruler, Home, Bath, Building, Layers, ParkingCircle, Armchair, Store, In
 import { formatArea } from '@/lib/formatters';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
 
+const TYPE_NOUN: Record<string, string> = {
+  apartment: 'apartment',
+  house: 'house',
+  land: 'plot',
+  commercial: 'commercial',
+  commercial_building: 'commercial',
+  commercial_land: 'commercial',
+  warehouse: 'warehouse',
+  other: 'this',
+};
+
 interface SpecCellProps {
   icon: React.ReactNode;
   label: string;
@@ -10,13 +21,13 @@ interface SpecCellProps {
 
 function SpecCell({ icon, label, value }: SpecCellProps) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+    <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-card text-muted-foreground shadow-sm">
         {icon}
       </span>
       <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="font-medium truncate">{value}</p>
+        <p className="truncate text-[0.95rem] font-semibold text-foreground">{value}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
   );
@@ -48,104 +59,133 @@ export function ListingSpecsGrid({ listing }: ListingSpecsGridProps) {
   // Avoid rendering an empty "Property Details" card (e.g. anonymous teaser).
   if (!hasSpec && !hasRentTerms) return null;
 
+  const typeNoun = TYPE_NOUN[listing.propertyType] ?? 'this';
+
   return (
-    <section className="rounded-2xl border border-border bg-card p-5 md:p-6">
-      <h2 className="text-lg font-semibold mb-4">Property Details</h2>
+    <section className="rounded-2xl border border-border bg-card p-5 md:p-6" data-testid="listing-specs-grid">
+      <h2 className="font-serif text-xl font-semibold text-foreground">Property details</h2>
+      <p className="mt-1 mb-4 text-sm text-muted-foreground">
+        Shown for {typeNoun} listings — fields that don't apply to this property type are hidden.
+      </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {listing.landArea && (
-            <SpecCell
-              icon={<Ruler className="h-4 w-4 text-muted-foreground" />}
-              label="Land Area"
-              value={formatArea(listing.landArea, listing.landAreaUnit)}
-            />
+            <div data-testid="spec-land-area">
+              <SpecCell
+                icon={<Ruler className="h-4 w-4 text-muted-foreground" />}
+                label="Land Area"
+                value={formatArea(listing.landArea, listing.landAreaUnit)}
+              />
+            </div>
           )}
 
           {listing.builtArea && (
-            <SpecCell
-              icon={<Building className="h-4 w-4 text-muted-foreground" />}
-              label="Built Area"
-              value={formatArea(listing.builtArea, listing.builtAreaUnit)}
-            />
+            <div data-testid="spec-built-area">
+              <SpecCell
+                icon={<Building className="h-4 w-4 text-muted-foreground" />}
+                label="Built Area"
+                value={formatArea(listing.builtArea, listing.builtAreaUnit)}
+              />
+            </div>
           )}
 
           {listing.bedrooms && (
-            <SpecCell
-              icon={<Home className="h-4 w-4 text-muted-foreground" />}
-              label="Bedrooms"
-              value={`${listing.bedrooms} BHK`}
-            />
+            <div data-testid="spec-bedrooms">
+              <SpecCell
+                icon={<Home className="h-4 w-4 text-muted-foreground" />}
+                label="Bedrooms"
+                value={`${listing.bedrooms} BHK`}
+              />
+            </div>
           )}
 
           {listing.bathrooms && (
-            <SpecCell
-              icon={<Bath className="h-4 w-4 text-muted-foreground" />}
-              label="Bathrooms"
-              value={listing.bathrooms}
-            />
+            <div data-testid="spec-bathrooms">
+              <SpecCell
+                icon={<Bath className="h-4 w-4 text-muted-foreground" />}
+                label="Bathrooms"
+                value={listing.bathrooms}
+              />
+            </div>
           )}
 
           {listing.carpetArea != null && (
-            <SpecCell
-              icon={<Layers className="h-4 w-4 text-muted-foreground" />}
-              label="Carpet Area"
-              value={formatArea(listing.carpetArea, listing.carpetAreaUnit)}
-            />
+            <div data-testid="spec-carpet-area">
+              <SpecCell
+                icon={<Layers className="h-4 w-4 text-muted-foreground" />}
+                label="Carpet Area"
+                value={formatArea(listing.carpetArea, listing.carpetAreaUnit)}
+              />
+            </div>
           )}
 
           {listing.washrooms != null && (
-            <SpecCell
-              icon={<Bath className="h-4 w-4 text-muted-foreground" />}
-              label="Washrooms"
-              value={listing.washrooms}
-            />
+            <div data-testid="spec-washrooms">
+              <SpecCell
+                icon={<Bath className="h-4 w-4 text-muted-foreground" />}
+                label="Washrooms"
+                value={listing.washrooms}
+              />
+            </div>
           )}
 
           {listing.floorNumber != null && (
-            <SpecCell
-              icon={<Building className="h-4 w-4 text-muted-foreground" />}
-              label="Floor"
-              value={`${listing.floorNumber}${listing.totalFloors != null ? ` / ${listing.totalFloors}` : ''}`}
-            />
+            <div data-testid="spec-floor">
+              <SpecCell
+                icon={<Building className="h-4 w-4 text-muted-foreground" />}
+                label="Floor"
+                value={`${listing.floorNumber}${listing.totalFloors != null ? ` / ${listing.totalFloors}` : ''}`}
+              />
+            </div>
           )}
 
           {listing.furnishingStatus && (
-            <SpecCell
-              icon={<Armchair className="h-4 w-4 text-muted-foreground" />}
-              label="Furnishing"
-              value={<span className="capitalize">{listing.furnishingStatus.replace(/_/g, ' ')}</span>}
-            />
+            <div data-testid="spec-furnishing">
+              <SpecCell
+                icon={<Armchair className="h-4 w-4 text-muted-foreground" />}
+                label="Furnishing"
+                value={<span className="capitalize">{listing.furnishingStatus.replace(/_/g, ' ')}</span>}
+              />
+            </div>
           )}
 
           {listing.parkingCount != null && (
-            <SpecCell
-              icon={<ParkingCircle className="h-4 w-4 text-muted-foreground" />}
-              label="Parking"
-              value={listing.parkingCount}
-            />
+            <div data-testid="spec-parking">
+              <SpecCell
+                icon={<ParkingCircle className="h-4 w-4 text-muted-foreground" />}
+                label="Parking"
+                value={listing.parkingCount}
+              />
+            </div>
           )}
 
           {listing.roadFrontageFt != null && (
-            <SpecCell
-              icon={<Ruler className="h-4 w-4 text-muted-foreground" />}
-              label="Road Frontage"
-              value={`${listing.roadFrontageFt} ft`}
-            />
+            <div data-testid="spec-road-frontage">
+              <SpecCell
+                icon={<Ruler className="h-4 w-4 text-muted-foreground" />}
+                label="Road Frontage"
+                value={`${listing.roadFrontageFt} ft`}
+              />
+            </div>
           )}
 
           {listing.commercialUsage && (
-            <SpecCell
-              icon={<Store className="h-4 w-4 text-muted-foreground" />}
-              label="Usage"
-              value={<span className="capitalize">{listing.commercialUsage}</span>}
-            />
+            <div data-testid="spec-commercial-usage">
+              <SpecCell
+                icon={<Store className="h-4 w-4 text-muted-foreground" />}
+                label="Usage"
+                value={<span className="capitalize">{listing.commercialUsage}</span>}
+              />
+            </div>
           )}
 
           {listing.numberOfUnits != null && (
-            <SpecCell
-              icon={<Building className="h-4 w-4 text-muted-foreground" />}
-              label="Units"
-              value={listing.numberOfUnits}
-            />
+            <div data-testid="spec-units">
+              <SpecCell
+                icon={<Building className="h-4 w-4 text-muted-foreground" />}
+                label="Units"
+                value={listing.numberOfUnits}
+              />
+            </div>
           )}
         </div>
 

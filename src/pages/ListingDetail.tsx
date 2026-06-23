@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PropertyImage, PropertyType } from '@/hooks/usePropertyListings';
 import { ListingResponse } from '@/hooks/useBrokerListings';
 import { PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
-import { AlertTriangle, ArrowLeft, Share2, Check, Heart } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Share2, Check, Heart, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -130,6 +130,14 @@ export default function ListingDetail() {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
+  const [bookingInitialDate, setBookingInitialDate] = useState<string | undefined>(undefined);
+  const [bookingInitialTime, setBookingInitialTime] = useState<string | undefined>(undefined);
+
+  const openBooking = (date?: string, time?: string) => {
+    setBookingInitialDate(date);
+    setBookingInitialTime(time);
+    setBookingModalOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -174,6 +182,14 @@ export default function ListingDetail() {
       ? [{ url: listing.primaryImageUrl, alt: 'Property image' }]
       : [];
   const effectiveImageCount = typeof listing.imageCount === 'number' ? listing.imageCount : images.length;
+
+  // Gallery overlay chips — rendered only when truthfully derivable.
+  const hasTrustBadge = (trustData?.badges?.length ?? 0) > 0;
+  const isUpdatedToday = (() => {
+    const ts = listing.lastUpdatedAt;
+    if (!ts) return false;
+    return new Date(ts).toDateString() === new Date().toDateString();
+  })();
 
   const handleShare = async () => {
     try {
@@ -222,6 +238,15 @@ export default function ListingDetail() {
   }
 
   const displayTitle = listing.title || `${label} in ${listing.locality || 'Unknown Location'}`;
+
+  // Breadcrumb city = district segment of areaKey (IN|KA|{district}|{locality}), when it
+  // differs from the locality crumb. Honest: omitted when not derivable.
+  const breadcrumbCity = (() => {
+    const district = listing.areaKey?.split('|')[2]?.trim();
+    if (!district) return null;
+    if (listing.locality && district.toLowerCase() === listing.locality.toLowerCase()) return null;
+    return district;
+  })();
 
   const handleToggleSaved = () => {
     setSaved((s) => !s);
@@ -287,6 +312,12 @@ export default function ListingDetail() {
               <li><Link to="/" className="hover:text-foreground">Home</Link></li>
               <li aria-hidden="true">/</li>
               <li><Link to="/discover" className="hover:text-foreground">Discover</Link></li>
+              {breadcrumbCity && (
+                <>
+                  <li aria-hidden="true">/</li>
+                  <li>{breadcrumbCity}</li>
+                </>
+              )}
               {listing.locality && (
                 <>
                   <li aria-hidden="true">/</li>
@@ -306,6 +337,21 @@ export default function ListingDetail() {
           <div className="lg:col-span-2 space-y-6">
             {/* Hero gallery with share + save overlay (mirrors agri detail) */}
             <div className="relative">
+              {(hasTrustBadge || isUpdatedToday) && (
+                <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-2">
+                  {hasTrustBadge && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-card/95 px-2.5 py-1 text-xs font-medium text-evergreen shadow-sm backdrop-blur">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Trusted listing
+                    </span>
+                  )}
+                  {isUpdatedToday && (
+                    <span className="inline-flex items-center rounded-full bg-card/95 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm backdrop-blur">
+                      Updated today
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="absolute right-3 top-3 z-20 flex gap-2">
                 <button
                   type="button"
@@ -320,6 +366,7 @@ export default function ListingDetail() {
                   onClick={handleToggleSaved}
                   aria-label={saved ? 'Remove from saved' : 'Save listing'}
                   aria-pressed={saved}
+                  data-testid="gallery-save-btn"
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-sm transition-colors hover:bg-muted"
                 >
                   <Heart className={`h-4 w-4 ${saved ? 'fill-current text-rose-500' : ''}`} />
@@ -345,14 +392,22 @@ export default function ListingDetail() {
           <ListingDetailSidebar
             listing={listing}
             user={user}
-            onOpenBookingModal={() => setBookingModalOpen(true)}
+            onOpenBookingModal={openBooking}
             onShare={handleShare}
+            saved={saved}
+            onToggleSaved={handleToggleSaved}
           />
         </div>
       </div>
 
       {user && (
-        <RequestViewingModal listingId={listing.id} open={bookingModalOpen} onClose={() => setBookingModalOpen(false)} />
+        <RequestViewingModal
+          listingId={listing.id}
+          open={bookingModalOpen}
+          onClose={() => setBookingModalOpen(false)}
+          initialDate={bookingInitialDate}
+          initialTime={bookingInitialTime}
+        />
       )}
     </AppLayout>
   );
