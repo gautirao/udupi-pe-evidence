@@ -20,6 +20,7 @@ import ListingDetail from "./pages/ListingDetail";
 
 // Lazily loaded — Trends uses Recharts (~200 KB); load only when navigated to
 const Trends = lazy(() => import("./pages/Trends"));
+const TrendsAreaResolved = lazy(() => import("./pages/TrendsAreaResolved"));
 
 // Lazily loaded — Broker routes; not needed for public/admin users
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -132,6 +133,7 @@ const App = () => (
               <Route path="/listing/:id" element={<ListingDetail />} />
               <Route path="/insights" element={<Navigate to="/trends" replace />} />
               <Route path="/trends" element={<Trends />} />
+              <Route path="/trends/:citySlug/areas/:areaSlug" element={<TrendsAreaResolved />} />
               <Route path="/area-overview" element={<AreaOverviewRedirect />} />
               {/* Onboarding */}
               <Route

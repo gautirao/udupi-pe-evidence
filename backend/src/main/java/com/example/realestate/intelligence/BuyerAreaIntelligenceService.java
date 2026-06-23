@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -67,6 +69,71 @@ public class BuyerAreaIntelligenceService {
         }
 
         return mapSnapshot(optional.get());
+    }
+
+    /**
+     * Resolves a (citySlug, areaSlug) pair to the matching area's stored identifiers.
+     *
+     * <p>Loads all snapshot rows for the city, re-sorts them deterministically
+     * (active_listing_count DESC, then area_key ASC for tie-breaking), derives the
+     * canonical slug for each row, and returns the first match in sorted order.
+     *
+     * <p>An unknown slug returns {@code matched=false} with a 200 response — NOT a 404.
+     * A k-anon-suppressed area (below threshold) still resolves matched=true; suppression
+     * governs metric visibility, not existence.
+     *
+     * <p>Warns when more than one row maps to the same slug (collision observability).
+     *
+     * @param citySlug requested city slug, already validated non-blank by caller
+     * @param areaSlug requested area slug (e.g. "malpe"), already validated non-blank by caller
+     * @return resolution response; never null
+     */
+    @Transactional(readOnly = true)
+    public ResolveAreaResponse resolveArea(String citySlug, String areaSlug) {
+        List<AreaIntelligenceSnapshot> rows =
+                repository.findByCitySlugOrderByActiveListingCountDesc(citySlug);
+
+        // Deterministic sort: active_listing_count DESC (already from repo), then area_key ASC
+        List<AreaIntelligenceSnapshot> sorted = rows.stream()
+                .sorted(Comparator
+                        .comparingInt(AreaIntelligenceSnapshot::getActiveListingCount).reversed()
+                        .thenComparing(AreaIntelligenceSnapshot::getAreaKey))
+                .toList();
+
+        // Collision observability: count how many rows map to the requested slug
+        long collisionCount = sorted.stream()
+                .filter(s -> deriveSlug(s).equals(areaSlug))
+                .count();
+        if (collisionCount > 1) {
+            log.warn("resolveArea: slug collision — {} rows in city='{}' map to slug='{}'; "
+                    + "returning deterministic winner (area_key ASC in sorted order)",
+                    collisionCount, citySlug, areaSlug);
+        }
+
+        // Select the first match in deterministic sorted order
+        Optional<AreaIntelligenceSnapshot> match = sorted.stream()
+                .filter(s -> deriveSlug(s).equals(areaSlug))
+                .findFirst();
+
+        if (match.isPresent()) {
+            AreaIntelligenceSnapshot s = match.get();
+            log.debug("resolveArea matched: city={} slug={} -> areaKey={}", citySlug, areaSlug, s.getAreaKey());
+            return new ResolveAreaResponse(citySlug, areaSlug, s.getAreaKey(), s.getAreaLabel(), true);
+        }
+
+        log.debug("resolveArea no match: city={} slug={}", citySlug, areaSlug);
+        return new ResolveAreaResponse(citySlug, areaSlug, null, null, false);
+    }
+
+    /**
+     * Derives the canonical slug for a snapshot row.
+     * Uses area_label when present; falls back to slugify of the last pipe segment of area_key.
+     */
+    private static String deriveSlug(AreaIntelligenceSnapshot s) {
+        if (s.getAreaLabel() != null) {
+            return AreaSlug.slugify(s.getAreaLabel());
+        }
+        return AreaSlug.slugifyFromAreaKey(s.getAreaKey());
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
