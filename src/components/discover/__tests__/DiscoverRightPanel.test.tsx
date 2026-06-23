@@ -134,7 +134,8 @@ describe('DiscoverRightPanel', () => {
         journey="area-first"
       />,
     );
-    expect(screen.getByText('Manipal')).toBeInTheDocument();
+    // 'Manipal' appears in both the breadcrumb area crumb and the area heading (a4 redesign).
+    expect(screen.getAllByText('Manipal').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByTestId('quick-select-chip')).not.toBeInTheDocument();
   });
 
@@ -396,7 +397,8 @@ describe('DiscoverRightPanel — search input (#952)', () => {
         onSearchChange={vi.fn()}
       />,
     );
-    expect(screen.getByPlaceholderText('Search listings by keyword')).toBeInTheDocument();
+    // a4 redesign: placeholder is "Search properties in <area>" (not "Search listings by keyword")
+    expect(screen.getByTestId('area-search-input')).toBeInTheDocument();
   });
 
   it('reflects searchQuery value in the input', () => {
@@ -412,7 +414,8 @@ describe('DiscoverRightPanel — search input (#952)', () => {
         onSearchChange={vi.fn()}
       />,
     );
-    expect(screen.getByPlaceholderText('Search listings by keyword')).toHaveValue('foo');
+    // a4 redesign: use data-testid selector (placeholder is now area-dynamic)
+    expect(screen.getByTestId('area-search-input')).toHaveValue('foo');
   });
 
   it('typing in the input fires onSearchChange', async () => {
@@ -430,7 +433,7 @@ describe('DiscoverRightPanel — search input (#952)', () => {
         onSearchChange={onSearchChange}
       />,
     );
-    await user.type(screen.getByPlaceholderText('Search listings by keyword'), 'a');
+    await user.type(screen.getByTestId('area-search-input'), 'a');
     // Each keystroke fires onSearchChange with the current input value.
     expect(onSearchChange).toHaveBeenCalledWith('a');
   });

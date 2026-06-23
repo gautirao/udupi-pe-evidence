@@ -636,7 +636,8 @@ describe('DiscoverRightPanel — area-selected content parity', () => {
         onSearchChange={vi.fn()}
       />,
     );
-    expect(screen.getByPlaceholderText('Search listings by keyword')).toBeInTheDocument();
+    // a4 redesign: placeholder is "Search properties in <area>" (area-dynamic); use testid
+    expect(screen.getByTestId('area-search-input')).toBeInTheDocument();
   });
 
   it('shows Trends button when trendsHref is provided', () => {

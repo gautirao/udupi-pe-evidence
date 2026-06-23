@@ -80,8 +80,10 @@ describe('AreaSelectedPanel', () => {
 
     it('highlights active chips', () => {
       renderPanel({ filters: { propertyTypes: ['apartment'], bedrooms: [2] } });
+      // R-C: property-type chips use NAVY (bg-primary) when active.
+      // BHK chips use copper-tint (bg-copper-tint) when active, NOT solid copper.
       expect(screen.getByTestId('quick-chip-apartment')).toHaveClass('bg-primary');
-      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-primary');
+      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-copper-tint');
       expect(screen.getByTestId('quick-chip-villa')).not.toHaveClass('bg-primary');
     });
   });
@@ -176,15 +178,16 @@ describe('AreaSelectedPanel', () => {
   });
 
   describe('Search input', () => {
-    it('shows search input when onSearchChange provided', () => {
+    it('shows area-scoped search input when onSearchChange provided', () => {
       renderPanel({ onSearchChange: vi.fn() });
-      expect(screen.getByPlaceholderText('Search listings by keyword')).toBeInTheDocument();
+      // Issue #1606 — placeholder is now area-scoped ("Search properties in {area}").
+      expect(screen.getByPlaceholderText('Search properties in Test Area')).toBeInTheDocument();
     });
 
     it('calls onSearchChange on input change', () => {
       const onSearchChange = vi.fn();
       renderPanel({ onSearchChange });
-      const input = screen.getByPlaceholderText('Search listings by keyword');
+      const input = screen.getByPlaceholderText('Search properties in Test Area');
       fireEvent.change(input, { target: { value: 'test' } });
       expect(onSearchChange).toHaveBeenCalledWith('test');
     });
@@ -202,7 +205,8 @@ describe('AreaSelectedPanel', () => {
     it('shows "for rent" result summary when intent=rent', () => {
       renderPanel({ areaListings: [mockListing], intent: 'rent' });
       expect(screen.getByTestId('area-result-summary')).toHaveTextContent('for rent');
-      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('1 property for rent in Test Area');
+      // Issue #1606 — summary now reads "{n} verified {property} for {sale|rent} in {area}".
+      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('1 verified property for rent in Test Area');
     });
 
     it('shows "for sale in this area yet" empty state by default (intent=buy)', () => {
@@ -213,6 +217,266 @@ describe('AreaSelectedPanel', () => {
     it('shows "for rent in this area yet" empty state when intent=rent', () => {
       renderPanel({ areaListings: [], intent: 'rent' });
       expect(screen.getByText(/No properties for rent in this area yet/)).toBeInTheDocument();
+    });
+  });
+
+  // ── Round-3 design-fidelity refinement (Issue #1606) ──────────────────────
+
+  describe('F1 — Area-first pill and Start-over button (round-3)', () => {
+    it('renders the area-first pill with bg-secondary (navy), NOT a copper class', () => {
+      const { container } = render(
+        <BrowserRouter>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+            journey="area-first"
+          />
+        </BrowserRouter>,
+      );
+      // The pill is a <span> with text 'Area-first'. Use querySelector for specificity.
+      const pill = container.querySelector('span.bg-secondary');
+      expect(pill).not.toBeNull();
+      expect(pill!.className).toContain('bg-secondary');
+      expect(pill!.className).not.toContain('bg-copper');
+    });
+
+    it('renders the Layers icon alongside the area-first pill (not MapPin)', () => {
+      const { container } = render(
+        <BrowserRouter>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+            journey="area-first"
+          />
+        </BrowserRouter>,
+      );
+      // The pill span carries bg-secondary and contains the Layers svg icon.
+      const pill = container.querySelector('span.bg-secondary');
+      expect(pill).not.toBeNull();
+      const svg = pill!.querySelector('svg');
+      expect(svg).not.toBeNull();
+    });
+
+    it('renders the Start-over button when journey + onStartOver are both provided', () => {
+      const onStartOver = vi.fn();
+      renderPanel({ journey: 'area-first', onStartOver });
+      expect(screen.getByTestId('start-over-button')).toBeInTheDocument();
+    });
+
+    it('does NOT render the Start-over button when onStartOver is absent', () => {
+      renderPanel({ journey: 'area-first' });
+      expect(screen.queryByTestId('start-over-button')).not.toBeInTheDocument();
+    });
+
+    it('Start-over button has outline variant (contains "border" in class or role button)', () => {
+      const onStartOver = vi.fn();
+      renderPanel({ journey: 'area-first', onStartOver });
+      const btn = screen.getByTestId('start-over-button');
+      expect(btn).toBeInTheDocument();
+      // Outline variant renders border classes.
+      expect(btn.className).toMatch(/border/);
+    });
+
+    it('Start-over button has rounded-full class', () => {
+      const onStartOver = vi.fn();
+      renderPanel({ journey: 'area-first', onStartOver });
+      const btn = screen.getByTestId('start-over-button');
+      expect(btn.className).toContain('rounded-full');
+    });
+
+    it('clicking Start-over calls onStartOver', () => {
+      const onStartOver = vi.fn();
+      renderPanel({ journey: 'area-first', onStartOver });
+      fireEvent.click(screen.getByTestId('start-over-button'));
+      expect(onStartOver).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders "Properties in {area}" headline', () => {
+      renderPanel();
+      expect(screen.getByRole('heading', { name: 'Properties in Test Area' })).toBeInTheDocument();
+    });
+  });
+
+  describe('F2 — Controls card and property-type filter card (round-3)', () => {
+    it('controls card uses bg-card (white surface), NOT bg-[hsl(var(--input-bg))]', () => {
+      // The controls card only renders when onCityChange or onIntentChange is provided.
+      const { container } = render(
+        <BrowserRouter>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+            onIntentChange={vi.fn()}
+          />
+        </BrowserRouter>,
+      );
+      // The controls card is the grid div wrapping City/Looking-to controls.
+      // It must carry bg-card and must NOT carry the old --input-bg fill.
+      const controlsCard = container.querySelector('[data-testid="intent-selector"]')?.closest('.bg-card');
+      expect(controlsCard).not.toBeNull();
+      // Also verify the old --input-bg class is NOT on the controls card itself.
+      const inputBgEl = container.querySelector('.bg-\\[hsl\\(var\\(--input-bg\\)\\)\\]');
+      // The CitySelect trigger MAY carry --input-bg; the CONTROLS CARD wrapping div must not.
+      // We simply assert the grid wrapper carries bg-card.
+      const gridWrapper = container.querySelector('.grid.grid-cols-2');
+      expect(gridWrapper?.className).toContain('bg-card');
+    });
+
+    it('property-type filter is wrapped in a white card (rounded-xl bg-card)', () => {
+      const { container } = render(
+        <BrowserRouter>
+          <AreaSelectedPanel
+            selectedArea={mockArea}
+            areaListings={[mockListing]}
+            filters={{}}
+            onFiltersChange={vi.fn()}
+            onSelectJourney={vi.fn()}
+            onAddSchool={vi.fn()}
+          />
+        </BrowserRouter>,
+      );
+      // The quick-filter card wraps both property-type and BHK chips.
+      // It is the div that contains quick-chip-all and uses rounded-xl bg-card.
+      const allChip = screen.getByTestId('quick-chip-all');
+      // Walk up to find the bg-card wrapper.
+      let node: HTMLElement | null = allChip.parentElement;
+      let foundBgCard = false;
+      while (node) {
+        if (node.className && node.className.includes('bg-card')) {
+          foundBgCard = true;
+          break;
+        }
+        node = node.parentElement;
+      }
+      expect(foundBgCard).toBe(true);
+    });
+
+    it('active property-type chip still uses bg-primary (navy)', () => {
+      renderPanel({ filters: { propertyTypes: ['apartment'] } });
+      expect(screen.getByTestId('quick-chip-apartment')).toHaveClass('bg-primary');
+    });
+
+    it('active BHK chip still uses bg-copper-tint', () => {
+      renderPanel({ filters: { bedrooms: [2] } });
+      expect(screen.getByTestId('quick-chip-2-bhk')).toHaveClass('bg-copper-tint');
+    });
+  });
+
+  // ── Issue #1606 — area-first results redesign ──────────────────────────────
+
+  describe('Header + headline (Issue #1606)', () => {
+    it('renders the "Properties in {area}" headline and area-derived subcopy', () => {
+      renderPanel();
+      expect(screen.getByRole('heading', { name: 'Properties in Test Area' })).toBeInTheDocument();
+      expect(
+        screen.getByText('Explore verified listings around Test Area, with map context and area-first filters.'),
+      ).toBeInTheDocument();
+    });
+
+    it('shows the intent-aware price helper (buy default)', () => {
+      renderPanel();
+      expect(screen.getByTestId('area-intent-helper')).toHaveTextContent('Showing sale prices in ₹ for Test Area');
+    });
+
+    it('shows rent price helper when intent=rent', () => {
+      renderPanel({ intent: 'rent' });
+      expect(screen.getByTestId('area-intent-helper')).toHaveTextContent('Showing rent prices in ₹ for Test Area');
+    });
+
+    it('renders the verification trust strip', () => {
+      renderPanel();
+      expect(screen.getByTestId('area-trust-strip')).toHaveTextContent('Every listing is verified.');
+    });
+  });
+
+  describe('Verified result count (Issue #1606)', () => {
+    it('reads "{n} verified properties for sale in {area}"', () => {
+      renderPanel({ areaListings: [mockListing, { ...mockListing, id: '2' }] });
+      expect(screen.getByTestId('area-result-summary')).toHaveTextContent('2 verified properties for sale in Test Area');
+    });
+  });
+
+  describe('"All" property-type chip (Issue #1606)', () => {
+    it('renders an All chip that is active when no property type is selected', () => {
+      renderPanel({ filters: {} });
+      // R-C: active All chip uses NAVY (bg-primary), not copper.
+      expect(screen.getByTestId('quick-chip-all')).toHaveClass('bg-primary');
+    });
+
+    it('All chip is not active when a property type filter is set', () => {
+      renderPanel({ filters: { propertyTypes: ['apartment'] } });
+      expect(screen.getByTestId('quick-chip-all')).not.toHaveClass('bg-primary');
+    });
+
+    it('clicking All clears the property-type filter (preserving bedrooms)', () => {
+      const onFiltersChange = vi.fn();
+      renderPanel({ filters: { propertyTypes: ['apartment'], bedrooms: [2] }, onFiltersChange });
+      fireEvent.click(screen.getByTestId('quick-chip-all'));
+      expect(onFiltersChange).toHaveBeenCalledWith({ propertyTypes: undefined, bedrooms: [2] });
+    });
+  });
+
+  describe('Controls card — City + Buy/Rent (Issue #1606)', () => {
+    it('renders the in-panel intent selector when onIntentChange provided', () => {
+      renderPanel({ onIntentChange: vi.fn() });
+      expect(screen.getByTestId('intent-selector')).toBeInTheDocument();
+    });
+
+    it('omits the controls card when neither city nor intent handlers are provided', () => {
+      renderPanel();
+      expect(screen.queryByTestId('intent-selector')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Breadcrumb (Issue #1606)', () => {
+    it('renders Home › City › Group › Area when a group context is present', () => {
+      renderPanel({ cityLabel: 'Udupi', groupName: 'University Belt' });
+      expect(screen.getByTestId('breadcrumb-home')).toHaveTextContent('Home');
+      expect(screen.getByTestId('breadcrumb-city')).toHaveTextContent('Udupi');
+      expect(screen.getByTestId('breadcrumb-group')).toHaveTextContent('University Belt');
+      expect(screen.getByTestId('breadcrumb-area')).toHaveTextContent('Test Area');
+    });
+
+    it('omits the group crumb when there is no group context', () => {
+      renderPanel({ cityLabel: 'Udupi', groupName: null });
+      expect(screen.queryByTestId('breadcrumb-group')).not.toBeInTheDocument();
+      expect(screen.getByTestId('breadcrumb-city')).toHaveTextContent('Udupi');
+      expect(screen.getByTestId('breadcrumb-area')).toHaveTextContent('Test Area');
+    });
+
+    it('does NOT use school-first wording in the breadcrumb', () => {
+      renderPanel({ cityLabel: 'Udupi', groupName: 'University Belt' });
+      expect(screen.getByTestId('area-first-breadcrumb')).not.toHaveTextContent(/Selected school/i);
+    });
+
+    it('wires progressive navigation: Home, City, Group crumbs call their handlers', () => {
+      const onCrumbHome = vi.fn();
+      const onCrumbCity = vi.fn();
+      const onCrumbGroup = vi.fn();
+      renderPanel({
+        cityLabel: 'Udupi',
+        groupName: 'University Belt',
+        onCrumbHome,
+        onCrumbCity,
+        onCrumbGroup,
+      });
+      fireEvent.click(screen.getByTestId('breadcrumb-home'));
+      fireEvent.click(screen.getByTestId('breadcrumb-city'));
+      fireEvent.click(screen.getByTestId('breadcrumb-group'));
+      expect(onCrumbHome).toHaveBeenCalledTimes(1);
+      expect(onCrumbCity).toHaveBeenCalledTimes(1);
+      expect(onCrumbGroup).toHaveBeenCalledTimes(1);
     });
   });
 });

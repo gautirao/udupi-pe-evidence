@@ -105,6 +105,79 @@ describe('PropertyCard', () => {
     expect(screen.queryByText('Listed')).not.toBeInTheDocument();
   });
 
+  // ── F4 — Trust-tier badge colour tokens (round-3 refinement) ────────────────
+  // These tests verify the COLOUR classes on the badge span, not just label presence.
+  // A: evergreen-tint bg + evergreen text (ShieldCheck icon).
+  // B: bg-secondary + text-secondary-foreground (Shield icon, NOT ShieldCheck).
+  // C: bg-muted/60 + text-muted-foreground (Shield icon).
+  // null / 'D' / unknown → NO badge rendered at all.
+
+  describe('F4 — trust badge colour tokens (round-3)', () => {
+    it('trustTier A → badge has bg-[hsl(var(--evergreen-tint))] class', () => {
+      renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const badge = screen.getByTestId('trust-badge');
+      expect(badge.className).toContain('bg-[hsl(var(--evergreen-tint))]');
+    });
+
+    it('trustTier A → badge has text-[hsl(var(--evergreen))] class', () => {
+      renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const badge = screen.getByTestId('trust-badge');
+      expect(badge.className).toContain('text-[hsl(var(--evergreen))]');
+    });
+
+    it('trustTier B → badge has bg-secondary class (calm navy, NOT evergreen)', () => {
+      renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const badge = screen.getByTestId('trust-badge');
+      expect(badge.className).toContain('bg-secondary');
+      expect(badge.className).not.toContain('bg-[hsl(var(--evergreen-tint))]');
+    });
+
+    it('trustTier B → badge has text-secondary-foreground class', () => {
+      renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const badge = screen.getByTestId('trust-badge');
+      expect(badge.className).toContain('text-secondary-foreground');
+    });
+
+    it('trustTier C → badge has bg-muted/60 class', () => {
+      renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const badge = screen.getByTestId('trust-badge');
+      expect(badge.className).toContain('bg-muted/60');
+    });
+
+    it('trustTier C → badge has text-muted-foreground class', () => {
+      renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+      const badge = screen.getByTestId('trust-badge');
+      expect(badge.className).toContain('text-muted-foreground');
+    });
+
+    it('trustTier D → NO badge rendered (D is outside A/B/C vocabulary)', () => {
+      // The backend may return 'D' for seed data; the component must silently omit it.
+      renderCard({
+        listing: makeListing({ trustTier: 'D' as DiscoverCityListingItem['trustTier'] }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+      expect(screen.queryByText('Verified')).not.toBeInTheDocument();
+      expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
+      expect(screen.queryByText('Listed')).not.toBeInTheDocument();
+    });
+
+    it('trustTier unknown string → NO badge rendered', () => {
+      renderCard({
+        listing: makeListing({ trustTier: 'UNKNOWN' as DiscoverCityListingItem['trustTier'] }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+    });
+
+    it('trustTier null → NO badge rendered (data-testid trust-badge absent)', () => {
+      renderCard({ listing: makeListing({ trustTier: null }), isAuthenticated: true, onNavigate: vi.fn() });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows the formatted price when isAuthenticated is true and pricePaise is set', () => {
     renderCard({
       listing: makeListing({ pricePaise: 5000000 * 100 }),
@@ -352,6 +425,209 @@ describe('PropertyCard', () => {
       await userEvent.unhover(card);
       card.focus();
       card.blur();
+    });
+  });
+
+  // ── Issue #1606 / ReTrends redesign fidelity ─────────────────────────────────
+  describe('ReTrends fidelity (Issue #1606)', () => {
+    it('renders an evergreen For-sale dot badge when listingPurpose is "sale"', () => {
+      const { container } = renderCard({
+        listing: makeListing({ listingPurpose: 'sale' }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      // The "For Sale" text renders inside an evergreen-tint span
+      expect(screen.getByText('For Sale')).toBeInTheDocument();
+      // Evergreen-tint class or inline CSS on the badge span
+      const badge = screen.getByText('For Sale').closest('span');
+      expect(badge).not.toBeNull();
+      // The badge uses evergreen-tint background via Tailwind class reference
+      expect(badge!.className).toContain('bg-[hsl(var(--evergreen-tint))]');
+    });
+
+    it('renders a muted border badge when listingPurpose is "rent" (not evergreen)', () => {
+      renderCard({
+        listing: makeListing({ listingPurpose: 'rent' }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText('For Rent')).toBeInTheDocument();
+      const badge = screen.getByText('For Rent').closest('span');
+      expect(badge).not.toBeNull();
+      // Rent uses muted/border, NOT evergreen
+      expect(badge!.className).not.toContain('bg-[hsl(var(--evergreen-tint))]');
+      expect(badge!.className).toContain('bg-muted');
+    });
+
+    it('renders a type-coloured dot pill for apartment (navy tintBg)', () => {
+      renderCard({
+        listing: makeListing({ propertyType: 'apartment' }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      // The type pill label 'Apartment' is rendered by capitalize(listing.propertyType).
+      const typeLabel = screen.getByText('Apartment');
+      expect(typeLabel).toBeInTheDocument();
+      const pill = typeLabel.closest('span');
+      expect(pill).not.toBeNull();
+      // The pill uses the navy tintBg inline style — just verify the element is present
+      // (inline style is set dynamically so we check the colour dot child is present).
+      const dot = pill!.querySelector('span[aria-hidden="true"]');
+      expect(dot).not.toBeNull();
+    });
+
+    it('renders a type-coloured dot pill for villa (copper tintBg)', () => {
+      renderCard({
+        listing: makeListing({ propertyType: 'villa', title: 'Nice Villa' }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByText('Villa')).toBeInTheDocument();
+    });
+
+    it('renders a "View details" button with ChevronRight (listing-view-details testid)', () => {
+      renderCard({
+        listing: makeListing(),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      const btn = screen.getByTestId('listing-view-details');
+      expect(btn).toBeInTheDocument();
+      expect(btn).toHaveTextContent('View details');
+    });
+
+    it('renders price in mono font class for authenticated users', () => {
+      renderCard({
+        listing: makeListing({ pricePaise: 10_000_000 * 100 }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      // The price paragraph carries font-mono tabular-nums — find it by the rupee symbol.
+      const priceEl = Array.from(document.querySelectorAll('p')).find((el) =>
+        el.textContent?.includes('₹'),
+      );
+      expect(priceEl).toBeDefined();
+      expect(priceEl!.className).toContain('font-mono');
+    });
+
+    it('does not render the For-sale badge when listingPurpose is undefined', () => {
+      renderCard({
+        listing: makeListing({ listingPurpose: undefined }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.queryByText('For Sale')).not.toBeInTheDocument();
+      expect(screen.queryByText('For Rent')).not.toBeInTheDocument();
+    });
+  });
+
+  // ── Cross-journey non-regression (HARD GATE) ──────────────────────────────────
+  // PropertyCard is the SHARED listing card used by area-first, school-first, and agri-first.
+  // These tests guard that #1606 round-3 colour changes do not break any journey's data contract.
+  describe('Cross-journey non-regression (shared card)', () => {
+    // Agri-first: agricultural_land type, trustTier null → no trust badge, no crash
+    it('renders without crash for agricultural_land property type (agri-first journey)', () => {
+      expect(() =>
+        renderCard({
+          listing: makeListing({ propertyType: 'agricultural_land', title: 'Agri Plot' }),
+          isAuthenticated: true,
+          onNavigate: vi.fn(),
+        }),
+      ).not.toThrow();
+      // Label renders as capitalize('agricultural_land') = 'Agricultural_land'
+      // The dot pill still renders; no crash from unknown type lookup
+      expect(screen.getByTestId('listing-card')).toBeInTheDocument();
+    });
+
+    // Agri-first: trustTier is typically null → no trust badge regardless of round-3 colours
+    it('renders NO trust badge for agri-first listing with trustTier null', () => {
+      renderCard({
+        listing: makeListing({ propertyType: 'agricultural_land', title: 'Agri Plot', trustTier: null }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+    });
+
+    // School-first: listing with no propertyType → omits the pill gracefully
+    it('renders without crash when propertyType is null (school-first listings may omit it)', () => {
+      expect(() =>
+        renderCard({
+          listing: makeListing({ propertyType: null }),
+          isAuthenticated: true,
+          onNavigate: vi.fn(),
+        }),
+      ).not.toThrow();
+      // No type pill should render (typeLabel is null)
+      expect(screen.getByTestId('listing-card')).toBeInTheDocument();
+    });
+
+    // Anon price gate still enforced (school-first journey uses same component, same gate)
+    it('still hides price for anonymous users on school-first shaped listings', () => {
+      renderCard({
+        listing: makeListing({ pricePaise: 8_000_000 * 100, listingPurpose: 'sale' }),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: 1.2,
+      });
+      expect(screen.getByText('Sign in to view price')).toBeInTheDocument();
+      expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
+    });
+
+    // Missing optional fields (no bedrooms, no builtArea, no createdAt) — still renders
+    it('renders cleanly with all optional metadata fields absent', () => {
+      renderCard({
+        listing: makeListing({
+          bedrooms: null,
+          bathrooms: null,
+          builtArea: null,
+          landArea: null,
+          totalFloors: null,
+          parkingCount: null,
+          furnishingStatus: null,
+          createdAt: null,
+          locality: undefined,
+        }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.getByTestId('listing-card')).toBeInTheDocument();
+      // No metadata row should render when all spec fields are absent
+      expect(screen.queryByText(/BHK/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/floors/)).not.toBeInTheDocument();
+    });
+
+    // Prop-contract guard: all props present in the original test suite's makeListing
+    // must still be accepted (no new required props introduced by #1606).
+    it('accepts the original property shape used by pre-#1606 test fixtures without error', () => {
+      const originalShapedListing: DiscoverCityListingItem = {
+        id: 'orig-1',
+        title: 'Legacy Listing',
+        locality: 'Udupi',
+        primaryImageUrl: null,
+        propertyType: 'apartment',
+        listingPurpose: 'sale',
+        pricePaise: 3_000_000 * 100,
+        bedrooms: 2,
+        bathrooms: 1,
+        builtArea: 1000,
+        builtAreaUnit: 'sqft',
+        landArea: null,
+        landAreaUnit: null,
+        totalFloors: null,
+        parkingCount: null,
+        furnishingStatus: null,
+        createdAt: null,
+        trustTier: null,
+      };
+      expect(() =>
+        renderCard({
+          listing: originalShapedListing,
+          isAuthenticated: true,
+          onNavigate: vi.fn(),
+        }),
+      ).not.toThrow();
+      expect(screen.getByText('Legacy Listing')).toBeInTheDocument();
     });
   });
 

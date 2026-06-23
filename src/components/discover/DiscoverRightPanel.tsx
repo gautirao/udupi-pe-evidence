@@ -664,6 +664,18 @@ export interface DiscoverRightPanelProps {
   onRetryGroupResults?: () => void;
   /** Back from group-results → return to group drill-down (clears groupResults flag). */
   onClearGroupResults?: () => void;
+  // ── Area-first selected-area results redesign (Issue #1606) ────────────────
+  /**
+   * Display name of the area-first selected group (e.g. "University Belt"), resolved
+   * from areaGroups by the parent with a prettified-slug fallback. Null when the area
+   * was reached without a group context — the breadcrumb omits the group crumb.
+   */
+  selectedGroupName?: string | null;
+  /**
+   * Navigate to the city's area-first landing (clears group + area, keeps journey).
+   * Drives the area-first results breadcrumb's city crumb.
+   */
+  onNavigateAreaLanding?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -770,6 +782,8 @@ export function DiscoverRightPanel({
   groupResultsTotalElements,
   onRetryGroupResults,
   onClearGroupResults,
+  selectedGroupName = null,
+  onNavigateAreaLanding,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -1250,6 +1264,15 @@ export function DiscoverRightPanel({
             selectedListingId={selectedListingId}
             onSelectListing={onSelectResultListing}
             onHoverListing={onHoverResultListing}
+            // Issue #1606 — area-first results redesign: breadcrumb + in-panel controls.
+            cityLabel={cityLabel ?? city}
+            groupName={selectedGroupName}
+            city={city}
+            onCityChange={onCityChange}
+            onIntentChange={onIntentChange}
+            onCrumbHome={onStartOver}
+            onCrumbCity={onNavigateAreaLanding}
+            onCrumbGroup={onBack}
           />
         );
 
@@ -1478,8 +1501,12 @@ export function DiscoverRightPanel({
       {/* Issue #1494 — Buy/Rent intent selector, visible at the top of the right panel.
           Left-aligned (Figma) so it sits on the content side, above the journey cards.
           Issue #1588 — suppressed on the public landing (guided-entry), where Buy/Rent
-          lives inside the hero controls card instead (avoids a duplicate control). */}
-      {onIntentChange && panelContent !== 'guided-entry' && !isAreaFirstLandingControls && (
+          lives inside the hero controls card instead (avoids a duplicate control).
+          Issue #1607 — also suppressed on the area-first CITY-LEVEL landing, where the
+          Buy/Rent control lives inside the in-panel controls card (no duplicate).
+          Issue #1606 — also suppressed on area-selected, where Buy/Rent moves into the
+          in-panel City + Looking-to controls card (mock parity, no duplicate control). */}
+      {onIntentChange && panelContent !== 'guided-entry' && panelContent !== 'area-selected' && !isAreaFirstLandingControls && (
         <div className="flex items-center justify-start gap-3 px-4 py-3 border-b border-border/50 shrink-0 bg-background">
           <IntentSelector intent={intent} onIntentChange={onIntentChange} />
         </div>

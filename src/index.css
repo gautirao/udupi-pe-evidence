@@ -91,6 +91,10 @@
     --chart-4: 38 92% 50%;
     --chart-5: 220 65% 50%;
 
+    /* R-C — warm map gutter (#EDEBE6) and body text (#374151) tokens (Issue #1606) */
+    --map-bg: 48 9% 91%;       /* warm parchment map gutter #EDEBE6 */
+    --text-body: 220 14% 25%;  /* sub-copy body text #374151 */
+
     /* Sidebar */
     --sidebar-background: 35 25% 96%;
     --sidebar-foreground: 220 25% 25%;
@@ -155,6 +159,10 @@
     --input-bg: 220 20% 18%; /* dark-mode warm control fill (tracks muted surface) */
     --ring: 0 0% 44%;
 
+    /* R-C dark-mode counterparts (Issue #1606) */
+    --map-bg: 220 18% 14%;  /* dark map gutter — matches dark card/surface family */
+    --text-body: 220 10% 68%; /* readable light muted for sub-copy on dark */
+
     --pin-cluster: 175 55% 50%;
     --pin-cluster-foreground: 0 0% 100%;
 
@@ -218,6 +226,14 @@
 
   .custom-marker-cluster-large {
     @apply text-lg;
+  }
+
+  /* a1 — selected property marker sits above its neighbours (copper ring).
+     Leaflet renders all markers in the overlayPane; z-index on the icon wrapper
+     lifts the selected pin above adjacent unselected pins. !important overrides
+     Leaflet's default z-index management on the icon element. */
+  .property-marker--selected {
+    z-index: 1000 !important;
   }
 
   /* School-first overview zone label pill — interactive hover lift.

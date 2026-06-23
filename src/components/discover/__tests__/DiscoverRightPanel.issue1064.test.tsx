@@ -105,7 +105,8 @@ describe('Issue #1064 — DiscoverRightPanel area hydration branches', () => {
           journey="area-first"
         />,
       );
-      expect(screen.getByText('Malpe')).toBeInTheDocument();
+      // 'Malpe' appears in both the breadcrumb area crumb and the area heading (a4 redesign).
+      expect(screen.getAllByText('Malpe').length).toBeGreaterThanOrEqual(1);
       expect(screen.queryByTestId('discover-area-hydrating')).not.toBeInTheDocument();
       expect(screen.queryByTestId('discover-area-not-found')).not.toBeInTheDocument();
     });

@@ -160,7 +160,7 @@ export function discoverListingToPropertyListing(
     lock_in_months: null,
     seller_type: l.sellerType ?? null,
     raw_post_id: null,
-    images: l.heroImageUrl ? [{ url: l.heroImageUrl, position: 0 } as PropertyImage] : undefined,
+    images: l.heroImageUrl ? [{ url: l.heroImageUrl }] : undefined,
   };
 }
 
@@ -215,5 +215,8 @@ export function cityListingToPropertyListing(
     lock_in_months: null,
     seller_type: null,
     raw_post_id: null,
+    // a3 mapper dependency — thread primaryImageUrl into images so MarkerPopoverCard
+    // can display the listing image. Mirrors discoverListingToPropertyListing (~L163).
+    images: l.primaryImageUrl ? [{ url: l.primaryImageUrl }] : undefined,
   };
 }

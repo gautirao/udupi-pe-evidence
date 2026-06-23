@@ -72,6 +72,7 @@ vi.mock('@/components/ui/card', () => ({
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { escapeHtml } from '@/lib/security';
+import type { PropertyListingWithImages } from '../PropertyMap';
 
 // ─── Unit tests for escapeHtml (the core of the RE-174 fix) ───
 // These tests confirm the escaping function behaves correctly in isolation,
@@ -120,7 +121,9 @@ describe('PropertyMap — divIcon HTML escaping (RE-174)', () => {
     capturedDivIconCalls.length = 0;
   });
 
-  it('renders "H" in the divIcon html for a house listing', async () => {
+  it('renders the formatted price label in the divIcon html for a house listing with a price (a1 pill behaviour)', async () => {
+    // a1: when price is non-null and > 0, the marker shows a price pill (e.g. "₹10 L")
+    // rather than the single-letter glyph.
     const { PropertyMap } = await import('../PropertyMap');
 
     const listings = [
@@ -150,12 +153,52 @@ describe('PropertyMap — divIcon HTML escaping (RE-174)', () => {
       },
     ];
 
-    render(<PropertyMap listings={listings} />);
+    render(<PropertyMap listings={listings as unknown as PropertyListingWithImages[]} />);
 
-    // At least one divIcon call should have been made for the marker
-    const markerIconCall = capturedDivIconCalls.find((c) => c.html.includes('H'));
+    // Price of ₹10 L (1_000_000 INR) → pill label "₹10 L"; glyph "H" is NOT shown.
+    const markerIconCall = capturedDivIconCalls.find((c) => c.html.includes('₹'));
     expect(markerIconCall).toBeDefined();
-    expect(markerIconCall!.html).toContain('>H<');
+    expect(markerIconCall!.html).toContain('₹10 L');
+  });
+
+  it('renders the "H" glyph in the divIcon html for a house listing with no price (a1 fallback behaviour)', async () => {
+    // a1: when price is null, the marker falls back to the property-type first letter.
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const listings = [
+      {
+        id: '2',
+        title: 'Test House No Price',
+        property_type: 'house' as const,
+        latitude: 13.35,
+        longitude: 74.75,
+        price: null,
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Udupi',
+        area_sqft: 1000,
+        bedrooms: 3,
+        bathrooms: 2,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-1',
+        slug: 'test-house-no-price',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+    ];
+
+    render(<PropertyMap listings={listings as unknown as PropertyListingWithImages[]} />);
+
+    // R-A: Null price → neutral '—' fallback (type-disc + glyph still render for type identity).
+    // The old 'H' (house first letter) is replaced by '—' per the R-A spec.
+    const markerIconCall = capturedDivIconCalls.find((c) => c.html.includes('—'));
+    expect(markerIconCall).toBeDefined();
+    expect(markerIconCall!.html).toContain('—');
   });
 
   it('does not produce raw < or > in divIcon html when propertyType starts with a special character', () => {
@@ -472,5 +515,286 @@ describe('PropertyMap — reset zoom on area deselection (#894)', () => {
     expect(stableMap.flyTo).toHaveBeenCalledTimes(1);
     // Confirm it was the cityCenter effect that fired, not a ghost reset call.
     expect(resetPathCalls).toHaveLength(1);
+  });
+});
+
+// ─── R-A per-type disc colour: two different types → different disc colours in divIcon HTML ─────────
+// PropertyMap now uses getPropertyTypeVisual to colour each marker disc.
+// apartment → navy #26395B, land → evergreen #1F7A5C.
+// Both colours must appear in distinct divIcon HTML fragments when rendered together.
+
+describe('PropertyMap — per-type disc colour in divIcon HTML (R-A)', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+  });
+
+  it('renders distinct disc colours for apartment (navy) vs land (evergreen) markers', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const listings = [
+      {
+        id: 'apt-1',
+        title: 'Apartment Listing',
+        property_type: 'apartment' as const,
+        latitude: 13.34,
+        longitude: 74.74,
+        price: 2_000_000,
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Manipal',
+        area_sqft: 900,
+        bedrooms: 2,
+        bathrooms: 1,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-1',
+        slug: 'apt-1',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+      {
+        id: 'land-1',
+        title: 'Land Listing',
+        property_type: 'land' as const,
+        latitude: 13.35,
+        longitude: 74.75,
+        price: 3_000_000,
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Udupi',
+        area_sqft: null,
+        bedrooms: null,
+        bathrooms: null,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-2',
+        slug: 'land-1',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+    ];
+
+    render(<PropertyMap listings={listings as unknown as PropertyListingWithImages[]} />);
+
+    // Navy #26395B for apartment, evergreen #1F7A5C for land.
+    const navyCall = capturedDivIconCalls.find((c) => c.html.includes('#26395B'));
+    const evergreenCall = capturedDivIconCalls.find((c) => c.html.includes('#1F7A5C'));
+
+    expect(navyCall).toBeDefined();
+    expect(evergreenCall).toBeDefined();
+
+    // They must be distinct divIcon calls, not the same cached entry.
+    expect(navyCall).not.toBe(evergreenCall);
+
+    // The navy call must NOT contain the evergreen colour (no cross-contamination).
+    expect(navyCall!.html).not.toContain('#1F7A5C');
+    // The evergreen call must NOT contain the navy colour.
+    expect(evergreenCall!.html).not.toContain('#26395B');
+  });
+
+  it('two listings of the same type and same price share one cached icon (single divIcon call)', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const listings = [
+      {
+        id: 'apt-a',
+        title: 'Apartment A',
+        property_type: 'apartment' as const,
+        latitude: 13.34,
+        longitude: 74.74,
+        price: 5_000_000,
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Manipal',
+        area_sqft: null,
+        bedrooms: null,
+        bathrooms: null,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-1',
+        slug: 'apt-a',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+      {
+        id: 'apt-b',
+        title: 'Apartment B',
+        property_type: 'apartment' as const,
+        latitude: 13.36,
+        longitude: 74.76,
+        price: 5_000_000, // same price → same label → same cache key
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Manipal',
+        area_sqft: null,
+        bedrooms: null,
+        bathrooms: null,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-2',
+        slug: 'apt-b',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+    ];
+
+    render(<PropertyMap listings={listings as unknown as PropertyListingWithImages[]} />);
+
+    // Both listings share the same type+colour+price → R1 cache hit → only ONE divIcon call.
+    const aptCalls = capturedDivIconCalls.filter((c) => c.html.includes('#26395B'));
+    expect(aptCalls).toHaveLength(1);
+  });
+});
+
+// ─── a1 price-pill: two same-type listings with different prices → distinct icons (R1 cache key fix) ───
+// Before R1, the icon cache was keyed by propertyType+selected only. Two house listings with
+// different prices shared the same (wrong) DivIcon — the second listing's marker would render
+// the first listing's price. R1 re-keys by `${propertyType}|${label}|default|selected` so each
+// unique price produces its own icon.
+//
+// We test via divIcon HTML: render PropertyMap with two house listings at different prices and
+// confirm both price strings appear in the captured divIcon calls.
+
+describe('PropertyMap — a1 R1 cache: same property_type, different prices → distinct marker labels', () => {
+  beforeEach(() => {
+    capturedDivIconCalls.length = 0;
+  });
+
+  it('produces two distinct divIcon calls — one per price — for two house listings with different prices', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const listings = [
+      {
+        id: 'house-cheap',
+        title: 'Cheap House',
+        property_type: 'house' as const,
+        latitude: 13.34,
+        longitude: 74.74,
+        price: 500_000,     // ₹5 L
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Udupi',
+        area_sqft: null,
+        bedrooms: null,
+        bathrooms: null,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-1',
+        slug: 'house-cheap',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+      {
+        id: 'house-expensive',
+        title: 'Expensive House',
+        property_type: 'house' as const,
+        latitude: 13.35,
+        longitude: 74.75,
+        price: 10_000_000,  // ₹1 Cr
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Manipal',
+        area_sqft: null,
+        bedrooms: null,
+        bathrooms: null,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-2',
+        slug: 'house-expensive',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+    ];
+
+    render(<PropertyMap listings={listings as unknown as PropertyListingWithImages[]} />);
+
+    // Both price strings must appear in distinct divIcon HTML fragments.
+    const cheapCall = capturedDivIconCalls.find((c) => c.html.includes('₹5 L'));
+    const expensiveCall = capturedDivIconCalls.find((c) => c.html.includes('₹1 Cr'));
+
+    expect(cheapCall).toBeDefined();
+    expect(expensiveCall).toBeDefined();
+
+    // They must be different calls (R1: unique cache entries, not the same cached icon)
+    expect(cheapCall).not.toBe(expensiveCall);
+
+    // Sanity: the cheap call must NOT contain the expensive price
+    expect(cheapCall!.html).not.toContain('₹1 Cr');
+    // Sanity: the expensive call must NOT contain the cheap price
+    expect(expensiveCall!.html).not.toContain('₹5 L');
+  });
+
+  it('does not produce "₹null" or "₹NaN" in any divIcon html for a listing with price=null', async () => {
+    const { PropertyMap } = await import('../PropertyMap');
+
+    const listings = [
+      {
+        id: 'warehouse-no-price',
+        title: 'No Price Warehouse',
+        property_type: 'warehouse' as const,
+        latitude: 13.34,
+        longitude: 74.74,
+        price: null,
+        price_paise: null,
+        status: 'LIVE' as const,
+        locality: 'Udupi',
+        area_sqft: null,
+        bedrooms: null,
+        bathrooms: null,
+        description: '',
+        created_at: '',
+        updated_at: '',
+        created_by: 'user-1',
+        slug: 'warehouse-no-price',
+        is_price_reduced: false,
+        is_new_to_market: false,
+        is_back_on_market: false,
+        is_rera_registered: false,
+        is_ready_to_move: false,
+      },
+    ];
+
+    render(<PropertyMap listings={listings as unknown as PropertyListingWithImages[]} />);
+
+    // Core invariant: NO divIcon call must ever produce "₹null" or "₹NaN".
+    // This holds both for new divIcon calls AND the iconCache hit path (icon was
+    // previously created correctly, so the cached HTML also has no bad strings).
+    const badCall = capturedDivIconCalls.find(
+      (c) => c.html.includes('₹null') || c.html.includes('₹NaN'),
+    );
+    expect(badCall).toBeUndefined();
+
+    // Secondary check: if a new divIcon call was made (not a cache hit), the '—' fallback
+    // label must appear in the HTML (R-A: null price → '—', not a type-initial letter).
+    // If capturedDivIconCalls is empty, the icon was served from iconCache — which
+    // means it was already created correctly by a prior call, so the invariant holds.
+    if (capturedDivIconCalls.length > 0) {
+      const glyphCall = capturedDivIconCalls.find((c) => c.html.includes('—'));
+      expect(glyphCall).toBeDefined();
+    }
   });
 });

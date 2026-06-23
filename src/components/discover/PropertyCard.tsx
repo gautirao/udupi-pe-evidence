@@ -1,11 +1,12 @@
 import React from 'react';
 import {
-  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin, Heart, Navigation,
+  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin, Heart, Navigation, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import { formatPrice, formatArea, formatRelativeDate } from '@/lib/formatters';
+import { getPropertyTypeVisual } from '@/lib/propertyTypeConfig';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,9 +28,9 @@ export function purposeLabel(p: string | null | undefined): string {
  * value yields no badge (never invent a tier). Documented mapping per request.
  */
 const TRUST_TIERS: Record<string, { label: string; className: string; icon: typeof ShieldCheck }> = {
-  A: { label: 'Verified', className: 'bg-evergreen text-evergreen-foreground', icon: ShieldCheck },
-  B: { label: 'Trusted', className: 'bg-primary text-primary-foreground', icon: ShieldCheck },
-  C: { label: 'Listed', className: 'bg-muted text-muted-foreground', icon: Shield },
+  A: { label: 'Verified', className: 'bg-[hsl(var(--evergreen-tint))] text-[hsl(var(--evergreen))]', icon: ShieldCheck },
+  B: { label: 'Trusted', className: 'bg-secondary text-secondary-foreground', icon: Shield },
+  C: { label: 'Listed', className: 'bg-muted/60 text-muted-foreground', icon: Shield },
 };
 
 /**
@@ -267,7 +268,7 @@ export function PropertyCard({
         <div className="flex items-start justify-between gap-2">
           {isAuthenticated ? (
             listing.pricePaise != null ? (
-              <p className="text-lg font-bold tracking-tight text-foreground tabular-nums">
+              <p className="text-xl font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums">
                 {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
               </p>
             ) : (
@@ -280,11 +281,22 @@ export function PropertyCard({
             </div>
           )}
 
-          {typeLabel && (
-            <span className="flex-shrink-0 rounded-full border border-border bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground">
-              {typeLabel}
-            </span>
-          )}
+          {typeLabel && (() => {
+            const typeVisual = getPropertyTypeVisual(listing.propertyType ?? '');
+            return (
+              <span
+                className="flex flex-shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-xs font-medium"
+                style={{ background: typeVisual.tintBg, color: typeVisual.tintFg }}
+              >
+                <span
+                  className="inline-block h-[7px] w-[7px] flex-shrink-0 rounded-full"
+                  style={{ background: typeVisual.colour }}
+                  aria-hidden="true"
+                />
+                {typeLabel}
+              </span>
+            );
+          })()}
         </div>
 
         {/* Title */}
@@ -337,9 +349,16 @@ export function PropertyCard({
         {(purpose || listing.createdAt) && (
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
             {purpose && (
-              <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
-                {purpose}
-              </span>
+              listing.listingPurpose === 'sale' ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[hsl(var(--evergreen-tint))] px-2 py-0.5 text-xs font-medium text-[hsl(var(--evergreen))]">
+                  <span className="inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-[hsl(var(--evergreen))]" aria-hidden="true" />
+                  {purpose}
+                </span>
+              ) : (
+                <span className="rounded-full border border-border bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">
+                  {purpose}
+                </span>
+              )
             )}
             {listing.createdAt && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -351,11 +370,17 @@ export function PropertyCard({
         )}
 
         {/* View details CTA — navigates like the card; keyboard accessible. stopPropagation
-            so it doesn't double-fire navigation via the card's own click handler. */}
+            so it doesn't double-fire navigation via the card's own click handler.
+            R-C: outline by default; navy (bg-primary) on card hover or when selected. */}
         <Button
           variant="outline"
           size="sm"
-          className="mt-3 w-full"
+          className={cn(
+            'mt-3 w-full gap-1.5',
+            isSelected
+              ? 'border-primary bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground',
+          )}
           data-testid="listing-view-details"
           onClick={(e) => {
             e.stopPropagation();
@@ -363,6 +388,7 @@ export function PropertyCard({
           }}
         >
           View details
+          <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         </Button>
       </div>
     </div>

@@ -26,4 +26,19 @@ describe('MapGroupBreadcrumb', () => {
     expect(nav).not.toHaveTextContent('Udupi');
     expect(nav).not.toHaveTextContent('University Belt');
   });
+
+  // Issue #1606 — selected-AREA state appends a third terminal crumb.
+  it('appends the area segment when areaName is provided', () => {
+    render(<MapGroupBreadcrumb cityLabel="Udupi" groupName="University Belt" areaName="Manipal" />);
+    const nav = screen.getByTestId('map-group-breadcrumb');
+    expect(nav).toHaveTextContent('Udupi');
+    expect(nav).toHaveTextContent('University Belt');
+    expect(nav).toHaveTextContent('Manipal');
+  });
+
+  it('omits the area segment when areaName is blank', () => {
+    render(<MapGroupBreadcrumb cityLabel="Udupi" groupName="University Belt" areaName="  " />);
+    const nav = screen.getByTestId('map-group-breadcrumb');
+    expect(nav).not.toHaveTextContent('Manipal');
+  });
 });

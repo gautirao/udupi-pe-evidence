@@ -1,6 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronLeft, MapPin, Search, TrendingUp, X, Plus, GraduationCap } from 'lucide-react';
+import {
+  ChevronLeft,
+  Layers,
+  MapPin,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  TrendingUp,
+  X,
+  Plus,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,12 +19,14 @@ import { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { PropertyCard } from '../PropertyCard';
-import { PanelHeader } from '../PanelHeader';
+import { AreaFirstBreadcrumb } from '../AreaFirstBreadcrumb';
+import { CitySelect } from '../CitySelect';
+import { IntentSelector } from '../IntentSelector';
 import type { DiscoverJourney, DiscoverIntent } from '@/hooks/useDiscoverUrlState';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { SlidersHorizontal } from 'lucide-react';
 
-// Quick filter options (hardcoded MVP)
+// Quick filter options (hardcoded MVP). 'All' is a virtual chip that clears the
+// property-type selection — it is not a property_type value.
 const QUICK_PROPERTY_TYPES = ['apartment', 'villa', 'land'] as const;
 const QUICK_BEDROOMS = [2, 3] as const;
 
@@ -38,7 +50,7 @@ interface AreaSelectedPanelProps {
   isInitialLoading?: boolean;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
-  /** Active context chips forwarded to PanelHeader centre slot. */
+  /** Active context chips forwarded below the header (seller/date/boolean filters). */
   activeContextChips?: React.ReactNode;
   /** Current property filters. */
   filters?: PropertyFilters;
@@ -65,10 +77,25 @@ interface AreaSelectedPanelProps {
   /**
    * Issue #1547 — ephemeral hover/focus signal for card→marker highlight.
    * Called with the listing id on card mouseenter/focus, null on mouseleave/blur.
-   * Lives in ephemeral component state in the parent (MapDiscovery useState) — never
-   * persisted to URL. Resets to null naturally when the panel unmounts on journey switch.
    */
   onHoverListing?: (id: string | null) => void;
+  // ── Issue #1606 — area-first results redesign ──────────────────────────────
+  /** Human-readable city label (e.g. "Udupi") for the breadcrumb + controls card. */
+  cityLabel?: string;
+  /** Selected group display name (e.g. "University Belt"); null when group-less. */
+  groupName?: string | null;
+  /** City slug — drives the in-panel city selector. */
+  city?: string;
+  /** Called when the user changes city from the in-panel controls card. */
+  onCityChange?: (city: string) => void;
+  /** Called when the user changes buy/rent intent from the in-panel controls card. */
+  onIntentChange?: (intent: DiscoverIntent) => void;
+  /** Breadcrumb: navigate to the Discover landing (Home crumb). */
+  onCrumbHome?: () => void;
+  /** Breadcrumb: navigate to the city's area-first landing (city crumb). */
+  onCrumbCity?: () => void;
+  /** Breadcrumb: navigate back to the selected group's drill-down (group crumb). */
+  onCrumbGroup?: () => void;
 }
 
 export function AreaSelectedPanel({
@@ -94,17 +121,25 @@ export function AreaSelectedPanel({
   selectedListingId = null,
   onSelectListing,
   onHoverListing,
+  cityLabel,
+  groupName,
+  city,
+  onCityChange,
+  onIntentChange,
+  onCrumbHome,
+  onCrumbCity,
+  onCrumbGroup,
 }: AreaSelectedPanelProps) {
   const navigate = useNavigate();
+  const areaLabel = selectedArea.areaLabel;
+  const intentNoun = intent === 'rent' ? 'rent' : 'sale';
 
   // Issue #1547 — scroll the selected card into view when selection is driven from the
-  // map marker side. Guards the missing-ref case (selected listing not in the rendered
-  // list, e.g. filtered out) so a marker click never crashes or scrolls to nothing.
+  // map marker side. Guards the missing-ref case so a marker click never crashes.
   const cardRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   useEffect(() => {
     if (!selectedListingId) return;
     const node = cardRefs.current.get(selectedListingId);
-    // Guard: scrollIntoView is unavailable in some environments (jsdom) / older browsers.
     if (node && typeof node.scrollIntoView === 'function') {
       node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
@@ -119,6 +154,7 @@ export function AreaSelectedPanel({
     () => new Set(filters.bedrooms || []),
     [filters.bedrooms],
   );
+  const allTypesActive = activePropertyTypes.size === 0;
 
   const hasPropertyFilters = Boolean(
     filters.propertyTypes?.length || filters.bedrooms?.length || filters.priceMin || filters.priceMax
@@ -136,6 +172,13 @@ export function AreaSelectedPanel({
     },
     [filters, activePropertyTypes, onFiltersChange],
   );
+
+  // "All" chip clears the property-type selection (does not touch bedrooms/price).
+  const handleSelectAllTypes = useCallback(() => {
+    if (!onFiltersChange) return;
+    if (allTypesActive) return; // already all
+    onFiltersChange({ ...filters, propertyTypes: undefined });
+  }, [filters, allTypesActive, onFiltersChange]);
 
   // Toggle bedroom count: add if not present, remove if already active
   const handleToggleBedroom = useCallback(
@@ -168,40 +211,45 @@ export function AreaSelectedPanel({
     });
   }, [filters, onFiltersChange]);
 
-  // Add school in this area (Issue #1157): enter the area-first school-picking
-  // sub-step via onAddSchool. This keeps journey=area-first (instead of flipping to
-  // school-first), so Back returns to area-selected rather than deleting the area.
   const handleAddSchool = useCallback(() => {
     onAddSchool?.();
   }, [onAddSchool]);
 
+  const resolvedCityLabel = cityLabel ?? city ?? '';
+  const count = areaListings?.length ?? 0;
+
   return (
-    <>
-      <PanelHeader
-        title={selectedArea.areaLabel}
-        journey={journey}
-        onStartOver={onStartOver}
-        activeContextChips={activeContextChips}
-        actions={
-          <>
+    <div className="flex flex-1 flex-col overflow-y-auto">
+      {/* Breadcrumb — sticky, area-first hierarchy: Home › City › Group › Area (Issue #1606) */}
+      <div className="sticky top-0 z-20 border-b border-border/60 bg-background/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <AreaFirstBreadcrumb
+          cityLabel={resolvedCityLabel || areaLabel}
+          groupName={groupName}
+          areaLabel={areaLabel}
+          onHome={onCrumbHome}
+          onCity={onCrumbCity}
+          onGroup={groupName ? onCrumbGroup : undefined}
+        />
+      </div>
+
+      {/* Header — journey pill row, headline, subcopy */}
+      <div className="border-b border-border px-4 pb-4 pt-3.5">
+        <div className="mb-2.5 flex items-center justify-between gap-2">
+          {journey === 'area-first' ? (
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-secondary-foreground">
+              <Layers className="h-3.5 w-3.5" aria-hidden="true" />
+              Area-first
+            </span>
+          ) : (
+            <span />
+          )}
+          <div className="flex items-center gap-1.5">
             {trendsHref && (
-              <Button asChild variant="ghost" size="sm" className="gap-1.5 text-xs h-7 px-2">
+              <Button asChild variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs">
                 <Link to={trendsHref}>
                   <TrendingUp className="h-3.5 w-3.5" />
                   Trends
                 </Link>
-              </Button>
-            )}
-            {onBack && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={onBack}
-                aria-label="Back to areas"
-                data-testid="back-button"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
             )}
             {filtersContent && (
@@ -220,80 +268,182 @@ export function AreaSelectedPanel({
                 </SheetContent>
               </Sheet>
             )}
-          </>
-        }
-      />
-
-      {/* Quick filter chips section */}
-      <div className="border-b border-border px-3 py-3 space-y-2">
-        {/* Property type chips */}
-        <div className="flex flex-wrap gap-1.5">
-          {QUICK_PROPERTY_TYPES.map((type) => (
-            <Button
-              key={type}
-              variant={activePropertyTypes.has(type) ? 'default' : 'outline'}
-              size="sm"
-              className={cn(
-                'h-8 text-xs px-3',
-                activePropertyTypes.has(type) && 'bg-primary text-primary-foreground',
-              )}
-              onClick={() => handleTogglePropertyType(type)}
-              data-testid={`quick-chip-${type}`}
-            >
-              {PROPERTY_TYPE_LABELS[type]}
-            </Button>
-          ))}
+            {onBack && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={onBack}
+                aria-label="Back to areas"
+                data-testid="back-button"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </Button>
+            )}
+            {journey != null && onStartOver != null && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 rounded-full px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={onStartOver}
+                aria-label="Start over and return to journey selection"
+                data-testid="start-over-button"
+              >
+                <X className="h-3.5 w-3.5" />
+                Start over
+              </Button>
+            )}
+          </div>
         </div>
 
-        {/* BHK chips */}
-        <div className="flex flex-wrap gap-1.5">
-          {QUICK_BEDROOMS.map((bed) => (
-            <Button
-              key={bed}
-              variant={activeBedrooms.has(bed) ? 'default' : 'outline'}
-              size="sm"
-              className={cn(
-                'h-8 text-xs px-3',
-                activeBedrooms.has(bed) && 'bg-primary text-primary-foreground',
-              )}
-              onClick={() => handleToggleBedroom(bed)}
-              data-testid={`quick-chip-${bed}-bhk`}
-            >
-              {bed} BHK
-            </Button>
-          ))}
-        </div>
+        {/* R-C — Fraunces serif headline: 2.375rem (38px), design-source exact. */}
+        <h1 className="font-['Fraunces',_ui-serif,_Georgia,_serif] text-[2.375rem] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground">
+          Properties in {areaLabel}
+        </h1>
+        {/* R-C — sub-copy: 15px, 1.55 line-height, --text-body colour. */}
+        <p className="mt-1.5 text-[15px] leading-[1.55] text-[hsl(var(--text-body))]">
+          Explore verified listings around {areaLabel}, with map context and area-first filters.
+        </p>
 
-        {/* Add school CTA */}
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full h-8 text-xs gap-1.5"
-          onClick={handleAddSchool}
-          data-testid="add-school-cta"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add a school in this area
-        </Button>
+        {/* Controls card — City + Buy/Rent (Issue #1606, mock parity) */}
+        {/* F2 — clean WHITE card surface; warm fill moves to the SELECT trigger inside the card */}
+        {(onCityChange || onIntentChange) && (
+          <div className="mt-3.5 grid grid-cols-2 gap-3 rounded-xl border border-border bg-card p-3 shadow-sm">
+            {onCityChange && (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  City
+                </span>
+                <CitySelect value={city ?? ''} onChange={onCityChange} className="h-9 bg-[hsl(var(--input-bg))] border-border" />
+              </div>
+            )}
+            {onIntentChange && (
+              <div className={cn('flex flex-col gap-1.5', !onCityChange && 'col-span-2')}>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                  Looking to
+                </span>
+                <IntentSelector intent={intent} onIntentChange={onIntentChange} hideLabel fill />
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="mt-2.5 text-xs text-muted-foreground" data-testid="area-intent-helper">
+          Showing {intentNoun} prices in ₹ for {areaLabel}.
+        </p>
+
+        {activeContextChips != null && (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">{activeContextChips}</div>
+        )}
       </div>
 
-      {/* Search input — sticky below header, above listing cards */}
+      {/* Quick filter card — property type + bedrooms + add-school affordance */}
+      {/* F2 — outer section keeps border-b layout; inner white card matches the controls card surface. */}
+      <div className="border-b border-border px-4 py-3">
+        <div className="rounded-xl border border-border bg-card p-3 shadow-sm">
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                Property type
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {/* R-C — "All" chip: NAVY (--primary) when active. Mock spec uses navy for property-type chips. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'h-8 px-3 text-xs',
+                    allTypesActive
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                      : '',
+                  )}
+                  onClick={handleSelectAllTypes}
+                  data-testid="quick-chip-all"
+                  aria-pressed={allTypesActive}
+                >
+                  All
+                </Button>
+                {QUICK_PROPERTY_TYPES.map((type) => (
+                  <Button
+                    key={type}
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3 text-xs',
+                      activePropertyTypes.has(type)
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
+                        : '',
+                    )}
+                    onClick={() => handleTogglePropertyType(type)}
+                    data-testid={`quick-chip-${type}`}
+                    aria-pressed={activePropertyTypes.has(type)}
+                  >
+                    {PROPERTY_TYPE_LABELS[type]}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                Bedrooms
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* R-C — BHK chips: copper-tint active (mock uses copper-tint for BHK, navy for property-type). */}
+                {QUICK_BEDROOMS.map((bed) => (
+                  <Button
+                    key={bed}
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-8 px-3 text-xs',
+                      activeBedrooms.has(bed)
+                        ? 'border-copper bg-copper-tint text-[hsl(var(--copper))] shadow-sm hover:bg-copper-tint/80'
+                        : '',
+                    )}
+                    onClick={() => handleToggleBedroom(bed)}
+                    data-testid={`quick-chip-${bed}-bhk`}
+                    aria-pressed={activeBedrooms.has(bed)}
+                  >
+                    {bed} BHK
+                  </Button>
+                ))}
+                {onAddSchool && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-auto h-8 gap-1.5 px-3 text-xs"
+                    onClick={handleAddSchool}
+                    data-testid="add-school-cta"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add a school in this area
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search */}
       {onSearchChange && (
-        <div className="sticky top-[49px] z-10 bg-card border-b border-border p-3">
+        <div className="border-b border-border px-4 py-3">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search listings by keyword"
+              placeholder={`Search properties in ${areaLabel}`}
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-8 h-9 text-sm pr-8"
+              className="h-9 pl-8 pr-8 text-sm"
               data-testid="area-search-input"
             />
             {searchQuery && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2"
                 onClick={() => onSearchChange('')}
                 aria-label="Clear search"
                 data-testid="area-search-clear"
@@ -308,33 +458,29 @@ export function AreaSelectedPanel({
       {/* Listings body */}
       <div
         className={cn(
-          'flex-1 overflow-y-auto transition-opacity duration-150',
-          isFetching && !isInitialLoading ? 'opacity-50 pointer-events-none' : 'opacity-100',
+          'transition-opacity duration-150',
+          isFetching && !isInitialLoading ? 'pointer-events-none opacity-50' : 'opacity-100',
         )}
       >
         {isLoadingListings ? (
           <div className="space-y-3 p-4">
+            {/* a4 — rounded-xl skeleton cards for consistency with PropertyCard corners. */}
             {[0, 1, 2].map((i) => (
-              <div key={i} data-testid="listing-skeleton" className="rounded-lg border border-border p-3">
-                <Skeleton className="w-full h-40 rounded-lg mb-3" />
-                <Skeleton className="h-4 w-2/3 mb-2" />
-                <Skeleton className="h-3 w-1/3 mb-2" />
+              <div key={i} data-testid="listing-skeleton" className="rounded-xl border border-border p-3">
+                <Skeleton className="mb-3 h-40 w-full rounded-lg" />
+                <Skeleton className="mb-2 h-4 w-2/3" />
+                <Skeleton className="mb-2 h-3 w-1/3" />
                 <Skeleton className="h-3 w-1/2" />
               </div>
             ))}
           </div>
         ) : !areaListings || areaListings.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full p-4">
-            <MapPin className="h-8 w-8 text-muted-foreground/40 mb-2" />
+          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+            <MapPin className="mb-2 h-8 w-8 text-muted-foreground/40" />
             {hasPropertyFilters && searchQuery ? (
               <>
-                <p className="text-sm text-muted-foreground mb-4">No listings match this search and filters</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearPropertyFilters}
-                  data-testid="clear-filters-button"
-                >
+                <p className="mb-4 text-sm text-muted-foreground">No listings match this search and filters</p>
+                <Button variant="outline" size="sm" onClick={handleClearPropertyFilters} data-testid="clear-filters-button">
                   Clear filters
                 </Button>
               </>
@@ -342,33 +488,28 @@ export function AreaSelectedPanel({
               <p className="text-sm text-muted-foreground">No listings match this search</p>
             ) : hasPropertyFilters ? (
               <>
-                <p className="text-sm text-muted-foreground mb-4">No listings match these filters</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearPropertyFilters}
-                  data-testid="clear-filters-button"
-                >
+                <p className="mb-4 text-sm text-muted-foreground">No listings match these filters</p>
+                <Button variant="outline" size="sm" onClick={handleClearPropertyFilters} data-testid="clear-filters-button">
                   Clear filters
                 </Button>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-              No properties for {intent === 'rent' ? 'rent' : 'sale'} in this area yet
-            </p>
+                No properties for {intentNoun} in this area yet
+              </p>
             )}
           </div>
         ) : (
           <>
-            {/* Issue #1494 — intent-aware result summary (AC4) */}
-            <div className="px-4 py-2 border-b border-border bg-muted/20" data-testid="area-result-summary">
-              <p className="text-xs text-muted-foreground">
-                {areaListings.length}{' '}
-                {areaListings.length === 1 ? 'property' : 'properties'} for{' '}
-                {intent === 'rent' ? 'rent' : 'sale'} in {selectedArea.areaLabel}
+            {/* Intent-aware verified result summary (Issue #1494 / #1606) */}
+            {/* a4 — warm evergreen-tint/60 strip instead of near-invisible bg-muted/20 */}
+            <div className="flex items-center gap-1.5 border-b border-border bg-evergreen-tint/60 px-4 py-2.5" data-testid="area-result-summary">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
+              <p className="text-xs font-medium text-foreground">
+                {count} verified {count === 1 ? 'property' : 'properties'} for {intentNoun} in {areaLabel}
               </p>
             </div>
-            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3 p-3">
+            <div className="grid grid-cols-1 gap-3 p-4 2xl:grid-cols-2">
               {areaListings.map((listing) => (
                 <div
                   key={listing.id}
@@ -391,6 +532,15 @@ export function AreaSelectedPanel({
           </>
         )}
       </div>
-    </>
+
+      {/* Trust strip — verification reassurance footer (Issue #1606, mock parity) */}
+      <div className="mt-auto flex items-start gap-2.5 border-t border-border bg-evergreen-tint/40 px-4 py-3.5" data-testid="area-trust-strip">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-evergreen" aria-hidden="true" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-semibold text-foreground">Every listing is verified.</span>{' '}
+          Documents checked, RERA registered, broker confirmed — before it reaches you.
+        </p>
+      </div>
+    </div>
   );
 }

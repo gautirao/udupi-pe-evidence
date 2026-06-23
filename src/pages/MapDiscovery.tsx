@@ -5,6 +5,8 @@ import { DEFAULT_SCHOOL_RADIUS_KM } from '@/constants/discover';
 import type { SchoolResult } from '@/hooks/useSchoolSearch';
 import { PublicDiscoverLayout } from '@/components/layout/PublicDiscoverLayout';
 import { MapAreaLegend } from '@/components/discover/MapAreaLegend';
+import { MapMarkerLegend } from '@/components/discover/MapMarkerLegend';
+import { MarkerPopoverCard } from '@/components/discover/MarkerPopoverCard';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
@@ -775,6 +777,12 @@ export default function MapDiscovery() {
   // Issue #1373 — selected agri polygon listing for right-panel stub (#1374 content).
   const [selectedMarkerListing, setSelectedMarkerListing] = useState<PropertyListingWithImages | null>(null);
 
+  // a3 — map container ref for MarkerPopoverCard auto-positioning (clamp-to-bounds).
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  // a3 — pixel position of the most recently clicked marker relative to the map container.
+  // Set on marker click (handleSelectMarkerListing wiring below), cleared on dismiss.
+  const [markerPixelPos, setMarkerPixelPos] = useState<{ x: number; y: number } | null>(null);
+
   // Issue #1466 — stable ref bundle so handleSelectMarkerListing's useCallback dep array
   // stays empty (stable identity). urlActions changes every render; urlState.selectedRegion
   // and journey are needed inside the callback but declared after this point in the file.
@@ -818,6 +826,34 @@ export default function MapDiscovery() {
     },
     [],
   );
+
+  // a3 — callback for MarkerClusterLayer to report the pixel position of a marker click.
+  // Gated to area-first residential path: areaKey set, no school, journey !== agri-first.
+  // School-first and agri-first marker click positions are NOT captured (those have their
+  // own panel/peek flows and must not trigger the area-first popover).
+  const handleMarkerClickWithPosition = useCallback(
+    (pos: { x: number; y: number }) => {
+      const { urlState: state } = markerListingCtxRef.current;
+      if (
+        state.journey !== 'agri-first' &&
+        state.areaKey != null &&
+        state.schoolId == null
+      ) {
+        setMarkerPixelPos(pos);
+      }
+    },
+    [],
+  );
+
+  // a3 — dismiss the popover and clear both local state + the URL `listing` param.
+  // Clearing the URL listing param keeps the #1547 copper card↔marker highlight in sync.
+  const handlePopoverDismiss = useCallback(() => {
+    setMarkerPixelPos(null);
+    setSelectedMarkerListing(null);
+    // Clear the URL listing param so the copper card highlight clears too (#1547 sync).
+    const { urlActions: actions } = markerListingCtxRef.current;
+    actions.clearSelectedListing?.();
+  }, []);
 
   // Issue #1374 — override panelContent to 'agri-detail' while an agri polygon is
   // selected. Confined to 'agri-selected' (not 'agri-landing') so a stale
@@ -2079,10 +2115,32 @@ export default function MapDiscovery() {
   const isSelectedGroupState =
     resolvedPanelContent === 'area-groups-landing' && !!focusedGroup && !selectedArea;
 
+  // Issue #1606 — area-first selected-AREA results state (terminal area chosen). Drives
+  // the redesigned Manipal-style results panel and the 3-level map breadcrumb. Distinct
+  // from isSelectedGroupState (no area yet) — here selectedArea is present.
+  const isAreaFirstSelectedAreaState =
+    resolvedPanelContent === 'area-selected' &&
+    urlState.journey === 'area-first' &&
+    !!selectedArea;
+
+  // Issue #1606 — resolved group display name for the area-first breadcrumb. Prefers the
+  // backend group name, falls back to a prettified slug so a deep-linked groupId that has
+  // not yet hydrated still reads as a human label (e.g. "University Belt"). Null when no
+  // group context exists — the breadcrumb then omits the group crumb.
+  const selectedGroupName =
+    focusedGroup?.name ?? (urlState.groupId ? prettifyZoneSlug(urlState.groupId) : null);
+
   return (
     <PublicDiscoverLayout>
       <div className="h-full flex flex-col lg:flex-row relative">
-        <div className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1">
+        {/* a3 — mapContainerRef wraps the full map half-panel for MarkerPopoverCard bounds clamp.
+            R-C — warm map gutter background (#EDEBE6) so the gutter between the map tile and
+            panel edge is warm off-white, not default grey. */}
+        <div ref={mapContainerRef} className="lg:w-1/2 h-64 lg:h-full relative order-1 lg:order-1" style={{ background: 'hsl(var(--map-bg))' }} onClick={
+          // a3 — background click dismisses the marker popover. stopPropagation is applied
+          // inside the card itself so clicks inside the card do not trigger this.
+          markerPixelPos != null ? handlePopoverDismiss : undefined
+        }>
           {showLoader && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
               <div className="flex flex-col items-center gap-3">
@@ -2234,6 +2292,7 @@ export default function MapDiscovery() {
               // Both flow only to MarkerClusterLayer visual — never to MapController (no flyTo).
               selectedListingId={urlState.selectedListing}
               hoveredListingId={hoveredListingId}
+              onMarkerClickWithPosition={handleMarkerClickWithPosition}
             />
           )}
 
@@ -2257,6 +2316,15 @@ export default function MapDiscovery() {
               <MapGroupBreadcrumb
                 cityLabel={CITY_CONFIG[city]?.label ?? city}
                 groupName={focusedGroup?.name ?? ''}
+              />
+            ) : isAreaFirstSelectedAreaState && focusedGroup ? (
+              // Issue #1606 — the area-first selected-AREA results step shows the full
+              // City › Group › Area breadcrumb on the map (mock placement). Only when a
+              // group context exists; group-less areas keep the AreaIndicatorOverlay below.
+              <MapGroupBreadcrumb
+                cityLabel={CITY_CONFIG[city]?.label ?? city}
+                groupName={focusedGroup.name}
+                areaName={selectedArea?.areaLabel}
               />
             ) : showSchoolBreadcrumb ? (
               <SchoolJourneyBreadcrumb
@@ -2294,8 +2362,10 @@ export default function MapDiscovery() {
               hidden on the area-first selected-group step (not part of the approved
               mock); city remains switchable from the landing via Start over. Issue #1607 —
               also hidden on the area-first city landing, where the city switcher now lives
-              in the right-panel controls card (mock parity). */}
-          {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && !isAreaFirstCityLanding && (
+              in the right-panel controls card (mock parity). Issue #1606 — also hidden on the
+              area-first selected-AREA results, where City + Looking-to move into the in-panel
+              controls card (mock parity, no duplicate control). */}
+          {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && !isAreaFirstCityLanding && resolvedPanelContent !== 'area-selected' && (
             <div className="absolute top-4 right-4 z-[1000] w-44">
               <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
             </div>
@@ -2308,6 +2378,16 @@ export default function MapDiscovery() {
           {resolvedPanelContent === 'guided-entry' && !schoolRadiusOverlay && overviewAreas.length > 0 && (
             <div className="absolute bottom-10 left-4 z-[1000]">
               <MapAreaLegend showZeroRow={false} />
+            </div>
+          )}
+
+          {/* a2 — Marker-meaning legend for the area-first selected-area results state.
+              Shown only when there is at least one area marker and we are in area-selected.
+              Does not render on guided-entry / selected-group (those keep MapAreaLegend).
+              Does not clash with badge (bottom-16 right-4), zoom (bottom-right), or attribution. */}
+          {isAreaFirstSelectedAreaState && !schoolRadiusOverlay && areaMarkerListings.length > 0 && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapMarkerLegend listings={areaMarkerListings} />
             </div>
           )}
 
@@ -2338,12 +2418,12 @@ export default function MapDiscovery() {
           {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding && discoverBadge.visible && discoverBadge.count != null && (
             <div
               className={
-                // Issue #1595 — on the selected-group step the pill is centred at the
-                // bottom of the map (mock parity), clear of the zoom controls (bottom-right),
-                // attribution, legend (bottom-left), and mobile controls. Every other
-                // drill-down context keeps the compact bottom-right placement.
-                isSelectedGroupState
-                  ? 'absolute bottom-6 left-1/2 z-[1000] -translate-x-1/2'
+                // Issue #1595 — on the selected-group step the pill is centred at the bottom.
+                // Issue #1606 — area-first selected-area step also centres the pill (bottom-8
+                // for clearance above attribution; clear of zoom bottom-right + legend bottom-left).
+                // Every other drill-down context keeps the compact bottom-right placement.
+                isSelectedGroupState || isAreaFirstSelectedAreaState
+                  ? 'absolute bottom-8 left-1/2 z-[1000] -translate-x-1/2'
                   : 'absolute bottom-16 right-4 z-[1000]'
               }
               data-testid="discover-badge"
@@ -2352,7 +2432,10 @@ export default function MapDiscovery() {
                 <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 {/* Issue #1595 — in the selected-group drill-down the footer pill names the
                     group and marks the count as verified ("Showing 8 verified properties in
-                    University Belt"); every other context keeps the plain "N properties". */}
+                    University Belt").
+                    Issue #1606 — in the area-first selected-area state the pill reads
+                    "Showing N verified properties in {areaLabel}". Every other context keeps
+                    the plain "N properties". */}
                 {resolvedPanelContent === 'area-groups-landing' && focusedGroup && !selectedArea ? (
                   <span>
                     Showing{' '}
@@ -2360,6 +2443,14 @@ export default function MapDiscovery() {
                       {discoverBadge.count.toLocaleString()}
                     </strong>
                     {' '}verified properties in {focusedGroup.name}
+                  </span>
+                ) : isAreaFirstSelectedAreaState && selectedArea ? (
+                  <span>
+                    Showing{' '}
+                    <strong className="font-semibold tabular-nums text-foreground">
+                      {discoverBadge.count.toLocaleString()}
+                    </strong>
+                    {' '}verified properties in {selectedArea.areaLabel}
                   </span>
                 ) : (
                   <span>
@@ -2435,6 +2526,25 @@ export default function MapDiscovery() {
             hasAreaSelected={!!selectedArea}
             areaLayerMaxZoom={AREA_LAYER_MAX_ZOOM}
           />
+
+          {/* a3 — Marker popover mini card. Gated to area-first residential path:
+              areaKey set, no school, journey !== agri-first. School-first (3 desynced
+              marker tiers) and agri-first (own peek/panel) are intentionally excluded.
+              ONE popover at a time; clicking a new marker replaces it.
+              Dismiss: X button (inside card), Escape key, map-background click (onClick
+              on this container div). */}
+          {isAreaFirstSelectedAreaState &&
+            selectedMarkerListing != null &&
+            markerPixelPos != null && (
+              <MarkerPopoverCard
+                listing={selectedMarkerListing}
+                isAuthenticated={isAuthenticated}
+                markerPixelPos={markerPixelPos}
+                mapContainerRef={mapContainerRef}
+                onDismiss={handlePopoverDismiss}
+                onViewDetails={(id) => navigate(`/listing/${id}`)}
+              />
+            )}
         </div>
 
         <DiscoverRightPanel
@@ -2471,6 +2581,11 @@ export default function MapDiscovery() {
           // Issue #1483 — clear groupId to return from Level-2 area list to Level-1 group cards.
           // Issue #1485 — same callback also used by school-first: school-group-areas → school-browse.
           onClearGroup={() => urlActions.selectGroup(null)}
+          // Issue #1606 — area-first results breadcrumb: resolved group name + city-crumb nav.
+          // selectGroup(null) clears both groupId and areaKey in a single PUSH, returning to
+          // the area-first landing (Level 1 group cards) while preserving journey=area-first.
+          selectedGroupName={selectedGroupName}
+          onNavigateAreaLanding={() => urlActions.selectGroup(null)}
           // Issue #1485 — forward area-groups loading state separately for school-first zone cards
           // so school-browse can show skeletons without coupling to the area-first isLoadingAreaGroups.
           isLoadingAreaGroupsForSchool={isLoadingAreaGroups}
