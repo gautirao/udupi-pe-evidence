@@ -17,7 +17,9 @@ const JOURNEY_PILL: Record<DiscoverJourney, JourneyPill> = {
   'area-first': {
     label: 'Area-first',
     icon: MapPin,
-    className: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+    // ReTrends navy eyebrow (navy-100 surface + navy-800 ink) — matches the mock's
+    // "Area-first" tag rather than a generic cool blue (Issue #1607 polish).
+    className: 'bg-secondary text-secondary-foreground',
   },
   'school-first': {
     label: 'School-first',

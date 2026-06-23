@@ -12,6 +12,7 @@ import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
 import { MapGroupBreadcrumb } from '@/components/discover/MapGroupBreadcrumb';
+import { AreaFirstLandingBreadcrumb } from '@/components/discover/AreaFirstLandingBreadcrumb';
 import {
   SchoolJourneyBreadcrumb,
   SchoolRadiusLegend,
@@ -1795,6 +1796,14 @@ export default function MapDiscovery() {
   // so a city with no live properties (e.g. Bangalore) renders no area markers at all.
   // Drill-down states keep the full area set (unchanged).
   const isLandingState = resolvedPanelContent === 'guided-entry';
+  // Issue #1607 — the area-first CITY-LEVEL landing (group cards shown, no group or
+  // area resolved yet). Treated like the public guided-entry landing for map chrome:
+  // only areas WITH live properties get a marker (zero-listing areas — including any
+  // seed/test areas — never render as misleading pins), plus the "Home › City › Areas"
+  // breadcrumb, the Areas legend, and the centred city-wide summary pill. Zero areas
+  // stay fully discoverable through the right-panel group/area lists.
+  const isAreaFirstCityLanding =
+    resolvedPanelContent === 'area-groups-landing' && !focusedGroup && !selectedArea;
   const liveAreas = discoverAreas.filter((a) => (a.listingCount ?? 0) > 0);
   // Issue #1588 follow-up — the selected city has finished loading and has zero live
   // properties. Gated on !areasLoading so the empty-state notice never flashes during
@@ -1804,7 +1813,7 @@ export default function MapDiscovery() {
   const cityHasNoListings = !areasLoading && cityTotal === 0;
   const overviewAreas =
     mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney
-      ? (isLandingState ? liveAreas : discoverAreas)
+      ? (isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas)
       : [];
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
@@ -1971,7 +1980,15 @@ export default function MapDiscovery() {
               (City › Zone › Area › School); otherwise the generic area indicator.
               Rendering one OR the other avoids a duplicate breadcrumb. */}
           <div className="absolute top-4 left-4 z-[1000]">
-            {isSelectedGroupState ? (
+            {isAreaFirstCityLanding ? (
+              // Issue #1607 — the area-first city-level landing shows the
+              // "Home › City › Areas" breadcrumb (mock placement). Home and the city
+              // crumb route progressively; "Areas" is the terminal (current) page.
+              <AreaFirstLandingBreadcrumb
+                cityLabel={CITY_CONFIG[city]?.label ?? city}
+                cityHref={`/discover?city=${encodeURIComponent(city)}`}
+              />
+            ) : isSelectedGroupState ? (
               // Issue #1595 (Option A) — the area-first selected-group step shows the
               // dynamic City › Group breadcrumb here on the map (mock placement),
               // replacing the generic area-indicator card for this state only.
@@ -2013,8 +2030,10 @@ export default function MapDiscovery() {
               (guided-entry), where the city control lives in the right-panel hero
               controls card; restored for every drill-down state. Issue #1595 — also
               hidden on the area-first selected-group step (not part of the approved
-              mock); city remains switchable from the landing via Start over. */}
-          {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && (
+              mock); city remains switchable from the landing via Start over. Issue #1607 —
+              also hidden on the area-first city landing, where the city switcher now lives
+              in the right-panel controls card (mock parity). */}
+          {resolvedPanelContent !== 'guided-entry' && !isSelectedGroupState && !isAreaFirstCityLanding && (
             <div className="absolute top-4 right-4 z-[1000] w-44">
               <CitySelect value={city} onChange={handleCityChange} className="bg-card shadow-sm" />
             </div>
@@ -2038,6 +2057,15 @@ export default function MapDiscovery() {
             </div>
           )}
 
+          {/* Issue #1607 — the area-first city landing shows only areas WITH properties
+              (zero-listing areas are hidden, mirroring the guided-entry landing), so the
+              legend carries just the "Areas with properties" row. */}
+          {isAreaFirstCityLanding && !schoolRadiusOverlay && overviewAreas.length > 0 && (
+            <div className="absolute bottom-10 left-4 z-[1000]">
+              <MapAreaLegend showZeroRow={false} />
+            </div>
+          )}
+
           {/* "Near a school" quick-filter button removed (Figma polish) — the school
               journey is reachable via the "Search by school area" card in the right panel.
               NearSchoolSheet stays mounted below but is no longer triggered from here. */}
@@ -2045,7 +2073,7 @@ export default function MapDiscovery() {
           {/* City / area listing count — bottom-right (Issue #1152). Issue #1588 — on the
               public landing this is replaced by the centered city-wide summary pill below;
               kept bottom-right for contextual (area/school/group) drill-down counts. */}
-          {resolvedPanelContent !== 'guided-entry' && discoverBadge.visible && discoverBadge.count != null && (
+          {resolvedPanelContent !== 'guided-entry' && !isAreaFirstCityLanding && discoverBadge.visible && discoverBadge.count != null && (
             <div
               className={
                 // Issue #1595 — on the selected-group step the pill is centred at the
@@ -2084,8 +2112,10 @@ export default function MapDiscovery() {
             </div>
           )}
 
-          {/* Public-landing summary pill — bottom-center, city-wide verified total (Issue #1588). */}
-          {resolvedPanelContent === 'guided-entry' && cityTotal > 0 && (
+          {/* Public-landing summary pill — bottom-center, city-wide verified total (Issue #1588).
+              Issue #1607 — the area-first city landing reuses the same centred pill so the
+              card "properties" stat, the map markers, and this pill all report one figure. */}
+          {(resolvedPanelContent === 'guided-entry' || isAreaFirstCityLanding) && cityTotal > 0 && (
             <div className="absolute bottom-5 left-1/2 z-[1000] -translate-x-1/2" data-testid="discover-badge">
               <div className="flex items-center gap-2 whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-[13px] font-semibold text-muted-foreground shadow-md">
                 <MapPin className="h-[15px] w-[15px] shrink-0 text-[hsl(var(--copper))]" aria-hidden="true" />

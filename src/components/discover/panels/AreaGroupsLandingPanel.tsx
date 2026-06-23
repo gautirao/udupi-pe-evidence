@@ -1,11 +1,16 @@
 import React from 'react';
-import { ChevronRight, Layers, MapPin } from 'lucide-react';
+import { ChevronRight, Layers, MapPin, ShieldCheck, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PanelHeader } from '../PanelHeader';
+import { CitySelect } from '../CitySelect';
+import { IntentSelector } from '../IntentSelector';
 import { AreaGroupSelectedPanel } from './AreaGroupSelectedPanel';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
+import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+
+// Shared uppercase eyebrow for the in-panel control labels (mirrors GuidedEntryPanel).
+const CONTROL_EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +42,16 @@ export type AreaGroupsLandingPanelProps = {
    * Falls back to a neutral label when omitted so non-city contexts (tests) render cleanly.
    */
   cityLabel?: string;
+  /**
+   * Issue #1607 — city + Buy/Rent controls live inside the panel (mock parity, mirrors
+   * GuidedEntryPanel). All four must be supplied together to render the controls card;
+   * when any is omitted (e.g. unit tests) the card is simply not shown — the existing
+   * URL-state controls are unchanged, only their placement moves off the map.
+   */
+  city?: string;
+  onCityChange?: (city: string) => void;
+  intent?: DiscoverIntent;
+  onIntentChange?: (intent: DiscoverIntent) => void;
 } & (
   | { fallbackAreas: DiscoverArea[]; onSelectArea: (areaKey: string) => void }
   | { fallbackAreas?: never; onSelectArea?: never }
@@ -81,20 +96,22 @@ interface StatProps {
   value: number;
   label: string;
   accent?: boolean;
+  /** Adds the mock's hairline divider + left padding (used for the 2nd/3rd tiles). */
+  divider?: boolean;
 }
 
-function Stat({ value, label, accent = false }: StatProps) {
+function Stat({ value, label, accent = false, divider = false }: StatProps) {
   return (
-    <div className="flex flex-col">
+    <div className={cn('flex min-w-0 flex-col', divider && 'border-l border-border pl-4')}>
       <span
         className={cn(
-          'text-lg font-bold leading-none tabular-nums',
+          'font-mono text-xl font-bold leading-none tracking-tight tabular-nums',
           accent ? 'text-copper' : 'text-foreground',
         )}
       >
         {value}
       </span>
-      <span className="mt-1 text-xs text-muted-foreground">{label}</span>
+      <span className="mt-1.5 text-xs text-muted-foreground">{label}</span>
     </div>
   );
 }
@@ -103,9 +120,9 @@ function Stat({ value, label, accent = false }: StatProps) {
 
 function GroupCardSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-      <div className="flex items-start gap-3">
-        <Skeleton className="h-9 w-9 rounded-lg" />
+    <div className="rounded-xl border border-border bg-card p-5 shadow-sm space-y-3.5">
+      <div className="flex items-start gap-3.5">
+        <Skeleton className="h-11 w-11 rounded-lg" />
         <div className="flex-1 space-y-2">
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-3 w-1/2" />
@@ -186,33 +203,38 @@ interface AreaGroupsIntroProps {
   groupCount: number;
   areaCount: number;
   forSaleCount: number | null;
+  /** City label used for the mock's "Browse {city} localities…" copy. */
+  cityLabel: string;
 }
 
-function AreaGroupsIntro({ groupCount, areaCount, forSaleCount }: AreaGroupsIntroProps) {
+function AreaGroupsIntro({ groupCount, areaCount, forSaleCount, cityLabel }: AreaGroupsIntroProps) {
+  // Issue #1607 — "Browse Udupi localities…" in real cities; drop the label cleanly
+  // for the neutral default so it never reads "Browse this city localities".
+  const cityPhrase = cityLabel && cityLabel !== 'this city' ? `${cityLabel} ` : '';
   return (
     <div
-      className="rounded-xl border border-border bg-card p-4 shadow-sm"
+      className="rounded-xl border border-border bg-card p-5 shadow-sm"
       data-testid="area-groups-intro"
     >
-      <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-copper-tint text-copper">
-          <MapPin className="h-5 w-5" aria-hidden="true" />
+      <div className="flex items-start gap-3.5">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-copper-tint text-copper">
+          <MapPin className="h-[22px] w-[22px]" aria-hidden="true" />
         </span>
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-foreground">
-            Explore by neighbourhood
+          <h3 className="text-[16.5px] font-bold tracking-[-0.01em] text-foreground">
+            Explore by area
           </h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Start with a neighbourhood group, then narrow down to a local area to
-            see the homes inside it.
+          <p className="mt-1 text-[13.5px] leading-relaxed text-muted-foreground">
+            Browse {cityPhrase}localities on the map, or choose a neighbourhood
+            group below to start.
           </p>
         </div>
       </div>
-      <div className="mt-4 flex items-center gap-7 border-t border-border pt-3">
+      <div className="mt-5 grid grid-cols-3 border-t border-border pt-4">
         <Stat value={groupCount} label={groupCount === 1 ? 'group' : 'groups'} />
-        <Stat value={areaCount} label={areaCount === 1 ? 'area' : 'areas'} />
+        <Stat value={areaCount} label={areaCount === 1 ? 'area' : 'areas'} divider />
         {forSaleCount != null && (
-          <Stat value={forSaleCount} label="for sale" accent />
+          <Stat value={forSaleCount} label={forSaleCount === 1 ? 'property' : 'properties'} accent divider />
         )}
       </div>
     </div>
@@ -240,32 +262,39 @@ function GroupCard({ group, onSelect, isSelected, forSale }: GroupCardProps) {
     <button
       type="button"
       className={cn(
-        'group w-full text-left rounded-xl p-4 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'group w-full text-left rounded-xl p-5 transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         isSelected
-          ? 'border-2 border-primary bg-muted shadow-sm'
-          : 'border border-border bg-card hover:border-copper/40 hover:shadow-sm',
+          ? 'border border-copper bg-copper-tint shadow-lg ring-2 ring-copper/25'
+          : 'border border-border bg-card shadow-sm hover:-translate-y-0.5 hover:border-copper/60 hover:shadow-lg',
       )}
       onClick={() => onSelect(group.id)}
       aria-current={isSelected ? 'true' : undefined}
       aria-label={`Select group ${group.name}${group.region_label ? `, ${group.region_label}` : ''}, ${areaCount} area${areaCount === 1 ? '' : 's'}`}
       data-testid={`area-group-card-${group.id}`}
     >
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <Layers className="h-5 w-5" aria-hidden="true" />
+      <div className="flex items-start gap-3.5">
+        <span
+          className={cn(
+            'flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition-colors',
+            isSelected
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-secondary text-primary group-hover:bg-primary group-hover:text-primary-foreground',
+          )}
+        >
+          <Layers className="h-[22px] w-[22px]" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <p className="font-semibold text-sm text-foreground truncate">{group.name}</p>
-            <span className="shrink-0 text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 font-medium">
+            <p className="text-[16px] font-bold tracking-[-0.01em] text-foreground truncate">{group.name}</p>
+            <span className="shrink-0 rounded-full border border-border bg-[#EEEDE9] px-2 py-0.5 font-mono text-[11px] font-semibold text-muted-foreground">
               {areaCount} area{areaCount === 1 ? '' : 's'}
             </span>
           </div>
           {group.subtitle && (
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{group.subtitle}</p>
+            <p className="text-[13px] leading-relaxed text-muted-foreground mt-1 line-clamp-2">{group.subtitle}</p>
           )}
           {group.region_label && (
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+            <span className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-border bg-[#EEEDE9] px-2 py-0.5 font-mono text-[11.5px] font-semibold text-muted-foreground">
               <MapPin className="h-3 w-3" aria-hidden="true" />
               {group.region_label}
             </span>
@@ -273,18 +302,37 @@ function GroupCard({ group, onSelect, isSelected, forSale }: GroupCardProps) {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
-        {forSale != null ? (
-          <span className="text-xs text-muted-foreground">
-            <span className="font-semibold text-copper tabular-nums">{forSale}</span>{' '}
-            home{forSale === 1 ? '' : 's'} for sale
+      <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-border/70 pt-3">
+        {forSale === 0 ? (
+          // Issue #1607 — a resolved-but-empty group is de-emphasised, never shown as
+          // an active listing area. The card stays navigable so the localities inside
+          // remain discoverable; the copy makes the empty state clear.
+          <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full border-[1.5px] border-muted-foreground/50" aria-hidden="true" />
+            No listings yet
+          </span>
+        ) : forSale != null ? (
+          <span className="text-[12.5px] text-muted-foreground">
+            <span className="font-mono font-semibold text-copper tabular-nums">{forSale}</span>{' '}
+            propert{forSale === 1 ? 'y' : 'ies'} for sale
           </span>
         ) : (
           <span />
         )}
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground transition-colors group-hover:text-copper">
-          Explore group
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+        <span
+          className={cn(
+            'inline-flex items-center gap-1 text-[13.5px] font-semibold transition-colors group-hover:text-copper',
+            isSelected ? 'text-copper' : 'text-foreground',
+          )}
+        >
+          View areas
+          <ChevronRight
+            className={cn(
+              'h-4 w-4 transition-transform group-hover:translate-x-0.5',
+              isSelected && 'translate-x-0.5',
+            )}
+            aria-hidden="true"
+          />
         </span>
       </div>
     </button>
@@ -301,6 +349,10 @@ export function AreaGroupsLandingPanel({
   groupId = null,
   onClearGroup,
   cityLabel = 'this city',
+  city,
+  onCityChange,
+  intent,
+  onIntentChange,
   fallbackAreas = [],
   onSelectArea,
 }: AreaGroupsLandingPanelProps) {
@@ -387,28 +439,98 @@ export function AreaGroupsLandingPanel({
     );
   }
 
-  return (
-    <>
-      <PanelHeader
-        title="Select area"
-        journey="area-first"
-        onStartOver={onStartOver}
-      />
+  // Issue #1607 — mock-aligned hero title. When a real city label is supplied
+  // (e.g. "Udupi") it reads "Choose an area in Udupi"; the neutral default keeps
+  // non-city contexts (tests) clean without a dangling "in this city".
+  const cityHeading =
+    cityLabel && cityLabel !== 'this city'
+      ? `Choose an area in ${cityLabel}`
+      : 'Choose an area';
 
-      <div
-        className="flex-1 overflow-y-auto"
-        aria-busy={isLoading}
-        aria-label="Area groups"
-      >
+  // Issue #1607 — render the in-panel city + Buy/Rent controls card only when all four
+  // control props are wired in (production). Unit tests that omit them simply skip it.
+  const showControls =
+    city != null && onCityChange != null && intent != null && onIntentChange != null;
+
+  // Mock-faithful single-scroll layout (mirrors GuidedEntryPanel): the eyebrow, Fraunces
+  // hero, subcopy and controls card scroll with the content instead of a compact sticky
+  // header, so the panel reads like the approved area-first mock.
+  return (
+    <div
+      className="flex-1 overflow-y-auto bg-background px-5 py-7 lg:px-11 lg:py-10"
+      aria-busy={isLoading}
+      aria-label="Area groups"
+    >
+      <div className="mx-auto max-w-[560px]">
+        {/* Eyebrow row: Area-first tag + Start over */}
+        <div className="mb-[14px] flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-secondary px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-secondary-foreground">
+            <Layers className="h-[13px] w-[13px]" aria-hidden="true" />
+            Area-first
+          </span>
+          {onStartOver && (
+            <button
+              type="button"
+              data-testid="start-over-button"
+              onClick={onStartOver}
+              aria-label="Start over and return to journey selection"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[12.5px] font-semibold text-foreground transition-colors hover:bg-muted/40"
+            >
+              Start over
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+
+        {/* Hero */}
+        <h1 className="mb-[13px] font-['Fraunces',_ui-serif,_Georgia,_serif] text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] text-foreground sm:text-3xl lg:text-[38px]">
+          {cityHeading}
+        </h1>
+        <p className="mb-6 max-w-[48ch] text-[14.5px] leading-relaxed text-muted-foreground lg:text-[16px]">
+          Start with a neighbourhood group, then narrow down to the localities and
+          properties inside it.
+        </p>
+
+        {/* Controls card: city + Buy/Rent (mock parity, mirrors GuidedEntryPanel) */}
+        {showControls && (
+          <>
+            <div className="mb-2.5 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm">
+              <label className="flex min-w-[150px] flex-1 flex-col gap-1.5">
+                <span className={CONTROL_EYEBROW}>City</span>
+                <CitySelect
+                  value={city as string}
+                  onChange={onCityChange as (city: string) => void}
+                  className="h-11 w-full rounded-md border-border bg-[hsl(var(--input-bg))] px-3 text-sm font-semibold text-foreground"
+                />
+              </label>
+              <div className="flex min-w-[150px] flex-1 flex-col gap-1.5">
+                <span className={CONTROL_EYEBROW}>Looking to</span>
+                <IntentSelector
+                  intent={intent as DiscoverIntent}
+                  onIntentChange={onIntentChange as (intent: DiscoverIntent) => void}
+                  hideLabel
+                  fill
+                />
+              </div>
+            </div>
+            <p className="mb-[22px] pl-0.5 text-[12.5px] text-muted-foreground">
+              {intent === 'rent'
+                ? 'Showing monthly rents — same properties, reworded for renting.'
+                : 'Showing sale prices in ₹ across every area.'}
+            </p>
+          </>
+        )}
+
+        {/* Body: skeletons → group cards → browse-all fallback */}
         {isLoading ? (
-          <div className="space-y-3 p-4" data-testid="area-groups-loading">
+          <div className="space-y-3.5" data-testid="area-groups-loading">
             {[0, 1, 2, 3].map((i) => (
               <GroupCardSkeleton key={i} />
             ))}
           </div>
         ) : groups.length > 0 ? (
           // ── Level 1: no resolved group (or invalid groupId) → show group cards ─
-          <div className="space-y-3 p-4" data-testid="area-groups-list">
+          <div className="space-y-6" data-testid="area-groups-list">
             {showInvalidGroupMessage && (
               <div
                 role="status"
@@ -424,29 +546,43 @@ export function AreaGroupsLandingPanel({
               groupCount={groups.length}
               areaCount={totalAreaCount}
               forSaleCount={totalForSale}
+              cityLabel={cityLabel}
             />
 
-            <div className="flex items-center justify-between pt-1">
-              <div className="flex items-center gap-2">
-                <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Neighbourhood groups
-                </p>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <p className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                    Neighbourhood groups
+                  </p>
+                </div>
+                <span className="font-mono text-[11.5px] font-semibold text-muted-foreground">
+                  {groups.length} group{groups.length === 1 ? '' : 's'}
+                </span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {groups.length} group{groups.length === 1 ? '' : 's'}
-              </span>
+
+              {groups.map((group) => (
+                <GroupCard
+                  key={group.id}
+                  group={group}
+                  onSelect={onSelectGroup}
+                  isSelected={group.id === focusedGroup?.id}
+                  forSale={forSaleForKeys(group.area_keys, listingIndex)}
+                />
+              ))}
             </div>
 
-            {groups.map((group) => (
-              <GroupCard
-                key={group.id}
-                group={group}
-                onSelect={onSelectGroup}
-                isSelected={group.id === focusedGroup?.id}
-                forSale={forSaleForKeys(group.area_keys, listingIndex)}
-              />
-            ))}
+            {/* Issue #1607 — trust strip (mock parity, mirrors GuidedEntryPanel). */}
+            <div className="flex items-center gap-3 border-t border-border pt-5">
+              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-md bg-[hsl(var(--evergreen-tint))]">
+                <ShieldCheck className="h-[19px] w-[19px] text-[hsl(var(--evergreen))]" aria-hidden="true" />
+              </span>
+              <p className="text-[13px] leading-snug text-muted-foreground">
+                <strong className="text-foreground">Every listing is verified.</strong> Documents
+                checked, RERA registered, broker confirmed — before it reaches you.
+              </p>
+            </div>
           </div>
         ) : (
           // ── No groups: Browse-all fallback across all city areas ────────────────
@@ -457,6 +593,6 @@ export function AreaGroupsLandingPanel({
           />
         )}
       </div>
-    </>
+    </div>
   );
 }

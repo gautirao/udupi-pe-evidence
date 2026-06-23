@@ -209,7 +209,9 @@ describe('DiscoverRightPanel — state machine routing', () => {
         onSelectAreaKey={vi.fn()}
       />,
     );
-    expect(screen.getByText('Select area')).toBeInTheDocument();
+    // Issue #1607 — area-groups landing now uses the mock "Choose an area" hero
+    // (neutral form here because no cityLabel is supplied in this routing test).
+    expect(screen.getByText('Choose an area')).toBeInTheDocument();
     expect(screen.getByTestId('area-group-card-south-zone')).toBeInTheDocument();
     expect(screen.getByText('South Zone')).toBeInTheDocument();
   });
@@ -426,7 +428,9 @@ describe('DiscoverRightPanel — groupId deep-link without journey (issue #1154)
         />
       </MemoryRouter>,
     );
-    expect(screen.getByText('Select area')).toBeInTheDocument();
+    // Issue #1607 — area-groups landing now uses the mock "Choose an area" hero
+    // (neutral form here because no cityLabel is supplied in this routing test).
+    expect(screen.getByText('Choose an area')).toBeInTheDocument();
     // Guided-entry panel must NOT appear — wrong panel
     expect(screen.queryByTestId('guided-entry-panel')).not.toBeInTheDocument();
   });

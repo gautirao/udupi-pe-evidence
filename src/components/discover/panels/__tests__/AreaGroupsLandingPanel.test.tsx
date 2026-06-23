@@ -600,8 +600,10 @@ describe('AreaGroupsLandingPanel — group card highlight for non-matching state
     );
     const selected = screen.getByTestId('area-group-card-group-A');
     expect(selected).toHaveAttribute('aria-current', 'true');
-    expect(selected.className).toContain('bg-muted');
-    expect(selected.className).toContain('border-primary');
+    // Issue #1607 polish — the selected card uses the mock's copper highlight
+    // (copper tint + copper border) instead of the previous navy/muted treatment.
+    expect(selected.className).toContain('bg-copper-tint');
+    expect(selected.className).toContain('border-copper');
     expect(screen.queryByTestId('area-group-invalid-message')).not.toBeInTheDocument();
   });
 });
@@ -609,11 +611,24 @@ describe('AreaGroupsLandingPanel — group card highlight for non-matching state
 // ─── Header ──────────────────────────────────────────────────
 
 describe('AreaGroupsLandingPanel — header', () => {
-  it('renders "Select area" as panel header title', () => {
+  it('renders the mock-aligned "Choose an area" hero title (Issue #1607)', () => {
     renderPanel(
       <AreaGroupsLandingPanel {...baseProps} groups={[]} isLoading={false} />,
     );
-    expect(screen.getByText('Select area')).toBeInTheDocument();
+    // No cityLabel supplied → neutral "Choose an area" (never "…in this city").
+    expect(screen.getByText('Choose an area')).toBeInTheDocument();
+  });
+
+  it('includes the city name in the hero when cityLabel is supplied (Issue #1607)', () => {
+    renderPanel(
+      <AreaGroupsLandingPanel
+        {...baseProps}
+        groups={[]}
+        isLoading={false}
+        cityLabel="Udupi"
+      />,
+    );
+    expect(screen.getByText('Choose an area in Udupi')).toBeInTheDocument();
   });
 
   it('shows Start over button (from PanelHeader with journey=area-first)', () => {

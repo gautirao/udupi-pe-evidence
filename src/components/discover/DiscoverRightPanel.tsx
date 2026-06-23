@@ -1098,6 +1098,10 @@ export function DiscoverRightPanel({
               groupId={groupId}
               onClearGroup={onClearGroup}
               cityLabel={cityLabel ?? city}
+              city={city}
+              onCityChange={onCityChange}
+              intent={intent}
+              onIntentChange={onIntentChange}
               fallbackAreas={discoverAreas}
               onSelectArea={onSelectAreaKey}
             />
@@ -1112,6 +1116,10 @@ export function DiscoverRightPanel({
             groupId={groupId}
             onClearGroup={onClearGroup}
             cityLabel={cityLabel ?? city}
+            city={city}
+            onCityChange={onCityChange}
+            intent={intent}
+            onIntentChange={onIntentChange}
           />
         );
 
@@ -1365,6 +1373,14 @@ export function DiscoverRightPanel({
     activeContextChips != null &&
     !PANELS_WITH_INLINE_CHIPS.has(panelContent);
 
+  // Issue #1607 — the area-first CITY-LEVEL landing (group cards, no resolved group)
+  // carries its own city + Buy/Rent controls card inside the panel (mock parity), so
+  // the floating top-strip Buy/Rent is suppressed there to avoid a duplicate control.
+  // The selected-group drill-down (Level 2) keeps the top-strip control unchanged.
+  const isAreaFirstLandingControls =
+    panelContent === 'area-groups-landing' &&
+    !(groupId?.trim() && areaGroups.some((g) => g.id === groupId.trim()));
+
   return (
     <div
       className="flex flex-col lg:w-1/2 border-l border-border bg-background overflow-hidden order-2 lg:order-2"
@@ -1374,7 +1390,7 @@ export function DiscoverRightPanel({
           Left-aligned (Figma) so it sits on the content side, above the journey cards.
           Issue #1588 — suppressed on the public landing (guided-entry), where Buy/Rent
           lives inside the hero controls card instead (avoids a duplicate control). */}
-      {onIntentChange && panelContent !== 'guided-entry' && (
+      {onIntentChange && panelContent !== 'guided-entry' && !isAreaFirstLandingControls && (
         <div className="flex items-center justify-start gap-3 px-4 py-3 border-b border-border/50 shrink-0 bg-background">
           <IntentSelector intent={intent} onIntentChange={onIntentChange} />
         </div>
