@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -80,14 +83,31 @@ public class CityAreaListingsController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "query_too_long");
         }
 
-        log.debug("GET /api/discover/cities/{}/listings areaKeys={} limitPerArea={} minPrice={} maxPrice={} bedrooms={} propertyType={} q={}",
+        // Determine auth state using the canonical pattern from PublicListingController.
+        // permitAll skips authorization but the Bearer filter still populates SecurityContext
+        // when a valid JWT is present — so this check is reliable.
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean isAuthenticated = auth != null
+                && auth.isAuthenticated()
+                && !(auth instanceof AnonymousAuthenticationToken);
+
+        log.debug("GET /api/discover/cities/{}/listings areaKeys={} limitPerArea={} minPrice={} maxPrice={} bedrooms={} propertyType={} q={} authenticated={}",
                 city, areaKeys.size(), limitPerArea, minPrice, maxPrice, bedrooms, propertyType,
-                q != null ? "[present]" : null);
+                q != null ? "[present]" : null, isAuthenticated);
 
         CityAreaListingsResponse response = service.getAreaListings(
-                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q, listingPurpose);
+                city, areaKeys, limitPerArea, minPrice, maxPrice, bedrooms, propertyType, q, listingPurpose,
+                isAuthenticated);
+
+        // Cache-control split by auth state:
+        //   anon  → coarsened response; safe to share via public cache (maxAge 60s)
+        //   authed → exact price data; MUST NOT be stored in a shared cache
+        CacheControl cacheControl = isAuthenticated
+                ? CacheControl.noStore()
+                : CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic();
+
         return ResponseEntity.ok()
-                .cacheControl(CacheControl.maxAge(60, TimeUnit.SECONDS).cachePublic())
+                .cacheControl(cacheControl)
                 .body(response);
     }
 }

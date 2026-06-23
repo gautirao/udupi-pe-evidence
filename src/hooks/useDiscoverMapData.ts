@@ -215,6 +215,9 @@ export function useDiscoverMapData({
     propertyType: discoverPropertyType,
     q: debouncedSearch?.trim() || undefined,
     listingPurpose,
+    // Issue #1616: thread auth state into the hook so JWT is sent for authed users (they
+    // receive exact pricePaise) and the cache key separates anon/authed buckets.
+    isAuthenticated,
   });
 
   // Issue #1261 — cross-area school-radius listings (PUBLIC endpoint).

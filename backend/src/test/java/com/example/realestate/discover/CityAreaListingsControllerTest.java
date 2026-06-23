@@ -68,7 +68,10 @@ class CityAreaListingsControllerTest {
     @Test
     void ac1_happyPath_returns200WithCorrectShape() throws Exception {
         UUID id = UUID.randomUUID();
-        AreaListingCard card = new AreaListingCard(id, 4_500_000L, "apartment", "Malpe",
+        // Anon response: priceBand populated, pricePaise null (omitted by NON_NULL).
+        // The TestConfig security chain permits all requests and does not inject an
+        // AnonymousAuthenticationToken, so SecurityContextHolder auth == null → isAuthenticated=false.
+        AreaListingCard card = new AreaListingCard(id, null, "₹50L–1Cr", "apartment", "Malpe",
                 "https://example.com/img.jpg", "sale", 2,
                 "Spacious 2BHK near beach", 2, 850.0, "sq ft",
                 null, null, null, null, null,
@@ -77,7 +80,7 @@ class CityAreaListingsControllerTest {
                 List.of(card));
         CityAreaListingsResponse resp = new CityAreaListingsResponse("udupi", 5, List.of(entry));
 
-        when(service.getAreaListings("udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null))
+        when(service.getAreaListings("udupi", List.of("IN|KA|Udupi|Malpe"), null, null, null, null, null, null, null, false))
                 .thenReturn(resp);
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -90,7 +93,10 @@ class CityAreaListingsControllerTest {
                 .andExpect(jsonPath("$.areas[0].areaName", is("Malpe")))
                 .andExpect(jsonPath("$.areas[0].listings", hasSize(1)))
                 .andExpect(jsonPath("$.areas[0].listings[0].id", is(id.toString())))
-                .andExpect(jsonPath("$.areas[0].listings[0].pricePaise", is(4_500_000)))
+                // anon: pricePaise must be ABSENT (not null, not 0) — NON_NULL omits it
+                .andExpect(jsonPath("$.areas[0].listings[0].pricePaise").doesNotExist())
+                // anon: priceBand must be present
+                .andExpect(jsonPath("$.areas[0].listings[0].priceBand", is("₹50L–1Cr")))
                 .andExpect(jsonPath("$.areas[0].listings[0].propertyType", is("apartment")))
                 .andExpect(jsonPath("$.areas[0].listings[0].listingPurpose", is("sale")))
                 .andExpect(jsonPath("$.areas[0].listings[0].bedrooms", is(2)))
@@ -110,13 +116,13 @@ class CityAreaListingsControllerTest {
     void ac3_multipleListings_preservesServiceOrder() throws Exception {
         UUID id1 = UUID.randomUUID();
         UUID id2 = UUID.randomUUID();
-        AreaListingCard card1 = new AreaListingCard(id1, 1_000_000L, "house", "Malpe", null, "sale", null,
+        AreaListingCard card1 = new AreaListingCard(id1, null, "₹0–25L", "house", "Malpe", null, "sale", null,
                 null, null, null, null, null, null, null, null, null, null, null, null, null);
-        AreaListingCard card2 = new AreaListingCard(id2, 2_000_000L, "apartment", "Malpe", null, "rent", 3,
+        AreaListingCard card2 = new AreaListingCard(id2, null, "₹0–25L", "apartment", "Malpe", null, "rent", 3,
                 null, 2, null, null, null, null, null, null, null, null, null, null, null);
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Malpe", "Malpe", null,
                 List.of(card1, card2));
-        when(service.getAreaListings(eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(eq("udupi"), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of(entry)));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -130,7 +136,7 @@ class CityAreaListingsControllerTest {
 
     @Test
     void ac4_limitAppliedPerArea_passedToService() throws Exception {
-        when(service.getAreaListings(eq("udupi"), any(), eq(3), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+        when(service.getAreaListings(eq("udupi"), any(), eq(3), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 3, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -139,7 +145,7 @@ class CityAreaListingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.limitPerArea", is(3)));
 
-        verify(service).getAreaListings("udupi", List.of("IN|KA|Udupi|Malpe"), 3, null, null, null, null, null, null);
+        verify(service).getAreaListings("udupi", List.of("IN|KA|Udupi|Malpe"), 3, null, null, null, null, null, null, false);
     }
 
     // ── AC5: limitPerArea clamped to 20 ─────────────────────────────────────
@@ -149,7 +155,7 @@ class CityAreaListingsControllerTest {
     @Test
     void ac5_limitPerAreaAboveMax_responseReflectsClamped20() throws Exception {
         // Service receives raw 100 and returns a response with the clamped limitPerArea=20
-        when(service.getAreaListings(eq("udupi"), any(), eq(100), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+        when(service.getAreaListings(eq("udupi"), any(), eq(100), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 20, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -158,14 +164,14 @@ class CityAreaListingsControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.limitPerArea", is(20)));
 
-        verify(service).getAreaListings("udupi", List.of("IN|KA|Udupi|Malpe"), 100, null, null, null, null, null, null);
+        verify(service).getAreaListings("udupi", List.of("IN|KA|Udupi|Malpe"), 100, null, null, null, null, null, null, false);
     }
 
     // ── AC6: anonymous callers get 200 ───────────────────────────────────────
 
     @Test
     void ac6_noJwtRequired_anonymousGets200() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         // No Authorization header supplied — must still get 200
@@ -178,7 +184,7 @@ class CityAreaListingsControllerTest {
 
     @Test
     void ac7_unknownCity_returns400() throws Exception {
-        when(service.getAreaListings(eq("nowhere"), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(eq("nowhere"), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown_city"));
 
         mockMvc.perform(get("/api/discover/cities/nowhere/listings")
@@ -228,7 +234,7 @@ class CityAreaListingsControllerTest {
                 List.of());
         AreaListingsEntry unknownEntry = new AreaListingsEntry("IN|KA|Udupi|Nowhere", null,
                 Boolean.TRUE, List.of());
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5,
                         List.of(knownEntry, unknownEntry)));
 
@@ -249,7 +255,7 @@ class CityAreaListingsControllerTest {
     void ac10_areaWithNoLiveListings_returnsEmptyListings() throws Exception {
         AreaListingsEntry entry = new AreaListingsEntry("IN|KA|Udupi|Manipal", "Manipal", null,
                 List.of());
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of(entry)));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -288,7 +294,7 @@ class CityAreaListingsControllerTest {
 
     @Test
     void filter_minPriceAndMaxPrice_passedToService() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), eq(1_000_000L), eq(5_000_000L), any(), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), eq(1_000_000L), eq(5_000_000L), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -299,14 +305,14 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                1_000_000L, 5_000_000L, null, null, null, null);
+                1_000_000L, 5_000_000L, null, null, null, null, false);
     }
 
     // ── Filter params: bedrooms passed to service ────────────────────────────
 
     @Test
     void filter_bedrooms_passedToService() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(3), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(3), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -316,14 +322,14 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, 3, null, null, null);
+                null, null, 3, null, null, null, false);
     }
 
     // ── Filter params: propertyType passed to service ────────────────────────
 
     @Test
     void filter_propertyType_passedToService() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), eq("apartment"), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), eq("apartment"), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -333,7 +339,7 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, "apartment", null, null);
+                null, null, null, "apartment", null, null, false);
     }
 
     // ── q param: keyword search ──────────────────────────────────────────────
@@ -341,7 +347,7 @@ class CityAreaListingsControllerTest {
     @Test
     void q_absent_serviceCalledWithQNull() throws Exception {
         // q not supplied → service receives q=null (backward compat)
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), isNull(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), isNull(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -350,13 +356,13 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, false);
     }
 
     @Test
     void q_keyword_passedToService() throws Exception {
         // q="villa" → service receives q="villa"
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), eq("villa"), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), eq("villa"), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -366,13 +372,13 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, null, "villa", null);
+                null, null, null, null, "villa", null, false);
     }
 
     @Test
     void q_emptyString_passedAsEmptyToService() throws Exception {
         // q="" → controller passes "" to service; service normalises to null (blank check)
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -383,13 +389,13 @@ class CityAreaListingsControllerTest {
         // Controller passes the raw value through; service normalises blank → null
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, null, "", null);
+                null, null, null, null, "", null, false);
     }
 
     @Test
     void q_whitespaceOnly_passedAsWhitespaceToService() throws Exception {
         // q="   " → controller passes "   " through; service normalises blank → null
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -399,7 +405,7 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, null, "   ", null);
+                null, null, null, null, "   ", null, false);
     }
 
     @Test
@@ -419,7 +425,7 @@ class CityAreaListingsControllerTest {
     @Test
     void q_combinedWithBedrooms_bothPassedToService() throws Exception {
         // q="villa" combined with bedrooms=2 → both forwarded correctly
-        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(2), any(), eq("villa"), any()))
+        when(service.getAreaListings(any(), any(), any(), any(), any(), eq(2), any(), eq("villa"), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -430,14 +436,14 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, 2, null, "villa", null);
+                null, null, 2, null, "villa", null, false);
     }
 
     // ── No filter params → service called with all nulls (existing happy path) ─
 
     @Test
     void filter_noParams_serviceCalledWithAllNulls() throws Exception {
-        when(service.getAreaListings(any(), any(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
+        when(service.getAreaListings(any(), any(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")
@@ -446,14 +452,15 @@ class CityAreaListingsControllerTest {
 
         verify(service).getAreaListings(
                 "udupi", List.of("IN|KA|Udupi|Malpe"), null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, false);
     }
 
-    // ── Cache-Control: public, max-age=60 ────────────────────────────────────
+    // ── Cache-Control: anon → public max-age=60; authed → no-store ──────────
 
     @Test
-    void getCityAreaListings_responseHasCacheControlPublicMaxAge60() throws Exception {
-        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+    void getCityAreaListings_anonResponseHasCacheControlPublicMaxAge60() throws Exception {
+        // No Authorization header → anonymous → public cache
+        when(service.getAreaListings(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean()))
                 .thenReturn(new CityAreaListingsResponse("udupi", 5, List.of()));
 
         mockMvc.perform(get("/api/discover/cities/udupi/listings")

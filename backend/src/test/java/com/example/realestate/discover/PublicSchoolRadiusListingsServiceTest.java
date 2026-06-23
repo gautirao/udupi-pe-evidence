@@ -49,9 +49,10 @@ class PublicSchoolRadiusListingsServiceTest {
     // ── Helper: build a minimal stub card ────────────────────────────────────
 
     private static PublicSchoolRadiusListingCard stubCard(String id) {
+        // priceBand replaces pricePaise — this endpoint is anon-only, exact price is never returned
         return new PublicSchoolRadiusListingCard(
                 id, "L-00" + id, "house", "Title " + id, "Malpe",
-                "IN|KA|Udupi|Malpe", 5_000_000L,
+                "IN|KA|Udupi|Malpe", "₹0–25L",
                 null, null, 100.0, "sq m", 3,
                 13.3, 74.7, "https://example.com/img.jpg",
                 "sale", "READY", 5, false,
@@ -289,7 +290,10 @@ class PublicSchoolRadiusListingsServiceTest {
         assertThat(card.id()).isEqualTo("xyz");
         assertThat(card.listingNumber()).isEqualTo("L-999");
         assertThat(card.propertyType()).isEqualTo("apartment");
-        assertThat(card.pricePaise()).isEqualTo(8_000_000L);
+        // pricePaise is no longer a field — price is coarsened to priceBand for all anon responses.
+        // price_paise=8_000_000L (₹80,000 = 0.8L) → "₹0–25L" band.
+        // Wait — 8_000_000 paise = ₹80,000 which is well under ₹25L. Correct band: "₹0–25L".
+        assertThat(card.priceBand()).isEqualTo("₹0–25L");
         assertThat(card.landArea()).isNull();
         assertThat(card.builtArea()).isEqualTo(75.0);
         assertThat(card.bedrooms()).isEqualTo(2);

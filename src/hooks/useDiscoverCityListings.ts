@@ -4,6 +4,13 @@ import { api } from '@/lib/api';
 export interface DiscoverCityListingItem {
   id: string;
   pricePaise?: number;
+  /**
+   * Coarse price band string (e.g. "₹50L–1Cr") returned by the backend for ANONYMOUS
+   * callers. Mutually exclusive with pricePaise — the backend sends exactly one of the
+   * two (or neither when the DB price is null). Authenticated callers receive pricePaise
+   * instead. See #1616 auth-branched price contract.
+   */
+  priceBand?: string | null;
   propertyType?: string;
   locality?: string;
   primaryImageUrl?: string | null;
@@ -54,6 +61,16 @@ export interface DiscoverCityListingsParams {
   q?: string;
   /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
   listingPurpose?: string;
+  /**
+   * Issue #1616 — auth-branched price contract. When true, the api helper attaches
+   * the JWT so the backend returns exact pricePaise (no priceBand). When false/absent,
+   * no JWT is sent and the backend returns a coarse priceBand string.
+   *
+   * This flag is also included in the TanStack Query cache key so that login/logout
+   * produces a separate cache bucket — preventing a stale anon (band) response from
+   * being served to a freshly-authenticated user and vice versa.
+   */
+  isAuthenticated?: boolean;
 }
 
 /**
@@ -73,6 +90,7 @@ export function useDiscoverCityListings({
   propertyType,
   q,
   listingPurpose,
+  isAuthenticated = false,
 }: DiscoverCityListingsParams) {
   const sortedKeys = [...areaKeys].sort();
 
@@ -88,6 +106,10 @@ export function useDiscoverCityListings({
       propertyType ?? null,
       q?.trim() || null,
       listingPurpose ?? null,
+      // Issue #1616: include auth state so login/logout produces a separate cache bucket.
+      // Anon callers receive priceBand; authed callers receive pricePaise — they must not
+      // share a cache entry or a stale band response would be served post-login.
+      isAuthenticated,
     ],
     queryFn: () => {
       const params = new URLSearchParams();
@@ -99,9 +121,12 @@ export function useDiscoverCityListings({
       if (propertyType) params.append('propertyType', propertyType);
       if (q?.trim()) params.append('q', q.trim());
       if (listingPurpose) params.append('listingPurpose', listingPurpose);
+      // Issue #1616: do NOT force skipAuth. When the user has a valid session the api
+      // helper attaches the JWT (Bearer token) automatically, causing the backend to
+      // return exact pricePaise. Anonymous callers have no session so no token is
+      // attached and the backend returns a coarse priceBand string instead.
       return api.get<DiscoverCityListingsResponse>(
         `/api/discover/cities/${encodeURIComponent(city)}/listings?${params.toString()}`,
-        { skipAuth: true },
       );
     },
     enabled: areaKeys.length > 0,

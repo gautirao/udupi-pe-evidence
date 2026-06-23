@@ -7,10 +7,18 @@ import java.time.OffsetDateTime;
 /**
  * Anon-safe projection for one listing in a school-radius result.
  *
- * <p>Contains EXACTLY the 20 approved public fields. Excluded fields
+ * <p>This endpoint is anon-only (no authed variant). Exact price is never exposed:
+ * {@code pricePaise} is always null/absent; {@code priceBand} carries the coarse label
+ * from {@link PriceBand}. A listing with null price_paise yields priceBand=null (omitted)
+ * — price is never fabricated.
+ *
+ * <p>Contains EXACTLY the 21 approved public fields. Excluded fields
  * (trustTier, reraNumber, reraValid, sellerType, status, updatedAt,
  * lastUpdatedAt, firstPublishedAt) are not declared in this record
  * and are never selected or serialized.
+ *
+ * <p>trustTier is deliberately excluded from this record (#1239/#1551 — anon-safe exclusion).
+ * Do NOT add it here.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record PublicSchoolRadiusListingCard(
@@ -20,7 +28,7 @@ public record PublicSchoolRadiusListingCard(
         String title,
         String locality,
         String areaKey,
-        Long pricePaise,
+        String priceBand,
         Double landArea,
         String landAreaUnit,
         Double builtArea,

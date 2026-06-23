@@ -59,7 +59,11 @@ public class CityAreaListingsService {
      *                     Passed to {@code websearch_to_tsquery('english', ?)} — malformed input
      *                     may cause a {@code DataAccessException} which propagates to the global
      *                     exception handler.
-     * @param listingPurpose optional listing purpose filter ('sale' or 'rent'); null/blank = no filter
+     * @param listingPurpose  optional listing purpose filter ('sale' or 'rent'); null/blank = no filter
+     * @param isAuthenticated true when the caller presented a valid JWT; false for anonymous callers.
+     *                        When false, pricePaise is omitted and priceBand (coarse label) is returned
+     *                        instead. Server-side price filtering (minPrice/maxPrice) always uses the
+     *                        exact price_paise column regardless of this flag.
      * @throws ResponseStatusException 400 "unknown_city" when city slug is not in cities table
      */
     @Transactional(readOnly = true)
@@ -71,7 +75,8 @@ public class CityAreaListingsService {
                                                     Integer bedrooms,
                                                     String propertyType,
                                                     String q,
-                                                    String listingPurpose) {
+                                                    String listingPurpose,
+                                                    boolean isAuthenticated) {
 
         int limit = clampLimit(rawLimit);
 
@@ -236,9 +241,17 @@ public class CityAreaListingsService {
                 String createdAt = createdTs != null ? createdTs.toInstant().toString() : null;
                 Double latitude = rs.getObject("latitude") != null ? rs.getDouble("latitude") : null;
                 Double longitude = rs.getObject("longitude") != null ? rs.getDouble("longitude") : null;
+
+                // Price projection: authenticated callers get exact pricePaise (priceBand null/omitted).
+                // Anonymous callers get priceBand (coarse label) and pricePaise null (omitted by NON_NULL).
+                // Null price_paise → both fields null for all callers — price is never fabricated.
+                Long projectedPricePaise = isAuthenticated ? pricePaise : null;
+                String projectedPriceBand = isAuthenticated ? null : PriceBand.of(pricePaise);
+
                 cardsByArea.get(areaKey).add(new AreaListingCard(
                         UUID.fromString(rawId),
-                        pricePaise,
+                        projectedPricePaise,
+                        projectedPriceBand,
                         rs.getString("property_type"),
                         rs.getString("locality"),
                         rs.getString("primary_image_url"),

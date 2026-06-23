@@ -141,6 +141,9 @@ public class PublicSchoolRadiusListingsService {
             boolean backOnMarket = backToMarketAt != null
                     && backToMarketAt.isAfter(OffsetDateTime.now().minusDays(BACK_ON_MARKET_WINDOW_DAYS));
 
+            // This endpoint is anon-only: price_paise is never returned in the response.
+            // Apply PriceBand coarsening. Null price_paise → priceBand null (omitted by NON_NULL).
+            Long rawPricePaise = rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null;
             return new PublicSchoolRadiusListingCard(
                     rs.getString("id"),
                     rs.getString("listing_number"),
@@ -148,7 +151,7 @@ public class PublicSchoolRadiusListingsService {
                     rs.getString("title"),
                     rs.getString("locality"),
                     rs.getString("area_key"),
-                    rs.getObject("price_paise") != null ? rs.getLong("price_paise") : null,
+                    PriceBand.of(rawPricePaise),
                     rs.getObject("land_area") != null ? rs.getDouble("land_area") : null,
                     rs.getString("land_area_unit"),
                     rs.getObject("built_area") != null ? rs.getDouble("built_area") : null,

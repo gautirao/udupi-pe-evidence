@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Lock, Building2, MapPin, Heart, Navigation, ChevronRight,
+  BedDouble, Bath, Ruler, Calendar, ShieldCheck, Shield, Building2, MapPin, Heart, Navigation, ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -32,23 +32,6 @@ const TRUST_TIERS: Record<string, { label: string; className: string; icon: type
   B: { label: 'Trusted', className: 'bg-secondary text-secondary-foreground', icon: Shield },
   C: { label: 'Listed', className: 'bg-muted/60 text-muted-foreground', icon: Shield },
 };
-
-/**
- * DEMO/NON-CONTRACTUAL trust-tier fallback. The discovery listing response DOES expose a
- * `trustTier` field, but it currently comes back null/empty for discovery-card listings
- * (the backend does not populate the scoring signal here yet — it is also flagged as an
- * incidental leak pending a deliberate, centrally-defined contract). To visually validate
- * the trust-badge affordance against the design mock, callers may opt into this fallback
- * via `demoTrustFallback`. It derives a STABLE tier from the listing id (deterministic,
- * never random) so the UI is consistent across renders. This is demo-only UI — it makes
- * NO verification claim and MUST be removed once the backend populates a real trust tier.
- * Tracked by the follow-up "expose listing trust tier for discovery listing cards" issue.
- */
-function demoTrustTierFor(id: string): 'A' | 'B' | 'C' {
-  let sum = 0;
-  for (let i = 0; i < id.length; i += 1) sum += id.charCodeAt(i);
-  return (['A', 'B', 'C'] as const)[sum % 3];
-}
 
 /** Build a deduplicated "Sublocality, Area" location string from real fields only. */
 export function buildLocationText(
@@ -107,13 +90,6 @@ export interface PropertyCardProps {
    * never fabricated. Computed by the parent panel from real school + listing coordinates.
    */
   distanceKm?: number | null;
-  /**
-   * Opt-in DEMO trust badge. When true AND the real `listing.trustTier` is absent, the card
-   * renders a clearly-marked, deterministic demo trust badge (see `demoTrustTierFor`) so the
-   * affordance is visible for design validation. Never overrides a real tier. Default false —
-   * existing consumers (and real backend data) are unaffected. Demo-only, non-contractual.
-   */
-  demoTrustFallback?: boolean;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -127,15 +103,10 @@ export function PropertyCard({
   onHover,
   areaLabel,
   distanceKm,
-  demoTrustFallback = false,
 }: PropertyCardProps) {
-  // Prefer the REAL backend trustTier when it maps to a displayable tier (A/B/C). The live
-  // discovery response currently returns tiers outside this vocabulary (e.g. 'D' on seed
-  // data) or null, which yield no badge. Only when there is no displayable real tier AND the
-  // caller opted in do we synthesize a clearly-marked, deterministic demo tier (see above).
-  const realTrust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
-  const isDemoTrust = !realTrust && demoTrustFallback;
-  const trust = realTrust ?? (isDemoTrust ? TRUST_TIERS[demoTrustTierFor(listing.id)] : undefined);
+  // Render real trust badge only when trustTier maps to a known tier (A/B/C).
+  // Tiers outside this vocabulary (e.g. 'D') and null/undefined yield no badge.
+  const trust = listing.trustTier ? TRUST_TIERS[listing.trustTier] : undefined;
 
   // Visual-only "save" affordance (heart). Session-local toggle for the affordance feel —
   // it does NOT persist, hit any API, or touch the user profile. Real save/unsave +
@@ -238,7 +209,6 @@ export function PropertyCard({
           <div className="absolute top-2.5 left-2.5">
             <span
               data-testid="trust-badge"
-              data-demo-trust={isDemoTrust ? 'true' : undefined}
               className={cn(
                 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium shadow-sm',
                 trust.className,
@@ -264,21 +234,20 @@ export function PropertyCard({
 
       {/* Body */}
       <div className="p-4">
-        {/* Price + property-type pill */}
+        {/* Price + property-type pill
+            Issue #1616 — three-way price render:
+            1. pricePaise present (authed path): render exact formatted price.
+            2. priceBand present (anon path): render the coarse band label.
+            3. Neither present (null DB price on either path): render "Price on request". */}
         <div className="flex items-start justify-between gap-2">
-          {isAuthenticated ? (
-            listing.pricePaise != null ? (
-              <p className="text-xl font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums">
-                {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Price on request</p>
-            )
+          {listing.pricePaise != null ? (
+            <p className="text-xl font-mono font-semibold tracking-[-0.01em] text-foreground tabular-nums">
+              {formatPrice(Math.round(listing.pricePaise / 100), 'INR')}
+            </p>
+          ) : listing.priceBand != null ? (
+            <p className="text-base font-semibold text-foreground">{listing.priceBand}</p>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-              <span className="text-xs text-muted-foreground">Sign in to view price</span>
-            </div>
+            <p className="text-xs text-muted-foreground">Price on request</p>
           )}
 
           {typeLabel && (() => {

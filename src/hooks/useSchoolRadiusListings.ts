@@ -15,6 +15,10 @@ import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
  * Fields excluded server-side (trustTier, reraNumber, reraValid, sellerType, status,
  * updatedAt, lastUpdatedAt, firstPublishedAt) are NEVER serialized — the UI must not
  * render or rely on them.
+ *
+ * Issue #1616: the `pricePaise` field on this endpoint was RENAMED to `priceBand` (a
+ * coarse band string, e.g. "₹50L–1Cr"). This endpoint is anon-only; there is no authed
+ * variant. `priceBand` is absent when the DB price is null.
  */
 export interface PublicSchoolRadiusListingCard {
   id: string;
@@ -23,7 +27,8 @@ export interface PublicSchoolRadiusListingCard {
   title?: string | null;
   locality?: string | null;
   areaKey?: string | null;
-  pricePaise?: number | null;
+  /** Issue #1616: renamed from pricePaise — this endpoint is anon-only and returns a coarse band. */
+  priceBand?: string | null;
   landArea?: number | null;
   landAreaUnit?: string | null;
   builtArea?: number | null;
@@ -89,12 +94,16 @@ export type SchoolRadiusListingItem = DiscoverCityListingItem & {
  *   heroImageUrl → primaryImageUrl
  *   latitude     → lat AND latitude (both populated for downstream consumers)
  *   longitude    → lon AND longitude
+ *   priceBand    → priceBand (carried as-is; pricePaise is not present on this endpoint)
  *
  * Optional fields not present in the 20-field contract (bathrooms, totalFloors,
  * parkingCount, furnishingStatus, trustTier) are left undefined — PropertyCard
  * tolerates their absence, and trustTier undefined means the trust badge simply
  * does not render (AC6). daysOnMarket/backOnMarket/possessionStatus ARE in the
  * contract and are carried for client-side filter parity.
+ *
+ * Issue #1616: pricePaise was renamed to priceBand on this endpoint. The mapping now
+ * carries priceBand into DiscoverCityListingItem.priceBand (no pricePaise mapping).
  */
 export function mapSchoolRadiusCard(
   c: PublicSchoolRadiusListingCard,
@@ -104,7 +113,7 @@ export function mapSchoolRadiusCard(
     propertyType: c.propertyType ?? undefined,
     title: c.title ?? null,
     locality: c.locality ?? undefined,
-    pricePaise: c.pricePaise ?? undefined,
+    priceBand: c.priceBand ?? undefined,
     primaryImageUrl: c.heroImageUrl ?? null,
     listingPurpose: c.listingPurpose ?? undefined,
     bedrooms: c.bedrooms ?? null,

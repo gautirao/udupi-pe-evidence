@@ -7,8 +7,17 @@ import java.util.UUID;
 /**
  * Slim listing card returned per area in the city-first discover endpoint.
  *
+ * <p>Auth-aware price projection:
+ * <ul>
+ *   <li>Authenticated callers: {@code pricePaise} populated, {@code priceBand} null (omitted by NON_NULL).</li>
+ *   <li>Anonymous callers: {@code pricePaise} null (omitted), {@code priceBand} populated with
+ *       a coarse band label from {@link PriceBand}.</li>
+ *   <li>Null price_paise in DB: both fields null/absent for all callers — price is never fabricated.</li>
+ * </ul>
+ *
  * @param id              listing UUID
- * @param pricePaise      asking price in paise, or null
+ * @param pricePaise      exact asking price in paise (authenticated callers only); null for anon
+ * @param priceBand       coarse price band label (anonymous callers only, e.g. "₹50L–1Cr"); null for authed
  * @param propertyType    e.g. "house", "apartment", "land"
  * @param locality        locality label from the listing record
  * @param primaryImageUrl URL of the lowest-position image, or null if none uploaded
@@ -32,6 +41,7 @@ import java.util.UUID;
 public record AreaListingCard(
         UUID id,
         Long pricePaise,
+        String priceBand,
         String propertyType,
         String locality,
         String primaryImageUrl,

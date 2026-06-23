@@ -67,6 +67,7 @@ class PublicSchoolRadiusListingsControllerTest {
     }
 
     private static PublicSchoolRadiusListingCard sampleCard() {
+        // priceBand replaces pricePaise — anon-only endpoint, exact price never returned
         return new PublicSchoolRadiusListingCard(
                 "abc-123",
                 "L-001",
@@ -74,7 +75,7 @@ class PublicSchoolRadiusListingsControllerTest {
                 "Test listing near school",
                 "Malpe",
                 "IN|KA|Udupi|Malpe",
-                5_000_000L,
+                "₹0–25L",
                 null,
                 null,
                 100.0,
@@ -249,7 +250,9 @@ class PublicSchoolRadiusListingsControllerTest {
                 .andExpect(jsonPath("$.content[0].title").exists())
                 .andExpect(jsonPath("$.content[0].locality").exists())
                 .andExpect(jsonPath("$.content[0].areaKey").exists())
-                .andExpect(jsonPath("$.content[0].pricePaise").exists())
+                // anon-only endpoint: priceBand present, pricePaise absent
+                .andExpect(jsonPath("$.content[0].priceBand").exists())
+                .andExpect(jsonPath("$.content[0].pricePaise").doesNotExist())
                 .andExpect(jsonPath("$.content[0].builtArea").exists())
                 .andExpect(jsonPath("$.content[0].builtAreaUnit").exists())
                 .andExpect(jsonPath("$.content[0].bedrooms").exists())

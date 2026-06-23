@@ -178,16 +178,86 @@ describe('PropertyCard', () => {
     });
   });
 
-  it('shows the formatted price when isAuthenticated is true and pricePaise is set', () => {
+  // ── Issue #1616 — three-way price contract ────────────────────────────────
+  // Branch 1: pricePaise present (authed path) → exact formatted rupee price rendered.
+  // Branch 2: priceBand present, no pricePaise (anon path) → band label rendered.
+  // Branch 3: neither present (null DB price on either path) → "Price on request".
+  // "Sign in to view price" no longer exists — replaced by the band or "Price on request".
+
+  it('#1616 branch-1: pricePaise present → exact formatted price visible (authed path)', () => {
     renderCard({
       listing: makeListing({ pricePaise: 5000000 * 100 }),
       isAuthenticated: true,
       onNavigate: vi.fn(),
     });
-    // formatPrice(50_00_000, 'INR') — exact string depends on the formatter, just verify price is visible
+    // Exact rupee value rendered; none of the fallback texts present
+    expect(screen.queryByText('Price on request')).not.toBeInTheDocument();
+    // Rupee symbol must be in the DOM
+    expect(document.body.textContent).toMatch(/₹/);
+  });
+
+  it('#1616 branch-2: priceBand present, no pricePaise → band label rendered (anon path)', () => {
+    renderCard({
+      listing: makeListing({ pricePaise: undefined, priceBand: '₹50L–1Cr' }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('₹50L–1Cr')).toBeInTheDocument();
+    // Must NOT show the old "Sign in" wall or "Price on request"
     expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
     expect(screen.queryByText('Price on request')).not.toBeInTheDocument();
   });
+
+  it('#1616 branch-2: anon with priceBand never shows exact rupee amount', () => {
+    const { container } = renderCard({
+      listing: makeListing({ pricePaise: undefined, priceBand: '₹25–50L' }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('₹25–50L')).toBeInTheDocument();
+    // No exact price digit-grouping in the DOM (the band is a label, not formatted paise)
+    expect(container.textContent).not.toMatch(/50,00,000|5,000,000/);
+  });
+
+  it('#1616 branch-3: neither pricePaise nor priceBand → "Price on request"', () => {
+    renderCard({
+      listing: makeListing({ pricePaise: undefined, priceBand: undefined }),
+      isAuthenticated: true,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('Price on request')).toBeInTheDocument();
+  });
+
+  it('#1616 branch-3 (anon): null priceBand and no pricePaise → "Price on request"', () => {
+    renderCard({
+      listing: makeListing({ pricePaise: undefined, priceBand: null }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.getByText('Price on request')).toBeInTheDocument();
+  });
+
+  it('#1616 no "Sign in to view price" text exists — old wall is fully removed', () => {
+    // Both authed and anon paths must NOT render the old sign-in wall copy.
+    const { rerender } = renderCard({
+      listing: makeListing({ pricePaise: undefined, priceBand: '₹0–25L' }),
+      isAuthenticated: false,
+      onNavigate: vi.fn(),
+    });
+    expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
+    rerender(
+      <MemoryRouter>
+        <PropertyCard
+          listing={makeListing({ pricePaise: 5000000 * 100 })}
+          isAuthenticated={true}
+          onNavigate={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
+  });
+
+  // Legacy tests updated for new contract (kept for backward-compat shape documentation)
 
   it('shows "Price on request" when authenticated but pricePaise is undefined', () => {
     renderCard({
@@ -196,15 +266,6 @@ describe('PropertyCard', () => {
       onNavigate: vi.fn(),
     });
     expect(screen.getByText('Price on request')).toBeInTheDocument();
-  });
-
-  it('shows "Sign in to view price" for anonymous users regardless of price', () => {
-    renderCard({
-      listing: makeListing({ pricePaise: 5000000 * 100 }),
-      isAuthenticated: false,
-      onNavigate: vi.fn(),
-    });
-    expect(screen.getByText('Sign in to view price')).toBeInTheDocument();
   });
 
   it('shows the locality with MapPin', () => {
@@ -288,33 +349,41 @@ describe('PropertyCard', () => {
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 
-  // ── Issue #1547 — anon no-leak (BLOCKING, RISK-2) ──────────────────────────
-  describe('anon price gate (no-leak)', () => {
-    // A clearly-recognisable, NON-NULL price so the assertion cannot false-pass on
-    // a missing/zero value. ₹50,00,000 contains the digit run "50,00,000".
-    const NON_NULL_PRICE = makeListing({ pricePaise: 5000000 * 100 });
+  // ── Issue #1547/#1616 — anon no-leak (BLOCKING, RISK-2) ────────────────────
+  // #1616 update: anon path no longer shows "Sign in to view price".
+  // Backend coarsens price; PropertyCard renders priceBand for anon (exact price never leaked).
+  describe('anon price gate (no-leak) — #1616 updated contract', () => {
+    // Backend-shaped anon fixture: pricePaise absent, priceBand carries the coarse label.
+    // The exact digit run "50,00,000" must never appear in the anon DOM.
+    const ANON_FIXTURE = makeListing({ pricePaise: undefined, priceBand: '₹50L–1Cr' });
+    // Authed fixture: pricePaise present (₹50,00,000), priceBand absent.
+    const AUTHED_FIXTURE = makeListing({ pricePaise: 5000000 * 100, priceBand: undefined });
 
-    it('never renders a rupee value or digits for anonymous users', () => {
+    it('#1616 anon: priceBand label shown, no exact digit-grouped rupee amount', () => {
       const { container } = renderCard({
-        listing: NON_NULL_PRICE,
+        listing: ANON_FIXTURE,
         isAuthenticated: false,
         onNavigate: vi.fn(),
       });
-      expect(screen.getByText('Sign in to view price')).toBeInTheDocument();
-      // No rupee symbol and no price digit-grouping anywhere in the anon DOM.
-      expect(container.textContent).not.toMatch(/₹/);
+      // Band label is shown (not a sign-in wall)
+      expect(screen.getByText('₹50L–1Cr')).toBeInTheDocument();
+      // No exact price digit-grouping — backend never sent it
       expect(container.textContent).not.toMatch(/50,00,000|5,000,000/);
+      // Old sign-in wall gone
+      expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
     });
 
-    it('renders the formatted rupee price for authenticated users (same fixture)', () => {
+    it('#1616 authed: exact formatted rupee price shown, no band label', () => {
       const { container } = renderCard({
-        listing: NON_NULL_PRICE,
+        listing: AUTHED_FIXTURE,
         isAuthenticated: true,
         onNavigate: vi.fn(),
       });
       expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
-      // The authed branch DOES show a rupee value for the same non-null fixture.
+      // The authed branch renders a rupee value from pricePaise
       expect(container.textContent).toMatch(/₹/);
+      // No band label for authed path
+      expect(screen.queryByText('₹50L–1Cr')).not.toBeInTheDocument();
     });
   });
 
@@ -562,16 +631,23 @@ describe('PropertyCard', () => {
       expect(screen.getByTestId('listing-card')).toBeInTheDocument();
     });
 
-    // Anon price gate still enforced (school-first journey uses same component, same gate)
-    it('still hides price for anonymous users on school-first shaped listings', () => {
+    // #1616: anon path for school-first journey receives priceBand (not pricePaise).
+    // The backend coarsens price; exact rupee amount must NOT appear for anon regardless
+    // of which journey surfaces the PropertyCard.
+    it('#1616 anon school-first: priceBand shown, no exact rupee amount (backend coarsens)', () => {
       renderCard({
-        listing: makeListing({ pricePaise: 8_000_000 * 100, listingPurpose: 'sale' }),
+        // Anon backend response: pricePaise absent (undefined), priceBand present
+        listing: makeListing({ pricePaise: undefined, priceBand: '₹50L–1Cr', listingPurpose: 'sale' }),
         isAuthenticated: false,
         onNavigate: vi.fn(),
         distanceKm: 1.2,
       });
-      expect(screen.getByText('Sign in to view price')).toBeInTheDocument();
-      expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
+      // Band label rendered — no exact price
+      expect(screen.getByText('₹50L–1Cr')).toBeInTheDocument();
+      // Old sign-in wall is gone
+      expect(screen.queryByText('Sign in to view price')).not.toBeInTheDocument();
+      // No exact digit-grouped rupee value in the DOM
+      expect(document.body.textContent).not.toMatch(/8,00,00,000|8,000,000/);
     });
 
     // Missing optional fields (no bedrooms, no builtArea, no createdAt) — still renders
@@ -703,6 +779,84 @@ describe('PropertyCard', () => {
       });
       expect(screen.getByText('Verified')).toBeInTheDocument();
       expect(screen.getByTestId('distance-badge')).toHaveTextContent('1.5 km from school');
+    });
+  });
+
+  // ── Issue #1616 — trust badge fabrication removed (AC10/AC11) ─────────────
+  // demoTrustFallback prop and demoTrustTierFor helper are REMOVED in #1616.
+  // PropertyCard must never invent a trust tier — real data or no badge.
+
+  describe('#1616 trust badge: no fabrication (AC10/AC11)', () => {
+    it('AC10: trustTier A → Verified badge rendered', () => {
+      renderCard({ listing: makeListing({ trustTier: 'A' }), isAuthenticated: true, onNavigate: vi.fn() });
+      expect(screen.getByTestId('trust-badge')).toBeInTheDocument();
+      expect(screen.getByText('Verified')).toBeInTheDocument();
+    });
+
+    it('AC10: trustTier B → Trusted badge rendered', () => {
+      renderCard({ listing: makeListing({ trustTier: 'B' }), isAuthenticated: true, onNavigate: vi.fn() });
+      expect(screen.getByTestId('trust-badge')).toBeInTheDocument();
+      expect(screen.getByText('Trusted')).toBeInTheDocument();
+    });
+
+    it('AC10: trustTier C → Listed badge rendered', () => {
+      renderCard({ listing: makeListing({ trustTier: 'C' }), isAuthenticated: true, onNavigate: vi.fn() });
+      expect(screen.getByTestId('trust-badge')).toBeInTheDocument();
+      expect(screen.getByText('Listed')).toBeInTheDocument();
+    });
+
+    it('AC10: trustTier D → NO badge (D is outside A/B/C vocabulary)', () => {
+      renderCard({
+        listing: makeListing({ trustTier: 'D' as DiscoverCityListingItem['trustTier'] }),
+        isAuthenticated: true,
+        onNavigate: vi.fn(),
+      });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+    });
+
+    it('AC10: trustTier null → NO badge (never invent a tier)', () => {
+      renderCard({ listing: makeListing({ trustTier: null }), isAuthenticated: true, onNavigate: vi.fn() });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+    });
+
+    it('AC11: anon school-first listing (no trustTier, no pricePaise) → NO trust badge rendered', () => {
+      // This is the AC11 / school-first anon case: backend omits trustTier from the
+      // PublicSchoolRadiusListingCard record (deliberate exclusion per #1239/#1551).
+      // Component must render no badge — never fabricate one.
+      renderCard({
+        listing: makeListing({ trustTier: null, pricePaise: undefined, priceBand: '₹50L–1Cr' }),
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        distanceKm: 0.8,
+      });
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+      expect(screen.queryByText('Verified')).not.toBeInTheDocument();
+      expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
+      expect(screen.queryByText('Listed')).not.toBeInTheDocument();
+      // But priceBand IS shown and distance badge IS shown
+      expect(screen.getByText('₹50L–1Cr')).toBeInTheDocument();
+      expect(screen.getByTestId('distance-badge')).toBeInTheDocument();
+    });
+
+    it('demoTrustFallback prop does not exist on PropertyCardProps (removed in #1616)', () => {
+      // Structural: PropertyCard must not accept a demoTrustFallback prop.
+      // If demoTrustFallback were still accepted, this assertion would catch a re-introduction.
+      // We test by passing an unexpected prop — TypeScript would catch it at compile time;
+      // at runtime the component must render WITHOUT any fabricated badge.
+      const listingNullTier = makeListing({ trustTier: null });
+      // Cast to any to bypass TS so the test remains valid even if the type definition changes
+      renderCard({
+        listing: listingNullTier,
+        isAuthenticated: false,
+        onNavigate: vi.fn(),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({ demoTrustFallback: true } as any),
+      });
+      // With demoTrustFallback removed, no badge should appear for null trustTier
+      expect(screen.queryByTestId('trust-badge')).not.toBeInTheDocument();
+      expect(screen.queryByText('Verified')).not.toBeInTheDocument();
+      expect(screen.queryByText('Trusted')).not.toBeInTheDocument();
+      expect(screen.queryByText('Listed')).not.toBeInTheDocument();
     });
   });
 });
