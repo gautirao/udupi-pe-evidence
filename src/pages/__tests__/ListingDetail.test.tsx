@@ -347,35 +347,6 @@ describe('ListingDetail — display ID (RE-83)', () => {
   });
 });
 
-// ── F. ListingTransparencyCard integration (RE-94) ──────────────
-
-describe('ListingDetail — ListingTransparencyCard (RE-94)', () => {
-  it('renders the transparency card for a listing with daysOnMarket', () => {
-    renderWithListing(makeListing({ daysOnMarket: 5 }));
-    const card = screen.getByTestId('listing-transparency-card');
-    expect(card).toBeInTheDocument();
-    expect(card.getAttribute('data-days')).toBe('5');
-  });
-
-  it('renders transparency card even when all new fields are absent (card renders null internally)', () => {
-    // The card is always rendered by ListingDetail; it returns null internally when nothing to show
-    renderWithListing(makeListing());
-    expect(screen.getByTestId('listing-transparency-card')).toBeInTheDocument();
-  });
-
-  it('passes backOnMarket flag to the transparency card', () => {
-    renderWithListing(makeListing({ backOnMarket: true }));
-    const card = screen.getByTestId('listing-transparency-card');
-    expect(card.getAttribute('data-back')).toBe('true');
-  });
-
-  it('passes isSuspectedDuplicate flag to the transparency card', () => {
-    renderWithListing(makeListing({ isSuspectedDuplicate: true }));
-    const card = screen.getByTestId('listing-transparency-card');
-    expect(card.getAttribute('data-duplicate')).toBe('true');
-  });
-});
-
 // ── G. Anonymous teaser view — RE-189 regression ──────────────
 
 describe('ListingDetail — anonymous teaser (RE-189)', () => {

@@ -258,6 +258,7 @@ export default function ListingDetail() {
 
   return (
     <AppLayout>
+      <div className="bg-muted/40 min-h-screen">
       <div className="max-w-6xl mx-auto p-4 md:p-6">
         {/* Preview banner */}
         {isPreview && (
@@ -409,6 +410,7 @@ export default function ListingDetail() {
           initialTime={bookingInitialTime}
         />
       )}
+      </div>
     </AppLayout>
   );
 }

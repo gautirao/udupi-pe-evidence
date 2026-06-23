@@ -126,12 +126,12 @@ interface MappablePoi extends PoiResponse {
 export function PoiMiniMap({ listingId, latitude, longitude, propertyType }: PoiMiniMapProps) {
   const [visible, setVisible] = useState(propertyType === 'land');
 
-  const { data, isLoading, isError } = useQuery({
+  const { data } = useQuery({
     queryKey: ['pois', listingId],
     queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`),
   });
 
-  if (isLoading || isError) return null;
+  // Always render the map when the listing has confirmed coordinates — POI overlays are optional.
 
   const zoom = ZOOM_BY_TYPE[propertyType ?? ''] ?? 15;
 
@@ -150,8 +150,6 @@ export function PoiMiniMap({ listingId, latitude, longitude, propertyType }: Poi
     .sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity))[0] as
     | MappablePoi
     | undefined;
-
-  if (mappable.length === 0 && !landTown) return null;
 
   const listingIcon = createListingIcon();
 

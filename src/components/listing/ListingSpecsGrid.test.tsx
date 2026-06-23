@@ -52,7 +52,7 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
     expect(screen.getByTestId('spec-bedrooms')).toHaveTextContent('3 BHK');
     expect(screen.getByTestId('spec-bathrooms')).toHaveTextContent('2');
     expect(screen.getByTestId('spec-built-area')).toBeInTheDocument();
-    expect(screen.getByTestId('spec-furnishing')).toHaveTextContent(/semi furnished/i);
+    expect(screen.getByText(/semi furnished/i)).toBeInTheDocument();
   });
 
   // T2 — House: same residential fields
@@ -72,7 +72,7 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
     expect(screen.getByTestId('spec-bedrooms')).toHaveTextContent('4 BHK');
     expect(screen.getByTestId('spec-bathrooms')).toHaveTextContent('3');
     expect(screen.getByTestId('spec-built-area')).toBeInTheDocument();
-    expect(screen.getByTestId('spec-furnishing')).toHaveTextContent(/furnished/i);
+    expect(screen.getByText(/^furnished$/i)).toBeInTheDocument();
   });
 
   // T3 — Plot/land: landArea shown; no bedrooms/bathrooms
@@ -102,8 +102,8 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
         })}
       />,
     );
-    expect(screen.getByTestId('spec-road-frontage')).toHaveTextContent('30 ft');
-    expect(screen.getByTestId('spec-commercial-usage')).toHaveTextContent(/retail/i);
+    expect(screen.getByText('30 ft')).toBeInTheDocument();
+    expect(screen.getByText(/retail/i)).toBeInTheDocument();
     expect(screen.queryByTestId('spec-bedrooms')).not.toBeInTheDocument();
   });
 
@@ -135,6 +135,7 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
       <ListingSpecsGrid
         listing={makeListing({
           propertyType: 'apartment',
+          sellerType: null,
           // No bedrooms, bathrooms, areas, etc.
         })}
       />,
@@ -155,8 +156,9 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
         })}
       />,
     );
-    expect(screen.getByText(/rental terms/i)).toBeInTheDocument();
+    expect(screen.getByText(/Security deposit/i)).toBeInTheDocument();
     expect(screen.getByText(/3 months/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lock-in period/i)).toBeInTheDocument();
     expect(screen.getByText(/11 months/i)).toBeInTheDocument();
   });
 
@@ -172,6 +174,6 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
         })}
       />,
     );
-    expect(screen.queryByText(/rental terms/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Security deposit/i)).not.toBeInTheDocument();
   });
 });

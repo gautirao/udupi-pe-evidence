@@ -1,10 +1,9 @@
-import { MapPin, Calendar, ExternalLink, ShieldCheck, Map as MapIcon, FileText, Check } from 'lucide-react';
+import { MapPin, Calendar, ExternalLink, ShieldCheck, Map as MapIcon, FileText, Check, Flag } from 'lucide-react';
 import { format } from 'date-fns';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { SimilarListings } from '@/components/listing/SimilarListings';
-import { ListingTransparencyCard, PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
+import type { PriceHistoryEntry } from '@/components/listing/ListingTransparencyCard';
 import { RERACard } from '@/components/listing/RERACard';
 import { NearbyPois } from '@/components/poi/NearbyPois';
 import { PoiMiniMap } from '@/components/poi/PoiMiniMap';
@@ -91,7 +90,7 @@ export function ListingDetailMainContent({
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
               <Badge className={badgeClass}>{label}</Badge>
               {purpose && (
-                <Badge variant="outline" className="font-medium">
+                <Badge className="bg-orange-100 text-orange-700 border-0 font-medium">
                   {isRent ? 'For rent' : 'For sale'}
                 </Badge>
               )}
@@ -232,15 +231,6 @@ export function ListingDetailMainContent({
         </DetailSection>
       )}
 
-      {/* ── Listing transparency ──────────────────────────────────────────── */}
-      <ListingTransparencyCard
-        daysOnMarket={listing.daysOnMarket}
-        backOnMarket={listing.backOnMarket}
-        lastUpdatedAt={listing.lastUpdatedAt}
-        isSuspectedDuplicate={listing.isSuspectedDuplicate}
-        priceHistory={priceHistory}
-      />
-
       {/* ── RERA & legal readiness (preserved) ───────────────────────────── */}
       <RERACard
         reraNumber={listing.reraNumber}
@@ -249,27 +239,6 @@ export function ListingDetailMainContent({
         expectedPossessionDate={listing.expectedPossessionDate}
         approvalsDeclared={listing.approvalsDeclared}
       />
-
-      {/* ── Key highlights / trust badges (preserved) ────────────────────── */}
-      {trustBadges && trustBadges.length > 0 && (
-        <Card>
-          <CardContent className="p-5 md:p-6">
-            <h2 className="text-lg font-semibold mb-3">Key Highlights</h2>
-            <ul className="space-y-1.5 text-sm text-muted-foreground list-disc list-inside">
-              {trustBadges.slice(0, 3).map((badge) => (
-                <li key={badge.dimensionType}>
-                  {DIMENSION_LABELS[badge.dimensionType] ?? badge.dimensionType}
-                </li>
-              ))}
-            </ul>
-            {trustBadges.length > 3 && (
-              <p className="text-xs text-muted-foreground mt-2">
-                + {trustBadges.length - 3} more
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {trustBadges && trustBadges.length > 0 && <TrustBadgeCard badges={trustBadges} />}
 
@@ -317,14 +286,9 @@ export function ListingDetailMainContent({
           <NearbySchoolsCard listingId={listing.id} embedded />
         </div>
 
-        {listing.createdAt && (
-          <div className="mt-5 flex items-center gap-2 border-t border-border pt-4 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>Posted {format(new Date(listing.createdAt), 'MMMM d, yyyy')}</span>
-            <span className="text-muted-foreground/50">•</span>
-            <span>{formatRelativeDate(listing.createdAt)}</span>
-          </div>
-        )}
+        <div className="mt-5 border-t border-border pt-5">
+          <NearbyPois listingId={listing.id} propertyType={listing.propertyType} embedded />
+        </div>
       </DetailSection>
 
       {/* ── Why trust this listing? + footer meta ─────────────────────────── */}
@@ -375,13 +339,17 @@ export function ListingDetailMainContent({
                   Posted {format(new Date(listing.createdAt), 'MMMM d, yyyy')}
                 </span>
               )}
+              <button
+                type="button"
+                className="ml-auto inline-flex items-center gap-1 text-muted-foreground/70 hover:text-destructive transition-colors"
+              >
+                <Flag className="h-3.5 w-3.5" />
+                Report this listing
+              </button>
             </div>
           </DetailSection>
         );
       })()}
-
-      {/* ── Nearby amenities (preserved — renders null when no POI data) ──── */}
-      <NearbyPois listingId={listing.id} propertyType={listing.propertyType} />
 
       {/* ── Similar listings (preserved) ─────────────────────────────────── */}
       <SimilarListings

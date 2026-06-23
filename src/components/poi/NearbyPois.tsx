@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Home, Building2, Route, Bus } from 'lucide-react';
+import { AlertCircle, Home, Building2, Route, Bus, LayoutGrid, ChevronDown, ChevronUp, MapPin, Search, Star, GraduationCap, Coffee, Plane } from 'lucide-react';
 import {
   CATEGORY_LABELS,
   CATEGORY_ICONS,
@@ -29,9 +29,30 @@ interface PoiResponse {
 interface NearbyPoisProps {
   listingId: string;
   propertyType: string;
+  embedded?: boolean;
 }
 
 const SEMI_RURAL_THRESHOLD = 4;
+
+const CATEGORY_ICON_NODE: Record<string, React.ReactNode> = {
+  HOSPITAL: <Building2 className="h-4 w-4" />,
+  TRANSPORT: <MapPin className="h-4 w-4" />,
+  GROCERY: <Search className="h-4 w-4" />,
+  WORSHIP: <Star className="h-4 w-4" />,
+  SCHOOL: <GraduationCap className="h-4 w-4" />,
+  HOTEL: <Coffee className="h-4 w-4" />,
+  AIRPORT: <Plane className="h-4 w-4" />,
+};
+
+const CATEGORY_SHORT_LABEL: Record<string, string> = {
+  HOSPITAL: 'Hospital',
+  TRANSPORT: 'Transport',
+  GROCERY: 'Daily needs',
+  WORSHIP: 'Landmarks',
+  SCHOOL: 'Schools',
+  HOTEL: 'Hotels',
+  AIRPORT: 'Airport',
+};
 
 function getMode(
   propertyType: string,
@@ -135,6 +156,85 @@ function byDistance(a: PoiResponse, b: PoiResponse): number {
 
 function nearest(pois: PoiResponse[], category: string): PoiResponse | undefined {
   return pois.filter((p) => p.category === category).sort(byDistance)[0];
+}
+
+function CategoryCard({ category, pois }: { category: string; pois: PoiResponse[] }) {
+  const icon = CATEGORY_ICON_NODE[category] ?? null;
+  const label = CATEGORY_SHORT_LABEL[category] ?? CATEGORY_LABELS[category] ?? category;
+  const top2 = pois.slice(0, 2);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-3.5">
+      <div className="flex items-center gap-1.5 mb-2.5">
+        <span className="text-muted-foreground">{icon}</span>
+        <span className="font-semibold text-sm text-foreground">{label}</span>
+      </div>
+      <div className="space-y-1.5">
+        {top2.map((p) => (
+          <div key={p.id} className="flex items-center justify-between text-sm gap-2">
+            <span className="truncate text-muted-foreground">{p.name}</span>
+            <span className="text-foreground shrink-0 tabular-nums">{formatDistance(p.distanceMeters)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EssentialsGrid({ pois, categoryOrder, embedded }: { pois: PoiResponse[]; categoryOrder: readonly string[]; embedded?: boolean }) {
+  const [showAll, setShowAll] = useState(false);
+  const amenityPois = pois.filter((p) => !SETTLEMENT_CATEGORIES.has(p.category));
+
+  const grouped = new Map<string, PoiResponse[]>();
+  for (const p of amenityPois) {
+    const sorted = [...(grouped.get(p.category) ?? []), p].sort(byDistance);
+    grouped.set(p.category, sorted);
+  }
+  const orderedCats = [
+    ...categoryOrder.filter((c) => grouped.has(c)),
+    ...[...grouped.keys()].filter((c) => !(categoryOrder as readonly string[]).includes(c)),
+  ];
+
+  if (orderedCats.length === 0) return null;
+
+  const INITIAL_CATS = 4;
+  const visibleCats = showAll ? orderedCats : orderedCats.slice(0, INITIAL_CATS);
+  const hasMore = orderedCats.length > INITIAL_CATS;
+
+  const content = (
+    <div>
+      <h3 className="flex items-center gap-2 text-base font-semibold mb-3">
+        <LayoutGrid className="h-4 w-4 text-muted-foreground" />
+        Nearby essentials
+      </h3>
+      <div className="grid grid-cols-2 gap-3">
+        {visibleCats.map((cat) => (
+          <CategoryCard key={cat} category={cat} pois={grouped.get(cat) ?? []} />
+        ))}
+      </div>
+      {hasMore && (
+        <button
+          type="button"
+          onClick={() => setShowAll(!showAll)}
+          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+        >
+          {showAll ? (
+            <>Show fewer <ChevronUp className="h-4 w-4" /></>
+          ) : (
+            <>Show all nearby essentials <ChevronDown className="h-4 w-4" /></>
+          )}
+        </button>
+      )}
+    </div>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <Card>
+      <CardContent className="p-4">{content}</CardContent>
+    </Card>
+  );
 }
 
 function LandMode({ pois }: { pois: PoiResponse[] }) {
@@ -282,71 +382,6 @@ function CategoryGridInner({
   );
 }
 
-function CategoryGrid({
-  pois,
-  heading,
-  description,
-  categoryOrder,
-}: {
-  pois: PoiResponse[];
-  heading: string;
-  description?: string;
-  categoryOrder: readonly string[];
-}) {
-  const amenityPois = pois.filter((p) => !SETTLEMENT_CATEGORIES.has(p.category));
-
-  const grouped = new Map<string, PoiResponse[]>();
-  for (const p of amenityPois) {
-    const list = grouped.get(p.category) ?? [];
-    list.push(p);
-    grouped.set(p.category, list);
-  }
-  const orderedCats = [
-    ...categoryOrder.filter((c) => grouped.has(c)),
-    ...[...grouped.keys()].filter((c) => !(categoryOrder as readonly string[]).includes(c)),
-  ];
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{heading}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent className="p-4">
-        {orderedCats.length === 0 ? (
-          <Alert>
-            <AlertDescription>
-              No amenities confirmed yet — explore the map for context.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <div className="space-y-4">
-            {orderedCats.map((cat) => {
-              const catPois = (grouped.get(cat) ?? []).slice(0, 3);
-              return (
-                <div key={cat}>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
-                    {CATEGORY_ICONS[cat] ?? ''} {CATEGORY_LABELS[cat] ?? cat}
-                  </p>
-                  {catPois.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between text-sm py-0.5">
-                      <span className="truncate mr-2">{p.name}</span>
-                      <span className="text-muted-foreground shrink-0">
-                        {formatDistance(p.distanceMeters)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <OsmAttribution />
-      </CardContent>
-    </Card>
-  );
-}
-
 function SemiRuralMode({ pois }: { pois: PoiResponse[] }) {
   const village = nearest(pois, 'VILLAGE_CENTER');
   const town = nearest(pois, 'TOWN_CENTER');
@@ -459,7 +494,7 @@ function CommercialMode({ pois }: { pois: PoiResponse[] }) {
   );
 }
 
-export function NearbyPois({ listingId, propertyType }: NearbyPoisProps) {
+export function NearbyPois({ listingId, propertyType, embedded }: NearbyPoisProps) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ['pois', listingId],
     queryFn: () => api.get<PoiResponse[]>(`/api/listings/${listingId}/pois`, { skipAuth: true }),
@@ -483,18 +518,12 @@ export function NearbyPois({ listingId, propertyType }: NearbyPoisProps) {
   if (mode === 'commercial') return <CommercialMode pois={pois} />;
   if (mode === 'house-semi-rural') return <SemiRuralMode pois={pois} />;
 
-  // Apartment or house-urban
-  const town = nearest(pois, 'TOWN_CENTER');
-  const townDesc = town
-    ? `${formatDistance(town.distanceMeters)} from ${town.name} city center`
-    : undefined;
-
+  // Apartment or house-urban — use new EssentialsGrid
   return (
-    <CategoryGrid
+    <EssentialsGrid
       pois={pois}
-      heading="Nearby Essentials"
-      description={townDesc}
       categoryOrder={AMENITY_CATEGORY_ORDER}
+      embedded={embedded}
     />
   );
 }
