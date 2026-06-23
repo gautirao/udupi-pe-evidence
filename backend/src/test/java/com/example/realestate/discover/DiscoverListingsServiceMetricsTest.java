@@ -44,7 +44,7 @@ class DiscoverListingsServiceMetricsTest {
                 null, null, null,    // no schoolLat/schoolLon/schoolRadiusKm
                 null,                // no q
                 null,                // bbox
-                0, 20, false, null
+                0, 20, false, null, null
         );
     }
 
@@ -57,7 +57,7 @@ class DiscoverListingsServiceMetricsTest {
                 13.3409, 74.7421, 2.0,   // schoolLat, schoolLon, schoolRadiusKm
                 "sea view",              // q
                 null,                    // bbox
-                0, 20, false, null
+                0, 20, false, null, null
         );
     }
 
@@ -70,7 +70,7 @@ class DiscoverListingsServiceMetricsTest {
                 13.3409, 74.7421, 2.0,   // schoolLat, schoolLon, schoolRadiusKm
                 null,                     // q
                 null,                     // bbox
-                0, 20, false, null
+                0, 20, false, null, null
         );
     }
 

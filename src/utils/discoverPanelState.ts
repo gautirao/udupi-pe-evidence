@@ -33,6 +33,7 @@ export type DiscoverPanelContent =
   | 'agri-group-locality'
   | 'agri-detail'
   | 'area-groups-landing'
+  | 'area-group-results'
   | 'area-selection'
   | 'area-selected'
   | 'school-browse'
@@ -56,7 +57,7 @@ export type DiscoverPanelContent =
  * 4. No journey → guided-entry
  */
 export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelContent {
-  const { journey, areaKey, schoolId, groupId, schoolPicking, selectedGroup, selectedRegion, selectedMaxKm, selectedListing, selectedLocality } = urlState;
+  const { journey, areaKey, schoolId, groupId, schoolPicking, groupResults, selectedGroup, selectedRegion, selectedMaxKm, selectedListing, selectedLocality } = urlState;
 
   // MVP2 — agri-first is checked FIRST (before every other branch, including the
   // area/school cold-load inferences below) so a stray schoolId / groupId / schoolPicking
@@ -132,6 +133,16 @@ export function derivePanelContent(urlState: DiscoverUrlState): DiscoverPanelCon
     }
     if (areaKey) {
       return 'area-selected';
+    }
+    // Issue #1597 — group-results view: journey=area-first + groupId present +
+    // groupResults flag + NO areaKey + NO schoolId.
+    // areaKey is already checked above and is absent here.
+    // schoolId guard: a stray schoolId (without areaKey) in the area-first
+    // journey must NOT route to area-group-results (spec: NO schoolId).
+    // groupId must be non-blank (mirrors school-group-areas trim guard).
+    // A stray groupResults without groupId must NOT route to a phantom state.
+    if (groupResults && groupId?.trim() && !schoolId) {
+      return 'area-group-results';
     }
     return 'area-groups-landing';
   }

@@ -66,7 +66,8 @@ public class DiscoverListingsController {
             @RequestParam(name = "page", required = false, defaultValue = "0") int page,
             @RequestParam(name = "size", required = false, defaultValue = "20") int size,
             @RequestParam(name = "includeAggregates", required = false, defaultValue = "false") boolean includeAggregates,
-            @RequestParam(name = "listingPurpose", required = false) String listingPurpose
+            @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
+            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys
     ) {
         log.debug("GET /api/discover/listings city={} page={} size={}", city, page, size);
 
@@ -94,6 +95,12 @@ public class DiscoverListingsController {
         // Parse and validate bbox
         DiscoverListingPredicateBuilder.Bbox bbox = BboxParser.parse(bboxParam);
 
+        // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
+        // Non-empty list is forwarded as-is and ANDed with the city subselect in the builder.
+        if (areaKeys != null && areaKeys.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
+        }
+
         // Convert rupees → paise
         Long priceMinPaise = priceMin != null ? priceMin * 100L : null;
         Long priceMaxPaise = priceMax != null ? priceMax * 100L : null;
@@ -120,7 +127,8 @@ public class DiscoverListingsController {
                 page,
                 effectiveSize,
                 includeAggregates,
-                listingPurpose
+                listingPurpose,
+                areaKeys
         );
 
         return ResponseEntity.ok()

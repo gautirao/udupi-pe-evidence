@@ -49,6 +49,14 @@ export function useDiscoverFilteredMarkers(
   listingPurpose?: string,
   /** Issue #1463 — Exclude markers of this property type (e.g. 'agricultural_land' in non-agri journeys). Absent = no exclusion. */
   excludePropertyType?: string,
+  /**
+   * Issue #1597 — optional area key filter for group-results markers.
+   * When non-empty, /api/discover/markers returns ONLY markers whose area_key is in this set.
+   * Sorted before use for stable cache keys. An empty array disables the fetch
+   * (empty-areaKeys guard) to prevent a whole-city leak or backend 400.
+   * When undefined, no area filter is applied (preserves existing call-site behaviour).
+   */
+  areaKeys?: string[],
 ) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
@@ -56,14 +64,24 @@ export function useDiscoverFilteredMarkers(
 
   const trimmedQ = q?.trim() || undefined;
 
+  // Issue #1597 — sort for stable cache keys; null when no area filter.
+  const sortedAreaKeys = areaKeys != null ? [...areaKeys].sort() : null;
+  // Empty-areaKeys guard: do NOT fire when the group has no member areas (backend returns 400 on []).
+  const areaKeysEmpty = sortedAreaKeys !== null && sortedAreaKeys.length === 0;
+
   return useQuery<DiscoverFilteredMarkersResponse>({
-    queryKey: ['discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null],
+    queryKey: ['discover-filtered-markers', city, filters, snapped, trimmedQ, listingPurpose ?? null, excludePropertyType ?? null, sortedAreaKeys],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
       if (snapped) {
         const [s, w, n, e] = snapped;
         params.set('bbox', `${s},${w},${n},${e}`);
+      }
+
+      // Issue #1597 — append areaKeys as repeated params when provided.
+      if (sortedAreaKeys !== null) {
+        sortedAreaKeys.forEach((k) => params.append('areaKeys', k));
       }
 
       filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
@@ -90,7 +108,7 @@ export function useDiscoverFilteredMarkers(
 
       return api.get<DiscoverFilteredMarkersResponse>(`/api/discover/markers?${params.toString()}`, { signal });
     },
-    enabled: enabled && city.length > 0,
+    enabled: enabled && city.length > 0 && !areaKeysEmpty,
     staleTime: 60_000,
     // Keep previous markers visible while a new school-proximity refetch is in-flight.
     // Without this, TanStack Query v5 resets data to undefined on queryKey change,

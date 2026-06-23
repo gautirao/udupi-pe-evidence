@@ -36,7 +36,7 @@ class RoutingDiscoverListingsServiceTest {
     private static final DiscoverListingsQuery QUERY = new DiscoverListingsQuery(
             "udupi", null, null, null, null, null, null, null,
             null, null, null, null, null, null, null, null,
-            null, null, 0, 20, false, null
+            null, null, 0, 20, false, null, null
     );
 
     private static final DiscoverListingsPage POSTGRES_PAGE =

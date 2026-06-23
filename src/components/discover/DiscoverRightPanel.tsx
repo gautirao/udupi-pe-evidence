@@ -34,6 +34,7 @@ import { PanelHeader } from './PanelHeader';
 import { GuidedEntryPanel } from './panels/GuidedEntryPanel';
 import { AreaSelectionPanel } from './panels/AreaSelectionPanel';
 import { AreaGroupsLandingPanel } from './panels/AreaGroupsLandingPanel';
+import { AreaGroupResultsPanel } from './panels/AreaGroupResultsPanel';
 import { AreaSelectedPanel } from './panels/AreaSelectedPanel';
 import { AgriGroupSelectedPanel } from './panels/AgriGroupSelectedPanel';
 import { AgriGroupListingPeek } from './panels/AgriGroupListingPeek';
@@ -648,6 +649,21 @@ export interface DiscoverRightPanelProps {
    * properties. Threaded to GuidedEntryPanel for the city-aware empty-state notice.
    */
   isCityEmpty?: boolean;
+  // ── Area-group-results panel (Issue #1597) ────────────────────────────────
+  /** Called when the user clicks "View all" in AreaGroupSelectedPanel — enters group-results state. */
+  onEnterGroupResults?: () => void;
+  /** Listings for the group-results panel (server-filtered by group's area_keys). */
+  groupResultsListings?: import('@/hooks/useDiscoverListings').DiscoverListingItem[];
+  /** True while the group-results listings fetch is in-flight. */
+  isLoadingGroupResults?: boolean;
+  /** True when the group-results listings fetch errored. */
+  isGroupResultsError?: boolean;
+  /** Total listing count from the paginated group-results response. */
+  groupResultsTotalElements?: number;
+  /** Retry callback for the group-results error state. */
+  onRetryGroupResults?: () => void;
+  /** Back from group-results → return to group drill-down (clears groupResults flag). */
+  onClearGroupResults?: () => void;
 }
 
 export function DiscoverRightPanel({
@@ -747,6 +763,13 @@ export function DiscoverRightPanel({
   totalProperties = 0,
   areasCount = 0,
   isCityEmpty = false,
+  onEnterGroupResults,
+  groupResultsListings = [],
+  isLoadingGroupResults = false,
+  isGroupResultsError = false,
+  groupResultsTotalElements,
+  onRetryGroupResults,
+  onClearGroupResults,
 }: DiscoverRightPanelProps) {
   const navigate = useNavigate();
 
@@ -1088,6 +1111,7 @@ export function DiscoverRightPanel({
         // cannot narrow when combined with other fixed sibling props like onClearGroup).
         // Issue #1483: fallbackAreas/onSelectArea also power the Level-2 area list — same prop
         // threading, no additional wiring needed.
+        // Issue #1597: thread onEnterGroupResults → AreaGroupsLandingPanel → AreaGroupSelectedPanel.
         if (onSelectAreaKey) {
           return (
             <AreaGroupsLandingPanel
@@ -1104,6 +1128,7 @@ export function DiscoverRightPanel({
               onIntentChange={onIntentChange}
               fallbackAreas={discoverAreas}
               onSelectArea={onSelectAreaKey}
+              onViewAllResults={onEnterGroupResults}
             />
           );
         }
@@ -1120,8 +1145,72 @@ export function DiscoverRightPanel({
             onCityChange={onCityChange}
             intent={intent}
             onIntentChange={onIntentChange}
+            onViewAllResults={onEnterGroupResults}
           />
         );
+
+      case 'area-group-results': {
+        // Issue #1597 — group-results state: server-filtered listings across all child areas.
+        // groupId is guaranteed non-blank by derivePanelContent. Resolve the group from the
+        // loaded areaGroups list; fall back gracefully to the landing when not yet resolved.
+        const resolvedGroupForResults = areaGroups.find((g) => g.id === groupId);
+        if (!resolvedGroupForResults) {
+          // Group not yet loaded or invalid — show the landing while loading.
+          if (onSelectAreaKey) {
+            return (
+              <AreaGroupsLandingPanel
+                groups={areaGroups}
+                isLoading={isLoadingAreaGroups}
+                onSelectGroup={onSelectGroup ?? (() => undefined)}
+                onStartOver={onStartOver}
+                groupId={groupId}
+                onClearGroup={onClearGroup}
+                cityLabel={cityLabel ?? city}
+                fallbackAreas={discoverAreas}
+                onSelectArea={onSelectAreaKey}
+              />
+            );
+          }
+          return (
+            <AreaGroupsLandingPanel
+              groups={areaGroups}
+              isLoading={isLoadingAreaGroups}
+              onSelectGroup={onSelectGroup ?? (() => undefined)}
+              onStartOver={onStartOver}
+              groupId={groupId}
+              onClearGroup={onClearGroup}
+              cityLabel={cityLabel ?? city}
+            />
+          );
+        }
+        // Issue #1597 — compute the full group listing count from the already-loaded
+        // discoverAreas data. This is the same sum as the "View all {N}" CTA in
+        // AreaGroupSelectedPanel (areas.reduce listingCount sum). Used for the anon
+        // preview banner to show the real total vs the ≤20/area teaser.
+        const totalGroupCount = resolvedGroupForResults.area_keys.reduce((sum, key) => {
+          const area = discoverAreas.find((a) => a.areaKey === key);
+          return sum + (area?.listingCount ?? 0);
+        }, 0);
+        return (
+          <AreaGroupResultsPanel
+            group={resolvedGroupForResults}
+            cityLabel={cityLabel ?? city}
+            listings={groupResultsListings}
+            isLoading={isLoadingGroupResults}
+            isError={isGroupResultsError}
+            totalElements={groupResultsTotalElements}
+            onRetry={onRetryGroupResults}
+            onBack={onClearGroupResults}
+            onStartOver={onStartOver}
+            intent={intent}
+            selectedListingId={selectedListingId}
+            onSelectListing={onSelectResultListing}
+            onHoverListing={onHoverResultListing}
+            isAuthenticated={isAuthenticated}
+            totalGroupCount={totalGroupCount}
+          />
+        );
+      }
 
       case 'area-selection':
         return <AreaSelectionPanel onStartOver={onStartOver} />;

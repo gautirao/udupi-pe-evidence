@@ -74,6 +74,39 @@ describe('useDiscoverMarkers', () => {
     expect(params.has('bbox')).toBe(false);
   });
 
+  it('areaKeys_appended_as_repeated_params_in_sorted_order', async () => {
+    mockGet.mockResolvedValue(BASE_RESPONSE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverMarkers('udupi', null, true, [
+          'IN|KA|Udupi|Manipal',
+          'IN|KA|Udupi|Karkala',
+        ]),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.getAll('areaKeys')).toEqual([
+      'IN|KA|Udupi|Karkala',
+      'IN|KA|Udupi|Manipal',
+    ]);
+  });
+
+  it('empty_areaKeys_disables_fetch_guard', () => {
+    const { result } = renderHook(
+      () => useDiscoverMarkers('udupi', null, true, []),
+      { wrapper: makeWrapper() },
+    );
+
+    // Must stay idle — empty areaKeys guard prevents request
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
   it('bbox_valid_finite_values_serialised_to_url', async () => {
     mockGet.mockResolvedValue(BASE_RESPONSE);
 

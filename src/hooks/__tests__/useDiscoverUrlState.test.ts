@@ -3017,6 +3017,100 @@ describe('useDiscoverUrlState — agriFencingDone tri-state URL param (Issue #14
   });
 });
 
+// ─── Issue #1597: groupResults URL flag ───────────────────────────────────────
+
+describe('useDiscoverUrlState — groupResults flag (Issue #1597)', () => {
+  it('reads groupResults=true when param is "1"', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first&groupId=coastal-homes&groupResults=1'),
+    });
+    expect(result.current[0].groupResults).toBe(true);
+  });
+
+  it('reads groupResults=undefined when param is absent', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&journey=area-first&groupId=coastal-homes'),
+    });
+    expect(result.current[0].groupResults).toBeUndefined();
+  });
+
+  it('reads groupResults=undefined when param value is not "1"', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper('/discover?city=udupi&groupResults=true'),
+    });
+    expect(result.current[0].groupResults).toBeUndefined();
+  });
+
+  it('enterGroupResults sets groupResults=1 and clears areaKey (PUSH semantics)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes&areaKey=IN%7CKA%7CUdupi%7CManipal',
+      ),
+    });
+
+    act(() => {
+      result.current[1].enterGroupResults();
+    });
+
+    expect(result.current[0].groupResults).toBe(true);
+    // areaKey must be cleared
+    expect(result.current[0].areaKey).toBeNull();
+    // city, journey, groupId and intent must be preserved
+    expect(result.current[0].city).toBe('udupi');
+    expect(result.current[0].journey).toBe('area-first');
+    expect(result.current[0].groupId).toBe('coastal-homes');
+  });
+
+  it('enterGroupResults preserves intent and filters', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes&intent=rent&type=house',
+      ),
+    });
+
+    act(() => {
+      result.current[1].enterGroupResults();
+    });
+
+    expect(result.current[0].groupResults).toBe(true);
+    expect(result.current[0].intent).toBe('rent');
+    expect(result.current[0].filters.propertyTypes).toEqual(['house']);
+  });
+
+  it('clearGroupResults removes groupResults param (REPLACE semantics)', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes&groupResults=1',
+      ),
+    });
+
+    act(() => {
+      result.current[1].clearGroupResults();
+    });
+
+    expect(result.current[0].groupResults).toBeUndefined();
+    // city and groupId must remain
+    expect(result.current[0].city).toBe('udupi');
+    expect(result.current[0].groupId).toBe('coastal-homes');
+  });
+
+  it('changeCity clears groupResults along with other journey state', () => {
+    const { result } = renderHook(() => useDiscoverUrlState(), {
+      wrapper: wrapper(
+        '/discover?city=udupi&journey=area-first&groupId=coastal-homes&groupResults=1',
+      ),
+    });
+
+    act(() => {
+      result.current[1].changeCity('kundapur');
+    });
+
+    expect(result.current[0].city).toBe('kundapur');
+    expect(result.current[0].groupResults).toBeUndefined();
+    expect(result.current[0].groupId).toBeNull();
+  });
+});
+
 describe('useDiscoverUrlState — clearAgriFilters removes all 8 agri params (Issue #1458)', () => {
   it('clears all 8 agri filter params (4 old + 4 new) in one call', () => {
     const { result } = renderHook(() => useDiscoverUrlState(), {

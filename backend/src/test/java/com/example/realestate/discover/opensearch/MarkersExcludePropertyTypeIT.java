@@ -120,7 +120,7 @@ class MarkersExcludePropertyTypeIT {
         return new DiscoverListingPredicateBuilder.Filters(
                 null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null, null,
-                null, excludePropertyTypes
+                null, excludePropertyTypes, null
         );
     }
 

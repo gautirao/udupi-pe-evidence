@@ -122,7 +122,8 @@ public final class DiscoverQueryDsl {
                 q.bbox(),
                 q.q(),
                 q.listingPurpose(),
-                null  // excludePropertyTypes — OS responses don't carry this input param
+                null,      // excludePropertyTypes — OS responses don't carry this input param
+                q.areaKeys()
         );
     }
 
@@ -238,6 +239,15 @@ public final class DiscoverQueryDsl {
                     .map(String::toLowerCase)
                     .toList();
             filter.add(Map.of("bool", Map.of("must_not", List.of(terms("property_type", excludeLower)))));
+        }
+
+        // areaKeys — restrict to specific area_key values (group-scoped browse).
+        // null = absent param → no clause (backward-compatible with existing journeys).
+        // Empty list is rejected at the controller layer (400), so this only fires for
+        // non-empty lists. Mirrors the Postgres AND pl.area_key IN (...) predicate; both
+        // apply AND-with the city_slug filter above, so no out-of-group leakage is possible.
+        if (f.areaKeys() != null && !f.areaKeys().isEmpty()) {
+            filter.add(terms("area_key", f.areaKeys()));
         }
 
         Map<String, Object> bool = new LinkedHashMap<>();

@@ -189,3 +189,122 @@ describe('AreaGroupSelectedPanel — empty member list', () => {
     expect(screen.getByTestId('area-group-selected-card')).toBeInTheDocument();
   });
 });
+
+// ─── Issue #1597: "View all" CTA wiring ─────────────────────────────────────
+
+describe('AreaGroupSelectedPanel — Issue #1597 View-all CTA (enterGroupResults)', () => {
+  it('CTA click calls onViewAllResults when provided (group-results transition)', async () => {
+    const onViewAllResults = vi.fn();
+    render(<AreaGroupSelectedPanel {...baseProps} onViewAllResults={onViewAllResults} />);
+    const cta = screen.getByTestId('area-group-view-all');
+    await userEvent.click(cta);
+    expect(onViewAllResults).toHaveBeenCalledTimes(1);
+  });
+
+  it('CTA click does NOT call onSelectArea (only onViewAllResults fires)', async () => {
+    const onViewAllResults = vi.fn();
+    const onSelectArea = vi.fn();
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        onSelectArea={onSelectArea}
+        onViewAllResults={onViewAllResults}
+      />,
+    );
+    await userEvent.click(screen.getByTestId('area-group-view-all'));
+    expect(onViewAllResults).toHaveBeenCalledTimes(1);
+    expect(onSelectArea).not.toHaveBeenCalled();
+  });
+
+  it('CTA count in "View all N properties" matches sum of member-area listingCounts', () => {
+    // MANIPAL=5, UDYAVARA=3 → total=8
+    render(<AreaGroupSelectedPanel {...baseProps} />);
+    expect(screen.getByTestId('area-group-view-all')).toHaveTextContent('View all 8 properties across University Belt');
+  });
+
+  it('when onViewAllResults is absent the CTA still renders (no crash; falls back to scroll)', () => {
+    // No onViewAllResults prop — component must not crash and CTA must still be present.
+    render(<AreaGroupSelectedPanel {...baseProps} />);
+    expect(screen.getByTestId('area-group-view-all')).toBeInTheDocument();
+  });
+});
+
+// ─── Issue #1597 (A2): DB description priority chain ─────────────────────────
+
+describe('AreaGroupSelectedPanel — Issue #1597 description priority chain (A2)', () => {
+  const AREA = makeArea({ areaKey: 'IN|KA|Udupi|Manipal', name: 'Manipal', listingCount: 3 });
+
+  it('renders DB description (group.description) over subtitle and adapter fallback when all three present', () => {
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        group={{
+          ...UNIVERSITY_BELT,
+          description: 'DB-sourced long-form copy for University Belt.',
+          subtitle: 'Short subtitle from backend',
+        }}
+        areas={[AREA]}
+      />,
+    );
+    const card = screen.getByTestId('area-group-selected-card');
+    expect(within(card).getByText('DB-sourced long-form copy for University Belt.')).toBeInTheDocument();
+    // subtitle and adapter copy must NOT appear when DB description is present
+    expect(within(card).queryByText('Short subtitle from backend')).not.toBeInTheDocument();
+    expect(within(card).queryByText(/student-heavy neighbourhoods/i)).not.toBeInTheDocument();
+  });
+
+  it('falls back to subtitle when group.description is null', () => {
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        group={{
+          ...UNIVERSITY_BELT,
+          description: null,
+          subtitle: 'Subtitle-only fallback',
+        }}
+        areas={[AREA]}
+      />,
+    );
+    const card = screen.getByTestId('area-group-selected-card');
+    expect(within(card).getByText('Subtitle-only fallback')).toBeInTheDocument();
+  });
+
+  it('falls back to adapter description when both description and subtitle are null', () => {
+    render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        group={{
+          ...UNIVERSITY_BELT,
+          description: null,
+          subtitle: null,
+        }}
+        areas={[AREA]}
+      />,
+    );
+    const card = screen.getByTestId('area-group-selected-card');
+    // The adapter content for 'university-belt' is the fallback
+    expect(within(card).getByText(/student-heavy neighbourhoods/i)).toBeInTheDocument();
+  });
+
+  it('DB description is dynamic per group: different groupId renders different copy', () => {
+    // Verify the description is sourced from the DTO and not hardcoded
+    const { rerender } = render(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        group={{ ...UNIVERSITY_BELT, description: 'Copy for group A', subtitle: null }}
+        areas={[AREA]}
+      />,
+    );
+    expect(screen.getByTestId('area-group-selected-card')).toHaveTextContent('Copy for group A');
+
+    rerender(
+      <AreaGroupSelectedPanel
+        {...baseProps}
+        group={{ ...UNIVERSITY_BELT, id: 'coastal-belt', name: 'Coastal Belt', description: 'Copy for group B', subtitle: null }}
+        areas={[AREA]}
+      />,
+    );
+    expect(screen.getByTestId('area-group-selected-card')).toHaveTextContent('Copy for group B');
+    expect(screen.getByTestId('area-group-selected-card')).not.toHaveTextContent('Copy for group A');
+  });
+});

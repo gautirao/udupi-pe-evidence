@@ -62,7 +62,8 @@ public class DiscoverMarkersController {
             @RequestParam(name = "bbox", required = false) String bboxParam,
             @RequestParam(name = "q", required = false) String q,
             @RequestParam(name = "listingPurpose", required = false) String listingPurpose,
-            @RequestParam(required = false) String excludePropertyType
+            @RequestParam(required = false) String excludePropertyType,
+            @RequestParam(name = "areaKeys", required = false) List<String> areaKeys
     ) {
         log.debug("GET /api/discover/markers city={}", city);
 
@@ -74,6 +75,11 @@ public class DiscoverMarkersController {
         // Validate partial school params
         if ((schoolLat == null) != (schoolLon == null)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "school_lat_and_lon_required_together");
+        }
+
+        // areaKeys: absent (null) = no area filter; present-but-empty = client bug → reject.
+        if (areaKeys != null && areaKeys.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "area_keys_must_not_be_empty");
         }
 
         // Parse and validate polygon
@@ -108,7 +114,8 @@ public class DiscoverMarkersController {
                 bbox,
                 (q != null && !q.isBlank()) ? q.trim() : null,
                 (listingPurpose != null && !listingPurpose.isBlank()) ? listingPurpose.trim() : null,
-                excludeList
+                excludeList,
+                areaKeys
         );
 
         return ResponseEntity.ok()

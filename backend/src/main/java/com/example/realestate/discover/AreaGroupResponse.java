@@ -6,7 +6,8 @@ import java.util.List;
 
 /**
  * DTO record for a single area group returned by GET /api/discover/area-groups.
- * Focus/bounds fields are nullable and omitted from JSON when null (@JsonInclude NON_NULL).
+ * Focus/bounds and description fields are nullable and omitted from JSON when null
+ * (@JsonInclude NON_NULL).
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record AreaGroupResponse(
@@ -21,5 +22,6 @@ public record AreaGroupResponse(
         Double minLat,
         Double minLon,
         Double maxLat,
-        Double maxLon
+        Double maxLon,
+        String description  // nullable; omitted from JSON when null
 ) {}

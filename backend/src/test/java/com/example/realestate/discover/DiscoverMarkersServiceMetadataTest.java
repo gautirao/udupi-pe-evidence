@@ -51,7 +51,7 @@ class DiscoverMarkersServiceMetadataTest {
                 null, null, null, null, null, null, null,
                 null, null, null, null, null,
                 null, null, null,
-                null, null, null, null
+                null, null, null, null, null
         );
     }
 
@@ -165,7 +165,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null, null, null,
                         null, null, null, null, null,
                         null, null, null,
-                        bbox, null, null, null
+                        bbox, null, null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -222,7 +222,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null, null, null,
                         null, null, null, null, null,
                         null, null, null,
-                        bbox, null, null, null
+                        bbox, null, null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -284,7 +284,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null, null, null,
                         null, null, null, null, null,
                         null, null, null,
-                        bbox, null, null, null
+                        bbox, null, null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -321,7 +321,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null, null, null,
                         null, null, null, null, null,
                         13.35, 74.75, 2.0,  // schoolLat, schoolLon, schoolRadiusKm
-                        bbox, null, null, null
+                        bbox, null, null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -358,7 +358,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null, null, null,
                         null, null, null, null, null,
                         null, null, null,
-                        bbox, "villa", null, null
+                        bbox, "villa", null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -397,7 +397,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null,
                         null, null, null, null, null,
                         null, null, null,
-                        bbox, null, null, null
+                        bbox, null, null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))
@@ -436,7 +436,7 @@ class DiscoverMarkersServiceMetadataTest {
                         null, null, null, null, null, null, null,
                         null, null, null, null, null,
                         null, null, null,
-                        bbox, null, null, null
+                        bbox, null, null, null, null
                 );
 
         when(jdbc.query(anyString(), any(RowMapper.class), any(Object[].class)))

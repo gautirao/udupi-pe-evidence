@@ -24,6 +24,12 @@ export interface AreaGroupSelectedPanelProps {
   onStartOver?: () => void;
   /** Select a member locality → drill into its results page (PUSH areaKey). */
   onSelectArea: (areaKey: string) => void;
+  /**
+   * Issue #1597 — "View all" CTA callback. When provided, the CTA navigates to the
+   * real group-results state (server-filtered list + map) instead of scrolling in-panel.
+   * When omitted, the previous scroll-to-list behaviour is preserved (safe fallback).
+   */
+  onViewAllResults?: () => void;
 }
 
 // ─── Summary stat tile ──────────────────────────────────────────────────────
@@ -135,6 +141,7 @@ export function AreaGroupSelectedPanel({
   onBack,
   onStartOver,
   onSelectArea,
+  onViewAllResults,
 }: AreaGroupSelectedPanelProps) {
   const areasRef = useRef<HTMLDivElement | null>(null);
 
@@ -145,20 +152,30 @@ export function AreaGroupSelectedPanel({
     [areas],
   );
 
-  // Backend-first, adapter-fallback (see discoverGroupContent.ts).
+  // Issue #1597 — description resolution priority:
+  //   1. Backend group.description (new field, long-form copy from DB).
+  //   2. group.subtitle (existing backend field, shorter form).
+  //   3. discoverGroupContent adapter fallback (frontend-only, for groups without DB copy).
+  // discoverGroupContent.ts is NOT deleted — it also feeds SchoolBrowsePanel and
+  // AreaIndicatorOverlay; LOCALITY_DESCRIPTION is preserved for LocalityCard.
   const fallback = getAreaGroupContent(group.id);
-  const description = group.subtitle?.trim() || fallback?.description;
+  const description = group.description?.trim() || group.subtitle?.trim() || fallback?.description;
   const regionLabel = group.region_label?.trim() || fallback?.regionLabel;
 
-  // "View all" is an in-panel affordance: there is no separate group-results page in
-  // the area-first flow (group → area → results), so it scrolls to the locality list
-  // below rather than inventing new navigation.
+  // Issue #1597 — "View all" CTA:
+  //   - When onViewAllResults is provided: navigate to the real group-results state
+  //     (server-filtered list + map). This is the primary path after #1597.
+  //   - Fallback: scroll to the locality list in-panel (pre-#1597 behaviour).
   const handleViewAll = useCallback(() => {
+    if (onViewAllResults) {
+      onViewAllResults();
+      return;
+    }
     const node = areasRef.current;
     if (node && typeof node.scrollIntoView === 'function') {
       node.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
-  }, []);
+  }, [onViewAllResults]);
 
   return (
     <>

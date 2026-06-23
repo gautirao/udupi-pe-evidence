@@ -50,7 +50,8 @@ public class AreaGroupsService {
                         nullableDouble(rs.getObject("min_lat")),
                         nullableDouble(rs.getObject("min_lon")),
                         nullableDouble(rs.getObject("max_lat")),
-                        nullableDouble(rs.getObject("max_lon"))
+                        nullableDouble(rs.getObject("max_lon")),
+                        rs.getString("description")
                 ),
                 normalizedCity
         );
@@ -64,7 +65,8 @@ public class AreaGroupsService {
                     k -> new GroupAccumulator(
                             row.slug(), row.name(), row.subtitle(), row.regionLabel(),
                             row.displayOrder(), row.focusLat(), row.focusLon(),
-                            row.minLat(), row.minLon(), row.maxLat(), row.maxLon()
+                            row.minLat(), row.minLon(), row.maxLat(), row.maxLon(),
+                            row.description()
                     )
             );
             if (row.areaKey() != null) {
@@ -77,7 +79,8 @@ public class AreaGroupsService {
                         acc.slug(), acc.name(), acc.subtitle(), acc.regionLabel(),
                         acc.displayOrder(), List.copyOf(acc.areaKeys()),
                         acc.focusLat(), acc.focusLon(),
-                        acc.minLat(), acc.minLon(), acc.maxLat(), acc.maxLon()
+                        acc.minLat(), acc.minLon(), acc.maxLat(), acc.maxLon(),
+                        acc.description()
                 ))
                 .toList();
 
@@ -104,7 +107,8 @@ public class AreaGroupsService {
             Double minLat,
             Double minLon,
             Double maxLat,
-            Double maxLon
+            Double maxLon,
+            String description
     ) {}
 
     // Mutable accumulator used while folding rows.
@@ -120,13 +124,15 @@ public class AreaGroupsService {
         private final Double minLon;
         private final Double maxLat;
         private final Double maxLon;
+        private final String description;
         private final List<String> areaKeys = new ArrayList<>();
 
         GroupAccumulator(String slug, String name, String subtitle, String regionLabel,
                          int displayOrder,
                          Double focusLat, Double focusLon,
                          Double minLat, Double minLon,
-                         Double maxLat, Double maxLon) {
+                         Double maxLat, Double maxLon,
+                         String description) {
             this.slug = slug;
             this.name = name;
             this.subtitle = subtitle;
@@ -138,6 +144,7 @@ public class AreaGroupsService {
             this.minLon = minLon;
             this.maxLat = maxLat;
             this.maxLon = maxLon;
+            this.description = description;
         }
 
         String slug()         { return slug; }
@@ -151,6 +158,7 @@ public class AreaGroupsService {
         Double minLon()       { return minLon; }
         Double maxLat()       { return maxLat; }
         Double maxLon()       { return maxLon; }
+        String description()  { return description; }
         List<String> areaKeys() { return areaKeys; }
     }
 
@@ -169,7 +177,8 @@ public class AreaGroupsService {
                 ag.min_lat,
                 ag.min_lon,
                 ag.max_lat,
-                ag.max_lon
+                ag.max_lon,
+                ag.description
             FROM area_groups ag
             JOIN cities c ON c.id = ag.city_id
             LEFT JOIN area_group_members agm

@@ -65,6 +65,13 @@ export interface UseDiscoverListingsParams {
   q?: string;
   /** Issue #1494 — buy/rent intent mapped to listingPurpose for the backend. */
   listingPurpose?: string;
+  /**
+   * Issue #1597 — optional area key filter for group-results state.
+   * When non-empty, the backend returns ONLY listings whose area_key is in this set.
+   * Sorted before use for stable cache keys. An empty array disables the fetch
+   * (enabled guard) to prevent a whole-city leak or a backend 400 error.
+   */
+  areaKeys?: string[];
 }
 
 export function useDiscoverListings({
@@ -77,6 +84,7 @@ export function useDiscoverListings({
   bbox,
   q,
   listingPurpose,
+  areaKeys,
 }: UseDiscoverListingsParams) {
   // Snap bbox to grid for cache efficiency; null when not provided or contains non-finite values.
   const snapped: [number, number, number, number] | null =
@@ -84,8 +92,33 @@ export function useDiscoverListings({
 
   const trimmedQ = q?.trim() || null;
 
+  // Issue #1597 — sort areaKeys for stable cache keys; null when not in group-results mode.
+  // Distinct key segment 'areaKeys' prevents collision with the existing ['discover-listings', ...]
+  // key shape used when no areaKeys are provided.
+  const sortedAreaKeys = areaKeys != null ? [...areaKeys].sort() : null;
+
+  // Issue #1597 — empty-areaKeys guard: do NOT fire when the group has no member areas.
+  // An empty areaKeys param sends HTTP 400 from the backend; omitting the param sends the
+  // full city result set (whole-city leak). Both outcomes are wrong.
+  const hasAreaKeysFilter = sortedAreaKeys !== null;
+  const areaKeysEmpty = hasAreaKeysFilter && sortedAreaKeys.length === 0;
+  const effectiveEnabled = enabled && city.length > 0 && !areaKeysEmpty;
+
   return useQuery<DiscoverListingsPage>({
-    queryKey: ['discover-listings', city, page, size, filters, includeAggregates, snapped, trimmedQ, listingPurpose ?? null],
+    queryKey: [
+      'discover-listings',
+      city,
+      page,
+      size,
+      filters,
+      includeAggregates,
+      snapped,
+      trimmedQ,
+      listingPurpose ?? null,
+      // Issue #1597: include sorted areaKeys in query key for stable cache hits.
+      // null when no areaKeys filter — distinct from [] (empty, fetch disabled).
+      sortedAreaKeys,
+    ],
     queryFn: ({ signal }) => {
       const params = new URLSearchParams();
       params.set('city', city);
@@ -95,6 +128,11 @@ export function useDiscoverListings({
       if (snapped) {
         const [s, w, n, e] = snapped;
         params.set('bbox', `${s},${w},${n},${e}`);
+      }
+
+      // Issue #1597 — append areaKeys as repeated params when provided.
+      if (sortedAreaKeys !== null) {
+        sortedAreaKeys.forEach((k) => params.append('areaKeys', k));
       }
 
       filters.propertyTypes?.forEach((t) => params.append('propertyTypes', t));
@@ -121,7 +159,7 @@ export function useDiscoverListings({
 
       return api.get<DiscoverListingsPage>(`/api/discover/listings?${params.toString()}`, { signal });
     },
-    enabled: enabled && city.length > 0,
+    enabled: effectiveEnabled,
     staleTime: 60_000,
   });
 }

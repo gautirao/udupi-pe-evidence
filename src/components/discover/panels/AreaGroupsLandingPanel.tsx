@@ -43,6 +43,12 @@ export type AreaGroupsLandingPanelProps = {
    */
   cityLabel?: string;
   /**
+   * Issue #1597 — "View all" CTA callback for AreaGroupSelectedPanel.
+   * When provided, the CTA navigates to the real group-results state (server-filtered
+   * list + map). Threaded from DiscoverRightPanel → AreaGroupsLandingPanel → AreaGroupSelectedPanel.
+   */
+  onViewAllResults?: () => void;
+  /**
    * Issue #1607 — city + Buy/Rent controls live inside the panel (mock parity, mirrors
    * GuidedEntryPanel). All four must be supplied together to render the controls card;
    * when any is omitted (e.g. unit tests) the card is simply not shown — the existing
@@ -355,6 +361,7 @@ export function AreaGroupsLandingPanel({
   onIntentChange,
   fallbackAreas = [],
   onSelectArea,
+  onViewAllResults,
 }: AreaGroupsLandingPanelProps) {
   // Issue #1178 — a groupId is "active" only when it is a non-blank string.
   // Trim guards against whitespace-only deep links (e.g. `?groupId=%20`), which
@@ -434,6 +441,8 @@ export function AreaGroupsLandingPanel({
           onStartOver={onStartOver}
           // onSelectArea cast: safe — showLevel2 guarantees it is defined (see comment above).
           onSelectArea={onSelectArea as (areaKey: string) => void}
+          // Issue #1597 — thread the group-results CTA callback.
+          onViewAllResults={onViewAllResults}
         />
       </div>
     );

@@ -45,7 +45,7 @@ class DiscoverSearchMetricsTest {
                 null, null, null,    // no schoolLat/schoolLon/schoolRadiusKm
                 "sea view",          // q
                 null,                // bbox
-                0, 20, false, null
+                0, 20, false, null, null
         );
     }
 

@@ -144,6 +144,14 @@ export interface DiscoverUrlState {
    */
   schoolPicking?: boolean;
   /**
+   * Issue #1597 — presence flag for the area-group results view.
+   * When true (URL `groupResults=1`), the area-first journey shows all listings across the
+   * selected group's child areas (server-filtered). Requires groupId to be present —
+   * a stray groupResults without groupId is ignored by derivePanelContent.
+   * Same presence-flag read style as schoolPicking (`=== '1' ? true : undefined`).
+   */
+  groupResults?: boolean;
+  /**
    * Selected agri-first corridor direction (Issue #1429).
    * Parsed from URL `region` param (e.g. "NW"). Null when absent or invalid.
    * Optional to allow partial construction in tests/callers.
@@ -284,6 +292,19 @@ export interface DiscoverUrlActions {
    * state (selectedSchool + filters.schoolLat/Lon/RadiusKm) is cleared by the caller.
    */
   backToSchoolPicking: () => void;
+  /**
+   * Issue #1597 — enter the area-group results view.
+   * Sets `groupResults=1` while keeping journey=area-first, groupId, city, intent,
+   * and all active filters. areaKey must NOT be present (results are group-wide).
+   * Single PUSH — a shareable destination so browser Back returns to the group drill-down.
+   */
+  enterGroupResults: () => void;
+  /**
+   * Issue #1597 — leave the area-group results view.
+   * Deletes `groupResults`, keeping groupId/journey/city/intent/filters.
+   * Single REPLACE — symmetric with clearSchoolPicking.
+   */
+  clearGroupResults: () => void;
   /**
    * Select or clear the agri-first regional group (Issue #1409).
    * Writes `group=DIRECTION:BAND` to URL (e.g. "N:10_25"). Null removes the param.
@@ -667,6 +688,9 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
   // read style as the bom/ntm/rera/rtm filter flags above.
   const schoolPicking = urlParams.get('schoolPicking') === '1' ? true : undefined;
 
+  // Issue #1597 — area-group results presence flag. Same style as schoolPicking.
+  const groupResults = urlParams.get('groupResults') === '1' ? true : undefined;
+
   // Issue #1430 — agri-group listing peek. UUID string from `listing` URL param.
   const rawListing = urlParams.get('listing');
   const selectedListing: string | null = rawListing && rawListing.length > 0 ? rawListing : null;
@@ -687,6 +711,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     journey,
     groupId,
     schoolPicking,
+    groupResults,
     selectedGroup,
     selectedRegion,
     selectedMaxKm,
@@ -996,6 +1021,7 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
           // Clear journey context — new city starts fresh
           next.delete('journey');
           next.delete('groupId');
+          next.delete('groupResults'); // Issue #1597 — clear group-results flag on city switch
           next.delete('group'); // Issue #1409 — clear agri-first regional group on city switch
           next.delete('region'); // Issue #1429 — clear corridor on city switch
           next.delete('maxKm'); // Issue #1429 — clear distance tier on city switch
@@ -1460,6 +1486,35 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     );
   }, [setUrlParams]);
 
+  // Issue #1597 — enter/clear the area-group results view.
+
+  const enterGroupResults = useCallback(() => {
+    // PUSH — shareable destination; Back returns to the group drill-down.
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('groupResults', '1');
+        // areaKey must not be present in group-results state (results are group-wide).
+        // selectArea preserves groupId; here we defensively drop areaKey if somehow present.
+        next.delete('areaKey');
+        return next;
+      },
+      { replace: false },
+    );
+  }, [setUrlParams]);
+
+  const clearGroupResults = useCallback(() => {
+    // REPLACE — symmetric with clearSchoolPicking; closing is not a new destination.
+    setUrlParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('groupResults');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setUrlParams]);
+
   // Issue #1494 — buy/rent intent. REPLACE (preference change, not navigation).
   // 'buy' is the default — omit from URL; only emit 'rent'.
   const setIntent = useCallback(
@@ -1504,6 +1559,8 @@ export function useDiscoverUrlState(): [DiscoverUrlState, DiscoverUrlActions] {
     enterSchoolPicking,
     clearSchoolPicking,
     backToSchoolPicking,
+    enterGroupResults,
+    clearGroupResults,
     setRegion,
     setRegionWithMaxKm,
     setMaxKm,

@@ -679,3 +679,97 @@ describe('area-first school-picking sub-step (Issue #1157)', () => {
     ).toBe('area-school-combined');
   });
 });
+
+// ─── Issue #1597: area-group-results routing ───────────────────────────────────
+
+describe('derivePanelContent — area-group-results (Issue #1597)', () => {
+  // Core: area-first + groupId + groupResults=true → area-group-results
+  it('area-first + groupId + groupResults → area-group-results', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', groupId: 'coastal-homes', groupResults: true }),
+      ),
+    ).toBe('area-group-results');
+  });
+
+  // groupResults without groupId must NOT route to a phantom state
+  it('area-first + groupResults but NO groupId → area-groups-landing (no phantom routing)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', groupId: null, groupResults: true }),
+      ),
+    ).toBe('area-groups-landing');
+  });
+
+  // Blank/whitespace groupId with groupResults also safe
+  it('area-first + whitespace groupId + groupResults → area-groups-landing (safe fallback)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', groupId: '  ', groupResults: true }),
+      ),
+    ).toBe('area-groups-landing');
+  });
+
+  // areaKey must take precedence over groupResults (areaKey beats group-results)
+  it('area-first + areaKey + groupId + groupResults → area-selected (areaKey wins)', () => {
+    expect(
+      derivePanelContent(
+        makeState({
+          journey: 'area-first',
+          areaKey: 'IN|KA|Udupi|Manipal',
+          groupId: 'coastal-homes',
+          groupResults: true,
+        }),
+      ),
+    ).toBe('area-selected');
+  });
+
+  // schoolId must take precedence over groupResults
+  it('area-first + schoolId + groupId + groupResults → area-school-combined or schools-in-area (schoolId wins)', () => {
+    const result = derivePanelContent(
+      makeState({
+        journey: 'area-first',
+        schoolId: 'sch-1',
+        groupId: 'coastal-homes',
+        groupResults: true,
+      }),
+    );
+    // schoolId without areaKey in area-first: depends on implementation, but must NOT be area-group-results
+    expect(result).not.toBe('area-group-results');
+  });
+
+  // groupResults alone (no groupId, no journey) must not route incorrectly
+  it('no journey + groupResults + no groupId → guided-entry (no phantom state)', () => {
+    const result = derivePanelContent(
+      makeState({ journey: null, groupId: null, groupResults: true }),
+    );
+    expect(result).toBe('guided-entry');
+  });
+
+  // school-first + groupResults must not affect school-first routing
+  it('school-first + groupId + groupResults → school-group-areas (not area-group-results)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'school-first', groupId: 'coastal-homes', groupResults: true }),
+      ),
+    ).toBe('school-group-areas');
+  });
+
+  // agri-first + groupResults must not route to area-group-results
+  it('agri-first + groupId + groupResults → agri-landing (not area-group-results)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'agri-first', groupId: 'coastal-homes', groupResults: true }),
+      ),
+    ).not.toBe('area-group-results');
+  });
+
+  // Regression: area-first + groupId alone (no groupResults) → area-groups-landing (unchanged)
+  it('area-first + groupId (no groupResults) → area-groups-landing (unchanged behaviour)', () => {
+    expect(
+      derivePanelContent(
+        makeState({ journey: 'area-first', groupId: 'coastal-homes' }),
+      ),
+    ).toBe('area-groups-landing');
+  });
+});

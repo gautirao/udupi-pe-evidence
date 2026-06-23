@@ -36,7 +36,7 @@ class RoutingDiscoverMarkersServiceTest {
     private static final DiscoverListingPredicateBuilder.Filters FILTERS =
             new DiscoverListingPredicateBuilder.Filters(
                     "udupi", null, null, null, null, null, null, null,
-                    null, null, null, null, null, null, null, null, null, null, null, null
+                    null, null, null, null, null, null, null, null, null, null, null, null, null
             );
 
     private static final DiscoverMarkersResponse POSTGRES_RESPONSE = new DiscoverMarkersResponse(

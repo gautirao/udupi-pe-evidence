@@ -691,4 +691,109 @@ describe('useDiscoverFilteredMarkers', () => {
   });
 
   // ─── End Issue #1496 ─────────────────────────────────────────────────────────
+
+  // ─── Issue #1597 — areaKeys filter for group-results markers ─────────────────
+
+  it('areaKeys_appended_as_repeated_params_in_sorted_order', async () => {
+    // When areaKeys is provided, they must be appended sorted and sent to /api/discover/markers.
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    // Sorted order: Karkala < Manipal alphabetically
+    expect(params.getAll('areaKeys')).toEqual([
+      'IN|KA|Udupi|Karkala',
+      'IN|KA|Udupi|Manipal',
+    ]);
+  });
+
+  it('empty_areaKeys_disables_fetch_guard', () => {
+    // Backend returns 400 on empty areaKeys=[]; the hook must not fire at all.
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          {},
+          true,
+          null,
+          undefined,
+          undefined,
+          undefined,
+          [],
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    // Must stay idle — empty areaKeys guard prevents request
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('no_areaKeys_backward_compat_does_not_append_areaKeys_param', async () => {
+    // Existing callers (useDiscoverMapData path) do not pass areaKeys → no areaKeys in URL.
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () => useDiscoverFilteredMarkers('udupi', {}, true),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('areaKeys')).toBe(false);
+  });
+
+  it('areaKeys_combined_with_propertyTypes_and_listingPurpose', async () => {
+    // All three filter dimensions must appear together in the same request URL —
+    // this is the group-results markers predicate (list+map consistent by construction).
+    mockGet.mockResolvedValue(BASE_MARKERS);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverFilteredMarkers(
+          'udupi',
+          { propertyTypes: ['house'], priceMin: 5000000 },
+          true,
+          null,
+          undefined,
+          'sale',
+          undefined,
+          ['IN|KA|Udupi|Malpe', 'IN|KA|Udupi|Ullal'],
+        ),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.getAll('propertyTypes')).toEqual(['house']);
+    expect(params.get('priceMin')).toBe('5000000');
+    expect(params.get('listingPurpose')).toBe('sale');
+    expect(params.getAll('areaKeys')).toEqual([
+      'IN|KA|Udupi|Malpe',
+      'IN|KA|Udupi|Ullal',
+    ]);
+  });
+
+  // ─── End Issue #1597 ─────────────────────────────────────────────────────────
 });

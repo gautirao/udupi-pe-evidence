@@ -19,6 +19,12 @@ export interface AreaGroup {
    */
   focus_lat?: number | null;
   focus_lon?: number | null;
+  /**
+   * Issue #1597 — optional long-form buyer-facing description surfaced from the
+   * backend DTO (JsonInclude.NON_NULL: absent when null). Frontend falls back to
+   * discoverGroupContent adapter when this is null/undefined.
+   */
+  description?: string | null;
 }
 
 interface AreaGroupsResponse {
@@ -32,6 +38,8 @@ interface AreaGroupDTO {
   name?: string;
   subtitle?: string | null;
   regionLabel?: string | null;
+  /** Issue #1597 — nullable long-form description (JsonInclude.NON_NULL: omitted when null). */
+  description?: string | null;
   displayOrder?: number;
   areaKeys?: string[] | null;
   focusLat?: number | null;
@@ -83,6 +91,9 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
           return null;
         }
 
+        // Issue #1597 — surface description from the backend DTO (null when absent).
+        const description = typeof item.description === 'string' ? item.description : null;
+
         return {
           id: slug || name!,
           name: name || slug!,
@@ -92,6 +103,7 @@ export function normalizeAreaGroupResponse(dto: AreaGroupsDTOResponse): AreaGrou
           area_keys: areaKeysArray,
           focus_lat: focusLat,
           focus_lon: focusLon,
+          description,
         };
       })
       .filter((group): group is AreaGroup => group !== null),

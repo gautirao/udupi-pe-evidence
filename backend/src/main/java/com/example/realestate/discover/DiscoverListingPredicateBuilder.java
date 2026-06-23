@@ -42,7 +42,8 @@ public class DiscoverListingPredicateBuilder {
             Bbox bbox,                     // viewport rectangle filter, nullable
             String q,                      // keyword search query; null/blank = no FTS filter
             String listingPurpose,         // 'sale' or 'rent'; null = no filter
-            List<String> excludePropertyTypes  // property types to exclude via NOT IN; null = no exclusion
+            List<String> excludePropertyTypes,  // property types to exclude via NOT IN; null = no exclusion
+            List<String> areaKeys          // restrict to specific area_keys (group members); null = no filter; MUST NOT be empty
     ) {}
 
     /**
@@ -247,6 +248,21 @@ public class DiscoverListingPredicateBuilder {
               .append(")");
             for (String t : f.excludePropertyTypes()) {
                 params.add(t.toLowerCase());
+            }
+        }
+
+        // areaKeys — restrict to explicit area_key members (group-scoped browse).
+        // null = absent param → no filter (backward-compatible; existing journeys pass nothing).
+        // empty list is rejected at the controller layer before reaching here (400 BAD REQUEST),
+        // so this block only fires when the list is non-null and non-empty, preserving the
+        // city subselect above — both predicates apply via AND.
+        if (f.areaKeys() != null && !f.areaKeys().isEmpty()) {
+            List<String> placeholders = Collections.nCopies(f.areaKeys().size(), "?");
+            sb.append(" AND pl.area_key IN (")
+              .append(String.join(", ", placeholders))
+              .append(")");
+            for (String k : f.areaKeys()) {
+                params.add(k);
             }
         }
 

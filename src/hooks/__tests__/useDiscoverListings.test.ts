@@ -570,3 +570,117 @@ describe('useDiscoverListings', () => {
     expect(allKeys.length).toBe(1);
   });
 });
+
+// ─── Issue #1597: areaKeys filter ─────────────────────────────────────────────
+
+describe('useDiscoverListings — areaKeys filter (Issue #1597)', () => {
+  it('appends multiple areaKeys as repeated params in sorted order', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          areaKeys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    // Backend accepts repeated areaKeys; they must be sorted (stable cache key)
+    expect(params.getAll('areaKeys')).toEqual([
+      'IN|KA|Udupi|Karkala',
+      'IN|KA|Udupi|Manipal',
+    ]);
+  });
+
+  it('does NOT fetch when areaKeys is an empty array (empty-areaKeys guard)', () => {
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          areaKeys: [],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    // Hook must stay idle — never sends the request
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it('fetches normally when areaKeys is undefined (no filter applied)', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          // areaKeys intentionally absent
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    expect(params.has('areaKeys')).toBe(false);
+  });
+
+  it('areaKeys cache key is distinct from no-areaKeys query', () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const w = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: qc }, children);
+
+    // Render both in sequence — they must produce different cache entries
+    const { rerender } = renderHook(
+      ({ areaKeys }: { areaKeys?: string[] }) =>
+        useDiscoverListings({ city: 'udupi', page: 0, filters: {}, enabled: true, areaKeys }),
+      { wrapper: w, initialProps: { areaKeys: undefined } },
+    );
+
+    rerender({ areaKeys: ['IN|KA|Udupi|Manipal'] });
+
+    const allKeys = qc.getQueryCache().getAll().map((entry) => JSON.stringify(entry.queryKey));
+    // Two distinct cache entries must exist
+    const uniqueKeys = new Set(allKeys);
+    expect(uniqueKeys.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('areaKeys are sorted stably regardless of input order', async () => {
+    mockGet.mockResolvedValue(BASE_PAGE);
+
+    const { result } = renderHook(
+      () =>
+        useDiscoverListings({
+          city: 'udupi',
+          page: 0,
+          filters: {},
+          enabled: true,
+          areaKeys: ['IN|KA|Udupi|Kundapur', 'IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
+        }),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url] = mockGet.mock.calls[0] as [string, unknown];
+    const params = new URLSearchParams(url.split('?')[1]);
+    const sent = params.getAll('areaKeys');
+    const expected = [...sent].sort();
+    expect(sent).toEqual(expected);
+  });
+});

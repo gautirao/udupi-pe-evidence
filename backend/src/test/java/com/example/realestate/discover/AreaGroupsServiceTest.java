@@ -159,4 +159,84 @@ class AreaGroupsServiceTest {
         assertThat(sqlCaptor.getValue())
                 .contains("is_active = true");
     }
+
+    // ── SQL selects description column ────────────────────────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getGroupsByCity_sqlSelectsDescriptionColumn() {
+        ArgumentCaptor<String> sqlCaptor = ArgumentCaptor.forClass(String.class);
+        when(jdbcOperations.query(sqlCaptor.capture(), any(RowMapper.class), anyString()))
+                .thenReturn(List.of());
+
+        service.getGroupsByCity("udupi");
+
+        assertThat(sqlCaptor.getValue())
+                .as("SQL must select ag.description")
+                .contains("ag.description");
+    }
+
+    // ── description field propagated to AreaGroupResponse ────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getGroupsByCity_withDescription_propagatesToDto() throws SQLException {
+        when(rs.getString("slug")).thenReturn("university-belt");
+        when(rs.getString("name")).thenReturn("University Belt");
+        when(rs.getString("subtitle")).thenReturn("Academic and student housing");
+        when(rs.getString("region_label")).thenReturn("Central Udupi");
+        when(rs.getInt("display_order")).thenReturn(1);
+        when(rs.getString("area_key")).thenReturn("IN|KA|Udupi|Manipal");
+        when(rs.getObject("focus_lat")).thenReturn(null);
+        when(rs.getObject("focus_lon")).thenReturn(null);
+        when(rs.getObject("min_lat")).thenReturn(null);
+        when(rs.getObject("min_lon")).thenReturn(null);
+        when(rs.getObject("max_lat")).thenReturn(null);
+        when(rs.getObject("max_lon")).thenReturn(null);
+        when(rs.getString("description")).thenReturn(
+                "Manipal's academic spine with strong student accommodation demand.");
+
+        ArgumentCaptor<RowMapper> mapperCaptor = ArgumentCaptor.forClass(RowMapper.class);
+        when(jdbcOperations.query(anyString(), mapperCaptor.capture(), anyString()))
+                .thenAnswer(inv -> List.of(mapperCaptor.getValue().mapRow(rs, 0)));
+
+        AreaGroupsResponse response = service.getGroupsByCity("udupi");
+
+        assertThat(response.groups()).hasSize(1);
+        AreaGroupResponse group = response.groups().get(0);
+        assertThat(group.description())
+                .as("description must be propagated from DB to DTO")
+                .isEqualTo("Manipal's academic spine with strong student accommodation demand.");
+    }
+
+    // ── description=null (not yet seeded) → DTO has null ─────────────────────
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void getGroupsByCity_nullDescription_dtoDescriptionIsNull() throws SQLException {
+        when(rs.getString("slug")).thenReturn("coastal-strip");
+        when(rs.getString("name")).thenReturn("Coastal Strip");
+        when(rs.getString("subtitle")).thenReturn(null);
+        when(rs.getString("region_label")).thenReturn(null);
+        when(rs.getInt("display_order")).thenReturn(2);
+        when(rs.getString("area_key")).thenReturn("IN|KA|Udupi|Malpe");
+        when(rs.getObject("focus_lat")).thenReturn(null);
+        when(rs.getObject("focus_lon")).thenReturn(null);
+        when(rs.getObject("min_lat")).thenReturn(null);
+        when(rs.getObject("min_lon")).thenReturn(null);
+        when(rs.getObject("max_lat")).thenReturn(null);
+        when(rs.getObject("max_lon")).thenReturn(null);
+        when(rs.getString("description")).thenReturn(null);  // not yet seeded
+
+        ArgumentCaptor<RowMapper> mapperCaptor = ArgumentCaptor.forClass(RowMapper.class);
+        when(jdbcOperations.query(anyString(), mapperCaptor.capture(), anyString()))
+                .thenAnswer(inv -> List.of(mapperCaptor.getValue().mapRow(rs, 0)));
+
+        AreaGroupsResponse response = service.getGroupsByCity("udupi");
+
+        assertThat(response.groups()).hasSize(1);
+        assertThat(response.groups().get(0).description())
+                .as("description must be null when DB returns null (pre-V99 or unseeded group)")
+                .isNull();
+    }
 }

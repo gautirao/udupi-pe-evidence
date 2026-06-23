@@ -289,7 +289,8 @@ public class DiscoverListingsService implements DiscoverListingsPort {
                 q.bbox(),
                 q.q(),
                 q.listingPurpose(),
-                null  // excludePropertyTypes — listings path does not apply type exclusion
+                null,      // excludePropertyTypes — listings path does not apply type exclusion
+                q.areaKeys()
         );
     }
 }

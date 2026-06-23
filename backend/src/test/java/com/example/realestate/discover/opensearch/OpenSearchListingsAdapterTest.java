@@ -46,7 +46,7 @@ class OpenSearchListingsAdapterTest {
         return new DiscoverListingsQuery(
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null,
-                null, null, 0, 20, includeAggregates, null
+                null, null, 0, 20, includeAggregates, null, null
         );
     }
 

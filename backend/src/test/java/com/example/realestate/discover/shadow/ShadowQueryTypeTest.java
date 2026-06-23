@@ -43,7 +43,7 @@ class ShadowQueryTypeTest {
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null,
                 null, null, null, null,
-                null, bbox, 0, 20, false, null);
+                null, bbox, 0, 20, false, null, null);
         assertThat(ShadowQueryType.fromListingsQuery(query)).isEqualTo(ShadowQueryType.BBOX);
     }
 
@@ -62,7 +62,7 @@ class ShadowQueryTypeTest {
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null,
                 null, null, null, null,
-                "cafe", bbox, 0, 20, false, null);
+                "cafe", bbox, 0, 20, false, null, null);
         assertThat(ShadowQueryType.fromListingsQuery(query)).isEqualTo(ShadowQueryType.KEYWORD);
     }
 
@@ -108,6 +108,6 @@ class ShadowQueryTypeTest {
                 "udupi", null, null, null, null, null, null, null,
                 null, null, null, null,
                 polygon, schoolLat, schoolLon, schoolRadiusKm,
-                q, null, 0, 20, false, null);
+                q, null, 0, 20, false, null, null);
     }
 }

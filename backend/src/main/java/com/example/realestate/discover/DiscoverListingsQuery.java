@@ -25,5 +25,6 @@ public record DiscoverListingsQuery(
         int page,
         int size,
         boolean includeAggregates,
-        String listingPurpose
+        String listingPurpose,
+        List<String> areaKeys  // null = no area filter; non-empty = restrict to group members
 ) {}

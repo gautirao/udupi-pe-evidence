@@ -37,12 +37,16 @@ import { useAreaGroups } from '@/hooks/useAreaGroups';
 import { useRegionalAreaGroups } from '@/hooks/useRegionalAreaGroups';
 import { useAgriMapListings } from '@/hooks/useAgriMapListings';
 import { useSchoolsByArea } from '@/hooks/useSchoolsByArea';
+import { useDiscoverListings } from '@/hooks/useDiscoverListings';
+import type { DiscoverListingItem } from '@/hooks/useDiscoverListings';
+import { useDiscoverFilteredMarkers } from '@/hooks/useDiscoverFilteredMarkers';
+import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
 import { getSectorBounds } from '@/lib/geo';
-import { clampSchoolRadiusKm, PropertyListing, PropertyImage } from '@/hooks/usePropertyListings';
-import { cityListingToPropertyListing } from '@/lib/discoverMappers';
+import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
+import { cityListingToPropertyListing, filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
 import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { NearSchoolSheet } from '@/components/map/NearSchoolSheet';
@@ -396,6 +400,48 @@ export default function MapDiscovery() {
 
   const panelContent = derivePanelContent(urlState);
 
+  // Issue #1597 — early derivation of PropertyFilters from URL state, available before
+  // useDiscoverPageState is called. Used by the group-results listings query so it respects
+  // active discover filters (propertyTypes, price, bedrooms, etc.).
+  // Mirrors the urlState.filters → PropertyFilters mapping in useDiscoverPageState's useState
+  // initializer. dateFrom/dateTo are ISO strings in URL state; PropertyFilters expects Date.
+  // schoolLat/schoolLon/polygon are NOT included: group-results is not a school or polygon state.
+  const urlDiscoverFilters: PropertyFilters = useMemo(() => {
+    const f = urlState.filters;
+    return {
+      propertyTypes: f.propertyTypes as PropertyFilters['propertyTypes'],
+      bedrooms: f.bedrooms,
+      priceMin: f.priceMin,
+      priceMax: f.priceMax,
+      sellerTypes: f.sellerTypes,
+      boardFilters: f.boardFilters,
+      categoryFilters: f.categoryFilters,
+      backOnMarket: f.backOnMarket,
+      newToMarket: f.newToMarket,
+      reraRegistered: f.reraRegistered,
+      readyToMove: f.readyToMove,
+      dateFrom: f.dateFrom ? new Date(f.dateFrom) : undefined,
+      dateTo: f.dateTo ? new Date(f.dateTo) : undefined,
+    };
+  // urlState.filters object identity changes on every URL change — use the individual
+  // scalar fields as deps so React can skip re-derivation when nothing changed.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    urlState.filters.propertyTypes,
+    urlState.filters.bedrooms,
+    urlState.filters.priceMin,
+    urlState.filters.priceMax,
+    urlState.filters.sellerTypes,
+    urlState.filters.boardFilters,
+    urlState.filters.categoryFilters,
+    urlState.filters.backOnMarket,
+    urlState.filters.newToMarket,
+    urlState.filters.reraRegistered,
+    urlState.filters.readyToMove,
+    urlState.filters.dateFrom,
+    urlState.filters.dateTo,
+  ]);
+
   // Fetch area groups for the current city.
   // The hook's enabled guard (city.length > 0) prevents fetching on empty city.
   // Passing urlState.city directly avoids a stale-data window that the conditional ''
@@ -444,6 +490,216 @@ export default function MapDiscovery() {
       ? `${selectedCorridorData.groupName} · ${selectedTierData.distanceLabel}`
       : selectedCorridorData.groupName
     : null;
+
+  // Issue #1597 — group-results state: server-filtered listings + markers across all
+  // child areas of the selected area-group. Queries gate on:
+  //   1. panelContent === 'area-group-results' (avoid fetching in drill-down or other states)
+  //   2. Resolved area_keys from the already-loaded areaGroupsData (prevents cold-load leak)
+  //   3. area_keys.length > 0 (empty-areaKeys guard → hook's enabled guard handles 400 prevention)
+  //
+  // Auth split: /api/discover/listings + /api/discover/markers are auth-gated. Anonymous buyers
+  // fall back to /api/discover/cities/{city}/listings (public, multi-areaKeys), with active
+  // property filters applied CLIENT-SIDE via applyAnonPropertyFilters — mirroring the same
+  // anon pattern used for school-first and area-first. Anon markers are derived from the
+  // city-listings response (same recipe as areaMarkerListings).
+  //
+  // Cold-load safety: areaGroupsData resolves before panelContent routes to 'area-group-results'
+  // because derivePanelContent only routes there when groupId is present; groupId drives
+  // the useAreaGroups fetch; when areaGroupsData has loaded, the resolved group is present.
+  const isGroupResultsState = panelContent === 'area-group-results';
+  const resolvedGroupForResults = isGroupResultsState && urlState.groupId
+    ? (areaGroupsData?.groups.find((g) => g.id === urlState.groupId) ?? null)
+    : null;
+  const resolvedGroupAreaKeys: string[] = resolvedGroupForResults?.area_keys ?? [];
+
+  // ── Authenticated path: /api/discover/listings (paginated, fully filtered) ──
+  const {
+    data: groupResultsAuthedData,
+    isLoading: isLoadingGroupResultsAuthed,
+    isError: isGroupResultsErrorAuthed,
+    refetch: refetchGroupResultsAuthed,
+  } = useDiscoverListings({
+    city: urlState.city,
+    page: 0,
+    size: 50,
+    // Issue #1597 — thread the active URL discover filters (propertyTypes, price, bedrooms,
+    // etc.) so that the group-results list respects user-applied filters.
+    filters: urlDiscoverFilters,
+    // Gate: only fire for authenticated users in group-results state.
+    enabled: isGroupResultsState && isAuthenticated,
+    listingPurpose: intentListingPurpose,
+    areaKeys: isGroupResultsState ? resolvedGroupAreaKeys : undefined,
+  });
+
+  // ── Authenticated path: /api/discover/markers (full predicate, list+map consistent) ──
+  // Issue #1597 — use useDiscoverFilteredMarkers (→ /api/discover/markers) rather than
+  // useDiscoverMarkers (→ /api/listings/markers) because the public endpoint silently
+  // ignores areaKeys and property filters (ListingMarkersController has no @RequestParam
+  // for them). The authed endpoint honours the full predicate including areaKeys + intent.
+  // bbox=null: group-results show all matching markers regardless of viewport.
+  const {
+    data: groupResultsMarkersData,
+  } = useDiscoverFilteredMarkers(
+    urlState.city,
+    urlDiscoverFilters,
+    isGroupResultsState && isAuthenticated, // only fire for authenticated users
+    null,        // bbox — no viewport clipping for group-results
+    undefined,   // q — no keyword search in group-results
+    intentListingPurpose,
+    undefined,   // excludePropertyType — not applicable
+    isGroupResultsState ? resolvedGroupAreaKeys : undefined,
+  );
+
+  // ── Anonymous path: /api/discover/cities/{city}/listings (public, multi-areaKeys) ──
+  // Mirrors the anon fallback for school-first (schoolListings useMemo) and area-first.
+  // useDiscoverCityListings only accepts a single propertyType and bedrooms value; pass the
+  // first value and filter remaining values client-side via applyAnonPropertyFilters below.
+  //
+  // Per-area teaser cap: the backend clamps server-side to MAX_LIMIT=20 per area
+  // (CityAreaListingsService.java Math.min(raw, 20)), so anon users see ≤20 listings/area
+  // regardless of limitPerArea. This is an ACCEPTED, documented limitation — the anon path
+  // is a teaser, not a full paginated view (consistent with existing area-first anon behavior).
+  const anonGroupFilters = urlDiscoverFilters;
+  const {
+    data: groupResultsAnonData,
+    isLoading: isLoadingGroupResultsAnon,
+    isError: isGroupResultsErrorAnon,
+    refetch: refetchGroupResultsAnon,
+  } = useDiscoverCityListings({
+    city: urlState.city,
+    areaKeys: isGroupResultsState && !isAuthenticated ? resolvedGroupAreaKeys : [],
+    limitPerArea: 20, // server caps at 20 anyway (MAX_LIMIT in CityAreaListingsService)
+    // Forward the first propertyType/bedrooms value; remaining are filtered client-side.
+    propertyType: anonGroupFilters.propertyTypes?.[0],
+    bedrooms: anonGroupFilters.bedrooms?.[0],
+    // priceMin/priceMax: convert from rupees (PropertyFilters unit) to paise (backend unit).
+    minPrice: anonGroupFilters.priceMin != null ? anonGroupFilters.priceMin * 100 : undefined,
+    maxPrice: anonGroupFilters.priceMax != null ? anonGroupFilters.priceMax * 100 : undefined,
+    listingPurpose: intentListingPurpose,
+  });
+
+  // ── Anon teaser filter audit ───────────────────────────────────────────────
+  // applyAnonPropertyFilters reads these fields from each listing item.
+  // Fields are checked against DiscoverCityListingItem (the public endpoint shape):
+  //
+  //   SUPPORTED — field present on DiscoverCityListingItem; safe to apply:
+  //     propertyTypes  → l.propertyType      ✓ present
+  //     bedrooms       → l.bedrooms           ✓ present
+  //     priceMin/Max   → l.pricePaise         ✓ present
+  //     dateFrom/dateTo → l.createdAt         ✓ present
+  //
+  //   STRIPPED — field ABSENT from DiscoverCityListingItem; would false-empty the teaser:
+  //     backOnMarket   → l.backOnMarket       ✗ absent (SchoolRadiusListingItem extension only)
+  //     newToMarket    → l.daysOnMarket       ✗ absent (SchoolRadiusListingItem extension only)
+  //     readyToMove    → l.possessionStatus   ✗ absent (SchoolRadiusListingItem extension only)
+  //
+  //   NOT READ by applyAnonPropertyFilters — these may remain on the spread filter object but
+  //   the helper never reads them, so they cannot affect the anon result (no false-empty):
+  //     reraRegistered, sellerTypes, categoryFilters (school-journey only)
+  //
+  // This is the documented anon teaser limitation: the anon path is a reduced experience.
+  // The authed full path (useDiscoverListings + useDiscoverFilteredMarkers) applies ALL filters
+  // server-side and is unaffected by this stripping.
+
+  // Flatten the multi-area response into a single list for rendering.
+  // Strip the three unsupported flags before delegating to applyAnonPropertyFilters so no
+  // active URL flag can silently zero the anon teaser.
+  const groupResultsAnonRaw: DiscoverCityListingItem[] = useMemo(() => {
+    if (!isGroupResultsState || isAuthenticated) return [];
+    const raw = (groupResultsAnonData?.areas ?? []).flatMap((a) => a.listings);
+    // Strip STRIPPED flags (see audit above) via destructuring so they are not forwarded to
+    // applyAnonPropertyFilters (the public DiscoverCityListingItem shape lacks their backing fields).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { backOnMarket: _bom, newToMarket: _ntm, readyToMove: _rtm, ...supportedFilters } =
+      anonGroupFilters;
+    return applyAnonPropertyFilters(
+      raw as Parameters<typeof applyAnonPropertyFilters>[0],
+      supportedFilters,
+    ) as DiscoverCityListingItem[];
+  }, [isGroupResultsState, isAuthenticated, groupResultsAnonData, anonGroupFilters]);
+
+  // Normalise anon city-listing items to DiscoverListingItem shape so the unified surface
+  // is correctly typed without unsafe casts. Fields absent from the public endpoint default
+  // to null/0/false — values the panel already guards against (null-checks, optional renders).
+  // heroImageUrl ← primaryImageUrl (different field name between the two response shapes).
+  const groupResultsAnonListings: DiscoverListingItem[] = useMemo(
+    () =>
+      groupResultsAnonRaw.map((l): DiscoverListingItem => ({
+        id: l.id,
+        listingNumber: null,
+        propertyType: l.propertyType ?? '',
+        title: l.title ?? null,
+        locality: l.locality ?? null,
+        areaKey: null,
+        pricePaise: l.pricePaise ?? null,
+        landArea: l.landArea ?? null,
+        landAreaUnit: l.landAreaUnit ?? null,
+        builtArea: l.builtArea ?? null,
+        builtAreaUnit: l.builtAreaUnit ?? null,
+        bedrooms: l.bedrooms ?? null,
+        latitude: l.lat ?? l.latitude ?? null,
+        longitude: l.lon ?? l.longitude ?? null,
+        heroImageUrl: l.primaryImageUrl ?? null,
+        createdAt: l.createdAt ?? new Date(0).toISOString(),
+        updatedAt: null,
+        firstPublishedAt: null,
+        lastUpdatedAt: null,
+        daysOnMarket: 0,
+        backOnMarket: false,
+        reraNumber: null,
+        reraValid: false,
+        trustTier: l.trustTier ?? null,
+        possessionStatus: null,
+        sellerType: null,
+        listingPurpose: l.listingPurpose ?? null,
+        status: 'active',
+      })),
+    [groupResultsAnonRaw],
+  );
+
+  // ── Unified group-results surface (authed or anon) ──
+  // The right panel and map always read from these unified variables so downstream code
+  // (DiscoverRightPanel props, groupResultsMarkers) is unaffected by the auth split.
+  const groupResultsListings: DiscoverListingItem[] = isAuthenticated
+    ? (groupResultsAuthedData?.content ?? [])
+    : groupResultsAnonListings;
+  const groupResultsTotalElements = isAuthenticated
+    ? groupResultsAuthedData?.totalElements
+    : groupResultsAnonListings.length;
+  const isLoadingGroupResults = isAuthenticated ? isLoadingGroupResultsAuthed : isLoadingGroupResultsAnon;
+  const isGroupResultsError = isAuthenticated ? isGroupResultsErrorAuthed : isGroupResultsErrorAnon;
+  const refetchGroupResults = isAuthenticated ? refetchGroupResultsAuthed : refetchGroupResultsAnon;
+
+  // Issue #1597 — convert group-filtered markers to PropertyListingWithImages[] for PropertyMap.
+  // Auth path: filteredMarkerToPropertyListing from /api/discover/markers (full predicate).
+  // Anon path: cityListingToPropertyListing derived from groupResultsAnonListings (same recipe
+  // as areaMarkerListings — filter null coords then reuse the city-listing mapper).
+  // Returns [] when:
+  //   - Not in the group-results state (no-op for all other panel states)
+  //   - areaGroupsData is still loading (resolvedGroupAreaKeys is empty → hook disabled → data undefined)
+  //   - The query is still in-flight
+  // This ensures NO unfiltered markers leak to the map while the query is pending.
+  const groupResultsMarkers = useMemo((): (PropertyListing & { images?: PropertyImage[] })[] => {
+    if (!isGroupResultsState) return [];
+    if (isAuthenticated) {
+      if (!groupResultsMarkersData?.markers) return [];
+      const now = new Date().toISOString();
+      return groupResultsMarkersData.markers.map((m) => filteredMarkerToPropertyListing(m, now));
+    }
+    // Anon: derive markers from the same filtered city listings already shown in the panel.
+    // Uses groupResultsAnonRaw (DiscoverCityListingItem[], has lat/lon fields from the
+    // public endpoint) rather than the normalized DiscoverListingItem[] shape, because
+    // cityListingToPropertyListing expects the raw city-listing shape.
+    // Filters null/undefined coords so Leaflet never receives NaN lat/lon.
+    if (groupResultsAnonRaw.length === 0) return [];
+    const now = new Date().toISOString();
+    return groupResultsAnonRaw
+      .filter((l) => l.lat != null && l.lon != null)
+      .map((l) => cityListingToPropertyListing(
+        { ...l, lat: l.lat as number, lon: l.lon as number },
+        now,
+      ));
+  }, [isGroupResultsState, isAuthenticated, groupResultsMarkersData, groupResultsAnonRaw]);
 
   // Issue #1430 — derive the AgriMapListingItem for the selected listing peek.
   // Finds the matching item from the already-loaded agri map listings.
@@ -1846,6 +2102,12 @@ export default function MapDiscovery() {
             <PropertyMap
               listings={(() => {
                 if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
+                // Issue #1597 — area-group-results state: serve ONLY the group-filtered
+                // markers. Must come before the area-first/school-first branches so no
+                // unfiltered city-wide markerListings leak as ghost/shadow markers.
+                // groupResultsMarkers is [] when the query is pending or the group has no
+                // resolved area_keys (empty-areaKeys guard prevents the fetch).
+                if (isGroupResultsState) return groupResultsMarkers;
                 // school-first journey
                 if (urlState.journey === 'school-first') {
                   // schoolId set: proximity markerListings drive the school-radius surface.
@@ -2335,6 +2597,14 @@ export default function MapDiscovery() {
           totalProperties={cityTotal}
           areasCount={discoverAreas.filter((a) => (a.listingCount ?? 0) > 0).length}
           isCityEmpty={cityHasNoListings}
+          // Issue #1597 — group-results state wiring
+          onEnterGroupResults={urlActions.enterGroupResults}
+          groupResultsListings={groupResultsListings}
+          isLoadingGroupResults={isLoadingGroupResults}
+          isGroupResultsError={isGroupResultsError}
+          groupResultsTotalElements={groupResultsTotalElements}
+          onRetryGroupResults={refetchGroupResults}
+          onClearGroupResults={urlActions.clearGroupResults}
           footerContent={isAuthenticated && !selectedArea && totalPages > 1 ? (
             <div className="flex items-center justify-between gap-2 px-4 py-2 border-t border-border bg-card shrink-0">
               <Button

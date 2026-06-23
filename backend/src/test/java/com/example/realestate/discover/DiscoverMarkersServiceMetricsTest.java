@@ -40,7 +40,7 @@ class DiscoverMarkersServiceMetricsTest {
                     null, null, null, null, null, null, null,
                     null, null, null, null, null,
                     null, null, null,
-                    null, null, null, null
+                    null, null, null, null, null
             );
 
     @BeforeEach

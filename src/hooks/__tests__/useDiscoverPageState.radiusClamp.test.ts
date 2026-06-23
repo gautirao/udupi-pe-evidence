@@ -59,7 +59,17 @@ function makeUrlActions(): DiscoverUrlActions {
     clearSchoolPicking: vi.fn(),
     backToSchoolPicking: vi.fn(),
     setSchoolJourney: vi.fn(),
-  };
+    // Issue #1464 — agri-group-locality drill-down actions.
+    setLocality: vi.fn(),
+    clearLocality: vi.fn(),
+    // Issue #1457/1458 — agri filter clear action.
+    clearAgriFilters: vi.fn(),
+    // Issue #1494 — buy/rent intent.
+    setIntent: vi.fn(),
+    // Issue #1597 — area-group-results journey actions.
+    enterGroupResults: vi.fn(),
+    clearGroupResults: vi.fn(),
+  } as DiscoverUrlActions;
 }
 
 const mockSchool: SchoolResult = {
