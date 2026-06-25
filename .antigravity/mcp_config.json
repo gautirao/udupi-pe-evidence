@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "jcodemunch": {
+      "command": "/opt/homebrew/bin/jcodemunch-mcp"
+    }
+  }
+}
