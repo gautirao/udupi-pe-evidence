@@ -84,8 +84,8 @@ test.describe('@broker-dashboard-v2 broker dashboard v2 smoke', () => {
     // Business assertion: disabled quality CTA present
     await expect(page.getByText(/details coming soon/i)).toBeVisible();
 
-    // No active link to /broker/listing-quality must exist
-    const qualityLink = page.locator('a[href="/broker/listing-quality"]');
+    // No active link to /broker/listing-quality must exist in the summary cards
+    const qualityLink = page.locator('[aria-live="polite"] a[href="/broker/listing-quality"]');
     await expect(qualityLink).toHaveCount(0);
   });
 

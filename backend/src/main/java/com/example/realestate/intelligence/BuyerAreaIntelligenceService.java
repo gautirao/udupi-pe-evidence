@@ -5,6 +5,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.jdbc.core.JdbcOperations;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -43,9 +45,13 @@ public class BuyerAreaIntelligenceService {
     private static final String CTA_LABEL_FALLBACK = "View listings in this area";
 
     private final AreaIntelligenceSnapshotRepository repository;
+    private final JdbcOperations jdbcOperations;
 
-    public BuyerAreaIntelligenceService(AreaIntelligenceSnapshotRepository repository) {
+    public BuyerAreaIntelligenceService(
+            AreaIntelligenceSnapshotRepository repository,
+            JdbcOperations jdbcOperations) {
         this.repository = repository;
+        this.jdbcOperations = jdbcOperations;
     }
 
     /**
@@ -90,50 +96,31 @@ public class BuyerAreaIntelligenceService {
      */
     @Transactional(readOnly = true)
     public ResolveAreaResponse resolveArea(String citySlug, String areaSlug) {
-        List<AreaIntelligenceSnapshot> rows =
-                repository.findByCitySlugOrderByActiveListingCountDesc(citySlug);
+        // Look up in static areas and cities tables for this city and area slug.
+        List<StaticAreaRow> staticAreas = jdbcOperations.query(
+                "SELECT a.area_key, a.name FROM areas a JOIN cities c ON c.id = a.city_id WHERE c.slug = ? AND a.area_slug = ?",
+                (rs, rowNum) -> new StaticAreaRow(rs.getString("area_key"), rs.getString("name")),
+                citySlug,
+                areaSlug
+        );
 
-        // Deterministic sort: active_listing_count DESC (already from repo), then area_key ASC
-        List<AreaIntelligenceSnapshot> sorted = rows.stream()
-                .sorted(Comparator
-                        .comparingInt(AreaIntelligenceSnapshot::getActiveListingCount).reversed()
-                        .thenComparing(AreaIntelligenceSnapshot::getAreaKey))
-                .toList();
-
-        // Collision observability: count how many rows map to the requested slug
-        long collisionCount = sorted.stream()
-                .filter(s -> deriveSlug(s).equals(areaSlug))
-                .count();
-        if (collisionCount > 1) {
-            log.warn("resolveArea: slug collision — {} rows in city='{}' map to slug='{}'; "
-                    + "returning deterministic winner (area_key ASC in sorted order)",
-                    collisionCount, citySlug, areaSlug);
+        if (staticAreas.isEmpty()) {
+            log.debug("resolveArea no match in static tables: city={} slug={}", citySlug, areaSlug);
+            return new ResolveAreaResponse(citySlug, areaSlug, null, null, false);
         }
 
-        // Select the first match in deterministic sorted order
-        Optional<AreaIntelligenceSnapshot> match = sorted.stream()
-                .filter(s -> deriveSlug(s).equals(areaSlug))
-                .findFirst();
+        StaticAreaRow a = staticAreas.get(0);
+        log.debug("resolveArea matched via static tables: city={} slug={} -> areaKey={}", citySlug, areaSlug, a.areaKey());
 
-        if (match.isPresent()) {
-            AreaIntelligenceSnapshot s = match.get();
-            log.debug("resolveArea matched: city={} slug={} -> areaKey={}", citySlug, areaSlug, s.getAreaKey());
-            return new ResolveAreaResponse(citySlug, areaSlug, s.getAreaKey(), s.getAreaLabel(), true);
+        // Optional trend/intelligence enrichment lookup from snapshot table
+        String label = a.name();
+        Optional<AreaIntelligenceSnapshot> snapshotOpt =
+                repository.findById(new AreaIntelligenceSnapshotId(citySlug, a.areaKey()));
+        if (snapshotOpt.isPresent()) {
+            label = snapshotOpt.get().getAreaLabel();
         }
 
-        log.debug("resolveArea no match: city={} slug={}", citySlug, areaSlug);
-        return new ResolveAreaResponse(citySlug, areaSlug, null, null, false);
-    }
-
-    /**
-     * Derives the canonical slug for a snapshot row.
-     * Uses area_label when present; falls back to slugify of the last pipe segment of area_key.
-     */
-    private static String deriveSlug(AreaIntelligenceSnapshot s) {
-        if (s.getAreaLabel() != null) {
-            return AreaSlug.slugify(s.getAreaLabel());
-        }
-        return AreaSlug.slugifyFromAreaKey(s.getAreaKey());
+        return new ResolveAreaResponse(citySlug, areaSlug, a.areaKey(), label, true);
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -273,4 +260,6 @@ public class BuyerAreaIntelligenceService {
         }
         return new BuyerAreaIntelligenceResponse.Metric<>(value, overallLabel);
     }
+
+    static record StaticAreaRow(String areaKey, String name) {}
 }

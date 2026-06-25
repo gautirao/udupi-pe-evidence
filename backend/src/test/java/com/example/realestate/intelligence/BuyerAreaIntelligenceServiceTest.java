@@ -9,6 +9,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.jdbc.core.JdbcOperations;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -47,6 +49,9 @@ class BuyerAreaIntelligenceServiceTest {
     @Mock
     private AreaIntelligenceSnapshotRepository repository;
 
+    @Mock
+    private JdbcOperations jdbcOperations;
+
     private BuyerAreaIntelligenceService service;
 
     /** Shared Jackson mapper for T7 JSON serialisation tests. */
@@ -54,7 +59,7 @@ class BuyerAreaIntelligenceServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BuyerAreaIntelligenceService(repository);
+        service = new BuyerAreaIntelligenceService(repository, jdbcOperations);
     }
 
     // ── T1: Full-confidence snapshot ──────────────────────────────────────────

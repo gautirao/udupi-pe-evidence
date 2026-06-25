@@ -2,7 +2,6 @@ package com.example.realestate.intelligence;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -22,29 +21,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Testcontainers integration tests for {@link BuyerAreaIntelligenceService#resolveArea}.
- *
- * <p>Follows the same structure as {@link BuyerAreaIntelligenceSeededMedianIT}: real Postgres
- * via Testcontainers, Flyway migrations applied on startup, direct snapshot seeding via
- * JdbcTemplate (no listing seeding needed — we test the resolver, not the aggregation pipeline).
- *
- * <p>We seed {@code area_intelligence_snapshot} rows directly (avoiding the ListingRepository
- * aggregation path) because we are testing slug resolution against existing snapshot rows,
- * not the snapshot computation itself. This is the correct anti-fake approach: the resolver
- * reads whatever rows are in the snapshot table, and we need precise control over the
- * (area_key, area_label, activeListingCount) combinations to exercise collision/sort logic.
- *
- * <p>Scenarios:
- * <ul>
- *   <li>IT-R01 – Known slug → 200 matched=true with exact stored area_key.</li>
- *   <li>IT-R02 – Unknown slug → 200 matched=false.</li>
- *   <li>IT-R03 – Collision pair with equal activeListingCount → deterministic winner (area_key ASC).</li>
- *   <li>IT-R04 – k-anon-suppressed area (activeListingCount=1) still resolves matched=true.</li>
- *   <li>IT-R05 – Null area_label → slug derived from area_key last segment.</li>
- * </ul>
- *
- * <h3>Transaction strategy</h3>
- * {@code NOT_SUPPORTED}: tests are not rolled back (mirrors sibling ITs). Cleanup in
- * {@code @AfterEach} deletes all rows with the sentinel area_key prefix.
  */
 @DataJpaTest
 @Testcontainers(disabledWithoutDocker = true)
@@ -79,34 +55,29 @@ class ResolveAreaIT {
 
     @AfterEach
     void cleanup() {
-        jdbcTemplate.execute(
-                "DELETE FROM area_intelligence_snapshot WHERE area_key LIKE '\\_rait\\_%' ESCAPE '\\'");
+        jdbcTemplate.execute("DELETE FROM area_intelligence_snapshot");
     }
 
-    // ── IT-R01: known slug → matched=true ─────────────────────────────────────
+    // ── IT-R01: known static area slug -> matched=true ─────────────────────────
 
     @Test
-    @DisplayName("IT-R01: seeded snapshot row matches slug → matched=true, exact area_key returned")
+    @DisplayName("IT-R01: known static area slug resolves matched=true")
     void it_r01_knownSlug_matchedTrue() {
-        seedSnapshot(CITY, SENTINEL + "Malpe", "Malpe", 20);
-
+        // 'malpe' slug resolves to IN|KA|Udupi|Malpe from V71 static areas seed
         ResolveAreaResponse resp = service.resolveArea(CITY, "malpe");
 
         assertThat(resp.matched()).isTrue();
-        assertThat(resp.areaKey()).isEqualTo(SENTINEL + "Malpe");
+        assertThat(resp.areaKey()).isEqualTo("IN|KA|Udupi|Malpe");
         assertThat(resp.areaLabel()).isEqualTo("Malpe");
         assertThat(resp.citySlug()).isEqualTo(CITY);
         assertThat(resp.areaSlug()).isEqualTo("malpe");
     }
 
-    // ── IT-R02: unknown slug → matched=false ──────────────────────────────────
+    // ── IT-R02: unknown slug -> matched=false ──────────────────────────────────
 
     @Test
-    @DisplayName("IT-R02: no row matches slug → matched=false, areaKey null, params echoed")
+    @DisplayName("IT-R02: unknown slug -> matched=false")
     void it_r02_unknownSlug_matchedFalse() {
-        // Seed a row that does NOT match the requested slug
-        seedSnapshot(CITY, SENTINEL + "Malpe", "Malpe", 20);
-
         ResolveAreaResponse resp = service.resolveArea(CITY, "no-such-area");
 
         assertThat(resp.matched()).isFalse();
@@ -116,64 +87,87 @@ class ResolveAreaIT {
         assertThat(resp.areaSlug()).isEqualTo("no-such-area");
     }
 
-    // ── IT-R03: collision pair, equal count → deterministic winner ────────────
-
-    /**
-     * Two snapshot rows with the same slugified area_label ("malpe-beach") and the SAME
-     * activeListingCount (10). The resolver must return the one with the lexicographically
-     * smaller area_key every time (stable across repeated calls).
-     *
-     * <p>area_key A (lexicographically smaller) must win over B.
-     */
-    @RepeatedTest(5)
-    @DisplayName("IT-R03 (repeated): collision with equal activeListingCount → area_key ASC winner is stable")
-    void it_r03_collision_equalCount_areaKeyAscWins() {
-        // Both area_labels slugify to "malpe-beach"
-        seedSnapshot(CITY, SENTINEL + "MalpeBeach-B", "Malpe Beach", 10);
-        seedSnapshot(CITY, SENTINEL + "MalpeBeach-A", "Malpe Beach", 10);
-
-        ResolveAreaResponse resp = service.resolveArea(CITY, "malpe-beach");
-
-        assertThat(resp.matched()).isTrue();
-        // Deterministic winner: area_key ASC → SENTINEL + "MalpeBeach-A" < SENTINEL + "MalpeBeach-B"
-        assertThat(resp.areaKey()).isEqualTo(SENTINEL + "MalpeBeach-A");
-    }
-
-    // ── IT-R04: k-anon-suppressed area still resolves ─────────────────────────
-
-    /**
-     * An area with activeListingCount=1 is below the k-anonymity threshold
-     * (AggregationConstants.K_ANON_MIN=10). Its metrics are suppressed in the
-     * BuyerAreaIntelligenceService path, but the row EXISTS in the snapshot table.
-     * Slug resolution MUST still return matched=true — existence is not suppressed,
-     * only metric values.
-     */
-    @Test
-    @DisplayName("IT-R04: k-anon suppressed area (activeListingCount=1) still resolves matched=true")
-    void it_r04_suppressedArea_stillResolves() {
-        seedSnapshot(CITY, SENTINEL + "TinyVillage", "Tiny Village", 1);
-
-        ResolveAreaResponse resp = service.resolveArea(CITY, "tiny-village");
-
-        assertThat(resp.matched()).isTrue();
-        assertThat(resp.areaKey()).isEqualTo(SENTINEL + "TinyVillage");
-    }
-
-    // ── IT-R05: null area_label → slug from area_key last segment ────────────
+    // ── IT-R03: snapshot missing + static area present -> matched=true ─────────
 
     @Test
-    @DisplayName("IT-R05: null area_label -> slug derived from area_key last segment")
-    void it_r05_nullLabel_slugFromAreaKeyLastSegment() {
-        // Realistic pipe-form area_key: last segment "Padubidri" slugifies to "padubidri".
-        // Sentinel "_rait_" is the first segment so the @AfterEach LIKE cleanup still matches.
-        String areaKey = SENTINEL + "IN|KA|Udupi|Padubidri";
-        seedSnapshotNullLabel(CITY, areaKey, 8);
-
-        ResolveAreaResponse resp = service.resolveArea(CITY, "padubidri");
+    @DisplayName("IT-R03: snapshot missing but area exists in static tables -> matched=true")
+    void it_r03_snapshotMissing_staticAreaPresent_matchedTrue() {
+        // No snapshot seeded, resolves directly to IN|KA|Udupi|Malpe
+        ResolveAreaResponse resp = service.resolveArea(CITY, "malpe");
 
         assertThat(resp.matched()).isTrue();
-        assertThat(resp.areaKey()).isEqualTo(areaKey);
+        assertThat(resp.areaKey()).isEqualTo("IN|KA|Udupi|Malpe");
+        assertThat(resp.areaLabel()).isEqualTo("Malpe");
+    }
+
+    // ── IT-R04: snapshot present + static area present -> matched=true & enriched ──
+
+    @Test
+    @DisplayName("IT-R04: snapshot present -> returns snapshot area_label")
+    void it_r04_snapshotPresent_staticAreaPresent_enriched() {
+        // Seed snapshot with custom label for the static area key
+        seedSnapshot(CITY, "IN|KA|Udupi|Malpe", "Malpe Custom Label", 25);
+
+        ResolveAreaResponse resp = service.resolveArea(CITY, "malpe");
+
+        assertThat(resp.matched()).isTrue();
+        assertThat(resp.areaKey()).isEqualTo("IN|KA|Udupi|Malpe");
+        assertThat(resp.areaLabel()).isEqualTo("Malpe Custom Label");
+    }
+
+    // ── IT-R05: null area_label in snapshot -> fallback to null ────────────────
+
+    @Test
+    @DisplayName("IT-R05: null area_label in snapshot -> falls back to null")
+    void it_r05_nullLabelInSnapshot_fallsBack() {
+        // Seed snapshot with null label
+        seedSnapshotNullLabel(CITY, "IN|KA|Udupi|Malpe", 10);
+
+        ResolveAreaResponse resp = service.resolveArea(CITY, "malpe");
+
+        assertThat(resp.matched()).isTrue();
+        assertThat(resp.areaKey()).isEqualTo("IN|KA|Udupi|Malpe");
         assertThat(resp.areaLabel()).isNull();
+    }
+
+    // ── IT-R06: migration/backfill creates and populates area_slug ─────────────
+
+    @Test
+    @DisplayName("IT-R06: migration/backfill creates and populates area_slug")
+    void it_r06_migrationBackfill_populatesAreaSlug() {
+        String slug = jdbcTemplate.queryForObject(
+                "SELECT area_slug FROM areas WHERE area_key = 'IN|KA|Udupi|Malpe'", String.class);
+        assertThat(slug).isEqualTo("malpe");
+    }
+
+    // ── IT-R07: trigger behaviour on name update (slug stability) ─────────────
+
+    @Test
+    @DisplayName("IT-R07: trigger keeps area_slug stable on name update, only regenerates if explicitly set to NULL")
+    void it_r07_triggerSlugStability() {
+        // Confirm initial state
+        String initialSlug = jdbcTemplate.queryForObject(
+                "SELECT area_slug FROM areas WHERE area_key = 'IN|KA|Udupi|Malpe'", String.class);
+        assertThat(initialSlug).isEqualTo("malpe");
+
+        // Update display name of Malpe
+        jdbcTemplate.update("UPDATE areas SET name = 'Malpe New Port' WHERE area_key = 'IN|KA|Udupi|Malpe'");
+
+        // Verify area_slug remains unchanged to protect public URL routes
+        String unchangedSlug = jdbcTemplate.queryForObject(
+                "SELECT area_slug FROM areas WHERE area_key = 'IN|KA|Udupi|Malpe'", String.class);
+        assertThat(unchangedSlug).isEqualTo("malpe");
+
+        // Explicitly trigger regeneration by setting it to NULL
+        jdbcTemplate.update("UPDATE areas SET area_slug = NULL WHERE area_key = 'IN|KA|Udupi|Malpe'");
+
+        // Verify slug regenerates dynamically based on the updated name
+        String regeneratedSlug = jdbcTemplate.queryForObject(
+                "SELECT area_slug FROM areas WHERE area_key = 'IN|KA|Udupi|Malpe'", String.class);
+        assertThat(regeneratedSlug).isEqualTo("malpe-new-port");
+
+        // Restore original data to leave clean DB state
+        jdbcTemplate.update("UPDATE areas SET name = 'Malpe', area_slug = 'malpe' WHERE area_key = 'IN|KA|Udupi|Malpe'");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -191,7 +185,7 @@ class ResolveAreaIT {
                 VALUES (?, ?, ?, now(), ?, 0, ?, false, 'insufficient')
                 ON CONFLICT (city_slug, area_key) DO UPDATE
                     SET area_label = EXCLUDED.area_label,
-                        active_listing_count = EXCLUDED.active_listing_count
+                         active_listing_count = EXCLUDED.active_listing_count
                 """,
                 citySlug, areaKey, areaLabel, activeListingCount, activeListingCount);
     }
