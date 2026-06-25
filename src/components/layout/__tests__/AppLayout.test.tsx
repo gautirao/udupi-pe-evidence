@@ -80,60 +80,72 @@ beforeEach(() => {
 });
 
 describe('AppLayout — nav links by role', () => {
-  it('logged-out: shows only Discover link, no role-specific links', () => {
+  it('logged-out: shows public nav, List your property CTA, and Sign in link', () => {
     renderLayout();
 
     expect(screen.getAllByRole('link', { name: /discover/i }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /schools/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /agricultural land/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /trends/i }).length).toBeGreaterThan(0);
+
+    const listCTA = screen.getByRole('link', { name: /list your property/i });
+    expect(listCTA).toBeInTheDocument();
+    expect(listCTA).toHaveAttribute('href', '/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new');
+    expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
+
     expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /notifications/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
   });
 
-  it('user role: shows Discover, Trends, Saved, My Listings, New Listing, My Bookings, Notifications — no admin/dealer-only links', () => {
+  it('user role: shows public nav, List property, Saved areas, My bookings — no broker/admin tools', () => {
     mockAuth = baseAuth({
       user: { email: 'user@test.com' },
       userRole: 'user',
     });
     renderLayout();
 
-    // Owner navigation items (superset of old user nav + listing management)
     expect(screen.getAllByRole('link', { name: /^discover$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^trends$/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /^saved$/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /my listings/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /new listing/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /saved areas/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /list property/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /my bookings/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);
 
     // Admin-only items must not appear
+    expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
-    // Dealer-only Dashboard link must not appear
-    expect(screen.queryByRole('link', { name: /^dashboard$/i })).not.toBeInTheDocument();
+    // Broker dashboard link must not appear
+    expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
   });
 
-  it('dealer role: shows Dashboard, My Listings, New Listing, Notifications — no user/admin links', () => {
+  it('dealer role: shows Broker dashboard, New listing, and Broker workspace menu — no user/admin links', async () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
       isBroker: true,
     });
+    const user = userEvent.setup();
     renderLayout();
 
-    expect(screen.getAllByRole('link', { name: /dashboard/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /my listings/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /broker dashboard/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /new listing/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);
 
-    expect(screen.queryByRole('link', { name: /insights/i })).not.toBeInTheDocument();
+    const brokerTrigger = screen.getByRole('button', { name: /broker workspace/i });
+    expect(brokerTrigger).toBeInTheDocument();
+
+    await user.click(brokerTrigger);
+
+    expect(screen.getAllByRole('menuitem', { name: /my listings/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /bookings/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /listing quality/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /demand gaps/i }).length).toBeGreaterThan(0);
+
     expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /feed runs/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /facebook groups/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
   });
 
-  it('admin role: shows Discover, Trends and "Admin" dropdown trigger — no dealer/user links', async () => {
+  it('admin role: shows public nav and "Admin console" dropdown trigger — no dealer/user links', async () => {
     mockAuth = baseAuth({
       user: { email: 'admin@test.com' },
       userRole: 'admin',
@@ -142,18 +154,16 @@ describe('AppLayout — nav links by role', () => {
     const user = userEvent.setup();
     renderLayout();
 
-    // Primary (admin) nav
+    // Primary nav
     expect(screen.getAllByRole('link', { name: /^discover$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^trends$/i }).length).toBeGreaterThan(0);
 
-    // Admin dropdown trigger is rendered (button containing "Admin" text)
-    const adminTrigger = screen.getByRole('button', { name: /admin/i });
+    // Admin dropdown trigger is rendered
+    const adminTrigger = screen.getByRole('button', { name: /admin console/i });
     expect(adminTrigger).toBeInTheDocument();
 
-    // Open the dropdown to expose admin nav links
     await user.click(adminTrigger);
 
-    // Admin section items appear in the dropdown as menuitems (Radix DropdownMenuItem role)
     expect(screen.getAllByRole('menuitem', { name: /feed runs/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('menuitem', { name: /facebook groups/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('menuitem', { name: /manual posts/i }).length).toBeGreaterThan(0);
@@ -161,10 +171,10 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.getAllByRole('menuitem', { name: /pending approval/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('menuitem', { name: /duplicates/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('menuitem', { name: /chrome extension/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('menuitem', { name: /intelligence/i }).length).toBeGreaterThan(0);
 
     // Must NOT show dealer or user-only links
-    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /new listing/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
   });
 });
@@ -178,7 +188,6 @@ describe('AppLayout — admin badge', () => {
     });
     renderLayout();
 
-    // Admin users have both the badge pill and the dropdown trigger labeled "Admin"
     expect(screen.getAllByText('Admin').length).toBeGreaterThan(0);
   });
 
@@ -203,7 +212,6 @@ describe('AppLayout — role label in dropdown', () => {
     const user = userEvent.setup();
     renderLayout();
 
-    // Open the avatar dropdown to expose the portal content
     await user.click(screen.getByRole('button', { name: /^US$/i }));
     expect(screen.getByText('User')).toBeInTheDocument();
   });
@@ -228,29 +236,29 @@ describe('AppLayout — role label in dropdown', () => {
 });
 
 describe('AppLayout — broker nav link hrefs', () => {
-  it('dealer role: My Listings link points to /broker/listings', () => {
+  it('dealer role: My Listings link points to /broker/listings', async () => {
     mockAuth = baseAuth({
       user: { email: 'dealer@test.com' },
       userRole: 'dealer',
       isBroker: true,
     });
+    const user = userEvent.setup();
     renderLayout();
 
-    const links = screen.getAllByRole('link', { name: /my listings/i });
+    await user.click(screen.getByRole('button', { name: /broker workspace/i }));
+
+    const links = screen.getAllByRole('menuitem', { name: /my listings/i });
     expect(links[0]).toHaveAttribute('href', '/broker/listings');
   });
 });
 
 describe('AppLayout — anonymous user menu', () => {
   it('shows "Sign in" link and no avatar button when user is null', () => {
-    // mockAuth is already baseAuth() (user: null) from beforeEach
     renderLayout();
 
     const signInLink = screen.getByRole('link', { name: /sign in/i });
     expect(signInLink).toBeInTheDocument();
-    // href must start with /auth and include returnTo (the link now carries ?returnTo=...)
     expect(signInLink.getAttribute('href')).toMatch(/^\/auth(\?|$)/);
-    // No avatar trigger button (the fallback 'U' button must not be present)
     expect(screen.queryByRole('button', { name: /^U$/i })).not.toBeInTheDocument();
   });
 
@@ -266,7 +274,6 @@ describe('AppLayout — anonymous user menu', () => {
     const signInLink = screen.getByRole('link', { name: /sign in/i });
     const href = signInLink.getAttribute('href') ?? '';
     expect(href).toContain('returnTo');
-    // /discover?city=udupi encoded → %2Fdiscover or contains discover
     expect(href).toContain('%2Fdiscover');
   });
 
@@ -275,7 +282,6 @@ describe('AppLayout — anonymous user menu', () => {
     renderLayout();
 
     expect(screen.queryByRole('link', { name: /^sign in$/i })).not.toBeInTheDocument();
-    // Avatar button IS present
     expect(screen.getByRole('button', { name: /^US$/i })).toBeInTheDocument();
   });
 });
@@ -299,3 +305,4 @@ describe('AppLayout — onboarding redirect for dealers', () => {
     expect(screen.getByText('home page')).toBeInTheDocument();
   });
 });
+

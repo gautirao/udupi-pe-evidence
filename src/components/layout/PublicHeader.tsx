@@ -26,8 +26,9 @@ import { cn } from '@/lib/utils';
  */
 const PUBLIC_NAV = [
   { name: 'Discover', href: '/discover' },
+  { name: 'Schools', href: '/discover?journey=school-first' },
+  { name: 'Agricultural land', href: '/discover?journey=agri-first' },
   { name: 'Trends', href: '/trends' },
-  { name: 'Saved', href: '/saved-areas' },
 ] as const;
 
 export function PublicHeader() {
@@ -43,10 +44,14 @@ export function PublicHeader() {
   const initials = user?.email?.split('@')[0].slice(0, 2).toUpperCase() || 'U';
   const roleLabel = isAdmin ? 'Administrator' : isBroker ? 'Broker' : 'User';
 
-  const isActive = (href: string) =>
-    href === '/discover'
-      ? location.pathname === '/discover'
-      : location.pathname.startsWith(href);
+  const isActive = (href: string) => {
+    const [path, query] = href.split('?');
+    if (path === '/discover') {
+      if (!query) return location.pathname.startsWith('/discover') && (!location.search.includes('journey=') || location.search.includes('journey=area-first'));
+      return location.pathname.startsWith('/discover') && location.search.includes(query);
+    }
+    return location.pathname.startsWith(href);
+  };
 
   return (
     <header className="flex h-[60px] flex-none items-center gap-7 border-b border-border bg-card px-7 font-sans">
@@ -121,14 +126,23 @@ export function PublicHeader() {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <Link
-            to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
-            className="rounded-md border border-input bg-card px-[18px] py-2 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-muted"
-          >
-            Sign in
-          </Link>
+          <div className="flex items-center gap-2.5">
+            <Link
+              to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+              className="rounded-md border border-input bg-card px-3.5 py-2 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-muted"
+            >
+              List your property
+            </Link>
+            <Link
+              to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
+              className="rounded-md bg-primary px-[18px] py-2 text-[13.5px] font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Sign in
+            </Link>
+          </div>
         )}
       </div>
     </header>
   );
 }
+

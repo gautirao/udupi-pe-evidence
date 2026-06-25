@@ -38,6 +38,8 @@ import {
   Bookmark,
   CalendarCheck2,
   ChevronDown,
+  GraduationCap,
+  Sprout,
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
@@ -48,8 +50,10 @@ interface AppLayoutProps {
 
 // ─── Static nav arrays (defined once at module level) ───────────────────────
 
-const adminPrimaryNavigation = [
-  { name: 'Discover', href: '/', icon: MapPin },
+const publicDiscoveryNavigation = [
+  { name: 'Discover', href: '/discover', icon: MapPin },
+  { name: 'Schools', href: '/discover?journey=school-first', icon: GraduationCap },
+  { name: 'Agricultural land', href: '/discover?journey=agri-first', icon: Sprout },
   { name: 'Trends', href: '/trends', icon: BarChart3 },
 ];
 
@@ -65,35 +69,35 @@ const adminNavigation = [
   { name: 'Locality Normalizer', href: '/admin/localities', icon: MapPin },
   { name: 'Audit Log', href: '/admin/audit-log', icon: Shield },
   { name: 'Trust Review', href: '/admin/trust-review', icon: ShieldCheck },
+  { name: 'Intelligence', href: '/admin/intelligence', icon: BarChart3 },
 ];
 
-const brokerNavigation = [
+const brokerRoleNavigation = [
+  { name: 'Broker dashboard', href: '/broker/dashboard', icon: Home },
+  { name: 'New listing', href: '/broker/listings/new', icon: Plus },
+  { name: 'Notifications', href: '/notifications', icon: Bell },
+];
+
+const brokerDetailedNavigation = [
   { name: 'Dashboard', href: '/broker/dashboard', icon: Home },
   { name: 'My Listings', href: '/broker/listings', icon: Building2 },
-  { name: 'New Listing', href: '/broker/listings/new', icon: Plus },
   { name: 'Bookings', href: '/broker/bookings', icon: CalendarCheck2 },
   { name: 'Listing Quality', href: '/broker/listing-quality', icon: Sparkles },
-  { name: 'Notifications', href: '/notifications', icon: Bell },
+  { name: 'Demand Gaps', href: '/broker/demand-gaps', icon: BarChart3 },
+  { name: 'Preferences', href: '/broker/preferences', icon: Users },
 ];
 
-const ownerNavigation = [
-  { name: 'Discover', href: '/', icon: Home },
-  { name: 'Trends', href: '/trends', icon: BarChart3 },
-  { name: 'Saved', href: '/saved-areas', icon: Bookmark },
-  { name: 'My Listings', href: '/broker/listings', icon: Building2 },
-  { name: 'New Listing', href: '/broker/listings/new', icon: Plus },
-  { name: 'My Bookings', href: '/my-bookings', icon: CalendarCheck2 },
+const userRoleNavigation = [
+  { name: 'List property', href: '/broker/listings/new', icon: Plus },
+  { name: 'My bookings', href: '/my-bookings', icon: CalendarCheck2 },
+  { name: 'Saved areas', href: '/saved-areas', icon: Bookmark },
   { name: 'Notifications', href: '/notifications', icon: Bell },
-];
-
-const loggedOutNavigation = [
-  { name: 'Discover', href: '/', icon: Home },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, isBroker, userRole, signOut } = useAuth();
+  const { user, isAdmin, isBroker, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -110,99 +114,89 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const roleLabel = isAdmin ? 'Administrator' : isBroker ? 'Broker' : 'User';
 
-  const primaryNav = isAdmin
-    ? adminPrimaryNavigation
-    : isBroker
-    ? brokerNavigation
-    : user
-    ? ownerNavigation
-    : loggedOutNavigation;
+  const isItemActive = (href: string) => {
+    const [path, query] = href.split('?');
+    if (path === '/' || path === '/discover') {
+      const onDiscover = location.pathname === '/' || location.pathname.startsWith('/discover');
+      if (!query) return onDiscover && (!location.search.includes('journey=') || location.search.includes('journey=area-first'));
+      return onDiscover && location.search.includes(query);
+    }
+    return location.pathname.startsWith(path);
+  };
 
-  const NavLinks = ({ mobile = false }: { mobile?: boolean }) => (
-    <div className={cn('flex', mobile ? 'flex-col gap-1' : 'items-center gap-1')}>
-      {primaryNav.map((item) => {
-        const isActive = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href);
-        return (
-          <Link
-            key={item.name}
-            to={item.href}
-            onClick={() => mobile && setMobileOpen(false)}
-            className={cn(
-              'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-            )}
-          >
-            <item.icon className="h-4 w-4" />
-            {item.name}
-          </Link>
-        );
-      })}
+  const NavItem = ({ item, mobile = false, onClick }: { item: { name: string; href: string; icon: typeof Home }; mobile?: boolean; onClick?: () => void }) => {
+    const active = isItemActive(item.href);
+    return (
+      <Link
+        to={item.href}
+        onClick={onClick}
+        className={cn(
+          'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+          active
+            ? 'bg-primary text-primary-foreground'
+            : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+        )}
+      >
+        <item.icon className="h-4 w-4" />
+        {item.name}
+      </Link>
+    );
+  };
 
-      {isAdmin && mobile && (
+  const MobileNavigation = () => (
+    <div className="flex flex-col gap-1">
+      <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        Public Discovery
+      </div>
+      {publicDiscoveryNavigation.map((item) => (
+        <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
+      ))}
+
+      <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
+        Actions
+      </div>
+      {!user ? (
+        <Link
+          to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+          onClick={() => setMobileOpen(false)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+        >
+          <Plus className="h-4 w-4" />
+          List your property
+        </Link>
+      ) : isAdmin ? (
         <>
-          <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
-            Admin
-          </div>
-          {adminNavigation.map((item) => {
-            const isActive = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.name}
-                to={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.name}
-              </Link>
-            );
-          })}
+          <div className="px-3 py-1 text-xs font-medium text-primary">Admin console</div>
+          {adminNavigation.map((item) => (
+            <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
+          ))}
         </>
-      )}
-
-      {isAdmin && !mobile && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors h-auto',
-                location.pathname.startsWith('/admin')
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-              )}
-            >
-              Admin
-              <ChevronDown className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-52">
-            {adminNavigation.map((item) => {
-              const isActive = location.pathname.startsWith(item.href);
-              return (
-                <DropdownMenuItem key={item.name} asChild>
-                  <Link
-                    to={item.href}
-                    className={cn(
-                      'flex items-center gap-2 w-full',
-                      isActive ? 'text-primary font-medium' : ''
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {item.name}
-                  </Link>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      ) : isBroker ? (
+        <>
+          {brokerRoleNavigation.map((item) => (
+            <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
+          ))}
+          <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
+            Broker workspace
+          </div>
+          {brokerDetailedNavigation.map((item) => (
+            <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
+          ))}
+        </>
+      ) : (
+        <>
+          {userRoleNavigation.map((item) => (
+            <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
+          ))}
+          <Link
+            to="/broker/listings"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            <Building2 className="h-4 w-4" />
+            My listings
+          </Link>
+        </>
       )}
     </div>
   );
@@ -219,7 +213,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-4">
+            <SheetContent side="left" className="w-64 p-4 overflow-y-auto">
               <SheetHeader>
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
               </SheetHeader>
@@ -232,12 +226,12 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
                 </div>
               </div>
-              <NavLinks mobile />
+              <MobileNavigation />
             </SheetContent>
           </Sheet>
 
-          {/* Logo */}
-          <Link to="/" className="flex items-center gap-2">
+          {/* Zone 1: Brand Logo */}
+          <Link to="/discover" className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-primary/10">
               <MapPin className="h-5 w-5 text-primary" />
             </div>
@@ -247,9 +241,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           </Link>
 
-          {/* Desktop nav */}
-          <nav className="hidden lg:flex items-center gap-1 ml-6">
-            <NavLinks />
+          {/* Zone 2: Public discovery nav */}
+          <nav aria-label="Public discovery" className="hidden lg:flex items-center gap-1 ml-6">
+            {publicDiscoveryNavigation.map((item) => (
+              <NavItem key={item.name} item={item} />
+            ))}
           </nav>
 
           {/* Spacer */}
@@ -263,10 +259,92 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
           )}
 
-          {/* Notifications */}
-          <NotificationBell />
+          {/* Zone 3: Role/workspace actions */}
+          <div aria-label="Role actions" className="hidden lg:flex items-center gap-1">
+            {!user ? (
+              <Link
+                to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+                className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
+              >
+                List your property
+              </Link>
+            ) : isAdmin ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors h-auto',
+                      location.pathname.startsWith('/admin')
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    )}
+                  >
+                    Admin console
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  {adminNavigation.map((item) => {
+                    const active = location.pathname.startsWith(item.href);
+                    return (
+                      <DropdownMenuItem key={item.name} asChild>
+                        <Link
+                          to={item.href}
+                          className={cn('flex items-center gap-2 w-full', active ? 'text-primary font-medium' : '')}
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {item.name}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : isBroker ? (
+              <>
+                {brokerRoleNavigation.map((item) => (
+                  <NavItem key={item.name} item={item} />
+                ))}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-muted-foreground hover:bg-secondary hover:text-foreground h-auto"
+                    >
+                      Broker workspace
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    {brokerDetailedNavigation.map((item) => {
+                      const active = location.pathname.startsWith(item.href);
+                      return (
+                        <DropdownMenuItem key={item.name} asChild>
+                          <Link
+                            to={item.href}
+                            className={cn('flex items-center gap-2 w-full', active ? 'text-primary font-medium' : '')}
+                          >
+                            <item.icon className="h-4 w-4" />
+                            {item.name}
+                          </Link>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              userRoleNavigation.map((item) => (
+                <NavItem key={item.name} item={item} />
+              ))
+            )}
+          </div>
 
-          {/* User menu */}
+          {/* Notifications */}
+          {user && <NotificationBell />}
+
+          {/* Zone 4: Account */}
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -288,6 +366,14 @@ export function AppLayout({ children }: AppLayoutProps) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                {!isAdmin && !isBroker && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/broker/listings" className="flex items-center gap-2 w-full cursor-pointer">
+                      <Building2 className="mr-2 h-4 w-4" />
+                      My listings
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
@@ -297,7 +383,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           ) : (
             <Link
               to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
+              className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
             >
               Sign in
             </Link>
@@ -312,3 +398,4 @@ export function AppLayout({ children }: AppLayoutProps) {
     </div>
   );
 }
+
