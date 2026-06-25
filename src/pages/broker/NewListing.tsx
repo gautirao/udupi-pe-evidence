@@ -93,7 +93,7 @@ export default function NewListing() {
       </AppLayout>
     );
   }
-  if (role !== 'dealer' && role !== 'admin' && role !== 'user') {
+  if (role !== 'dealer' && role !== 'admin' && role !== 'user' && role !== 'broker') {
     return <Navigate to="/" replace />;
   }
 

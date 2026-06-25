@@ -240,7 +240,7 @@ export default function EditListing() {
       </AppLayout>
     );
   }
-  if (role !== 'dealer' && role !== 'admin' && role !== 'user') {
+  if (role !== 'dealer' && role !== 'admin' && role !== 'user' && role !== 'broker') {
     return <Navigate to="/" replace />;
   }
 
