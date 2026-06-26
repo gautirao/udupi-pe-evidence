@@ -236,3 +236,20 @@ WHERE area_key IN (
 SELECT COUNT(*) FROM property_listings WHERE title LIKE '[AGRI]%' AND status='LIVE';  -- 21
 SELECT COUNT(*) FROM regional_area_classifications;  -- same as after first run
 ```
+
+---
+
+## Remote Development Restoration (#1647)
+
+To restore agricultural discovery seed data and regional classifications on the **remote development DB** (used by deployed Pages/dev e2e):
+
+```bash
+ALLOW_REMOTE_DEV_AGRI_SEED=true TARGET_ENV=remote-dev ./scripts/db/seed-remote-dev-agricultural-listings.sh
+```
+
+**Safety guards:**
+- Requires explicit environment variables (`ALLOW_REMOTE_DEV_AGRI_SEED=true` and `TARGET_ENV=remote-dev`).
+- Explicitly warns before execution.
+- Will not run against production.
+- Completely idempotent (`ON CONFLICT DO UPDATE`).
+
