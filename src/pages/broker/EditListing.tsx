@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAccessRoute } from '@/lib/routeAccess';
 import { useGetListing, useUpdateListing, useSubmitListing } from '@/hooks/useBrokerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -240,7 +241,7 @@ export default function EditListing() {
       </AppLayout>
     );
   }
-  if (role !== 'dealer' && role !== 'admin' && role !== 'user' && role !== 'broker') {
+  if (!canAccessRoute('/broker/listings/123/edit', role)) {
     return <Navigate to="/" replace />;
   }
 

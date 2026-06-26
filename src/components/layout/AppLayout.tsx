@@ -47,6 +47,7 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
 import { getDiscoverRoute, getTrendsRoute, getSavedRoute } from '@/lib/navUtils';
+import { getVisibleNavigationForRole, PolicyRole } from '@/lib/routeAccess';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -100,6 +101,9 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const policyRole: PolicyRole = !user ? 'anonymous' : isAdmin ? 'admin' : isBroker ? 'broker' : 'user';
+  const navVisibility = getVisibleNavigationForRole(policyRole);
 
   const handleSignOut = async () => {
     await signOut();
@@ -174,11 +178,11 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
       <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
         Explore
       </div>
-      {publicDiscoveryNavigation.map((item) => (
+      {navVisibility.showPublicDiscovery && publicDiscoveryNavigation.map((item) => (
         <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
       ))}
 
-      {user && !isAdmin && !isBroker && (
+      {user && navVisibility.showConsumerActivity && (
         <>
           <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
             My activity
@@ -194,18 +198,20 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
       </div>
       {!user ? (
         <>
-          <Link
-            to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
-            onClick={(e) => {
-              e.preventDefault();
-              setMobileOpen(false);
-              openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
-            }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            List property
-          </Link>
+          {navVisibility.showListProperty && (
+            <Link
+              to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+              onClick={(e) => {
+                e.preventDefault();
+                setMobileOpen(false);
+                openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
+              }}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              List property
+            </Link>
+          )}
           <Link
             to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
             onClick={(e) => {
@@ -219,14 +225,14 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
             Sign in
           </Link>
         </>
-      ) : isAdmin ? (
+      ) : navVisibility.showAdminConsole ? (
         <>
           <div className="px-3 py-1 text-xs font-medium text-primary">Admin Console</div>
           {adminNavigation.map((item) => (
             <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
           ))}
         </>
-      ) : isBroker ? (
+      ) : navVisibility.showBrokerWorkspace ? (
         <>
           {brokerRoleNavigation.map((item) => (
             <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
@@ -238,19 +244,11 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
             <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
           ))}
         </>
-      ) : (
+      ) : navVisibility.showConsumerActivity ? (
         <>
           <NavItem item={{ name: 'List property', href: '/broker/listings/new', icon: Plus }} mobile onClick={() => setMobileOpen(false)} />
-          <Link
-            to="/broker/listings"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-          >
-            <Building2 className="h-4 w-4" />
-            My listings
-          </Link>
         </>
-      )}
+      ) : null}
     </div>
   );
 
@@ -313,17 +311,19 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
           {/* Zone 3: Role/workspace actions */}
           <div aria-label="Role actions" className="hidden lg:flex items-center gap-1">
             {isLoading ? null : !user ? (
-              <Link
-                to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
-                onClick={(e) => {
-                  e.preventDefault();
-                  openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
-                }}
-                className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
-              >
-                List property
-              </Link>
-            ) : isAdmin ? (
+              navVisibility.showListProperty ? (
+                <Link
+                  to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
+                  }}
+                  className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
+                >
+                  List property
+                </Link>
+              ) : null
+            ) : navVisibility.showAdminConsole ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -356,7 +356,7 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
                   })}
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : isBroker ? (
+            ) : navVisibility.showBrokerWorkspace ? (
               <>
                 {brokerRoleNavigation.map((item) => (
                   <NavItem key={item.name} item={item} />
@@ -389,11 +389,11 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
-            ) : (
+            ) : navVisibility.showConsumerActivity ? (
               userRoleNavigation.map((item) => (
                 <NavItem key={item.name} item={item} />
               ))
-            )}
+            ) : null}
           </div>
 
           {/* Notifications */}

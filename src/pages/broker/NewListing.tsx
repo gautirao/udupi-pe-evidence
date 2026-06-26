@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { canAccessRoute } from '@/lib/routeAccess';
 import { useCreateListing } from '@/hooks/useBrokerListings';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -93,7 +94,7 @@ export default function NewListing() {
       </AppLayout>
     );
   }
-  if (role !== 'dealer' && role !== 'admin' && role !== 'user' && role !== 'broker') {
+  if (!canAccessRoute('/broker/listings/new', role)) {
     return <Navigate to="/" replace />;
   }
 

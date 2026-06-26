@@ -1,0 +1,15 @@
+# Cross-Tool Handoff Packet: Issue #1633 (Phase 1)
+Branch: issue-1633
+
+## What Remains
+- Phase 2: Administrative user-management screens (/admin/users, /admin/users/:userId, /admin/users/:userId/roles) and audit log viewing (/admin/audit-log).
+- Phase 3: Canonical /listings/new migration, /dealer legacy route migration, discover journey redesign, and backend role APIs.
+- Human review gate and merge approval for PR #1633 Phase 1.
+
+## Validation Already Run
+- Command: npm test -- AppLayout.test.tsx Auth routeAccess LandingPage.test.tsx
+  Status: PASSED (69 passed across 5 test suites, 0 net-new regressions).
+- Command: npm test -- NewListing.guard.test.tsx EditListing.guard.test.tsx
+  Status: PASSED (10 passed across 2 test suites).
+- Command: node node_modules/.bin/tsc --noEmit -p tsconfig.app.json
+  Status: PASSED (Zero net-new branch vs baseline typecheck errors).
