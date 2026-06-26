@@ -1,39 +1,90 @@
 ---
 name: mode3-run
-description: Hands-off Mode-3 execution in Antigravity for an approved GitHub issue. Main Agent owns gates; Subagents provide concurrent transport; Route-and-Run defines choreography.
+description: Hands-off Mode-3 execution in Antigravity for an approved GitHub issue with Claude agent parity. Main Agent owns gates; specialist subagents provide disciplined domain verification.
 argument-hint: <issue#>
 ---
 
 # Antigravity Mode 3 Execution: `/mode3-run <issue#>`
 
-This command executes a GitHub issue end-to-end with disciplined engineering practices matching Claude `/mode3-run`. The Main Agent acts as team lead and gatekeeper, delegating investigation and implementation to specialized subagents.
+This command executes a GitHub issue end-to-end with disciplined engineering practices achieving parity with Claude `/mode3-run`. The Main Agent acts as `team-lead`, orchestrating specialized agents based on issue scope and changed file paths.
 
 ## Mandatory Execution Invariants
 
 1. **Issue-Driven Triage Gate**: No code edits may occur before performing formal intake triage (Scope, Risk, Routing, Non-goals) per `.antigravity/commands/route-and-run.md`.
-2. **Subagent Orchestration**: Main Agent MUST NOT implement changes directly. It must spawn a `mode3-orchestrator` subagent via `invoke_subagent` (or `define_subagent`) running on a high-capability reasoning model (Gemini Pro / High reasoning profile).
-3. **jCodemunch Navigation**: Agents should use `jCodemunch-MCP` for code discovery (`search_symbols`, `get_context_bundle`, etc.) when the MCP/index is configured, fresh, and available before calling direct `Read` or `Write` tools.
-   - If `jCodemunch-MCP` is unavailable, stale, or not configured, the agent must:
-     1. state that fallback mode is active,
-     2. use repository search and direct file inspection cautiously,
-     3. document the fallback in the final report,
-     4. avoid claiming jCodemunch-backed discovery or validation.
+2. **Subagent Orchestration**: Main Agent MUST NOT implement changes directly. It must spawn a `mode3-orchestrator` subagent via `invoke_subagent` running on a high-capability reasoning model (Gemini Pro / High reasoning tier).
+3. **jCodemunch Discovery**: Agents should use `jCodemunch-MCP` for code discovery (`search_symbols`, `get_context_bundle`, etc.) when the MCP/index is configured, fresh, and available before calling direct `Read` or `Write` tools.
+   - If `jCodemunch-MCP` is unavailable, blocked, stale, or not exposed, the agent must:
+     1. state exact fallback reason,
+     2. use repository search cautiously,
+     3. document fallback in final report,
+     4. avoid claiming jCodemunch-backed discovery.
 4. **Stop / Continue Policy**:
-   - Continue autonomously for scoped, straightforward implementation and fixable validation failures.
+   - Continue autonomously for scoped implementation and fixable validation failures.
    - Stop with `NEEDS_USER_DECISION` for code contradictions, product choices, scope creep, pre-existing un-isolatable baseline failures, secrets/credentials, or destructive operations.
-5. **Merge Halt**: Stop with `READY_TO_MERGE` upon PR opening and verified validation. **No merge without user approval.** No admin/privileged merge bypass.
+5. **Merge Halt**: Stop with `READY_TO_MERGE` upon PR opening and passed validation. **no merge without user approval.** Never bypass human review gates.
 
-## Phase Execution Index
+## Execution Choreography (12-Step Workflow)
 
-| Phase | Actor | Action | Governing Contract |
-| :--- | :--- | :--- | :--- |
-| **Phase 0** | Main Agent | Preflight scan for duplicate runs & lock acquisition | `.antigravity/contracts/main-agent.md` |
-| **Phase 1** | Main Agent | Intake triage & write `team-lead-assignment.toml` | `.antigravity/commands/route-and-run.md` |
-| **Phase 2** | Orchestrator | Code discovery (jCodemunch) & author implementation plan | `.antigravity/agents/mode3-orchestrator.md` |
-| **Phase 3** | Main Agent | Plan review & materialization | `.antigravity/contracts/main-agent.md` |
-| **Phase 4** | Implementer | Scoped code edits in feature branch (`issue-<N>`) | `.antigravity/contracts/implementation.md` |
-| **Phase 5** | Validator | Repository validation gates (`tsconfig.app.json`, tests) | `.antigravity/contracts/validation.md` |
-| **Phase 6** | Main Agent | Final code review & browser verification | `.antigravity/commands/workdone-review.md` |
-| **Phase 7** | Reporter | Open PR & emit standardized final report / handoff | `.antigravity/commands/closeout.md` |
+When `/mode3-run` is invoked, execution must strictly follow these sequential steps:
+1. **Read issue scope**: Intake target GitHub issue and examine requirements.
+2. **Run explorer-planner**: Classify risk level (`low`, `med`, `high`), identify ownership areas, and draft specialist routing and validation plans.
+3. **Run spec-enricher if the issue is unclear**: Improve acceptance criteria, non-goals, edge cases, and test expectations before coding.
+4. **Select specialist agents based on scope and changed files**: Apply the Specialist Routing Matrix.
+5. **Run implementer only after specialist plan is clear**: Author scoped edits inside designated feature branch (`issue-<N>`) or git worktree.
+6. **Run qa-fast or qa depending on task size**: Execute automated validation (`tsconfig.app.json`, baseline-vs-branch tuple comparison, test runners).
+7. **Run security-reviewer when auth/security/public endpoint paths are touched**: Block admin link leakage, role bypass, PII exposure, or auth fallback regressions.
+8. **Run performance-analyst when queries/indexes/discover/list/map paths are touched**: Verify index usage, query shapes, N+1 exclusion, and pagination limits.
+9. **Run database-flyway-supabase-engineer whenever migrations/scripts/db/supabase/Testcontainers are touched**: Enforce Flyway checksum immutability, forward-only migrations, and fixture/seed separation.
+10. **Run supervisor-engineer before code-reviewer**: Final supervisory quality gate evaluating scope creep, cross-file impact, and routing compliance.
+11. **Run code-reviewer**: Audit all changed code. Must not approve if any required specialist returned `BLOCKER`.
+12. **Run closeout-reporter**: Emit final report and PR closeout summary.
 
-To start: Read the target issue `<issue#>`, perform Phase 0 preflight checks, and proceed through Phase 1.
+## Specialist Routing Matrix
+
+| Touched Files / Scope Area | Required Specialist Agents |
+| :--- | :--- |
+| `src/**/*.tsx`, `src/**/*.ts` | `frontend-engineer` |
+| frontend tests | `frontend-engineer` + `qa-fast` |
+| `backend/src/main/java/**` | `backend-engineer` |
+| `backend/src/test/**` | `backend-engineer` + `qa-fast` |
+| `db/migration/**` | `database-flyway-supabase-engineer` + `backend-engineer` |
+| `scripts/db/**` | `database-flyway-supabase-engineer` + data/fixture review if present |
+| `supabase/**` | `database-flyway-supabase-engineer` + `security-reviewer` if policies/auth touched |
+| `AuthContext`, `JwtConfig`, `SecurityConfig` | `security-reviewer` + `backend-engineer` |
+| query / index / performance paths | `performance-analyst` |
+| `docs/product/spec/issues` | `spec-enricher` + `architect` |
+| UI mock / design files | `ui-designer` + `frontend-engineer` |
+
+## Mandatory Specialist Matrix Before READY_TO_MERGE
+
+Before returning `READY_TO_MERGE`, `/mode3-run` must output this exact sign-off block into the trajectory:
+
+```text
+Specialist review matrix:
+- explorer-planner: required/not required, verdict
+- spec-enricher: required/not required, verdict
+- architect: required/not required, verdict
+- frontend-engineer: required/not required, verdict
+- backend-engineer: required/not required, verdict
+- database-flyway-supabase-engineer: required/not required, verdict
+- performance-analyst: required/not required, verdict
+- qa-fast: required/not required, verdict
+- qa: required/not required, verdict
+- security-reviewer: required/not required, verdict
+- supervisor-engineer: required, verdict
+- code-reviewer: required, verdict
+- closeout-reporter: required, verdict
+```
+
+If any required specialist returns `BLOCKER`, `NEEDS_REWORK`, or `UNVERIFIED`, final execution status must halt at:
+```text
+STATUS: NEEDS_REWORK
+```
+not `READY_TO_MERGE`.
+
+## Cross-Tool Handoff Protocol
+
+When saving intermediate transition states or handing off between tool environments, agents must emit a cross-tool handoff packet to disk (`.antigravity/handoffs/issue-<N>/cross-tool-handoff.txt`).
+The packet must document:
+- What remains: <explicit remaining tasks>
+- Validation already run: <exact test commands and status>
