@@ -217,14 +217,23 @@ fi
 
 FLYWAY_URL="jdbc:postgresql://${DOCKER_HOST_ADDR}:${PG_PORT}/${DB_NAME}"
 
-# Step 3: Run Flyway to apply V1..V83.
+# Stage migration files to temporary directory and strip CONCURRENTLY for throwaway test fixture
+TMP_MIGRATION_DIR=$(mktemp -d)
+cp -r "${MIGRATION_DIR}/." "${TMP_MIGRATION_DIR}/"
+if [[ "$(uname)" == "Darwin" ]]; then
+  find "${TMP_MIGRATION_DIR}" -name "*.sql" -exec sed -i '' 's/CONCURRENTLY//g' {} +
+else
+  find "${TMP_MIGRATION_DIR}" -name "*.sql" -exec sed -i 's/CONCURRENTLY//g' {} +
+fi
+
+# Step 3: Run Flyway to apply V1..V96.
 # -baselineOnMigrate=true + -baselineVersion=0.1 tells Flyway:
 #   "The DB already has schema through version 0.1; apply everything after that."
 # Flyway creates flyway_schema_history, inserts a baseline row for 0.1, then
-# applies V1..V83 in order.
+# applies V1..V96 in order.
 docker run --rm \
   --add-host="host.docker.internal:host-gateway" \
-  -v "${MIGRATION_DIR}:/flyway/sql:ro" \
+  -v "${TMP_MIGRATION_DIR}:/flyway/sql:ro" \
   "${FLYWAY_IMAGE}" \
   -url="${FLYWAY_URL}" \
   -user="${DB_USER}" \
@@ -234,6 +243,8 @@ docker run --rm \
   -baselineVersion=0.1 \
   "-placeholders.concurrently_keyword=" \
   migrate
+
+rm -rf "${TMP_MIGRATION_DIR}"
 
 echo "==> Flyway migration complete."
 
@@ -262,7 +273,7 @@ PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB_USER}" \
         (installed_rank, version, description, type, script, checksum,
          installed_by, installed_on, execution_time, success)
       VALUES
-        (85, '65', 'EncryptPhoneAtRest', 'JDBC',
+        (999, '65', 'EncryptPhoneAtRest', 'JDBC',
          'com.example.realestate.migration.V65__EncryptPhoneAtRest',
          NULL, 'fixture', now(), 0, true)
       ON CONFLICT (installed_rank) DO NOTHING;" 2>/dev/null

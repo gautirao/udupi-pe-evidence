@@ -275,6 +275,125 @@ ON CONFLICT (id) DO UPDATE
       updated_at        = NOW();
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 5b. Demo Records for Broker Listing-Quality Dashboard (Issue #1652)
+--     Populates high (BUYER_READY), medium (NEEDS_IMPROVEMENT), and low (PRIORITY_FIX)
+--     examples across Manipal, Malpe, and Kaup. Leaves 2 listings unscored for empty states.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- High quality (Score >= 80 -> BUYER_READY)
+UPDATE public.property_listings
+SET quality_score = 90,
+    quality_computed_at = NOW(),
+    quality_breakdown = '{"overall":90,"computedAt":"2026-06-26T12:00:00Z","components":[{"type":"TRUST","score":90,"applied":true,"finding":"Verified broker identity","weightBp":2000},{"type":"PHOTOS","score":90,"applied":true,"finding":"12 high-resolution photos","weightBp":2000},{"type":"DESCRIPTION","score":90,"applied":true,"finding":"Detailed description provided","weightBp":2000},{"type":"KEY_FIELDS","score":90,"applied":true,"finding":"All key fields complete","weightBp":2000},{"type":"LOCATION","score":90,"applied":true,"finding":"Exact coordinates verified","weightBp":2000}]}'
+WHERE id IN ('e2e00001-0000-0000-0000-000000000001', 'e2e00002-0000-0000-0000-000000000001', 'e2e00003-0000-0000-0000-000000000001');
+
+-- Medium quality (50 <= Score < 80 -> NEEDS_IMPROVEMENT)
+UPDATE public.property_listings
+SET quality_score = 65,
+    quality_computed_at = NOW(),
+    quality_breakdown = '{"overall":65,"computedAt":"2026-06-26T12:00:00Z","components":[{"type":"TRUST","score":80,"applied":true,"finding":"Identity verified","weightBp":2000},{"type":"PHOTOS","score":50,"applied":true,"finding":"Only 3 photos uploaded","weightBp":2000},{"type":"DESCRIPTION","score":60,"applied":true,"finding":"Short description","weightBp":2000},{"type":"KEY_FIELDS","score":80,"applied":true,"finding":"Key fields complete","weightBp":2000},{"type":"LOCATION","score":55,"applied":true,"finding":"Approximate location pin","weightBp":2000}]}'
+WHERE id IN ('e2e00001-0000-0000-0000-000000000002', 'e2e00002-0000-0000-0000-000000000002', 'e2e00003-0000-0000-0000-000000000002');
+
+-- Low quality (Score < 50 -> PRIORITY_FIX)
+UPDATE public.property_listings
+SET quality_score = 40,
+    quality_computed_at = NOW(),
+    quality_breakdown = '{"overall":40,"computedAt":"2026-06-26T12:00:00Z","components":[{"type":"TRUST","score":40,"applied":true,"finding":"Unverified account","weightBp":2000},{"type":"PHOTOS","score":20,"applied":true,"finding":"Only 1 low-res photo","weightBp":2000},{"type":"DESCRIPTION","score":30,"applied":true,"finding":"Missing description","weightBp":2000},{"type":"KEY_FIELDS","score":60,"applied":true,"finding":"Some fields missing","weightBp":2000},{"type":"LOCATION","score":50,"applied":true,"finding":"Location unverified","weightBp":2000}]}'
+WHERE id IN ('e2e00001-0000-0000-0000-000000000003', 'e2e00001-0000-0000-0000-000000000004', 'e2e00002-0000-0000-0000-000000000003', 'e2e00003-0000-0000-0000-000000000003');
+
+-- Note: e2e00002-0000-0000-0000-000000000004 and e2e00003-0000-0000-0000-000000000004 remain unscored (quality_score IS NULL)
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 5c. Demo Records for Area-Insights Dashboard (Issue #1652)
+--     Populates area snapshots, demand signals (opportunities to act), and viewing enquiries.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+INSERT INTO public.area_intelligence_snapshot (
+    city_slug, area_key, area_label, computed_at, active_listing_count,
+    median_price_paise, dominant_property_type, fresh_listing_count,
+    avg_listing_quality, price_comparison_sample_count, price_comparison_supported,
+    confidence, demand_score
+) VALUES
+('udupi', 'IN|KA|Udupi|Manipal', 'Manipal', NOW(), 34, 650000000, 'apartment', 8, 78.50, 34, true, 'full', 82.40),
+('udupi', 'IN|KA|Udupi|Malpe',   'Malpe',   NOW(), 28, 550000000, 'house',     5, 71.20, 28, true, 'full', 75.10),
+('udupi', 'IN|KA|Udupi|Kaup',    'Kaup',    NOW(), 19, 450000000, 'house',     4, 68.00, 19, true, 'full', 69.80)
+ON CONFLICT (city_slug, area_key) DO UPDATE SET
+    area_label                    = EXCLUDED.area_label,
+    computed_at                   = EXCLUDED.computed_at,
+    active_listing_count          = EXCLUDED.active_listing_count,
+    median_price_paise            = EXCLUDED.median_price_paise,
+    dominant_property_type        = EXCLUDED.dominant_property_type,
+    fresh_listing_count           = EXCLUDED.fresh_listing_count,
+    avg_listing_quality           = EXCLUDED.avg_listing_quality,
+    price_comparison_sample_count = EXCLUDED.price_comparison_sample_count,
+    price_comparison_supported    = EXCLUDED.price_comparison_supported,
+    confidence                    = EXCLUDED.confidence,
+    demand_score                  = EXCLUDED.demand_score;
+
+-- Clear previous demo demand signals to keep count deterministic across multi-hour runs
+DELETE FROM public.area_demand_signal WHERE city_slug = 'udupi' AND window_days = 30;
+
+INSERT INTO public.area_demand_signal (
+    city_slug, area_key, property_type, listing_purpose, budget_band,
+    period_start, period_end, window_days, search_count, panel_open_count,
+    lead_intent_count, listing_count, gap_score, signal_type, confidence, computed_at
+) VALUES
+-- Manipal (10 qualifying buckets -> 10 qualifying signals MINUS 4 live listings = 6 opportunities to act)
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', 'UNDER_5L',    NOW() - INTERVAL '1 hour', NOW(), 30, 40, 10, 5, 1, 1.5, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', '5L_20L',      NOW() - INTERVAL '1 hour', NOW(), 30, 45, 12, 6, 1, 1.8, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', '20L_50L',     NOW() - INTERVAL '1 hour', NOW(), 30, 50, 15, 8, 1, 2.1, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', '50L_1CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 55, 18, 9, 1, 2.4, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', '1CR_2CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 35, 8,  4, 0, 1.6, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', 'ABOVE_2CR',   NOW() - INTERVAL '1 hour', NOW(), 30, 30, 6,  3, 0, 1.4, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'apartment', 'sale', 'UNSPECIFIED', NOW() - INTERVAL '1 hour', NOW(), 30, 32, 7,  3, 0, 1.3, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'house',     'sale', '50L_1CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 38, 9,  4, 0, 1.7, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'house',     'sale', '1CR_2CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 42, 11, 5, 0, 1.9, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Manipal', 'villa',     'sale', 'ABOVE_2CR',   NOW() - INTERVAL '1 hour', NOW(), 30, 31, 5,  2, 0, 1.2, 'supply_gap', 'enough_data', NOW()),
+
+-- Malpe (8 qualifying buckets -> 8 - 4 = 4 opportunities to act)
+('udupi', 'IN|KA|Udupi|Malpe', 'house', 'sale', '5L_20L',      NOW() - INTERVAL '1 hour', NOW(), 30, 35, 8, 3, 1, 1.4, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'house', 'sale', '20L_50L',     NOW() - INTERVAL '1 hour', NOW(), 30, 40, 10, 4, 1, 1.6, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'house', 'sale', '50L_1CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 45, 12, 5, 1, 1.8, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'house', 'sale', '1CR_2CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 30, 6, 2, 0, 1.2, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'apartment', 'sale', '20L_50L', NOW() - INTERVAL '1 hour', NOW(), 30, 32, 7, 3, 0, 1.3, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'apartment', 'sale', '50L_1CR', NOW() - INTERVAL '1 hour', NOW(), 30, 34, 8, 4, 0, 1.5, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'villa', 'sale', '1CR_2CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 31, 6, 2, 0, 1.1, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Malpe', 'plot',  'sale', '20L_50L',     NOW() - INTERVAL '1 hour', NOW(), 30, 33, 7, 3, 0, 1.3, 'supply_gap', 'enough_data', NOW()),
+
+-- Kaup (8 qualifying buckets -> 8 - 4 = 4 opportunities to act)
+('udupi', 'IN|KA|Udupi|Kaup', 'house', 'sale', 'UNDER_5L',    NOW() - INTERVAL '1 hour', NOW(), 30, 32, 6, 2, 1, 1.2, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'house', 'sale', '5L_20L',      NOW() - INTERVAL '1 hour', NOW(), 30, 36, 8, 3, 1, 1.4, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'house', 'sale', '20L_50L',     NOW() - INTERVAL '1 hour', NOW(), 30, 42, 11, 5, 1, 1.7, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'house', 'sale', '50L_1CR',     NOW() - INTERVAL '1 hour', NOW(), 30, 38, 9, 4, 0, 1.5, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'apartment', 'sale', '20L_50L', NOW() - INTERVAL '1 hour', NOW(), 30, 30, 5, 2, 0, 1.1, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'apartment', 'sale', '50L_1CR', NOW() - INTERVAL '1 hour', NOW(), 30, 35, 8, 3, 0, 1.4, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'plot',  'sale', '5L_20L',      NOW() - INTERVAL '1 hour', NOW(), 30, 31, 6, 2, 0, 1.2, 'supply_gap', 'enough_data', NOW()),
+('udupi', 'IN|KA|Udupi|Kaup', 'plot',  'sale', '20L_50L',     NOW() - INTERVAL '1 hour', NOW(), 30, 34, 7, 3, 0, 1.3, 'supply_gap', 'enough_data', NOW());
+
+-- Synthetic requester for viewing enquiries
+INSERT INTO auth.users (id) VALUES ('b2c3d4e5-f6a7-8901-bcde-f23456789012') ON CONFLICT (id) DO NOTHING;
+
+-- Synthetic viewing requests (enquiries on broker listings: 3 in Manipal, 3 in Malpe, 3 in Kaup)
+INSERT INTO public.viewing_requests (
+    id, listing_id, requester_id, broker_id, requested_date, requested_time_slot, status, created_at, updated_at
+) VALUES
+-- Manipal
+('e2e00004-0000-0000-0000-000000000001', 'e2e00001-0000-0000-0000-000000000001', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '10:00 AM - 11:00 AM', 'REQUESTED', NOW(), NOW()),
+('e2e00004-0000-0000-0000-000000000002', 'e2e00001-0000-0000-0000-000000000002', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '11:00 AM - 12:00 PM', 'REQUESTED', NOW(), NOW()),
+('e2e00004-0000-0000-0000-000000000003', 'e2e00001-0000-0000-0000-000000000003', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '02:00 PM - 03:00 PM', 'REQUESTED', NOW(), NOW()),
+-- Malpe
+('e2e00004-0000-0000-0000-000000000004', 'e2e00002-0000-0000-0000-000000000001', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '10:00 AM - 11:00 AM', 'REQUESTED', NOW(), NOW()),
+('e2e00004-0000-0000-0000-000000000005', 'e2e00002-0000-0000-0000-000000000002', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '11:00 AM - 12:00 PM', 'REQUESTED', NOW(), NOW()),
+('e2e00004-0000-0000-0000-000000000006', 'e2e00002-0000-0000-0000-000000000003', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '02:00 PM - 03:00 PM', 'REQUESTED', NOW(), NOW()),
+-- Kaup
+('e2e00004-0000-0000-0000-000000000007', 'e2e00003-0000-0000-0000-000000000001', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '10:00 AM - 11:00 AM', 'REQUESTED', NOW(), NOW()),
+('e2e00004-0000-0000-0000-000000000008', 'e2e00003-0000-0000-0000-000000000002', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '11:00 AM - 12:00 PM', 'REQUESTED', NOW(), NOW()),
+('e2e00004-0000-0000-0000-000000000009', 'e2e00003-0000-0000-0000-000000000003', 'b2c3d4e5-f6a7-8901-bcde-f23456789012', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', CURRENT_DATE + 1, '02:00 PM - 03:00 PM', 'REQUESTED', NOW(), NOW())
+ON CONFLICT (id) DO UPDATE SET
+    status = EXCLUDED.status,
+    updated_at = NOW();
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 6. Validation assertions (fail the transaction if counts are wrong)
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$
