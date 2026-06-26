@@ -16,7 +16,7 @@ cd scripts/db
 ```
 
 Ports: 5434 (primary) / 5435 (replica).
-Applies migrations through V87 (regional classification schema).
+Applies migrations through the current repository migration set, including the regional classification schema.
 
 ### 2. Run residential seed (recommended first)
 

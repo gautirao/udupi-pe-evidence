@@ -82,10 +82,12 @@ echo "==> Found ${MIGRATION_COUNT} Flyway migration file(s) in ${MIGRATION_DIR}"
 if docker ps --format '{{.Ports}}' 2>/dev/null | grep -q "[0-9.]*:${PG_PORT}->"; then
   CONFLICT=$(docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null \
     | grep "[0-9.]*:${PG_PORT}->" | awk '{print $1}' || true)
-  echo "ERROR: Port ${PG_PORT} is already bound by container '${CONFLICT}'." >&2
-  echo "Stop it first:  docker rm -f ${CONFLICT}" >&2
-  echo "Or override:    PG_TEST_PORT=5435 $0" >&2
-  exit 1
+  if [[ "${CONFLICT}" != "${CONTAINER}" ]]; then
+    echo "ERROR: Port ${PG_PORT} is already bound by container '${CONFLICT}'." >&2
+    echo "Stop it first:  docker rm -f ${CONFLICT}" >&2
+    echo "Or override:    PG_TEST_PORT=5435 $0" >&2
+    exit 1
+  fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -274,17 +276,12 @@ APPLIED=$(PGPASSWORD="${PG_PASSWORD}" psql -h localhost -p "${PG_PORT}" -U "${DB
   -d "${DB_NAME}" -t -A \
   -c "SELECT COUNT(*) FROM flyway_schema_history WHERE success = true;" 2>/dev/null || echo "0")
 
-# Expected count = 87 (current schema, through V87):
+# Deriving expected count dynamically from MIGRATION_COUNT (all V*.sql files):
 #   1  baseline row (Flyway -baselineOnMigrate inserts this)
-#  86  applied SQL rows for V0..V87 (V65 has no .sql — it is a Java migration)
-# Total = 87 rows with success = true.
-#
-# NOTE: bump EXPECTED_HISTORY_ROWS by 1 for every new versioned SQL migration added
-# under backend/src/main/resources/db/migration/. The V65 synthetic JDBC backfill
-# above is a no-op once its installed_rank collides with a real SQL migration, so it
-# does not add to this total. (Was 84 through V83; V84/V85/V86 added the agri schema;
-# V87 added regional_area_classifications for #1408 regional grouping.)
-EXPECTED_HISTORY_ROWS=87
+#   (MIGRATION_COUNT - 2) applied SQL rows for V1..V(last) (V0 and V0.1 are baselined)
+#   1  synthetic JDBC row for V65
+# Total = MIGRATION_COUNT
+EXPECTED_HISTORY_ROWS="${MIGRATION_COUNT}"
 
 echo "==> Flyway: ${APPLIED} rows in flyway_schema_history (expected exactly ${EXPECTED_HISTORY_ROWS})."
 
