@@ -42,7 +42,7 @@ vi.mock('@/components/discover/DiscoverRightPanel', () => ({
   DiscoverRightPanel: () => <div data-testid="discover-right-panel-mock" />,
 }));
 
-vi.mock('@/components/layout/AppLayout', () => ({
+vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 

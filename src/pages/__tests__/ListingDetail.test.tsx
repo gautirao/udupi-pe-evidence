@@ -27,7 +27,7 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@/components/layout/AppLayout', () => ({
+vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
 }));

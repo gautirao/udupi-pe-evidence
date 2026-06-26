@@ -73,7 +73,7 @@ const mockUseAreaIntelligence = vi.mocked(useAreaIntelligence);
 const mockUseAreaOverview = vi.mocked(useAreaOverview);
 
 // ─── AppLayout mock (avoids nav/auth complexity) ──────────────────────────────
-vi.mock('@/components/layout/AppLayout', () => ({
+vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
 }));

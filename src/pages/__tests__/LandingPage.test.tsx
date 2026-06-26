@@ -203,13 +203,12 @@ describe('LandingPage (ReTrends redesign)', () => {
       expect(screen.getByRole('button', { name: /Explore on Map/i })).toBeInTheDocument();
     });
 
-    it('Explore on Map navigates to /discover with the city param', async () => {
+    it('Explore on Map navigates to /discover with the city param and without journey=area-first', async () => {
       const user = userEvent.setup();
       renderPage();
       await user.click(screen.getByRole('button', { name: /Explore on Map/i }));
-      expect(mockNavigate).toHaveBeenCalledWith(
-        expect.stringContaining('/discover?city=udupi&lat=13.34090&lon=74.74210&zoom=11&journey=area-first'),
-      );
+      expect(mockNavigate).toHaveBeenCalledWith('/discover?city=udupi');
+      expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('journey=area-first'));
     });
 
     it('renders the trust stats row', () => {

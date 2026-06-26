@@ -44,7 +44,7 @@ const FULL_CARD: PublicSchoolRadiusListingCard = {
   title: 'Sea-view villa',
   locality: 'Manipal',
   areaKey: 'IN|KA|Udupi|Manipal',
-  pricePaise: 9_000_000,
+  priceBand: '₹50L–1Cr',
   landArea: 2400,
   landAreaUnit: 'sqft',
   builtArea: 1800,
@@ -176,7 +176,7 @@ describe('mapSchoolRadiusCard (AC5)', () => {
     expect(item.propertyType).toBe('house');
     expect(item.title).toBe('Sea-view villa');
     expect(item.locality).toBe('Manipal');
-    expect(item.pricePaise).toBe(9_000_000);
+    expect(item.priceBand).toBe('₹50L–1Cr');
     expect(item.bedrooms).toBe(3);
     expect(item.builtArea).toBe(1800);
     expect(item.landAreaUnit).toBe('sqft');

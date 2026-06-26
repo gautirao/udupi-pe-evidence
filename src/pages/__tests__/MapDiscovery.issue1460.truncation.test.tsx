@@ -41,7 +41,7 @@ vi.mock('@/components/map/PropertyMap', () => ({
   PropertyListingWithImages: vi.fn(),
 }));
 
-vi.mock('@/components/layout/AppLayout', () => ({
+vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 

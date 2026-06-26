@@ -174,6 +174,7 @@ describe('PropertyMap — AgriMarkerClusterLayer (Issue #1372)', () => {
     expect(lastCall).toBeDefined();
     expect(lastCall.html).toContain('agri-cluster');
     expect(lastCall.html).toContain('🌾');
+    expect(lastCall.html).toContain('5 properties');
     // Should NOT contain residential cluster class
     expect(lastCall.html).not.toContain('custom-marker-cluster');
   });

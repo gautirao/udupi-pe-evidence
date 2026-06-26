@@ -60,7 +60,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 // Shallow-mock heavy UI components to keep test fast
-vi.mock('@/components/layout/AppLayout', () => ({
+vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
 }));

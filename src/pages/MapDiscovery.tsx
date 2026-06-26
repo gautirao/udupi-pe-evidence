@@ -10,6 +10,7 @@ import { MarkerPopoverCard } from '@/components/discover/MarkerPopoverCard';
 import { PropertyMap, PropertyListingWithImages } from '@/components/map/PropertyMap';
 import { computeZoneLabelPoints } from '@/lib/schoolZoneLabels';
 import type { ZoneLabelPoint } from '@/components/map/SchoolZoneLabelLayer';
+import type { AreaPoint } from '@/components/map/AreaMarkerLayer';
 import { MapFilters } from '@/components/map/MapFilters';
 import { DiscoverRightPanel } from '@/components/discover/DiscoverRightPanel';
 import { AreaIndicatorOverlay } from '@/components/discover/AreaIndicatorOverlay';
@@ -1045,10 +1046,35 @@ export default function MapDiscovery() {
     return { ...filters, polygon: bboxPolygon };
   }, [filters, selectedArea, urlState.schoolId]);
 
+  // Issue #1655 — top-grouped-level guard: at the grouped overview level, individual
+  // property markers and paginated listings should NOT be fetched. Only group/zone
+  // count markers (from useDiscoverAreas / useAreaGroups / useRegionalAreaGroups)
+  // are needed. This boolean mirrors the later isTopGroupedAreaOrSchool / isTopGroupedAgri
+  // definitions (line ~2098) but is computed here so it can gate the data hooks.
+  const isTopGroupedLevel = (() => {
+    if (
+      (urlState.journey === 'area-first' || urlState.journey === 'school-first') &&
+      !urlState.groupId &&
+      !urlState.areaKey &&
+      !selectedArea &&
+      !urlState.schoolId &&
+      !selectedSchool
+    ) return true;
+    if (
+      urlState.journey === 'agri-first' &&
+      !urlState.selectedRegion &&
+      !urlState.areaKey &&
+      !selectedArea &&
+      !urlState.selectedLocality &&
+      !urlState.selectedGroup
+    ) return true;
+    return false;
+  })();
+
   const {
     areasLoading, listingDataLoading, markersLoading, isLoadingAreaListings,
     isFetching,
-    discoverAreas, listingsWithCoords, filteredListings,
+    discoverAreas, discoverAreasData, listingsWithCoords, filteredListings,
     markerListings, areaListings, areaMarkerListings,
     schoolRadiusListings, schoolRadiusListingsLoading, schoolRadiusHasMore,
     topLocalities, activeFocusBounds, trendsAreaKeys,
@@ -1075,7 +1101,10 @@ export default function MapDiscovery() {
     // Issue #1115 — school-first branch additionally requires boundedSearchTriggered so
     // the /api/discover/markers fetch does NOT auto-fire on school select. The CTA in
     // SchoolSelectedPanel sets this flag. Area-first branch is untouched.
+    // Issue #1655 — top-grouped guard: disable markers at grouped level so
+    // useDiscoverFilteredMarkers does not fire for individual property coordinates.
     markersEnabled:
+      !isTopGroupedLevel &&
       isAuthenticated &&
       (urlState.journey === 'area-first' ||
         // Issue #1372 — agri-first journey must also enable markers so AgriMarkerClusterLayer
@@ -1088,6 +1117,11 @@ export default function MapDiscovery() {
           filters.schoolLon != null &&
           boundedSearchTriggered)) &&
       mapZoom > AREA_LAYER_MAX_ZOOM,
+    // Issue #1655 — suppress the paginated listings fetch at grouped overview level.
+    // At top-grouped states the right panel shows groups/zones, not individual listings,
+    // so there is no consumer for this data. Drilling down into a group/area/school
+    // clears isTopGroupedLevel and re-enables the fetch.
+    listingsEnabled: !isTopGroupedLevel,
     page,
     bbox: mapBbox,
     journey: urlState.journey,
@@ -1406,19 +1440,9 @@ export default function MapDiscovery() {
   // school selected) and only at overview zoom, so they never clutter drill-down
   // states or other journeys. onSelectZone reuses the existing selectGroup action.
   const schoolZoneLabels = useMemo<ZoneLabelPoint[]>(() => {
-    if (urlState.journey !== 'school-first') return [];
-    if (urlState.groupId || urlState.areaKey || urlState.schoolId) return [];
-    if (mapZoom > AREA_LAYER_MAX_ZOOM) return [];
-    return computeZoneLabelPoints(areaGroupsData?.groups ?? [], discoverAreas);
-  }, [
-    urlState.journey,
-    urlState.groupId,
-    urlState.areaKey,
-    urlState.schoolId,
-    mapZoom,
-    areaGroupsData,
-    discoverAreas,
-  ]);
+    // Issue #1655 — unified group listing pins replace legacy schoolZoneLabels pills at Level 0.
+    return [];
+  }, []);
 
   // Issue #1152 — derive the correct badge count given area/filter/loading context.
   // Uses raw filters, not effectiveFilters: the bbox polygon injected by effectiveFilters is system-managed; badge takes the area path when selectedArea != null regardless.
@@ -2032,8 +2056,8 @@ export default function MapDiscovery() {
   // Hoisted above the isCityValid early return to satisfy Rules of Hooks.
   const areaRestoreArea = useMemo(() => {
     if (!urlState.areaKey) return null;
-    return discoverAreas.find((a) => a.areaKey === urlState.areaKey) ?? null;
-  }, [urlState.areaKey, discoverAreas]);
+    return discoverAreasData?.areas?.find((a) => a.areaKey === urlState.areaKey) ?? null;
+  }, [urlState.areaKey, discoverAreasData]);
 
   // Issue #1547 ITEM 6 — memoize school marker positions to prevent SchoolMarkerFocusPanner
   // from re-running its useEffect on every render due to inline array recreation.
@@ -2103,10 +2127,149 @@ export default function MapDiscovery() {
   // from /api/discover/areas for the current city, so this is true only for the real
   // selected city, never leaked from another city's data.
   const cityHasNoListings = !areasLoading && cityTotal === 0;
-  const overviewAreas =
-    mapZoom <= AREA_LAYER_MAX_ZOOM && !isAgriJourney
-      ? (isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas)
-      : [];
+
+  const isTopGroupedAreaOrSchool =
+    (urlState.journey === 'area-first' || urlState.journey === 'school-first') &&
+    !urlState.groupId &&
+    !urlState.areaKey &&
+    !selectedArea &&
+    !urlState.schoolId &&
+    !selectedSchool;
+
+  const isTopGroupedAgri =
+    isAgriJourney &&
+    !urlState.selectedRegion &&
+    !urlState.areaKey &&
+    !selectedArea &&
+    !urlState.selectedLocality &&
+    !urlState.selectedGroup;
+
+  const overviewAreas = useMemo((): AreaPoint[] => {
+    if (mapZoom > AREA_LAYER_MAX_ZOOM) return [];
+
+    if (isTopGroupedAreaOrSchool) {
+      if (isLoadingAreaGroups) return [];
+      const groups = areaGroupsData?.groups ?? [];
+      if (groups.length === 0) {
+        return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
+      }
+      return groups
+        .map((group): AreaPoint | null => {
+          const groupAreaKeys = group.area_keys ?? [];
+          const memberAreas = discoverAreas.filter((a) => groupAreaKeys.includes(a.areaKey));
+          const totalListings = memberAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
+
+          let lat = group.focus_lat != null ? group.focus_lat : null;
+          let lon = group.focus_lon != null ? group.focus_lon : null;
+          if (lat == null || lon == null) {
+            const coords = memberAreas.filter((a) => a.geo_center_lat != null && a.geo_center_lon != null);
+            if (coords.length > 0) {
+              lat = coords.reduce((sum, a) => sum + a.geo_center_lat, 0) / coords.length;
+              lon = coords.reduce((sum, a) => sum + a.geo_center_lon, 0) / coords.length;
+            }
+          }
+          if (lat == null || lon == null) return null;
+
+          const unionBbox = computeGroupBounds(memberAreas)?.bbox ?? null;
+
+          return {
+            areaKey: group.id,
+            areaLabel: group.name,
+            geo_center_lat: lat,
+            geo_center_lon: lon,
+            bbox: unionBbox,
+            listingCount: totalListings,
+            schoolCount: undefined,
+          };
+        })
+        .filter((a): a is AreaPoint => a !== null && (a.listingCount ?? 0) > 0);
+    }
+
+    if (isTopGroupedAgri) {
+      if (isLoadingRegionalAreaGroups) return [];
+      if (corridorGroups.length === 0) return [];
+      const sourceAreas = agriAreasData ?? [];
+      return corridorGroups
+        .map((corridor): AreaPoint => {
+          const uniqueAreaKeys = Array.from(new Set(corridor.availableMaxDistances.flatMap((t) => t.areaKeys)));
+          const memberAreas = sourceAreas.filter((a) => uniqueAreaKeys.includes(a.areaKey));
+          let totalListings = memberAreas.reduce((sum, a) => sum + (a.listingCount ?? 0), 0);
+          if (totalListings === 0) {
+            totalListings = corridor.availableMaxDistances.reduce((max, t) => Math.max(max, t.listingCount ?? 0), 0);
+          }
+
+          const memberAreasWithCoords = memberAreas.filter((a) => a.geoCenterLat != null && a.geoCenterLon != null);
+          let lat: number | null = null;
+          let lon: number | null = null;
+          if (memberAreasWithCoords.length > 0) {
+            lat = memberAreasWithCoords.reduce((sum, a) => sum + a.geoCenterLat, 0) / memberAreasWithCoords.length;
+            lon = memberAreasWithCoords.reduce((sum, a) => sum + a.geoCenterLon, 0) / memberAreasWithCoords.length;
+          } else {
+            const baseLat = urlState.viewport?.lat ?? 13.34;
+            const baseLon = urlState.viewport?.lon ?? 74.74;
+            const offset = 0.04;
+            lat = baseLat + (corridor.directionCode.includes('N') ? offset : corridor.directionCode.includes('S') ? -offset : 0);
+            lon = baseLon + (corridor.directionCode.includes('E') ? offset : corridor.directionCode.includes('W') ? -offset : 0);
+          }
+
+          const mappedMembers: AreaPoint[] = memberAreas.map((a) => ({
+            areaKey: a.areaKey,
+            areaLabel: a.name,
+            geo_center_lat: a.geoCenterLat,
+            geo_center_lon: a.geoCenterLon,
+            bbox:
+              a.minLat != null && a.minLon != null && a.maxLat != null && a.maxLon != null
+                ? ([[a.minLat, a.minLon], [a.maxLat, a.maxLon]] as [[number, number], [number, number]])
+                : null,
+            listingCount: a.listingCount,
+          }));
+          const unionBbox = computeGroupBounds(mappedMembers)?.bbox ?? null;
+
+          return {
+            areaKey: corridor.directionCode,
+            areaLabel: corridor.groupName,
+            geo_center_lat: lat,
+            geo_center_lon: lon,
+            bbox: unionBbox,
+            listingCount: totalListings,
+          };
+        })
+        .filter((a) => (a.listingCount ?? 0) > 0);
+    }
+
+    if (!isAgriJourney) {
+      return isLandingState || isAreaFirstCityLanding ? liveAreas : discoverAreas;
+    }
+
+    return [];
+  }, [
+    mapZoom,
+    isTopGroupedAreaOrSchool,
+    isTopGroupedAgri,
+    isLoadingAreaGroups,
+    isLoadingRegionalAreaGroups,
+    isAgriJourney,
+    isLandingState,
+    isAreaFirstCityLanding,
+    areaGroupsData,
+    discoverAreas,
+    corridorGroups,
+    agriAreasData,
+    liveAreas,
+    urlState.viewport,
+  ]);
+
+  const handleOverviewAreaClick = useCallback((area: AreaPoint) => {
+    if (isTopGroupedAgri && corridorGroups.some((c) => c.directionCode === area.areaKey)) {
+      urlActions.setRegionWithMaxKm(area.areaKey);
+      return;
+    }
+    if (isTopGroupedAreaOrSchool && (areaGroupsData?.groups ?? []).some((g) => g.id === area.areaKey)) {
+      urlActions.selectGroup(area.areaKey);
+      return;
+    }
+    handleAreaClick(area);
+  }, [isTopGroupedAgri, corridorGroups, isTopGroupedAreaOrSchool, areaGroupsData, urlActions, handleAreaClick]);
 
   // Issue #1595 — the area-first selected-group drill-down state (a group is focused,
   // no specific area selected yet). Drives the mock-aligned map chrome for this step:
@@ -2159,6 +2322,7 @@ export default function MapDiscovery() {
           ) : (
             <PropertyMap
               listings={(() => {
+                if (isTopGroupedAreaOrSchool || isTopGroupedAgri) return [];
                 if (mapZoom <= AREA_LAYER_MAX_ZOOM) return [];
                 // Issue #1597 — area-group-results state: serve ONLY the group-filtered
                 // markers. Must come before the area-first/school-first branches so no
@@ -2230,7 +2394,7 @@ export default function MapDiscovery() {
               cityCenter={cityCenter}
               cityZoom={cityZoom}
               areas={overviewAreas}
-              onAreaClick={handleAreaClick}
+              onAreaClick={handleOverviewAreaClick}
               focusedGroupAreas={mapZoom <= AREA_LAYER_MAX_ZOOM ? focusedGroupAreas : undefined}
               schoolZoneLabels={schoolZoneLabels}
               onSelectZone={(groupId) => urlActions.selectGroup(groupId)}

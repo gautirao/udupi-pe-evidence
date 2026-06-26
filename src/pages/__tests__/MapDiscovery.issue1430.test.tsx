@@ -105,7 +105,7 @@ vi.mock('@/components/map/PropertyMap', () => ({
   PropertyMap: () => <div data-testid="property-map-mock" />,
 }));
 
-vi.mock('@/components/layout/AppLayout', () => ({
+vi.mock('@/components/layout/AppLayout', () => ({ RoleAwareHeader: () => null,
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 

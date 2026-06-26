@@ -36,6 +36,7 @@ describe('normalizeAreaGroupResponse', () => {
       area_keys: ['IN|KA|Udupi|Manipal', 'IN|KA|Udupi|Karkala'],
       focus_lat: 13.35,
       focus_lon: 74.79,
+      description: null,
     });
   });
 
@@ -63,6 +64,7 @@ describe('normalizeAreaGroupResponse', () => {
       area_keys: ['IN|KA|Udupi|Area1'],
       focus_lat: null,
       focus_lon: null,
+      description: null,
     });
   });
 
@@ -232,6 +234,7 @@ describe('normalizeAreaGroupResponse', () => {
       area_keys: ['area1', 'area2'],
       focus_lat: null,
       focus_lon: null,
+      description: null,
     });
 
     expect(result.groups[1]).toEqual({
@@ -243,6 +246,7 @@ describe('normalizeAreaGroupResponse', () => {
       area_keys: [],
       focus_lat: null,
       focus_lon: null,
+      description: null,
     });
 
     expect(result.groups[2]).toEqual({
@@ -254,6 +258,7 @@ describe('normalizeAreaGroupResponse', () => {
       area_keys: ['area3'],
       focus_lat: null,
       focus_lon: null,
+      description: null,
     });
   });
 

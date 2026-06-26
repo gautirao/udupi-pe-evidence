@@ -44,6 +44,7 @@ vi.mock('@/components/map/PropertyMap', () => ({
 
 vi.mock('@/components/layout/AppLayout', () => ({
   AppLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  RoleAwareHeader: () => <div data-testid="role-aware-header-mock" />,
 }));
 
 const PADUBIDRI_AREA_KEY = 'IN|KA|Udupi|Padubidri';

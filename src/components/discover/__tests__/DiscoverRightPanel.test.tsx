@@ -220,11 +220,12 @@ describe('DiscoverRightPanel', () => {
     expect(screen.getByText('₹5 L')).toBeInTheDocument();
   });
 
-  it('shows blurred price gate for anonymous users', () => {
+  it('shows price band or request for anonymous users', () => {
     const area = makeArea('k1', 'Manipal', 5);
     const listings: DiscoverCityListingItem[] = [{
       id: 'l1',
-      pricePaise: 500000 * 100,
+      pricePaise: undefined,
+      priceBand: '₹50L–1Cr',
       propertyType: 'apartment',
       locality: 'Manipal',
       primaryImageUrl: null,
@@ -240,7 +241,7 @@ describe('DiscoverRightPanel', () => {
         isAuthenticated={false}
       />,
     );
-    expect(screen.getByText(/sign in to view price/i)).toBeInTheDocument();
+    expect(screen.getByText('₹50L–1Cr')).toBeInTheDocument();
     expect(screen.queryByText('₹5 L')).not.toBeInTheDocument();
   });
 

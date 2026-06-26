@@ -30,6 +30,13 @@ export interface UseDiscoverMapDataParams {
   fitTick: number;
   /** Pre-computed gate: true only when authenticated AND zoom > AREA_LAYER_MAX_ZOOM. */
   markersEnabled: boolean;
+  /**
+   * Issue #1655 — pre-computed gate: false at top-grouped journey levels where the right
+   * panel shows groups/zones, not individual listings. Disables the useDiscoverListings
+   * fetch to avoid fetching paginated listing data that has no consumer.
+   * Defaults to true when omitted (backward-compatible).
+   */
+  listingsEnabled?: boolean;
   /** Current page for the listing cards panel (0-indexed). */
   page: number;
   /**
@@ -127,6 +134,7 @@ export function useDiscoverMapData({
   isAuthenticated,
   fitTick,
   markersEnabled,
+  listingsEnabled = true,
   page,
   bbox,
   journey,
@@ -139,6 +147,8 @@ export function useDiscoverMapData({
   const cityZoom = useMemo(() => CITY_CONFIG[city]?.zoom, [city]);
 
   // ── Paginated discover listings (auth-only) ────────────────────────────────
+  // Issue #1655: gated by listingsEnabled so top-grouped journey states avoid fetching
+  // individual listing data that the UI does not consume (right panel shows groups).
   const {
     data: discoverListingsPage,
     isLoading: discoverListingsLoading,
@@ -150,7 +160,7 @@ export function useDiscoverMapData({
     size: 50,
     filters,
     includeAggregates: true,
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && listingsEnabled,
     bbox,
     q: debouncedSearch || undefined,
     listingPurpose,

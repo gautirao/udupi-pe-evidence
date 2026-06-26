@@ -266,7 +266,7 @@ export default function LandingPage() {
   }, [isLoading]);
 
   const handleExplore = () => {
-    navigate(getDiscoverRoute(selectedCity, 'area-first'));
+    navigate(getDiscoverRoute(selectedCity));
   };
 
   if (showAuthLoader) {

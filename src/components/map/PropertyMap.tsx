@@ -1223,9 +1223,10 @@ function AgriMarkerClusterLayer({
         }
 
         return L.divIcon({
-          html: `<div class="agri-cluster agri-cluster-${size}">🌾 ${count}</div>`,
+          html: `<div class="agri-cluster agri-cluster-${size}">🌾 ${count} ${count === 1 ? 'property' : 'properties'}</div>`,
           className: '',
-          iconSize: L.point(sizeNum, sizeNum),
+          iconSize: undefined,
+          iconAnchor: [0, 0],
         });
       },
     });

@@ -228,6 +228,24 @@
     @apply text-lg;
   }
 
+  .agri-cluster {
+    background-color: #15803d;
+    color: #ffffff;
+    border: 1.5px solid rgba(255, 255, 255, 0.95);
+    border-radius: 9999px;
+    padding: 5px 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 700;
+    font-size: 12.5px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+  }
+
   /* a1 — selected property marker sits above its neighbours (copper ring).
      Leaflet renders all markers in the overlayPane; z-index on the icon wrapper
      lifts the selected pin above adjacent unselected pins. !important overrides
