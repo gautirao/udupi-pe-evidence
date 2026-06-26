@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Loader2, MapPin, X, AlertCircle, Bookmark } from 'lucide-react';
 import { useSavedAreas, useDeleteSavedArea, useSaveArea } from '@/hooks/useSavedAreas';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { formatRelativeDate } from '@/lib/formatters';
 
 interface SavedAreasProps {
@@ -12,6 +13,7 @@ interface SavedAreasProps {
 
 export function SavedAreas({ selectedArea }: SavedAreasProps) {
   const { user } = useAuth();
+  const { openAuthModal } = useAuthModal();
   const { data: savedAreas = [], isLoading, error } = useSavedAreas();
   const deleteMutation = useDeleteSavedArea();
   const saveMutation = useSaveArea();
@@ -74,23 +76,27 @@ export function SavedAreas({ selectedArea }: SavedAreasProps) {
                 : `Tracking ${savedAreas.length} area${savedAreas.length !== 1 ? 's' : ''}`}
             </CardDescription>
           </div>
-          {user && (
-            <Button
-              data-testid="save-area-button"
-              size="sm"
-              variant={isAlreadySaved ? 'secondary' : 'default'}
-              disabled={!selectedArea || isAlreadySaved || saveMutation.isPending}
-              onClick={handleSaveArea}
-              className="gap-1.5 flex-shrink-0"
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Bookmark className={`h-4 w-4 ${isAlreadySaved ? 'fill-current' : ''}`} />
-              )}
-              {isAlreadySaved ? 'Saved' : 'Save Area'}
-            </Button>
-          )}
+          <Button
+            data-testid="save-area-button"
+            size="sm"
+            variant={isAlreadySaved ? 'secondary' : 'default'}
+            disabled={!selectedArea || (user ? isAlreadySaved : false) || saveMutation.isPending}
+            onClick={() => {
+              if (!user) {
+                openAuthModal({ redirect: '/saved-areas', returnTo: '/saved-areas' });
+              } else {
+                handleSaveArea();
+              }
+            }}
+            className="gap-1.5 flex-shrink-0"
+          >
+            {saveMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Bookmark className={`h-4 w-4 ${isAlreadySaved ? 'fill-current' : ''}`} />
+            )}
+            {isAlreadySaved && user ? 'Saved' : 'Save Area'}
+          </Button>
         </div>
       </CardHeader>
       <CardContent>

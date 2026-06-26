@@ -104,9 +104,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Defer role + profile fetch to avoid Supabase client deadlock
         if (session?.user) {
+          if (event === 'SIGNED_IN') {
+            setIsLoading(true);
+          }
           setTimeout(() => {
-            fetchUserRole(session.user.id);
-            fetchInsightsAccess(session.user.id);
+            Promise.all([
+              fetchUserRole(session.user.id),
+              fetchInsightsAccess(session.user.id),
+            ]).finally(() => {
+              setIsLoading(false);
+            });
           }, 0);
         } else {
           setUserRole(null);

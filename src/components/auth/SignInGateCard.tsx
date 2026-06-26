@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 
 export interface SignInGateCardProps {
   /** Shown as the `<h3>` inside the overlay variant. Not rendered in card variant. */
@@ -26,6 +27,13 @@ export function SignInGateCard({
   returnTo,
   variant = 'card',
 }: SignInGateCardProps) {
+  const { openAuthModal } = useAuthModal();
+
+  const handleModalOpen = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openAuthModal({ returnTo, redirect: returnTo });
+  };
+
   if (variant === 'overlay') {
     return (
       <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -36,7 +44,9 @@ export function SignInGateCard({
             <p className="mb-4 text-sm text-gray-200">{description}</p>
           )}
           <Button variant="secondary" size="lg" asChild>
-            <Link to={`/auth?returnTo=${encodeURIComponent(returnTo)}`}>{ctaLabel}</Link>
+            <Link to={`/auth?returnTo=${encodeURIComponent(returnTo)}`} onClick={handleModalOpen}>
+              {ctaLabel}
+            </Link>
           </Button>
         </div>
       </div>
@@ -52,7 +62,9 @@ export function SignInGateCard({
           <p className="text-sm text-muted-foreground mb-3">{description}</p>
         )}
         <Button className="w-full" asChild>
-          <Link to={`/auth?returnTo=${encodeURIComponent(returnTo)}`}>{ctaLabel}</Link>
+          <Link to={`/auth?returnTo=${encodeURIComponent(returnTo)}`} onClick={handleModalOpen}>
+            {ctaLabel}
+          </Link>
         </Button>
       </CardContent>
     </Card>

@@ -94,7 +94,7 @@ describe('AppLayout — nav links by role', () => {
     expect(listCTA).toHaveAttribute('href', '/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new');
     expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
 
-    expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^saved$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
@@ -383,10 +383,9 @@ describe('PublicDiscoverLayout — /discover route behaviour', () => {
     expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
-
     expect(screen.getByRole('link', { name: /list property/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^saved$/i })).not.toBeInTheDocument();
   });
 
   it('5. Active tab state marks correct journey active', () => {

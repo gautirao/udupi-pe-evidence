@@ -92,7 +92,7 @@ describe('LandingPage (ReTrends redesign)', () => {
       expect(screen.getByRole('link', { name: /Agricultural land/i })).toHaveAttribute('href', '/discover?city=udupi&lat=13.34090&lon=74.74210&zoom=11&journey=agri-first');
       expect(screen.getByRole('link', { name: /^Trends$/i })).toHaveAttribute('href', '/trends?city=udupi');
       expect(screen.getByRole('link', { name: /List property/i })).toHaveAttribute('href', '/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new');
-      expect(screen.queryByRole('link', { name: /Saved/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /^Saved$/i })).not.toBeInTheDocument();
     });
 
     it('renders Saved and List property actions for signed-in normal consumers', () => {

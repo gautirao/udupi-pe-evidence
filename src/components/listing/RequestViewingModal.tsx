@@ -5,6 +5,7 @@ import { useDiscoverTelemetry } from '@/hooks/useDiscoverTelemetry';
 import { addDays, format } from 'date-fns';
 import { AlertCircle, Calendar, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useCreateBooking, TIME_SLOTS } from '@/hooks/useBookings';
 import {
   Dialog,
@@ -47,6 +48,7 @@ interface RequestViewingModalProps {
  */
 export function RequestViewingModal({ listingId, open, onClose, initialDate, initialTime }: RequestViewingModalProps) {
   const { user } = useAuth();
+  const { openAuthModal } = useAuthModal();
   const createBooking = useCreateBooking();
 
   // Issue #1531 — additive LEAD_INTENT telemetry (fire-and-forget; never throws).
@@ -124,7 +126,15 @@ export function RequestViewingModal({ listingId, open, onClose, initialDate, ini
               Please sign in to request a viewing.
             </p>
             <Button asChild>
-              <Link to="/auth">Sign In</Link>
+              <Link
+                to="/auth"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openAuthModal({ returnTo: typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '/' });
+                }}
+              >
+                Sign In
+              </Link>
             </Button>
           </div>
         ) : (

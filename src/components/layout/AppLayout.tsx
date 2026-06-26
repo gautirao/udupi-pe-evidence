@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { useAuthModal } from '@/contexts/AuthModalContext';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -93,13 +95,26 @@ const userRoleNavigation = [
 
 export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}) {
   const { user, isAdmin, isBroker, signOut, isLoading } = useAuth();
+  const { openAuthModal } = useAuthModal();
+  const { toast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/', { replace: true });
+    const isProtected = location.pathname.startsWith('/broker') ||
+      location.pathname.startsWith('/admin') ||
+      location.pathname.startsWith('/my-bookings') ||
+      location.pathname.startsWith('/saved-areas') ||
+      location.pathname.startsWith('/onboarding') ||
+      location.pathname.startsWith('/auth');
+    if (isProtected) {
+      navigate('/discover', { replace: true });
+    }
+    toast({
+      description: 'You have been signed out.',
+    });
   };
 
   const initials = user?.email
@@ -181,7 +196,11 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
         <>
           <Link
             to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
-            onClick={() => setMobileOpen(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              setMobileOpen(false);
+              openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
+            }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
           >
             <Plus className="h-4 w-4" />
@@ -189,7 +208,11 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
           </Link>
           <Link
             to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
-            onClick={() => setMobileOpen(false)}
+            onClick={(e) => {
+              e.preventDefault();
+              setMobileOpen(false);
+              openAuthModal({ returnTo: location.pathname + location.search });
+            }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-primary hover:bg-secondary transition-colors"
           >
             <LogOut className="h-4 w-4 rotate-180" />
@@ -292,6 +315,10 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
             {isLoading ? null : !user ? (
               <Link
                 to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+                onClick={(e) => {
+                  e.preventDefault();
+                  openAuthModal({ redirect: '/broker/listings/new', returnTo: '/broker/listings/new' });
+                }}
                 className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
               >
                 List property
@@ -403,6 +430,10 @@ export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}
           ) : (
             <Link
               to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
+              onClick={(e) => {
+                e.preventDefault();
+                openAuthModal({ returnTo: location.pathname + location.search });
+              }}
               className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
             >
               Sign in

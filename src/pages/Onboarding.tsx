@@ -14,7 +14,7 @@ import { Loader2, MapPin, Building2, Home } from 'lucide-react';
  *  - Already dealer/admin: redirect to / (onboarding is not relevant).
  */
 export default function Onboarding() {
-  const { isBroker, isAdmin, isLoading } = useAuth();
+  const { user, isBroker, isAdmin, isLoading } = useAuth();
   const navigate = useNavigate();
 
   if (isLoading) {
@@ -31,33 +31,40 @@ export default function Onboarding() {
     return <Navigate to="/" replace />;
   }
 
+  const handleSelect = (path: string) => {
+    if (user) {
+      localStorage.setItem(`onboarding_done_${user.id}`, 'true');
+    }
+    navigate(path);
+  };
+
   return (
     <AppLayout>
-      <div className="container max-w-4xl py-16 px-4">
+      <div className="container max-w-4xl py-12 px-4">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold tracking-tight mb-3">What brings you here?</h1>
-          <p className="text-muted-foreground text-lg">
-            Choose how you want to use Udupi Property Explorer.
+          <h1 className="text-3xl font-bold tracking-tight">Welcome to Udupi Property Tracker</h1>
+          <p className="text-muted-foreground mt-2 text-lg">
+            How would you like to use the platform today?
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {/* Browse path */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Consumer path */}
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
-            onClick={() => navigate('/')}
+            onClick={() => handleSelect('/')}
           >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-3">
                 <MapPin className="h-6 w-6 text-primary" />
               </div>
-              <CardTitle>Browse &amp; Invest</CardTitle>
+              <CardTitle>Browse & Invest</CardTitle>
               <CardDescription>
                 Explore listings on the map, save areas you care about, and track market trends.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="outline" onClick={() => navigate('/')}>
+              <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); handleSelect('/'); }}>
                 Start Browsing
               </Button>
             </CardContent>
@@ -66,7 +73,7 @@ export default function Onboarding() {
           {/* Owner path */}
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
-            onClick={() => navigate('/broker/listings/new')}
+            onClick={() => handleSelect('/broker/listings/new')}
           >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-3">
@@ -78,7 +85,7 @@ export default function Onboarding() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); navigate('/broker/listings/new'); }}>
+              <Button className="w-full" variant="outline" onClick={(e) => { e.stopPropagation(); handleSelect('/broker/listings/new'); }}>
                 List as Owner
               </Button>
             </CardContent>
@@ -87,7 +94,7 @@ export default function Onboarding() {
           {/* Dealer path */}
           <Card
             className="cursor-pointer transition-colors hover:border-primary"
-            onClick={() => navigate('/broker/setup')}
+            onClick={() => handleSelect('/broker/setup')}
           >
             <CardHeader className="pb-3">
               <div className="flex items-center justify-center h-12 w-12 rounded-lg bg-primary/10 mb-3">
@@ -99,7 +106,7 @@ export default function Onboarding() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full" onClick={() => navigate('/broker/setup')}>
+              <Button className="w-full" onClick={(e) => { e.stopPropagation(); handleSelect('/broker/setup'); }}>
                 Become a Broker
               </Button>
             </CardContent>
