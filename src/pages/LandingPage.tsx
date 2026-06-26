@@ -18,6 +18,8 @@ import {
   MapPin,
   TrendingUp,
   Bookmark,
+  GraduationCap,
+  Sprout,
   Shield,
   ShieldCheck,
   CheckCircle2,
@@ -29,8 +31,10 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTrendingAreas } from '@/hooks/useTrendingAreas';
 import { formatPrice } from '@/lib/formatters';
-import { DISTRICT_TO_CITY_SLUG } from '@/lib/localityUtils';
+import { DISTRICT_TO_CITY_SLUG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { getDiscoverRoute, getTrendsRoute, getSavedRoute } from '@/lib/navUtils';
 import { CITIES } from '@/constants/cities';
+import { RoleAwareHeader } from '@/components/layout/AppLayout';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Static marketing content. These mirror the ReTrends mock exactly. The
@@ -149,88 +153,8 @@ const AREA_OVERVIEW_META: Record<string, string> = {
 // Header
 // ────────────────────────────────────────────────────────────────────────────
 
-function SiteHeader() {
-  const { user, signOut, isLoading } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/', { replace: true });
-  };
-
-  return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm">
-      <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white">
-            <MapPin className="h-5 w-5" />
-          </span>
-          <span className="flex flex-col leading-none">
-            <span className="text-base font-bold text-foreground">ReTrends</span>
-            <span className="text-[11px] text-muted-foreground">Real Estate Trends</span>
-          </span>
-        </Link>
-
-        {/* Center nav */}
-        <nav className="hidden items-center gap-8 md:flex">
-          <Link
-            to="/discover"
-            className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
-          >
-            <MapPin className="h-4 w-4" />
-            Discover
-          </Link>
-          <Link
-            to="/trends"
-            className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
-          >
-            <TrendingUp className="h-4 w-4" />
-            Trends
-          </Link>
-          <Link
-            to="/saved-areas"
-            className="flex items-center gap-1.5 text-sm font-medium text-foreground/80 transition-colors hover:text-foreground"
-          >
-            <Bookmark className="h-4 w-4" />
-            Saved
-          </Link>
-        </nav>
-
-        {/* Auth control */}
-        {isLoading ? null : user ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
-                    {(user.email?.split('@')[0].slice(0, 2).toUpperCase()) || 'U'}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.email}</p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}>Sign In</Link>
-          </Button>
-        )}
-      </div>
-    </header>
-  );
+function SiteHeader({ selectedCity }: { selectedCity?: string }) {
+  return <RoleAwareHeader selectedCity={selectedCity} />;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -325,7 +249,7 @@ function TrendingLocalitiesSection({ selectedCity }: { selectedCity: string }) {
 export default function LandingPage() {
   const { isLoading } = useAuth();
   const navigate = useNavigate();
-  const [selectedCity, setSelectedCity] = useState('bangalore');
+  const [selectedCity, setSelectedCity] = useState(DEFAULT_CITY);
   const [locality, setLocality] = useState('');
 
   // Delayed-show: only render the auth spinner if it takes > 200 ms to resolve.
@@ -342,7 +266,7 @@ export default function LandingPage() {
   }, [isLoading]);
 
   const handleExplore = () => {
-    navigate(`/discover?city=${encodeURIComponent(selectedCity)}`);
+    navigate(getDiscoverRoute(selectedCity, 'area-first'));
   };
 
   if (showAuthLoader) {
@@ -355,7 +279,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      <SiteHeader selectedCity={selectedCity} />
 
       {/* ──────────────────────────────────────────────────────────────── */}
       {/* Hero */}

@@ -43,19 +43,14 @@ import {
 } from 'lucide-react';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn } from '@/lib/utils';
+import { DEFAULT_CITY } from '@/lib/localityUtils';
+import { getDiscoverRoute, getTrendsRoute, getSavedRoute } from '@/lib/navUtils';
 
 interface AppLayoutProps {
   children: React.ReactNode;
 }
 
 // ─── Static nav arrays (defined once at module level) ───────────────────────
-
-const publicDiscoveryNavigation = [
-  { name: 'Discover', href: '/discover', icon: MapPin },
-  { name: 'Schools', href: '/discover?journey=school-first', icon: GraduationCap },
-  { name: 'Agricultural land', href: '/discover?journey=agri-first', icon: Sprout },
-  { name: 'Trends', href: '/trends', icon: BarChart3 },
-];
 
 const adminNavigation = [
   { name: 'Feed Runs', href: '/admin/feeds', icon: FileText },
@@ -89,15 +84,15 @@ const brokerDetailedNavigation = [
 
 const userRoleNavigation = [
   { name: 'List property', href: '/broker/listings/new', icon: Plus },
+  { name: 'Saved', href: '/saved-areas', icon: Bookmark },
   { name: 'My bookings', href: '/my-bookings', icon: CalendarCheck2 },
-  { name: 'Saved areas', href: '/saved-areas', icon: Bookmark },
   { name: 'Notifications', href: '/notifications', icon: Bell },
 ];
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function AppLayout({ children }: AppLayoutProps) {
-  const { user, isAdmin, isBroker, signOut } = useAuth();
+export function RoleAwareHeader({ selectedCity }: { selectedCity?: string } = {}) {
+  const { user, isAdmin, isBroker, signOut, isLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -114,22 +109,38 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const roleLabel = isAdmin ? 'Administrator' : isBroker ? 'Broker' : 'User';
 
-  const isItemActive = (href: string) => {
-    const [path, query] = href.split('?');
-    if (path === '/' || path === '/discover') {
+  const currentCity = selectedCity || new URLSearchParams(location.search).get('city') || DEFAULT_CITY;
+  const currentJourney = new URLSearchParams(location.search).get('journey');
+
+  const publicDiscoveryNavigation = [
+    { name: 'Discover', href: getDiscoverRoute(currentCity), icon: MapPin },
+    { name: 'Schools', href: getDiscoverRoute(currentCity, 'school-first'), icon: GraduationCap },
+    { name: 'Agricultural land', href: getDiscoverRoute(currentCity, 'agri-first'), icon: Sprout },
+    { name: 'Trends', href: getTrendsRoute(currentCity), icon: BarChart3 },
+  ];
+
+  const isItemActive = (href: string, name: string) => {
+    if (name === 'Discover') {
       const onDiscover = location.pathname === '/' || location.pathname.startsWith('/discover');
-      if (!query) return onDiscover && (!location.search.includes('journey=') || location.search.includes('journey=area-first'));
-      return onDiscover && location.search.includes(query);
+      return onDiscover && (!currentJourney || currentJourney === 'area-first');
     }
+    if (name === 'Schools') {
+      return location.pathname.startsWith('/discover') && currentJourney === 'school-first';
+    }
+    if (name === 'Agricultural land') {
+      return location.pathname.startsWith('/discover') && currentJourney === 'agri-first';
+    }
+    const [path] = href.split('?');
     return location.pathname.startsWith(path);
   };
 
-  const NavItem = ({ item, mobile = false, onClick }: { item: { name: string; href: string; icon: typeof Home }; mobile?: boolean; onClick?: () => void }) => {
-    const active = isItemActive(item.href);
+  const NavItem = ({ item, mobile = false, onClick }: { item: { name: string; href: string; icon: any }; mobile?: boolean; onClick?: () => void }) => {
+    const active = isItemActive(item.href, item.name);
     return (
       <Link
         to={item.href}
         onClick={onClick}
+        aria-current={active ? 'page' : undefined}
         className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
           active
@@ -146,27 +157,48 @@ export function AppLayout({ children }: AppLayoutProps) {
   const MobileNavigation = () => (
     <div className="flex flex-col gap-1">
       <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        Public Discovery
+        Explore
       </div>
       {publicDiscoveryNavigation.map((item) => (
         <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
       ))}
 
+      {user && !isAdmin && !isBroker && (
+        <>
+          <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
+            My activity
+          </div>
+          <NavItem item={{ name: 'Saved', href: '/saved-areas', icon: Bookmark }} mobile onClick={() => setMobileOpen(false)} />
+          <NavItem item={{ name: 'My bookings', href: '/my-bookings', icon: CalendarCheck2 }} mobile onClick={() => setMobileOpen(false)} />
+          <NavItem item={{ name: 'Notifications', href: '/notifications', icon: Bell }} mobile onClick={() => setMobileOpen(false)} />
+        </>
+      )}
+
       <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-4">
-        Actions
+        Workspace
       </div>
       {!user ? (
-        <Link
-          to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
-          onClick={() => setMobileOpen(false)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          List your property
-        </Link>
+        <>
+          <Link
+            to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            List property
+          </Link>
+          <Link
+            to={`/auth?returnTo=${encodeURIComponent(location.pathname + location.search)}`}
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-primary hover:bg-secondary transition-colors"
+          >
+            <LogOut className="h-4 w-4 rotate-180" />
+            Sign in
+          </Link>
+        </>
       ) : isAdmin ? (
         <>
-          <div className="px-3 py-1 text-xs font-medium text-primary">Admin console</div>
+          <div className="px-3 py-1 text-xs font-medium text-primary">Admin Console</div>
           {adminNavigation.map((item) => (
             <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
           ))}
@@ -185,9 +217,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </>
       ) : (
         <>
-          {userRoleNavigation.map((item) => (
-            <NavItem key={item.name} item={item} mobile onClick={() => setMobileOpen(false)} />
-          ))}
+          <NavItem item={{ name: 'List property', href: '/broker/listings/new', icon: Plus }} mobile onClick={() => setMobileOpen(false)} />
           <Link
             to="/broker/listings"
             onClick={() => setMobileOpen(false)}
@@ -202,9 +232,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm font-sans">
         <div className="flex h-14 items-center px-4 gap-4">
           {/* Mobile menu */}
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -222,7 +250,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                   <MapPin className="h-5 w-5 text-primary" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-semibold leading-tight">Udupi Tracker</span>
+                  <span className="font-semibold leading-tight">ReTrends</span>
                   <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
                 </div>
               </div>
@@ -236,7 +264,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <MapPin className="h-5 w-5 text-primary" />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="font-semibold leading-tight">Udupi Property Tracker</span>
+              <span className="font-semibold leading-tight">ReTrends</span>
               <span className="text-xs text-muted-foreground leading-tight">Real Estate Trends</span>
             </div>
           </Link>
@@ -261,12 +289,12 @@ export function AppLayout({ children }: AppLayoutProps) {
 
           {/* Zone 3: Role/workspace actions */}
           <div aria-label="Role actions" className="hidden lg:flex items-center gap-1">
-            {!user ? (
+            {isLoading ? null : !user ? (
               <Link
                 to="/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new"
                 className="text-sm font-semibold text-foreground hover:bg-secondary transition-colors px-3 py-1.5 rounded-md border border-input"
               >
-                List your property
+                List property
               </Link>
             ) : isAdmin ? (
               <DropdownMenu>
@@ -280,7 +308,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                         : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     )}
                   >
-                    Admin console
+                    Admin Console
                     <ChevronDown className="h-3.5 w-3.5" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -342,10 +370,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
 
           {/* Notifications */}
-          {user && <NotificationBell />}
+          {!isLoading && user && <NotificationBell />}
 
           {/* Zone 4: Account */}
-          {user ? (
+          {isLoading ? null : user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-9 w-9 rounded-full">
@@ -366,14 +394,6 @@ export function AppLayout({ children }: AppLayoutProps) {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {!isAdmin && !isBroker && (
-                  <DropdownMenuItem asChild>
-                    <Link to="/broker/listings" className="flex items-center gap-2 w-full cursor-pointer">
-                      <Building2 className="mr-2 h-4 w-4" />
-                      My listings
-                    </Link>
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
@@ -390,8 +410,13 @@ export function AppLayout({ children }: AppLayoutProps) {
           )}
         </div>
       </header>
+    );
+}
 
-      {/* Main content */}
+export function AppLayout({ children }: AppLayoutProps) {
+  return (
+    <div className="min-h-screen bg-background flex flex-col font-sans">
+      <RoleAwareHeader />
       <main className="flex-1">
         {children}
       </main>

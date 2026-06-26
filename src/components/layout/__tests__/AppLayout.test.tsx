@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Onboarding from '../../../pages/Onboarding';
 import { AppLayout } from '../AppLayout';
+import { PublicDiscoverLayout } from '../PublicDiscoverLayout';
 
 // ─── Polyfills for jsdom ─────────────────────────────────
 
@@ -18,7 +19,7 @@ globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserv
 
 // Stub out NotificationBell — we test nav rendering here, not notifications.
 vi.mock('@/components/notifications/NotificationBell', () => ({
-  NotificationBell: () => null,
+  NotificationBell: () => <button type="button">Notifications bell</button>,
 }));
 
 const mockSignOut = vi.fn();
@@ -88,18 +89,18 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.getAllByRole('link', { name: /agricultural land/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /trends/i }).length).toBeGreaterThan(0);
 
-    const listCTA = screen.getByRole('link', { name: /list your property/i });
+    const listCTA = screen.getByRole('link', { name: /list (your )?property/i });
     expect(listCTA).toBeInTheDocument();
     expect(listCTA).toHaveAttribute('href', '/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new');
     expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
 
-    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /my listings/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
   });
 
-  it('user role: shows public nav, List property, Saved areas, My bookings — no broker/admin tools', () => {
+  it('user role: shows public nav, List property, Saved, My bookings, Notifications — no broker/admin tools', () => {
     mockAuth = baseAuth({
       user: { email: 'user@test.com' },
       userRole: 'user',
@@ -108,9 +109,10 @@ describe('AppLayout — nav links by role', () => {
 
     expect(screen.getAllByRole('link', { name: /^discover$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /^trends$/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole('link', { name: /saved areas/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /saved/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /list property/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('link', { name: /my bookings/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /notifications/i }).length).toBeGreaterThan(0);
 
     // Admin-only items must not appear
     expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
@@ -141,7 +143,7 @@ describe('AppLayout — nav links by role', () => {
     expect(screen.getAllByRole('menuitem', { name: /listing quality/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('menuitem', { name: /demand gaps/i }).length).toBeGreaterThan(0);
 
-    expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /admin console/i })).not.toBeInTheDocument();
   });
 
@@ -175,7 +177,7 @@ describe('AppLayout — nav links by role', () => {
 
     // Must NOT show dealer or user-only links
     expect(screen.queryByRole('link', { name: /broker dashboard/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /saved areas/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
   });
 });
 
@@ -303,6 +305,103 @@ describe('AppLayout — onboarding redirect for dealers', () => {
     );
 
     expect(screen.getByText('home page')).toBeInTheDocument();
+  });
+});
+
+describe('PublicDiscoverLayout — /discover route behaviour', () => {
+  function renderDiscover(url = '/discover?city=udupi') {
+    return render(
+      <MemoryRouter initialEntries={[url]}>
+        <PublicDiscoverLayout>
+          <div>discover map surface</div>
+        </PublicDiscoverLayout>
+      </MemoryRouter>,
+    );
+  }
+
+  it('1. Broker on /discover?city=udupi sees all public nav and broker actions', () => {
+    mockAuth = baseAuth({
+      user: { email: 'broker@test.com' },
+      userRole: 'dealer',
+      isBroker: true,
+    });
+    renderDiscover();
+
+    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+
+    expect(screen.getByRole('link', { name: /broker dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /new listing/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /notifications/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /broker workspace/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^BR$/i })).toBeInTheDocument();
+  });
+
+  it('2. Admin on /discover?city=udupi sees Admin Console visible without opening avatar', () => {
+    mockAuth = baseAuth({
+      user: { email: 'admin@test.com' },
+      userRole: 'admin',
+      isAdmin: true,
+    });
+    renderDiscover();
+
+    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: /admin console/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /notifications bell/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^AD$/i })).toBeInTheDocument();
+  });
+
+  it('3. Normal user on /discover?city=udupi sees consumer actions', () => {
+    mockAuth = baseAuth({
+      user: { email: 'user@test.com' },
+      userRole: 'user',
+    });
+    renderDiscover();
+
+    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+
+    expect(screen.getByRole('link', { name: /list property/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /saved/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /my bookings/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /notifications/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^US$/i })).toBeInTheDocument();
+  });
+
+  it('4. Anonymous user on /discover?city=udupi sees public links, List property, Sign in', () => {
+    renderDiscover();
+
+    expect(screen.getByRole('link', { name: /^discover$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^schools$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^trends$/i })).toBeInTheDocument();
+
+    expect(screen.getByRole('link', { name: /list property/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign in/i })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /saved/i })).not.toBeInTheDocument();
+  });
+
+  it('5. Active tab state marks correct journey active', () => {
+    const { unmount: u1 } = renderDiscover('/discover?city=udupi');
+    expect(screen.getByRole('link', { name: /^discover$/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /^schools$/i })).not.toHaveAttribute('aria-current');
+    u1();
+
+    const { unmount: u2 } = renderDiscover('/discover?city=udupi&journey=school-first');
+    expect(screen.getByRole('link', { name: /^discover$/i })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /^schools$/i })).toHaveAttribute('aria-current', 'page');
+    u2();
+
+    renderDiscover('/discover?city=udupi&journey=agri-first');
+    expect(screen.getByRole('link', { name: /^agricultural land$/i })).toHaveAttribute('aria-current', 'page');
   });
 });
 

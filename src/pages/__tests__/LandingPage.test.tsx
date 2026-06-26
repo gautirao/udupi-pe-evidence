@@ -85,11 +85,39 @@ describe('LandingPage (ReTrends redesign)', () => {
       expect(screen.getByText('Real Estate Trends')).toBeInTheDocument();
     });
 
-    it('renders the nav links (Discover, Trends, Saved) with correct routes', () => {
+    it('renders the public nav links (Discover, Schools, Agricultural land, Trends) and List property CTA for anonymous users — no Saved', () => {
       renderPage();
-      expect(screen.getByRole('link', { name: /Discover/i })).toHaveAttribute('href', '/discover');
-      expect(screen.getByRole('link', { name: /^Trends$/i })).toHaveAttribute('href', '/trends');
+      expect(screen.getByRole('link', { name: /Discover/i })).toHaveAttribute('href', '/discover?city=udupi');
+      expect(screen.getByRole('link', { name: /Schools/i })).toHaveAttribute('href', '/discover?city=udupi&lat=13.34090&lon=74.74210&zoom=11&journey=school-first');
+      expect(screen.getByRole('link', { name: /Agricultural land/i })).toHaveAttribute('href', '/discover?city=udupi&lat=13.34090&lon=74.74210&zoom=11&journey=agri-first');
+      expect(screen.getByRole('link', { name: /^Trends$/i })).toHaveAttribute('href', '/trends?city=udupi');
+      expect(screen.getByRole('link', { name: /List property/i })).toHaveAttribute('href', '/auth?redirect=/broker/listings/new&returnTo=/broker/listings/new');
+      expect(screen.queryByRole('link', { name: /Saved/i })).not.toBeInTheDocument();
+    });
+
+    it('renders Saved and List property actions for signed-in normal consumers', () => {
+      mockUser = { email: 'user@test.com' };
+      renderPage();
       expect(screen.getByRole('link', { name: /Saved/i })).toHaveAttribute('href', '/saved-areas');
+      expect(screen.getByRole('link', { name: /List property/i })).toHaveAttribute('href', '/broker/listings/new');
+    });
+
+    it('updates header nav links when hero selectedCity changes to a non-default city', async () => {
+      Element.prototype.hasPointerCapture = vi.fn();
+      Element.prototype.setPointerCapture = vi.fn();
+      Element.prototype.releasePointerCapture = vi.fn();
+      Element.prototype.scrollIntoView = vi.fn();
+
+      const user = userEvent.setup();
+      renderPage();
+      expect(screen.getByRole('link', { name: /Discover/i })).toHaveAttribute('href', '/discover?city=udupi');
+
+      const citySelect = screen.getByRole('combobox', { name: /city/i });
+      await user.click(citySelect);
+      const option = await screen.findByRole('option', { name: /mangalore/i });
+      await user.click(option);
+
+      expect(screen.getByRole('link', { name: /Discover/i })).toHaveAttribute('href', '/discover?city=mangalore');
     });
 
     it('renders a Sign In link to /auth (unauthenticated)', () => {
@@ -180,7 +208,7 @@ describe('LandingPage (ReTrends redesign)', () => {
       renderPage();
       await user.click(screen.getByRole('button', { name: /Explore on Map/i }));
       expect(mockNavigate).toHaveBeenCalledWith(
-        expect.stringContaining('/discover?city=bangalore'),
+        expect.stringContaining('/discover?city=udupi&lat=13.34090&lon=74.74210&zoom=11&journey=area-first'),
       );
     });
 

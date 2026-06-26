@@ -17,6 +17,7 @@ import { useAreaOverview } from '@/hooks/useAreaOverview';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useAreaIntelligence } from '@/hooks/useAreaIntelligence';
 import { AreaGuide } from '@/components/area/AreaGuide';
+import { DEFAULT_CITY } from '@/lib/localityUtils';
 
 // ─── Q1 = Option A (default): area-guide is THE default /trends experience ────
 // The buyer area-guide (AC2–AC16) is what every user sees on /trends, including
@@ -54,7 +55,7 @@ export default function Trends() {
   const navigate = useNavigate();
 
   // URL is the single source of truth for area state
-  const city = searchParams.get('city') ?? 'bangalore';
+  const city = searchParams.get('city') ?? DEFAULT_CITY;
   const rawAreaKeys = searchParams.getAll('areaKey');
   const urlAreaKeys = rawAreaKeys.slice(0, 3); // cap at 3
   const selectedKey = urlAreaKeys[0] ?? '';

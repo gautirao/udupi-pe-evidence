@@ -9,6 +9,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { Loader2 } from "lucide-react";
 import { DISTRICT_TO_CITY_SLUG } from "@/lib/localityUtils";
+import { AppLayout } from "@/components/layout/AppLayout";
 
 // Eagerly loaded — these are on the critical path for first paint
 import MapDiscovery from "./pages/MapDiscovery";
@@ -132,8 +133,8 @@ const App = () => (
               <Route path="/discover" element={<MapDiscovery />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
               <Route path="/insights" element={<Navigate to="/trends" replace />} />
-              <Route path="/trends" element={<Trends />} />
-              <Route path="/trends/:citySlug/areas/:areaSlug" element={<TrendsAreaResolved />} />
+              <Route path="/trends" element={<AppLayout><Trends /></AppLayout>} />
+              <Route path="/trends/:citySlug/areas/:areaSlug" element={<AppLayout><TrendsAreaResolved /></AppLayout>} />
               <Route path="/area-overview" element={<AreaOverviewRedirect />} />
               {/* Onboarding */}
               <Route
