@@ -1,8 +1,8 @@
-import { useInfiniteQuery, UseInfiniteQueryResult } from '@tanstack/react-query';
+import { useInfiniteQuery, UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { SchoolResult } from './useSchoolSearch';
 
-interface SchoolsByAreaResponse {
+export interface SchoolsByAreaResponse {
   schools: SchoolResult[];
   totalElements: number;
   isLast: boolean;
@@ -18,7 +18,7 @@ export function useSchoolsByArea(
   board: string[] = [],
   category: string[] = [],
   size: number = 20,
-): UseInfiniteQueryResult<SchoolsByAreaResponse, Error> {
+): UseInfiniteQueryResult<InfiniteData<SchoolsByAreaResponse>, Error> {
   return useInfiniteQuery({
     queryKey: ['schools-by-area', areaKey, board, category, size],
     staleTime: 60_000,

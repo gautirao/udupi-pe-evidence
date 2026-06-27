@@ -2003,6 +2003,16 @@ export default function MapDiscovery() {
           // loop because urlState.filters.boardFilters is a new array ref each render).
           boardFilters: urlState.filters.boardFilters,
           categoryFilters: urlState.filters.categoryFilters,
+          dateFrom: filters.dateFrom
+            ? typeof filters.dateFrom === 'string'
+              ? filters.dateFrom
+              : filters.dateFrom.toISOString().slice(0, 10)
+            : undefined,
+          dateTo: filters.dateTo
+            ? typeof filters.dateTo === 'string'
+              ? filters.dateTo
+              : filters.dateTo.toISOString().slice(0, 10)
+            : undefined,
         }}
         onClearArea={handleAreaBack}
         onClearSchool={onClearSchool}

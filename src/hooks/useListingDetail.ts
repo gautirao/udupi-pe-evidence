@@ -3,7 +3,9 @@ import { api } from '@/lib/api';
 import { ListingResponse } from '@/hooks/useBrokerListings';
 import { PropertyImage } from '@/hooks/usePropertyListings';
 
-export interface PublicListingDetail extends ListingResponse {
+export interface PublicListingDetail extends Partial<ListingResponse> {
+  id: string;
+  propertyType: string;
   images: PropertyImage[];
   areaKey?: string | null;
 }

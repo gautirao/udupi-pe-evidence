@@ -130,8 +130,7 @@ describe('SchoolsInAreaPanel — error and retry states (Issue #1144)', () => {
       refetch: mockRefetch,
       fetchNextPage: vi.fn(),
       hasNextPage: false,
-      isFetchingNextPage: false,
-    } as ReturnType<typeof useSchoolsByArea>);
+    } as any);
   });
 
   it('AC1: renders named error state when hook isError is true', () => {
@@ -233,8 +232,7 @@ describe('SchoolsInAreaPanel — filter preservation (Issue #1138)', () => {
       refetch: mockRefetch,
       fetchNextPage: vi.fn(),
       hasNextPage: false,
-      isFetchingNextPage: false,
-    } as ReturnType<typeof useSchoolsByArea>);
+    } as any);
   });
 
   it('AC5: board chip toggle preserves dateFrom and dateTo', () => {

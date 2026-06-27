@@ -34,7 +34,9 @@ const propertyConfig: Record<string, { label: string; badgeClass: string }> = {
 };
 
 /** Shape returned by GET /api/public/listings/:id. Extends camelCase backend DTO. */
-export interface PublicListingDetail extends ListingResponse {
+export interface PublicListingDetail extends Partial<ListingResponse> {
+  id: string;
+  propertyType: string;
   images: PropertyImage[];
   primaryImageUrl?: string | null;  // teaser: URL of first image
   imageCount?: number;               // teaser: total image count (incl. locked)

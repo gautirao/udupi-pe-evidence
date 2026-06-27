@@ -156,7 +156,7 @@ function makeListing(overrides = {}) {
   };
 }
 
-function renderWithListing(listing: ReturnType<typeof makeListing> | null, loading = false) {
+function renderWithListing(listing: any, loading = false) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
