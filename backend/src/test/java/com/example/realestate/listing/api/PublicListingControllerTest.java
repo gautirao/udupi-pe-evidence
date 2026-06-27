@@ -528,6 +528,25 @@ class PublicListingControllerTest {
                 .andExpect(jsonPath("$.content[0].description").doesNotExist());
     }
 
+    // ==================== GET /discovery — JSON shape validation ====================
+
+    @Test
+    void discovery_verifiesJsonShapeCompatibility() throws Exception {
+        Listing listing = buildListing(LISTING_ID, ListingStatus.LIVE.toDbValue(), "land",
+                "Discovery Plot", "Manipal", new BigDecimal("3000000"), "A plot");
+        listing.setListingPurpose("SALE");
+        Page<Listing> page = new PageImpl<>(List.of(listing), PageRequest.of(0, 50), 1);
+        when(listingRepository.findAllLiveListings(any(PageRequest.class))).thenReturn(page);
+
+        mockMvc.perform(get("/api/public/listings/discovery"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(50));
+    }
+
     // ==================== GET /within-polygon — invalid JSON -> 400 ====================
 
     @Test
