@@ -8,6 +8,7 @@ import { AreaGroupSelectedPanel } from './AreaGroupSelectedPanel';
 import type { AreaGroup } from '@/hooks/useAreaGroups';
 import type { DiscoverArea } from '@/hooks/useDiscoverAreas';
 import type { DiscoverIntent } from '@/hooks/useDiscoverUrlState';
+import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
 
 // Shared uppercase eyebrow for the in-panel control labels (mirrors GuidedEntryPanel).
 const CONTROL_EYEBROW = 'text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground';
@@ -259,9 +260,14 @@ interface GroupCardProps {
    * area data resolves (never fabricated) — the figure is then omitted.
    */
   forSale: number | null;
+  /**
+   * Issue #1659 — formatted member area name summary (e.g. "Whitefield, Marathahalli + 1 more").
+   * Null when no area keys resolve to names; the card then falls back to subtitle.
+   */
+  areaNameSummary: string | null;
 }
 
-function GroupCard({ group, onSelect, isSelected, forSale }: GroupCardProps) {
+function GroupCard({ group, onSelect, isSelected, forSale, areaNameSummary }: GroupCardProps) {
   const areaCount = group.area_keys.length;
 
   return (
@@ -296,9 +302,17 @@ function GroupCard({ group, onSelect, isSelected, forSale }: GroupCardProps) {
               {areaCount} area{areaCount === 1 ? '' : 's'}
             </span>
           </div>
-          {group.subtitle && (
+          {/* Issue #1659 — show member area names; fall back to subtitle when unavailable. */}
+          {areaNameSummary ? (
+            <p
+              className="text-[12.5px] leading-relaxed text-muted-foreground mt-1 truncate"
+              data-testid="group-card-area-names"
+            >
+              {areaNameSummary}
+            </p>
+          ) : group.subtitle ? (
             <p className="text-[13px] leading-relaxed text-muted-foreground mt-1 line-clamp-2">{group.subtitle}</p>
-          )}
+          ) : null}
           {group.region_label && (
             <span className="mt-2.5 inline-flex items-center gap-1 rounded-full border border-border bg-[#EEEDE9] px-2 py-0.5 font-mono text-[11.5px] font-semibold text-muted-foreground">
               <MapPin className="h-3 w-3" aria-hidden="true" />
@@ -425,6 +439,13 @@ export function AreaGroupsLandingPanel({
   const totalForSale = React.useMemo(
     () => forSaleForKeys([...distinctAreaKeys], listingIndex),
     [distinctAreaKeys, listingIndex],
+  );
+
+  // Issue #1659 — area name index for member area summary on each group card.
+  // Built once per fallbackAreas change; O(n) where n = city area count (< 100).
+  const areaNameIndex = React.useMemo(
+    () => buildAreaNameIndex(fallbackAreas as DiscoverArea[]),
+    [fallbackAreas],
   );
 
   // ── Level 2: resolved group → rich selected-group drill-down (Issue #1595) ────
@@ -578,6 +599,8 @@ export function AreaGroupsLandingPanel({
                   onSelect={onSelectGroup}
                   isSelected={group.id === focusedGroup?.id}
                   forSale={forSaleForKeys(group.area_keys, listingIndex)}
+                  // Issue #1659 — pass resolved member area name summary.
+                  areaNameSummary={formatMemberAreaSummary(group.area_keys, areaNameIndex)}
                 />
               ))}
             </div>

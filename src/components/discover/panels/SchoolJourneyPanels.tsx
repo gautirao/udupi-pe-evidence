@@ -32,6 +32,7 @@ import type { PropertyFilters } from '@/hooks/usePropertyListings';
 import { clampSchoolRadiusKm } from '@/hooks/usePropertyListings';
 import { SchoolsInAreaPanel as RealSchoolsInAreaPanel } from './SchoolsInAreaPanel';
 import { haversineKm } from '@/lib/geo';
+import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
 
 // ReTrends redesign: 3/5/10 km replaces 1/2/3/5 km
 const RADIUS_OPTIONS = [3, 5, 10] as const;
@@ -482,9 +483,10 @@ interface ZoneCardProps {
   group: AreaGroup;
   memberAreas: DiscoverArea[];
   onClick: () => void;
+  areaNameSummary: string | null;
 }
 
-function ZoneCard({ group, memberAreas, onClick }: ZoneCardProps) {
+function ZoneCard({ group, memberAreas, onClick, areaNameSummary }: ZoneCardProps) {
   const totalSchools = memberAreas.reduce((sum, a) => sum + a.schoolCount, 0);
   const totalListings = memberAreas.reduce((sum, a) => sum + a.listingCount, 0);
   const areaCount = group.area_keys.length;
@@ -508,9 +510,17 @@ function ZoneCard({ group, memberAreas, onClick }: ZoneCardProps) {
               {areaCount} area{areaCount === 1 ? '' : 's'}
             </span>
           </div>
-          {group.subtitle && (
+          {/* Issue #1659 — show member area names; fall back to subtitle when unavailable. */}
+          {areaNameSummary ? (
+            <p
+              className="text-xs text-muted-foreground mt-0.5 truncate"
+              data-testid="school-zone-card-area-names"
+            >
+              {areaNameSummary}
+            </p>
+          ) : group.subtitle ? (
             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{group.subtitle}</p>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -591,6 +601,12 @@ export function SchoolBrowsePanel({
   onSelectGroup,
   discoverAreas = [],
 }: SchoolBrowsePanelProps) {
+  // Issue #1659 — build area-name index once per discoverAreas change.
+  const areaNameIndex = React.useMemo(
+    () => buildAreaNameIndex(discoverAreas),
+    [discoverAreas],
+  );
+
   const [searchQuery, setSearchQuery] = useState('');
   // Issue #1160 cycle-2: must call setSchoolJourney (not delegate via onSelectSchool(id))
   // so that areaKey is resolved and written to the URL in the same atomic push.
@@ -745,12 +761,14 @@ export function SchoolBrowsePanel({
                   const memberAreas = discoverAreas.filter((a) =>
                     group.area_keys.includes(a.areaKey),
                   );
+                  const areaNameSummary = formatMemberAreaSummary(group.area_keys, areaNameIndex);
                   return (
                     <ZoneCard
                       key={group.id}
                       group={group}
                       memberAreas={memberAreas}
                       onClick={() => onSelectGroup(group.id)}
+                      areaNameSummary={areaNameSummary}
                     />
                   );
                 })}

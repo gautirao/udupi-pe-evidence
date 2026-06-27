@@ -41,6 +41,7 @@ import { AgriGroupListingPeek } from './panels/AgriGroupListingPeek';
 import { AgriGroupLocalityPanel } from './panels/AgriGroupLocalityPanel';
 import type { AgriMapListingItem } from '@/hooks/useAgriMapListings';
 import type { AgriFilterValues } from './panels/AgriFiltersPanel';
+import { formatMemberAreaSummary, buildAreaNameIndex } from '@/utils/areaNameSummary';
 
 // ─── CorridorLandingPanel — corridor-first two-level UX (Issue #1429) ─────────
 
@@ -115,7 +116,14 @@ function CorridorLandingPanel({
   onSetRegionWithMaxKm,
   onSetMaxKm,
   onClearRegionAndMaxKm,
+  discoverAreas = [],
 }: CorridorLandingPanelProps) {
+  // Issue #1659 — build area-name index once per discoverAreas change.
+  const corridorAreaNameIndex = React.useMemo(
+    () => buildAreaNameIndex(discoverAreas),
+    [discoverAreas],
+  );
+
   // ── Loading state ──
   if (isLoading) {
     return (
@@ -277,6 +285,15 @@ function CorridorLandingPanel({
           );
           const bearing =
             BEARING_LABELS[corridor.directionCode] ?? corridor.directionCode;
+
+          // Issue #1659 — union of area keys across all tiers for this corridor.
+          // The largest tier (maxKm) includes all closer-tier areas cumulatively,
+          // so we take the union (de-duplicated) to avoid overcounting.
+          const corridorAreaKeys = Array.from(
+            new Set(corridor.availableMaxDistances.flatMap((t) => t.areaKeys)),
+          );
+          const corridorAreaSummary = formatMemberAreaSummary(corridorAreaKeys, corridorAreaNameIndex);
+
           return (
             <button
               key={corridor.directionCode}
@@ -303,7 +320,15 @@ function CorridorLandingPanel({
                   >
                     {corridor.groupName}
                   </span>
-                  {maxKm > 0 && (
+                  {/* Issue #1659 — show covered area names; fall back to distance badge. */}
+                  {corridorAreaSummary ? (
+                    <span
+                      className="mt-1 block text-[12px] text-muted-foreground truncate"
+                      data-testid="corridor-card-area-names"
+                    >
+                      {corridorAreaSummary}
+                    </span>
+                  ) : maxKm > 0 ? (
                     <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1">
                       <Route
                         className="h-3.5 w-3.5 text-evergreen"
@@ -313,7 +338,7 @@ function CorridorLandingPanel({
                         Up to {maxKm} km
                       </span>
                     </span>
-                  )}
+                  ) : null}
                 </div>
                 <span
                   aria-hidden="true"
