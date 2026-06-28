@@ -4,7 +4,7 @@ export type PolicyRole = 'anonymous' | 'user' | 'broker' | 'dealer' | 'admin';
 export function isPublicRoute(route: string): boolean {
   const [path] = route.split('?');
   const clean = path.split('#')[0];
-  if (clean === '/' || clean === '/discover' || clean === '/schools' || clean === '/trends' || clean === '/area-overview') {
+  if (clean === '/' || clean === '/discover' || clean === '/schools' || clean === '/trends') {
     return true;
   }
   if (clean.startsWith('/listing/')) {
@@ -31,11 +31,11 @@ export function isAdminRoute(route: string): boolean {
   return clean.startsWith('/admin');
 }
 
-/** Check if a route is a broker/dealer workspace route. */
+/** Check if a route is a broker workspace route. */
 export function isBrokerRoute(route: string): boolean {
   const [path] = route.split('?');
   const clean = path.split('#')[0];
-  return clean.startsWith('/broker') || clean.startsWith('/dealer');
+  return clean.startsWith('/broker');
 }
 
 /** Determine if a given role can access a target route. */
@@ -62,9 +62,6 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
     if (clean === '/broker/listings/new' || (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))) {
       return true;
     }
-    if (clean === '/dealer/listings/new' || (clean.startsWith('/dealer/listings/') && clean.endsWith('/edit'))) {
-      return true;
-    }
     return false;
   }
 
@@ -89,9 +86,6 @@ export function canAccessRoute(route: string, role?: string | null): boolean {
     }
     // Listing create / edit routes are allowed for normal consumers to list properties
     if (clean === '/broker/listings/new' || (clean.startsWith('/broker/listings/') && clean.endsWith('/edit'))) {
-      return true;
-    }
-    if (clean === '/dealer/listings/new' || (clean.startsWith('/dealer/listings/') && clean.endsWith('/edit'))) {
       return true;
     }
     return false;

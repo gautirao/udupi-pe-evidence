@@ -136,15 +136,15 @@ export default function SavedAreas() {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">My Saved Areas</h1>
           <Button variant="outline" asChild>
-            <Link to="/insights">View Insights</Link>
+            <Link to="/trends">View Trends</Link>
           </Button>
         </div>
 
         {!areas || areas.length === 0 ? (
           <p className="text-muted-foreground">
             No saved areas yet. Save an area from the{' '}
-            <Link to="/insights" className="underline underline-offset-2">
-              Insights
+            <Link to="/trends" className="underline underline-offset-2">
+              Trends
             </Link>{' '}
             page to get notified when new listings appear.
           </p>

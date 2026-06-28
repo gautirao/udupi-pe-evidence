@@ -55,8 +55,6 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/trust").permitAll()
                         // Public POI listing endpoint — no auth required (#907)
                         .requestMatchers(HttpMethod.GET, "/api/listings/*/pois").permitAll()
-                        // Public listing markers endpoint — no auth required (C-1)
-                        .requestMatchers(HttpMethod.GET, "/api/listings/markers").permitAll()
                         // Public discover areas endpoint — no auth required (B-4)
                         .requestMatchers(HttpMethod.GET, "/api/discover/areas").permitAll()
                         // Public area listings endpoint — no auth required (C-2)

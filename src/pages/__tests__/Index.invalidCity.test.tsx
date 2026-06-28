@@ -49,9 +49,6 @@ vi.mock('@/hooks/useDiscoverAreas', () => ({
   useDiscoverAreas: vi.fn(() => ({ data: undefined, isLoading: false })),
 }));
 
-vi.mock('@/hooks/useDiscoverMarkers', () => ({
-  useDiscoverMarkers: vi.fn(() => ({ data: undefined, isLoading: false })),
-}));
 
 vi.mock('@/hooks/useDiscoverCityListings', () => ({
   useDiscoverCityListings: vi.fn(() => ({ data: undefined, isLoading: false })),

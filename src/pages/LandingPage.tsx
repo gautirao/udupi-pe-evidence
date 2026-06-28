@@ -487,7 +487,7 @@ export default function LandingPage() {
                     {AREA_OVERVIEW_META[a.name]} · {a.description}
                   </p>
                   <Link
-                    to={`/area-overview?city=${encodeURIComponent(selectedCity)}`}
+                    to={`/trends?city=${encodeURIComponent(selectedCity)}`}
                     className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline"
                   >
                     View Overview

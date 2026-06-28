@@ -43,16 +43,14 @@ describe('routeAccess governance module (Issue #1633)', () => {
     expect(canAccessRoute('/admin/groups', 'user')).toBe(false);
   });
 
-  it('6. broker/dealer accessing broker dashboard / new listing is allowed', () => {
+  it('6. broker accessing broker dashboard / new listing is allowed', () => {
     expect(canAccessRoute('/broker/dashboard', 'broker')).toBe(true);
     expect(canAccessRoute('/broker/listings', 'broker')).toBe(true);
-    expect(canAccessRoute('/dealer/dashboard', 'dealer')).toBe(true);
   });
 
-  it('7. broker/dealer accessing admin console or consumer saved is blocked', () => {
+  it('7. broker accessing admin console or consumer saved is blocked', () => {
     expect(canAccessRoute('/admin/feeds', 'broker')).toBe(false);
     expect(canAccessRoute('/saved-areas', 'broker')).toBe(false);
-    expect(canAccessRoute('/admin/feeds', 'dealer')).toBe(false);
   });
 
   it('8. admin accessing admin console is allowed', () => {
@@ -71,7 +69,6 @@ describe('routeAccess governance module (Issue #1633)', () => {
     expect(getDefaultLandingForRole('anonymous')).toBe('/discover');
     expect(getDefaultLandingForRole('user')).toBe('/discover');
     expect(getDefaultLandingForRole('broker')).toBe('/broker/dashboard');
-    expect(getDefaultLandingForRole('dealer')).toBe('/broker/dashboard');
     expect(getDefaultLandingForRole('admin')).toBe('/admin/listings/pending');
 
     const anonNav = getVisibleNavigationForRole('anonymous');

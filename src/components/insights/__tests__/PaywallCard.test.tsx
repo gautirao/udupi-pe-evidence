@@ -94,7 +94,7 @@ describe('PaywallCard', () => {
     );
   });
 
-  it('calls refreshAuth() and navigate("/insights") on success', async () => {
+  it('calls refreshAuth() and navigate("/trends") on success', async () => {
     const user = userEvent.setup();
     renderCard();
 
@@ -102,7 +102,7 @@ describe('PaywallCard', () => {
 
     await waitFor(() => {
       expect(mockRefreshAuth).toHaveBeenCalledTimes(1);
-      expect(mockNavigate).toHaveBeenCalledWith('/insights');
+      expect(mockNavigate).toHaveBeenCalledWith('/trends');
     });
   });
 

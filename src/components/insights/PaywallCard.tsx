@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 /**
  * Shown in the Insights right column when the user's trial has expired.
  * Calls POST /api/payments/insights-pass; on success refreshes auth state
- * in-place (SPA-safe) and navigates to /insights so the access gate re-evaluates.
+ * in-place (SPA-safe) and navigates to /trends so the access gate re-evaluates.
  * On error, toasts a "coming soon" message — the payment endpoint may not be live yet.
  */
 export function PaywallCard() {
@@ -25,7 +25,7 @@ export function PaywallCard() {
       await api.post('/api/payments/insights-pass');
       toast({ title: 'Access extended!', description: 'Loading your insights...' });
       await refreshAuth();
-      navigate('/insights');
+      navigate('/trends');
     } catch {
       toast({
         title: 'Payment coming soon',

@@ -69,54 +69,6 @@ function PageLoader() {
   );
 }
 
-/** Redirect /dealer/listings/:id/edit?... → /broker/listings/:id/edit?... preserving query params */
-function BrokerListingEditRedirect() {
-  const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
-  const query = searchParams.toString();
-  return <Navigate to={`/broker/listings/${id}/edit${query ? `?${query}` : ''}`} replace />;
-}
-
-/** Redirect /dealer/listings?... → /broker/listings?... preserving query params */
-function BrokerListingsRedirect() {
-  const [searchParams] = useSearchParams();
-  const query = searchParams.toString();
-  return <Navigate to={`/broker/listings${query ? `?${query}` : ''}`} replace />;
-}
-
-/** Redirect /dealer/bookings?... → /broker/bookings?... preserving query params */
-function BrokerBookingsRedirect() {
-  const [searchParams] = useSearchParams();
-  const query = searchParams.toString();
-  return <Navigate to={`/broker/bookings${query ? `?${query}` : ''}`} replace />;
-}
-
-/** Infer city slug from the first areaKey param (pipe index 2 = district). */
-function inferCityFromAreaKey(areaKeys: string[]): string {
-  const first = areaKeys[0];
-  if (!first) return 'bangalore';
-  const district = first.split('|')[2];
-  return (district && DISTRICT_TO_CITY_SLUG[district]) ?? 'bangalore';
-}
-
-/**
- * Redirect /area-overview?... → /trends?... preserving all areaKey params.
- * If ?city is absent, infers it from the first areaKey's district segment.
- * Falls back to 'bangalore' when no valid areaKey is present.
- */
-function AreaOverviewRedirect() {
-  const [searchParams] = useSearchParams();
-  const areaKeys = searchParams.getAll('areaKey');
-  const cityParam = searchParams.get('city');
-
-  const city = cityParam ?? inferCityFromAreaKey(areaKeys);
-
-  const next = new URLSearchParams();
-  next.set('city', city);
-  areaKeys.forEach(k => next.append('areaKey', k));
-
-  return <Navigate to={`/trends?${next.toString()}`} replace />;
-}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -134,10 +86,8 @@ const App = () => (
               <Route path="/" element={<LandingPage />} />
               <Route path="/discover" element={<MapDiscovery />} />
               <Route path="/listing/:id" element={<ListingDetail />} />
-              <Route path="/insights" element={<Navigate to="/trends" replace />} />
               <Route path="/trends" element={<AppLayout><Trends /></AppLayout>} />
               <Route path="/trends/:citySlug/areas/:areaSlug" element={<AppLayout><TrendsAreaResolved /></AppLayout>} />
-              <Route path="/area-overview" element={<AreaOverviewRedirect />} />
               {/* Onboarding */}
               <Route
                 path="/onboarding"
@@ -228,13 +178,7 @@ const App = () => (
                   </ProtectedRoute>
                 }
               />
-              {/* Legacy /dealer/* redirects — preserve query params via window.location */}
-              <Route path="/dealer/setup" element={<Navigate to="/broker/setup" replace />} />
-              <Route path="/dealer/dashboard" element={<Navigate to="/broker/dashboard" replace />} />
-              <Route path="/dealer/listings/new" element={<Navigate to="/broker/listings/new" replace />} />
-              <Route path="/dealer/listings/:id/edit" element={<BrokerListingEditRedirect />} />
-              <Route path="/dealer/listings" element={<BrokerListingsRedirect />} />
-              <Route path="/dealer/bookings" element={<BrokerBookingsRedirect />} />
+
               {/* User Routes */}
               <Route
                 path="/my-bookings"
