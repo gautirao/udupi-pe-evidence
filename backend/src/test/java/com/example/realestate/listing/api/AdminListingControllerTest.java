@@ -19,6 +19,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
@@ -60,6 +61,7 @@ class AdminListingControllerTest {
     private static final UUID DEALER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID LISTING_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
 
+    @EnableMethodSecurity
     static class TestConfig {
         @Bean
         public SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {

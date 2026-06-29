@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -49,10 +50,9 @@ public class AdminListingController {
         this.objectMapper = objectMapper;
     }
 
+    @PreAuthorize("#caller.isAdmin()")
     @PostMapping("/{id}/approve")
     public ResponseEntity<?> approve(CallerInfo caller, @PathVariable UUID id) {
-        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
-
         try {
             Listing approved = listingWorkflowService.approveListing(id, caller.userId());
             log.info("POST /api/admin/listings/{}/approve -> 200 status=LIVE", id);
