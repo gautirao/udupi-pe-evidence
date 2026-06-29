@@ -95,6 +95,84 @@ function renderDetail(listing: PublicListingDetail, user: User | null) {
   );
 }
 
+/**
+ * AgriListingDetail — Sidebar "View Trends" CTA canonicalization (#1670)
+ *
+ *   A1 — valid areaKey (4+ segments, known district, non-empty last) →
+ *        "View Trends" renders as a link with href /trends/{citySlug}/areas/{slug},
+ *        no '|' / '%7C' in the URL (RE1, RE2)
+ *   A2 — areaKey null → CTA is a disabled button, no link rendered
+ *   A3 — areaKey with <4 segments (IN|KA) → CTA hidden (disabled btn only)
+ *   A4 — empty last segment (IN|KA|Udupi|) → CTA hidden
+ *   A5 — unknown district → CTA hidden (no DEFAULT_CITY mis-route)
+ *
+ * Known district used for A1: "Udupi" → citySlug "udupi" (per DISTRICT_TO_CITY_SLUG).
+ * Unknown district used for A5: "Kodagu" (not in DISTRICT_TO_CITY_SLUG map).
+ */
+
+describe('AgriListingDetail — Sidebar "View Trends" CTA canonicalization (#1670)', () => {
+  it('A1 — valid areaKey (IN|KA|Udupi|Malpe) → link href /trends/udupi/areas/malpe (RE1)', () => {
+    const listing = {
+      ...BASE_AGRI_LISTING,
+      areaKey: 'IN|KA|Udupi|Malpe',
+    } as unknown as PublicListingDetail;
+    renderDetail(listing, mockUser);
+    const link = screen.getByRole('link', { name: /view trends/i });
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/trends/udupi/areas/malpe');
+  });
+
+  it('A1 — generated href contains no raw pipe | (RE2)', () => {
+    const listing = {
+      ...BASE_AGRI_LISTING,
+      areaKey: 'IN|KA|Udupi|Malpe',
+    } as unknown as PublicListingDetail;
+    renderDetail(listing, mockUser);
+    const link = screen.getByRole('link', { name: /view trends/i });
+    expect(link.getAttribute('href')).not.toContain('|');
+    expect(link.getAttribute('href')).not.toMatch(/%7C/i);
+  });
+
+  it('A2 — areaKey null → no "View Trends" link rendered, only disabled button', () => {
+    const listing = {
+      ...BASE_AGRI_LISTING,
+      areaKey: null,
+    } as unknown as PublicListingDetail;
+    renderDetail(listing, mockUser);
+    expect(screen.queryByRole('link', { name: /view trends/i })).not.toBeInTheDocument();
+    // Disabled button still present (not hidden, just non-navigable)
+    const btn = screen.getByRole('button', { name: /view trends/i });
+    expect(btn).toBeDisabled();
+  });
+
+  it('A3 — areaKey with <4 segments (IN|KA) → no "View Trends" link', () => {
+    const listing = {
+      ...BASE_AGRI_LISTING,
+      areaKey: 'IN|KA',
+    } as unknown as PublicListingDetail;
+    renderDetail(listing, mockUser);
+    expect(screen.queryByRole('link', { name: /view trends/i })).not.toBeInTheDocument();
+  });
+
+  it('A4 — areaKey with empty last segment (IN|KA|Udupi|) → no "View Trends" link', () => {
+    const listing = {
+      ...BASE_AGRI_LISTING,
+      areaKey: 'IN|KA|Udupi|',
+    } as unknown as PublicListingDetail;
+    renderDetail(listing, mockUser);
+    expect(screen.queryByRole('link', { name: /view trends/i })).not.toBeInTheDocument();
+  });
+
+  it('A5 — unknown district (IN|KA|Kodagu|Madikeri) → no "View Trends" link (no mis-route)', () => {
+    const listing = {
+      ...BASE_AGRI_LISTING,
+      areaKey: 'IN|KA|Kodagu|Madikeri',
+    } as unknown as PublicListingDetail;
+    renderDetail(listing, mockUser);
+    expect(screen.queryByRole('link', { name: /view trends/i })).not.toBeInTheDocument();
+  });
+});
+
 describe('AgriListingDetail — anon visibility gating (#1454)', () => {
   it('anon: shows price sign-in CTA in sidebar when price is null', () => {
     renderDetail(BASE_AGRI_LISTING, null);

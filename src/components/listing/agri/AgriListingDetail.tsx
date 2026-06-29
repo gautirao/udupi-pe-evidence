@@ -61,7 +61,8 @@ import {
   OWNERSHIP_TYPE_LABELS,
 } from '@/lib/agriFieldLabels';
 import { formatListingId } from '@/lib/listing-id';
-import { DISTRICT_TO_CITY_SLUG, DEFAULT_CITY } from '@/lib/localityUtils';
+import { districtToCitySlug } from '@/lib/localityUtils';
+import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import { useToast } from '@/hooks/use-toast';
 import type { PropertyImage, PropertyListing } from '@/hooks/usePropertyListings';
 import type { PublicListingDetail } from '@/pages/ListingDetail';
@@ -367,8 +368,15 @@ function Sidebar({
   const trendsHref = (() => {
     if (!listing.areaKey) return null;
     const parts = listing.areaKey.split('|');
-    const trendCity = (parts[2] && DISTRICT_TO_CITY_SLUG[parts[2]]) ?? DEFAULT_CITY;
-    return `/trends?city=${trendCity}&areaKey=${encodeURIComponent(listing.areaKey)}`;
+    if (parts.length < 4) return null;
+    const district = parts[2];
+    const localitySegment = parts[3];
+    if (!localitySegment) return null;
+    const citySlug = districtToCitySlug(district);
+    if (!citySlug) return null;
+    const areaSlug = slugifyFromAreaKey(listing.areaKey);
+    if (!areaSlug) return null;
+    return `/trends/${citySlug}/areas/${areaSlug}`;
   })();
   const localityName = listing.locality ?? 'this area';
 

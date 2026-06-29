@@ -18,6 +18,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { applyAnonPropertyFilters } from './MapDiscovery';
+import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -32,6 +33,69 @@ function makeListing(overrides: Partial<SchoolRadiusListingItem> = {}): SchoolRa
     ...overrides,
   };
 }
+
+// ─── #1670: trendsHref canonical path formula (RE1, RE2) ──────────────────────
+//
+// MapDiscovery.tsx (line 2086-2088) computes:
+//   const trendsHref = selectedArea
+//     ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
+//     : undefined;
+//
+// MapDiscovery cannot be mounted in JSDOM — it requires Leaflet, QueryClient,
+// Router, and AuthContext and the existing test suite documents this explicitly.
+// We test the formula as a pure logic contract by reproducing it directly,
+// identical to the approach used for the auth-guard and rupeesToPaise contracts
+// in this file.
+
+describe('MapDiscovery — trendsHref canonical path formula (#1670, RE1, RE2)', () => {
+  it('produces /trends/{city}/areas/{slug} when selectedArea is set (RE1)', () => {
+    const city = 'udupi';
+    const selectedArea = { areaKey: 'IN|KA|Udupi|Malpe' };
+    // Reproduce the formula from MapDiscovery.tsx line 2086-2088
+    const trendsHref = selectedArea
+      ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
+      : undefined;
+    expect(trendsHref).toBe('/trends/udupi/areas/malpe');
+  });
+
+  it('generated trendsHref contains no raw pipe | (RE2)', () => {
+    const city = 'udupi';
+    const selectedArea = { areaKey: 'IN|KA|Udupi|Malpe' };
+    const trendsHref = selectedArea
+      ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
+      : undefined;
+    expect(trendsHref).not.toContain('|');
+  });
+
+  it('generated trendsHref contains no percent-encoded pipe %7C (RE2)', () => {
+    const city = 'udupi';
+    const selectedArea = { areaKey: 'IN|KA|Udupi|Malpe' };
+    const trendsHref = selectedArea
+      ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
+      : undefined;
+    expect(trendsHref).not.toMatch(/%7C/i);
+  });
+
+  it('is undefined when selectedArea is null (no link rendered)', () => {
+    const city = 'udupi';
+    const selectedArea = null;
+    const trendsHref = selectedArea
+      ? `/trends/${city}/areas/${slugifyFromAreaKey((selectedArea as { areaKey: string }).areaKey)}`
+      : undefined;
+    expect(trendsHref).toBeUndefined();
+  });
+
+  it('multi-word locality "Kodi Beach" → slug is hyphenated in trendsHref (RE1)', () => {
+    const city = 'udupi';
+    const selectedArea = { areaKey: 'IN|KA|Udupi|Kodi Beach' };
+    const trendsHref = selectedArea
+      ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
+      : undefined;
+    expect(trendsHref).toBe('/trends/udupi/areas/kodi-beach');
+    expect(trendsHref).not.toContain('|');
+    expect(trendsHref).not.toMatch(/%7C/i);
+  });
+});
 
 // ─── R3: rupeesToPaise unit assertion ─────────────────────────────────────────
 //

@@ -1,5 +1,6 @@
 import { MapPin, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { slugifyFromAreaKey } from '@/lib/areaSlug';
 
 interface NearbyAreaOption {
   areaKey: string;
@@ -52,7 +53,7 @@ export function CompareNearbyAreas({
         {options.map(area => (
           <Link
             key={area.areaKey}
-            to={`/trends?city=${citySlug}&areaKey=${encodeURIComponent(area.areaKey)}`}
+            to={`/trends/${citySlug}/areas/${slugifyFromAreaKey(area.areaKey)}`}
             role="listitem"
             className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
           >

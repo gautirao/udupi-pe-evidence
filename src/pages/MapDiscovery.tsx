@@ -47,6 +47,7 @@ import { useDiscoverCityListings } from '@/hooks/useDiscoverCityListings';
 import type { DiscoverCityListingItem } from '@/hooks/useDiscoverCityListings';
 import type { SchoolRadiusListingItem } from '@/hooks/useSchoolRadiusListings';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { slugifyFromAreaKey } from '@/lib/areaSlug';
 import { getSectorBounds } from '@/lib/geo';
 import { clampSchoolRadiusKm, PropertyListing, PropertyImage, PropertyFilters } from '@/hooks/usePropertyListings';
 import { cityListingToPropertyListing, filteredMarkerToPropertyListing } from '@/lib/discoverMappers';
@@ -2083,7 +2084,7 @@ export default function MapDiscovery() {
   if (!isCityValid) return <CityNotSupported city={city} />;
 
   const trendsHref = selectedArea
-    ? `/trends?city=${city}&areaKey=${encodeURIComponent(selectedArea.areaKey)}`
+    ? `/trends/${city}/areas/${slugifyFromAreaKey(selectedArea.areaKey)}`
     : undefined;
 
   const filtersContent = (

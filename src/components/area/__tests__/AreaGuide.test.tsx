@@ -559,14 +559,19 @@ describe('AC7 — CompareNearbyAreas', () => {
     // No per-area metric numbers
     expect(screen.queryByText(/₹/)).not.toBeInTheDocument();
     expect(screen.queryByText(/active listings/i)).not.toBeInTheDocument();
-    // Chip Links carry role="listitem" (overriding the default link role) so query anchor tags directly.
+    // Chip Links carry role="listitem" (overriding the default link role) so query by that role.
+    // #1670: chips now use canonical /trends/{city}/areas/{slug} paths — no longer query-param URLs.
     // Guide is now the DEFAULT body whenever a full pipe areaKey is present — no &guide=1 needed.
-    const chipAnchors = Array.from(document.querySelectorAll('a[href*="areaKey"]'));
+    const chipAnchors = Array.from(document.querySelectorAll('[role="listitem"]'));
     expect(chipAnchors.length).toBeGreaterThan(0);
     chipAnchors.forEach(anchor => {
       const href = anchor.getAttribute('href') ?? '';
-      expect(href).toContain('areaKey=');
-      expect(href).not.toContain('guide=1'); // guide=1 removed — guide is now the default
+      // Canonical slug path format: /trends/{citySlug}/areas/{slug}
+      expect(href).toMatch(/^\/trends\/[^/]+\/areas\//);
+      expect(href).not.toContain('areaKey='); // legacy query-param removed (#1670)
+      expect(href).not.toContain('|');        // no raw pipe in URL
+      expect(href).not.toMatch(/%7C/i);       // no percent-encoded pipe in URL
+      expect(href).not.toContain('guide=1');  // guide=1 removed — guide is now the default
     });
   });
 
