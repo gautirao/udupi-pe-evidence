@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
@@ -99,10 +101,7 @@ class TrustControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, userRoleService, supabaseStorageService);
-        // Default: CallerInfoResolver resolves OWNER_ID as role "broker" (not admin)
-        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
-        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
+        reset(badgeService, listingRepository, supabaseStorageService);
     }
 
     // -------------------------------------------------------------------------
@@ -219,11 +218,9 @@ class TrustControllerTest {
     @Test
     void getTrustProgress_nonOwner_returns403() throws Exception {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(brokerListing()));
-        // OTHER_ID != OWNER_ID, not admin
-        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
 
         mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied — not the listing owner"));
     }
@@ -239,7 +236,7 @@ class TrustControllerTest {
         when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of(earnedRow("IDENTITY")));
 
         mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cta").value("LOCATION"))
                 .andExpect(jsonPath("$.badges").isArray())
@@ -264,7 +261,7 @@ class TrustControllerTest {
         ));
 
         mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.badges.length()").value(4))
                 // AUTHORITY is last (appended after the OWNER_DIMENSIONS loop)
@@ -283,7 +280,7 @@ class TrustControllerTest {
         ));
 
         mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.badges.length()").value(4))
                 .andExpect(jsonPath("$.badges[3].dimensionType").value("AUTHORITY"))
@@ -302,7 +299,7 @@ class TrustControllerTest {
         ));
 
         mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 // cta is null when all badges are EARNED
                 .andExpect(jsonPath("$.cta", Matchers.nullValue()));
@@ -323,7 +320,7 @@ class TrustControllerTest {
         ));
 
         mockMvc.perform(get("/api/listings/{id}/trust-progress", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.badges[2].dimensionType").value("PHOTOS"))
                 .andExpect(jsonPath("$.badges[2].badgeState").value("AVAILABLE"))

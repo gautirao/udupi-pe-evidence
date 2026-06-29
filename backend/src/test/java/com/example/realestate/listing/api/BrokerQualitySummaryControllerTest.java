@@ -23,6 +23,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -84,7 +86,7 @@ class BrokerQualitySummaryControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(userRoleService, brokerDashboardService);
+        reset(brokerDashboardService);
 
         fullResponse = new BrokerQualitySummaryResponse(
                 new BrokerQualitySummaryResponse.Portfolio(3, 5),
@@ -109,11 +111,10 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: dealer role → 200 with all five response blocks")
     void qualitySummary_withDealerRole_returns200WithAllBlocks() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("dealer"));
         when(brokerDashboardService.getQualitySummary(BROKER_ID)).thenReturn(fullResponse);
 
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 // portfolio block
                 .andExpect(jsonPath("$.portfolio.activeListings").value(3))
@@ -143,11 +144,10 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: broker role → 200")
     void qualitySummary_withBrokerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         when(brokerDashboardService.getQualitySummary(BROKER_ID)).thenReturn(fullResponse);
 
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quality.state").value("COMPLETE"));
 
@@ -157,11 +157,10 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: admin role → 200")
     void qualitySummary_withAdminRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(brokerDashboardService.getQualitySummary(ADMIN_ID)).thenReturn(fullResponse);
 
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
 
         verify(brokerDashboardService).getQualitySummary(ADMIN_ID);
@@ -170,11 +169,10 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: user role → 200 (user is an allowed role)")
     void qualitySummary_withUserRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
         when(brokerDashboardService.getQualitySummary(BROKER_ID)).thenReturn(fullResponse);
 
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk());
 
         verify(brokerDashboardService).getQualitySummary(BROKER_ID);
@@ -185,8 +183,6 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: viewer role → 403 with role-error message")
     void qualitySummary_withViewerRole_returnsForbidden() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("viewer"));
-
         mockMvc.perform(get("/api/listings/mine/quality-summary")
                         .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
                 .andExpect(status().isForbidden())
@@ -209,8 +205,6 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: PENDING state — averageQualityScore null, percentageComputed null when zero listings")
     void qualitySummary_pendingState_nullScoreAndNullPercentage() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         BrokerQualitySummaryResponse pendingResponse = new BrokerQualitySummaryResponse(
                 new BrokerQualitySummaryResponse.Portfolio(0, 0),
                 new BrokerQualitySummaryResponse.Quality("PENDING", null, 0, 0, null),
@@ -226,7 +220,7 @@ class BrokerQualitySummaryControllerTest {
         when(brokerDashboardService.getQualitySummary(BROKER_ID)).thenReturn(pendingResponse);
 
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quality.state").value("PENDING"))
                 // null values must serialise as JSON null, not 0
@@ -244,12 +238,11 @@ class BrokerQualitySummaryControllerTest {
     @DisplayName("qualitySummary: service called with JWT-derived userId, not a request param")
     void qualitySummary_serviceCalledWithJwtUserId_notRequestParam() throws Exception {
         UUID jwtUserId = UUID.fromString("00000000-0000-0000-0000-000000000099");
-        when(userRoleService.getUserRole(jwtUserId)).thenReturn(Optional.of("broker"));
         when(brokerDashboardService.getQualitySummary(jwtUserId)).thenReturn(fullResponse);
 
         // No brokerId param in the request — the endpoint must still pass jwtUserId to service
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(jwtUserId.toString()))))
+                        .with(jwt().jwt(j -> j.subject(jwtUserId.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk());
 
         // Verify exactly jwtUserId was passed — not any other UUID
@@ -262,13 +255,12 @@ class BrokerQualitySummaryControllerTest {
     void qualitySummary_withBrokerIdParam_paramIsIgnored() throws Exception {
         UUID callerUserId = UUID.fromString("00000000-0000-0000-0000-000000000022");
         UUID anotherBrokerId = UUID.fromString("00000000-0000-0000-0000-000000000033");
-        when(userRoleService.getUserRole(callerUserId)).thenReturn(Optional.of("broker"));
         when(brokerDashboardService.getQualitySummary(callerUserId)).thenReturn(fullResponse);
 
         // Supply a brokerId param that differs from the JWT subject
         mockMvc.perform(get("/api/listings/mine/quality-summary")
                         .param("brokerId", anotherBrokerId.toString())
-                        .with(jwt().jwt(j -> j.subject(callerUserId.toString()))))
+                        .with(jwt().jwt(j -> j.subject(callerUserId.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk());
 
         // Must be called with the JWT-derived userId, not the param
@@ -281,8 +273,6 @@ class BrokerQualitySummaryControllerTest {
     @Test
     @DisplayName("qualitySummary: PARTIAL state — countComputed < countTotal, averageQualityScore non-null")
     void qualitySummary_partialState_correctCountsAndAverage() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         BrokerQualitySummaryResponse partialResponse = new BrokerQualitySummaryResponse(
                 new BrokerQualitySummaryResponse.Portfolio(2, 4),
                 new BrokerQualitySummaryResponse.Quality("PARTIAL", 71, 2, 4, 50),
@@ -298,7 +288,7 @@ class BrokerQualitySummaryControllerTest {
         when(brokerDashboardService.getQualitySummary(BROKER_ID)).thenReturn(partialResponse);
 
         mockMvc.perform(get("/api/listings/mine/quality-summary")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.quality.state").value("PARTIAL"))
                 .andExpect(jsonPath("$.quality.averageQualityScore").value(71))

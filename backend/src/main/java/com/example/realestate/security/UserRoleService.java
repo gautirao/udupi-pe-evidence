@@ -2,6 +2,7 @@ package com.example.realestate.security;
 
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -17,6 +18,14 @@ public class UserRoleService {
 
     public UserRoleService(UserRoleRepository userRoleRepository) {
         this.userRoleRepository = userRoleRepository;
+    }
+
+    /**
+     * Returns ALL roles for the given user (multi-role support).
+     * No LIMIT — returns every row. Used by DbRoleJwtAuthenticationConverter.
+     */
+    public List<String> findAllRoles(UUID userId) {
+        return userRoleRepository.findAllRoles(userId);
     }
 
     /**

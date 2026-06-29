@@ -23,8 +23,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -82,10 +83,9 @@ class ListingControllerAgriValidationTest {
     @BeforeEach
     void setUp() {
         reset(listingCrudService, listingWorkflowService, listingImageRepository,
-                listingResponseMapper, userRoleService);
+                listingResponseMapper);
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         // Minimal stub listing returned by createDraft and updateListing.
         // Validation fires before service calls, so for 400 cases the stub is never reached.
@@ -144,7 +144,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void create_withCanonicalWaterSource_returns201() throws Exception {
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -167,7 +167,7 @@ class ListingControllerAgriValidationTest {
     void create_withNullAgriFields_returns201() throws Exception {
         // Null values must be skipped — not validated — so no rejection.
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -184,7 +184,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void create_withUnknownWaterSource_returns400() throws Exception {
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -202,7 +202,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void create_withUnknownSoilType_returns400() throws Exception {
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -221,7 +221,7 @@ class ListingControllerAgriValidationTest {
     void create_withOldFreeTextSoilType_returns400() throws Exception {
         // "Red loam" was consolidated into RED_LATERITE via V91 — must be rejected
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -239,7 +239,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void create_withUnknownRoadAccess_returns400() throws Exception {
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -257,7 +257,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void create_withUnknownCultivationStatus_returns400() throws Exception {
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -275,7 +275,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void create_withUnknownOwnershipType_returns400() throws Exception {
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -294,7 +294,7 @@ class ListingControllerAgriValidationTest {
     void create_withBlankWaterSource_returns201() throws Exception {
         // Blank values are treated the same as null — skipped, not validated
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -314,7 +314,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void update_withUnknownSoilType_returns400() throws Exception {
         mockMvc.perform(put("/api/listings/{id}", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -327,7 +327,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void update_withNullAgriFields_returns200() throws Exception {
         mockMvc.perform(put("/api/listings/{id}", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -340,7 +340,7 @@ class ListingControllerAgriValidationTest {
     @Test
     void update_withCanonicalOwnershipType_returns200() throws Exception {
         mockMvc.perform(put("/api/listings/{id}", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {

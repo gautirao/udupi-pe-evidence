@@ -26,6 +26,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.reset;
@@ -96,9 +98,7 @@ class TrustControllerPhotoTest {
 
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, photoHashService, userRoleService, supabaseStorageService);
-        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
-        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
+        reset(badgeService, listingRepository, photoHashService, supabaseStorageService);
     }
 
     // -------------------------------------------------------------------------
@@ -136,7 +136,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -150,7 +150,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", UUID.randomUUID())
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -165,7 +165,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(emptyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -180,7 +180,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isRequestEntityTooLarge())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -195,7 +195,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -210,7 +210,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -225,7 +225,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -246,7 +246,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Photo submitted for review"));
     }
@@ -263,7 +263,7 @@ class TrustControllerPhotoTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/photos/verify", LISTING_ID)
                         .file(dummyPart())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Photo verification is already pending"));
     }

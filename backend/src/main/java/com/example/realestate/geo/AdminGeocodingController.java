@@ -1,16 +1,15 @@
 package com.example.realestate.geo;
 
 import com.example.realestate.security.CallerInfo;
+import com.example.realestate.security.IsAdmin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -51,12 +50,11 @@ public class AdminGeocodingController {
      * Final event:
      * {@code data: {"type":"done","processed":N,"geocoded":N,"failed":N}}
      */
+    @IsAdmin
     @PostMapping(value = "/missing", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter geocodeMissing(
             CallerInfo caller,
             @RequestParam(defaultValue = "20") int batchSize) {
-
-        if (!caller.isAdmin()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Requires admin role");
 
         int effectiveBatch = Math.min(Math.max(batchSize, 1), MAX_BATCH);
         log.info("POST /api/admin/geocode/missing batchSize={} adminId={}", effectiveBatch, caller.userId());

@@ -17,11 +17,14 @@ public class JwtConfig {
 
     private final IngestionApiKeyFilter ingestionApiKeyFilter;
     private final PrometheusApiKeyFilter prometheusApiKeyFilter;
+    private final DbRoleJwtAuthenticationConverter dbRoleJwtAuthenticationConverter;
 
     public JwtConfig(IngestionApiKeyFilter ingestionApiKeyFilter,
-                     PrometheusApiKeyFilter prometheusApiKeyFilter) {
+                     PrometheusApiKeyFilter prometheusApiKeyFilter,
+                     DbRoleJwtAuthenticationConverter dbRoleJwtAuthenticationConverter) {
         this.ingestionApiKeyFilter = ingestionApiKeyFilter;
         this.prometheusApiKeyFilter = prometheusApiKeyFilter;
+        this.dbRoleJwtAuthenticationConverter = dbRoleJwtAuthenticationConverter;
     }
 
     @Bean
@@ -78,7 +81,11 @@ public class JwtConfig {
                         .requestMatchers(HttpMethod.GET, "/api/trends/**").permitAll()
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}));
+                // Wire DbRoleJwtAuthenticationConverter to perform the user_roles DB lookup per
+                // request and populate ROLE_* GrantedAuthorities on the JwtAuthenticationToken.
+                // CallerInfoResolver reads from those authorities — zero additional DB lookups.
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt ->
+                        jwt.jwtAuthenticationConverter(dbRoleJwtAuthenticationConverter)));
 
         return http.build();
     }

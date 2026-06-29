@@ -10,7 +10,6 @@ import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.exception.GlobalExceptionHandler;
 import com.example.realestate.security.CallerInfoResolver;
-import com.example.realestate.security.UserRoleService;
 import com.example.realestate.security.WebMvcConfig;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +32,12 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -87,12 +86,16 @@ class AdminListingControllerTest {
     @MockitoBean
     private AdminAuditService adminAuditService;
 
+    /**
+     * Satisfies DbRoleJwtAuthenticationConverter's constructor dependency in the @WebMvcTest
+     * security slice. No stubs needed — jwt().authorities(...) bypasses the converter entirely.
+     */
     @MockitoBean
-    private UserRoleService userRoleService;
+    private com.example.realestate.security.UserRoleService userRoleService;
 
     @BeforeEach
     void setUp() {
-        reset(listingWorkflowService, listingResponseMapper, adminAuditService, userRoleService);
+        reset(listingWorkflowService, listingResponseMapper, adminAuditService);
         // Delegate mapper to a minimal implementation so existing response-field assertions keep working.
         when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
             Listing l = inv.getArgument(0);
@@ -130,16 +133,14 @@ class AdminListingControllerTest {
 
     @Test
     void approve_withAdminRole_returns200WithLiveStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing approved = buildListing(LISTING_ID, "LIVE", "land", "Plot in Manipal",
+Listing approved = buildListing(LISTING_ID, "LIVE", "land", "Plot in Manipal",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         approved.setReviewedAt(OffsetDateTime.now());
         approved.setReviewedBy(ADMIN_ID);
         when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID)).thenReturn(approved);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("LIVE"));
@@ -151,9 +152,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_withReasonAndAdminRole_returns200WithRejectedStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
+Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
         rejected.setRejectionReason("Blurry images");
         rejected.setReviewedAt(OffsetDateTime.now());
@@ -162,7 +161,7 @@ class AdminListingControllerTest {
                 .thenReturn(rejected);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"rejectionReason":"Blurry images"}
@@ -179,10 +178,8 @@ class AdminListingControllerTest {
 
     @Test
     void reject_withoutReason_returns400() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"rejectionReason":""}
@@ -197,10 +194,8 @@ class AdminListingControllerTest {
 
     @Test
     void reject_withNullReason_returns400() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {}
@@ -215,10 +210,8 @@ class AdminListingControllerTest {
 
     @Test
     void approve_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires admin role"));
 
@@ -237,13 +230,12 @@ class AdminListingControllerTest {
 
     @Test
     void approve_wrongStatus_returns409() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID))
+when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID))
                 .thenThrow(new ListingStatusException(
                         "Cannot approve listing with status DRAFT"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot approve listing with status DRAFT"));
     }
@@ -252,12 +244,11 @@ class AdminListingControllerTest {
 
     @Test
     void approve_listingNotFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID))
+when(listingWorkflowService.approveListing(LISTING_ID, ADMIN_ID))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -266,12 +257,11 @@ class AdminListingControllerTest {
 
     @Test
     void reject_listingNotFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Bad listing"))
+when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Bad listing"))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"rejectionReason":"Bad listing"}
@@ -284,13 +274,12 @@ class AdminListingControllerTest {
 
     @Test
     void reject_wrongStatus_returns409() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Reason"))
+when(listingWorkflowService.rejectListing(LISTING_ID, ADMIN_ID, "Reason"))
                 .thenThrow(new ListingStatusException(
                         "Cannot reject listing with status DRAFT"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"rejectionReason":"Reason"}
@@ -303,14 +292,12 @@ class AdminListingControllerTest {
 
     @Test
     void restore_withAdminRole_archivedListing_returns200WithDraftStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing restored = buildListing(LISTING_ID, "DRAFT", "land", "Plot in Manipal",
+Listing restored = buildListing(LISTING_ID, "DRAFT", "land", "Plot in Manipal",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         when(listingWorkflowService.restoreListing(eq(LISTING_ID), any())).thenReturn(restored);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("DRAFT"));
@@ -322,12 +309,11 @@ class AdminListingControllerTest {
 
     @Test
     void restore_listingNotArchived_returns409() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.restoreListing(eq(LISTING_ID), any()))
+when(listingWorkflowService.restoreListing(eq(LISTING_ID), any()))
                 .thenThrow(new ListingNotArchivedException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Listing is not archived: " + LISTING_ID));
 
@@ -336,22 +322,19 @@ class AdminListingControllerTest {
 
     @Test
     void restore_listingNotFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.restoreListing(eq(LISTING_ID), any()))
+when(listingWorkflowService.restoreListing(eq(LISTING_ID), any()))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
 
     @Test
     void restore_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires admin role"));
 
@@ -362,11 +345,10 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_asAdmin_returns204() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(true);
+when(listingWorkflowService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(true);
 
         mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNoContent());
 
         verify(listingWorkflowService).adminForceDelete(LISTING_ID, ADMIN_ID);
@@ -376,11 +358,10 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_alreadyArchived_returns204WithoutAudit() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(false);
+when(listingWorkflowService.adminForceDelete(LISTING_ID, ADMIN_ID)).thenReturn(false);
 
         mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNoContent());
 
         verify(listingWorkflowService).adminForceDelete(LISTING_ID, ADMIN_ID);
@@ -389,12 +370,11 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_notFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        doThrow(new ListingNotFoundException(LISTING_ID))
+doThrow(new ListingNotFoundException(LISTING_ID))
                 .when(listingWorkflowService).adminForceDelete(LISTING_ID, ADMIN_ID);
 
         mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound());
 
         verify(adminAuditService, never()).record(any(), any(), any(), any(), any(), any());
@@ -402,10 +382,8 @@ class AdminListingControllerTest {
 
     @Test
     void adminForceDelete_asDealer_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+mockMvc.perform(delete("/api/admin/listings/" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden());
 
         verify(listingWorkflowService, never()).adminForceDelete(any(), any());
@@ -416,15 +394,13 @@ class AdminListingControllerTest {
 
     @Test
     void returnForEdits_withAdminRole_returns200WithDraftStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing returned = buildListing(LISTING_ID, "DRAFT", "house", "House in Udupi",
+Listing returned = buildListing(LISTING_ID, "DRAFT", "house", "House in Udupi",
                 "Udupi", new BigDecimal("8000000"), "A house");
         when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, "Please add better photos"))
                 .thenReturn(returned);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"note":"Please add better photos"}
@@ -440,10 +416,8 @@ class AdminListingControllerTest {
 
     @Test
     void returnForEdits_blankNote_returns422() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"note":"  "}
@@ -456,10 +430,8 @@ class AdminListingControllerTest {
 
     @Test
     void returnForEdits_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"note":"Fix photos"}
@@ -472,12 +444,11 @@ class AdminListingControllerTest {
 
     @Test
     void returnForEdits_listingNotFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, "Fix photos"))
+when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, "Fix photos"))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"note":"Fix photos"}
@@ -490,9 +461,7 @@ class AdminListingControllerTest {
 
     @Test
     void claimScraped_withAdminRole_returns200WithDraftStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
+UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
         Listing claimed = buildListing(LISTING_ID, "DRAFT", "house", "Scraped House",
                 "Manipal", new BigDecimal("4000000"), "A scraped house");
         claimed.setCreatedBy(ownerId);
@@ -500,7 +469,7 @@ class AdminListingControllerTest {
                 .thenReturn(claimed);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"ownerId":"%s"}
@@ -516,10 +485,8 @@ class AdminListingControllerTest {
 
     @Test
     void claimScraped_nullOwnerId_returns400() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {}
@@ -532,16 +499,14 @@ class AdminListingControllerTest {
 
     @Test
     void claimScraped_alreadyClaimed_returns409() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
+UUID ownerId = UUID.fromString("00000000-0000-0000-0000-000000000020");
         when(listingWorkflowService.claimScrapedListing(LISTING_ID, ownerId, ADMIN_ID))
                 .thenThrow(new ListingLifecycleException(
                         ListingErrorCode.ALREADY_CLAIMED,
                         "Listing already has an owner — cannot reassign"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"ownerId":"%s"}
@@ -554,10 +519,8 @@ class AdminListingControllerTest {
 
     @Test
     void claimScraped_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/claim-scraped")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"ownerId":"00000000-0000-0000-0000-000000000020"}
@@ -572,9 +535,7 @@ class AdminListingControllerTest {
 
     @Test
     void approveScraped_withAdminRole_returns200WithLiveStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing approved = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
+Listing approved = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
                 "Manipal", new BigDecimal("4000000"), "A scraped house");
         approved.setReviewedAt(OffsetDateTime.now());
         approved.setReviewedBy(ADMIN_ID);
@@ -582,7 +543,7 @@ class AdminListingControllerTest {
                 .thenReturn(approved);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("LIVE"));
@@ -594,15 +555,13 @@ class AdminListingControllerTest {
 
     @Test
     void approveScraped_incompleteListing_returns422() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        when(listingWorkflowService.approveScrapedListing(LISTING_ID, ADMIN_ID))
+when(listingWorkflowService.approveScrapedListing(LISTING_ID, ADMIN_ID))
                 .thenThrow(new ListingLifecycleException(
                         ListingErrorCode.LISTING_INCOMPLETE,
                         "Listing is incomplete: Price must be greater than 0"));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("LISTING_INCOMPLETE"));
 
@@ -611,10 +570,8 @@ class AdminListingControllerTest {
 
     @Test
     void approveScraped_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/approve-scraped")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires admin role"));
 
@@ -625,9 +582,7 @@ class AdminListingControllerTest {
 
     @Test
     void restoreRejected_withAdminRole_returns200WithLiveStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House in Udupi",
+Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House in Udupi",
                 "Udupi", new BigDecimal("8000000"), "A house");
         restored.setReviewedAt(OffsetDateTime.now());
         restored.setReviewedBy(ADMIN_ID);
@@ -635,7 +590,7 @@ class AdminListingControllerTest {
                 .thenReturn(restored);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"moderationNote":"Reviewed again — looks fine"}
@@ -651,10 +606,8 @@ class AdminListingControllerTest {
 
     @Test
     void restoreRejected_blankNote_returns422() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"moderationNote":""}
@@ -667,10 +620,8 @@ class AdminListingControllerTest {
 
     @Test
     void restoreRejected_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"moderationNote":"Override reason"}
@@ -683,12 +634,11 @@ class AdminListingControllerTest {
 
     @Test
     void restoreRejected_listingNotFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.restoreRejectedListing(LISTING_ID, ADMIN_ID, "Override reason"))
+when(listingWorkflowService.restoreRejectedListing(LISTING_ID, ADMIN_ID, "Override reason"))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"moderationNote":"Override reason"}
@@ -701,15 +651,13 @@ class AdminListingControllerTest {
 
     @Test
     void archive_withAdminRole_returns200WithArchivedStatus() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing archived = buildListing(LISTING_ID, "ARCHIVED", "house", "House in Udupi",
+Listing archived = buildListing(LISTING_ID, "ARCHIVED", "house", "House in Udupi",
                 "Udupi", new BigDecimal("8000000"), "A house");
         when(listingWorkflowService.adminArchiveListing(LISTING_ID, ADMIN_ID, "Duplicate listing"))
                 .thenReturn(archived);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reasonNote":"Duplicate listing"}
@@ -725,15 +673,13 @@ class AdminListingControllerTest {
 
     @Test
     void archive_withoutBody_returns200() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        Listing archived = buildListing(LISTING_ID, "ARCHIVED", "land", "Plot in Manipal",
+Listing archived = buildListing(LISTING_ID, "ARCHIVED", "land", "Plot in Manipal",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         when(listingWorkflowService.adminArchiveListing(eq(LISTING_ID), eq(ADMIN_ID), isNull()))
                 .thenReturn(archived);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("ARCHIVED"));
@@ -743,10 +689,8 @@ class AdminListingControllerTest {
 
     @Test
     void archive_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
-        mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reasonNote":"Remove this"}
@@ -759,12 +703,11 @@ class AdminListingControllerTest {
 
     @Test
     void archive_listingNotFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        when(listingWorkflowService.adminArchiveListing(LISTING_ID, ADMIN_ID, "Remove this"))
+when(listingWorkflowService.adminArchiveListing(LISTING_ID, ADMIN_ID, "Remove this"))
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reasonNote":"Remove this"}
@@ -777,9 +720,7 @@ class AdminListingControllerTest {
 
     @Test
     void reject_auditJsonContainsProperlyEscapedRejectionReason() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        String specialReason = "Bad \"quality\" photos\nand a backslash\\here";
+String specialReason = "Bad \"quality\" photos\nand a backslash\\here";
         Listing rejected = buildListing(LISTING_ID, "REJECTED", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
         rejected.setRejectionReason(specialReason);
@@ -787,7 +728,7 @@ class AdminListingControllerTest {
                 .thenReturn(rejected);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/reject")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("rejectionReason", specialReason))))
                 .andExpect(status().isOk());
@@ -804,16 +745,14 @@ class AdminListingControllerTest {
 
     @Test
     void returnForEdits_auditJsonContainsProperlyEscapedNote() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        String specialNote = "Please fix: use \"proper\" images\nno newlines";
+String specialNote = "Please fix: use \"proper\" images\nno newlines";
         Listing returned = buildListing(LISTING_ID, "DRAFT", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
         when(listingWorkflowService.returnForEdits(LISTING_ID, ADMIN_ID, specialNote))
                 .thenReturn(returned);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/return-for-edits")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("note", specialNote))))
                 .andExpect(status().isOk());
@@ -830,16 +769,14 @@ class AdminListingControllerTest {
 
     @Test
     void restoreRejected_auditJsonContainsProperlyEscapedModerationNote() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
-        String specialNote = "Override: \"admin\" approved\ttab and backslash\\done";
+String specialNote = "Override: \"admin\" approved\ttab and backslash\\done";
         Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "A house");
         when(listingWorkflowService.restoreRejectedListing(LISTING_ID, ADMIN_ID, specialNote))
                 .thenReturn(restored);
 
         mockMvc.perform(post("/api/admin/listings/" + LISTING_ID + "/restore-rejected")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("moderationNote", specialNote))))
                 .andExpect(status().isOk());

@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -104,10 +106,8 @@ class TrustControllerIdentityTest {
 
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, photoHashService, userRoleService,
+        reset(badgeService, listingRepository, photoHashService,
                 profileRepository, otpService, supabaseStorageService, identityEvidenceRepository);
-        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
-        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
     }
 
     // -------------------------------------------------------------------------
@@ -158,7 +158,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNotFound());
     }
 
@@ -171,7 +171,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -185,7 +185,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "INVALID_TYPE")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value(
                         "Invalid document type. Must be one of: AADHAAR, PAN, VOTER_ID, PASSPORT, DRIVING_LICENSE"));
@@ -200,7 +200,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(jsonPath("$.error").value("File size must not exceed 10 MB"));
     }
@@ -220,7 +220,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Identity already verified"));
     }
@@ -240,7 +240,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Identity evidence already submitted and under review"));
     }
@@ -277,7 +277,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Identity evidence submitted for review"));
 
@@ -296,7 +296,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Legal name is required"));
     }
@@ -331,7 +331,7 @@ class TrustControllerIdentityTest {
                             .param("legal_name", "John Doe")
                             .param("phone_number", "+919876543210")
                             .param("document_type", docType)
-                            .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                            .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                     .andExpect(status().isOk());
         }
     }
@@ -372,7 +372,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Identity evidence submitted for review"));
 
@@ -403,7 +403,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", longName)
                         .param("phone_number", "+919876543210")
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Legal name must not exceed 200 characters"));
     }
@@ -418,7 +418,7 @@ class TrustControllerIdentityTest {
                         .param("legal_name", "John Doe")
                         .param("phone_number", longPhone)
                         .param("document_type", "AADHAAR")
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Phone number must not exceed 100 characters"));
     }

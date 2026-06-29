@@ -1,55 +1,43 @@
 package com.example.realestate.security;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.Map;
-import java.util.Optional;
+import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.when;
 
 /**
  * Unit tests for {@link CallerInfoResolver}.
- * Verifies role resolution, CallerInfo construction, and FORBIDDEN paths.
+ *
+ * <p>After the RBAC foundation refactor, {@link CallerInfoResolver} reads the caller's role
+ * from pre-populated {@code ROLE_*} authorities on the {@link JwtAuthenticationToken} — it
+ * issues <strong>zero</strong> {@code user_roles} DB lookups. {@link DbRoleJwtAuthenticationConverter}
+ * performs the single lookup upstream; these tests set authorities directly to verify resolver
+ * behaviour in isolation.
+ *
+ * <h3>Single-lookup invariant</h3>
+ * <p>{@link CallerInfoResolver} has no {@link UserRoleService} dependency. Successful resolution
+ * with only {@code ROLE_*} authorities in the token proves the resolver does not touch the DB.
  */
-@ExtendWith(MockitoExtension.class)
 class CallerInfoResolverTest {
 
     private static final UUID USER_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
 
-    @Mock
-    private UserRoleService userRoleService;
-
-    @InjectMocks
-    private CallerInfoResolver resolver;
-
-    @BeforeEach
-    void installToken() {
-        // Install a JwtAuthenticationToken into the SecurityContext so the resolver can extract it.
-        Jwt jwt = Jwt.withTokenValue("token")
-                .header("alg", "RS256")
-                .subject(USER_ID.toString())
-                .issuedAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(3600))
-                .build();
-        JwtAuthenticationToken token = new JwtAuthenticationToken(jwt);
-        SecurityContextHolder.getContext().setAuthentication(token);
-    }
+    // CallerInfoResolver has no dependencies — zero-arg constructor proves zero DB lookups.
+    private final CallerInfoResolver resolver = new CallerInfoResolver();
 
     @AfterEach
     void clearContext() {
@@ -60,7 +48,6 @@ class CallerInfoResolverTest {
 
     @Test
     void supportsParameter_returnsTrue_forCallerInfoType() throws Exception {
-        // Minimal MethodParameter pointing at the first argument of a dummy method
         MethodParameter param = MethodParameter.forExecutable(
                 DummyHandler.class.getDeclaredMethod("handle", CallerInfo.class), 0);
         assertThat(resolver.supportsParameter(param)).isTrue();
@@ -73,22 +60,11 @@ class CallerInfoResolverTest {
         assertThat(resolver.supportsParameter(param)).isFalse();
     }
 
-    // ===== resolveArgument — happy paths =====
+    // ===== resolveArgument — happy paths: reads role from ROLE_* authorities =====
 
     @Test
-    void resolveArgument_dealerRole_returnsDealerCallerInfo() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("dealer"));
-
-        CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
-
-        assertThat(result.userId()).isEqualTo(USER_ID);
-        assertThat(result.role()).isEqualTo("dealer");
-        assertThat(result.isAdmin()).isFalse();
-    }
-
-    @Test
-    void resolveArgument_adminRole_returnsAdminCallerInfo() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("admin"));
+    void resolveArgument_adminAuthority_returnsAdminCallerInfo() throws Exception {
+        installToken(USER_ID, new SimpleGrantedAuthority("ROLE_ADMIN"));
 
         CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
 
@@ -98,8 +74,30 @@ class CallerInfoResolverTest {
     }
 
     @Test
-    void resolveArgument_userRole_returnsCallerInfoWithIsAdminFalse() throws Exception {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("user"));
+    void resolveArgument_brokerAuthority_returnsBrokerCallerInfo() throws Exception {
+        installToken(USER_ID, new SimpleGrantedAuthority("ROLE_BROKER"));
+
+        CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
+
+        assertThat(result.userId()).isEqualTo(USER_ID);
+        assertThat(result.role()).isEqualTo("broker");
+        assertThat(result.isAdmin()).isFalse();
+    }
+
+    @Test
+    void resolveArgument_dealerAuthority_returnsDealerCallerInfo() throws Exception {
+        installToken(USER_ID, new SimpleGrantedAuthority("ROLE_DEALER"));
+
+        CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
+
+        assertThat(result.userId()).isEqualTo(USER_ID);
+        assertThat(result.role()).isEqualTo("dealer");
+        assertThat(result.isAdmin()).isFalse();
+    }
+
+    @Test
+    void resolveArgument_userAuthority_returnsCallerInfoWithIsAdminFalse() throws Exception {
+        installToken(USER_ID, new SimpleGrantedAuthority("ROLE_USER"));
 
         CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
 
@@ -108,11 +106,40 @@ class CallerInfoResolverTest {
         assertThat(result.isAdmin()).isFalse();
     }
 
+    @Test
+    void resolveArgument_multipleAuthorities_picksHighestPrecedenceRole() throws Exception {
+        // ROLE_ADMIN + ROLE_BROKER → "admin" wins (admin > broker precedence)
+        installToken(USER_ID,
+                new SimpleGrantedAuthority("ROLE_BROKER"),
+                new SimpleGrantedAuthority("ROLE_ADMIN"));
+        CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
+        assertThat(result.role()).isEqualTo("admin");
+        assertThat(result.isAdmin()).isTrue();
+    }
+
+    /**
+     * Proves the single-lookup contract: {@link CallerInfoResolver} has no
+     * {@link UserRoleService} dependency (zero-arg constructor). Successful resolution
+     * with only {@code ROLE_ADMIN} in the token proves no DB lookup occurs — any service
+     * call would produce a {@code NullPointerException} since no service is wired.
+     */
+    @Test
+    void resolveArgument_readsRoleFromAuthority_notFromUserRoleService() throws Exception {
+        installToken(USER_ID, new SimpleGrantedAuthority("ROLE_ADMIN"));
+
+        CallerInfo result = (CallerInfo) resolver.resolveArgument(null, null, null, null);
+
+        // Successful return without NPE proves no UserRoleService.getUserRole() was called.
+        assertThat(result.role()).isEqualTo("admin");
+        assertThat(result.isAdmin()).isTrue();
+    }
+
     // ===== resolveArgument — FORBIDDEN paths =====
 
     @Test
-    void resolveArgument_emptyRole_throwsForbidden() {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.empty());
+    void resolveArgument_noRoleAuthority_throwsForbidden() {
+        // Token with no ROLE_* authorities — resolver must throw 403 without any DB call.
+        installToken(USER_ID /* no authorities */);
 
         assertThatThrownBy(() -> resolver.resolveArgument(null, null, null, null))
                 .isInstanceOf(ResponseStatusException.class)
@@ -124,8 +151,10 @@ class CallerInfoResolverTest {
     }
 
     @Test
-    void resolveArgument_disallowedRole_throwsForbidden() {
-        when(userRoleService.getUserRole(USER_ID)).thenReturn(Optional.of("viewer"));
+    void resolveArgument_unknownRoleAuthority_throwsForbidden() {
+        // Token with an authority not in the known ROLE_* precedence set.
+        // Resolver must throw 403 — no DB re-query for unknown authorities.
+        installToken(USER_ID, new SimpleGrantedAuthority("ROLE_VIEWER"));
 
         assertThatThrownBy(() -> resolver.resolveArgument(null, null, null, null))
                 .isInstanceOf(ResponseStatusException.class)
@@ -144,7 +173,8 @@ class CallerInfoResolverTest {
                 .issuedAt(Instant.now())
                 .expiresAt(Instant.now().plusSeconds(3600))
                 .build();
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(badJwt));
+        SecurityContextHolder.getContext().setAuthentication(
+                new JwtAuthenticationToken(badJwt, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
 
         assertThatThrownBy(() -> resolver.resolveArgument(null, null, null, null))
                 .isInstanceOf(ResponseStatusException.class)
@@ -154,7 +184,23 @@ class CallerInfoResolverTest {
                 });
     }
 
-    // ===== Dummy methods used for MethodParameter construction =====
+    // ===== Helpers =====
+
+    /**
+     * Installs a {@link JwtAuthenticationToken} with the given authorities into the SecurityContext.
+     * Mirrors how {@link DbRoleJwtAuthenticationConverter} populates the authentication in production.
+     */
+    private static void installToken(UUID userId, GrantedAuthority... authorities) {
+        Jwt jwt = Jwt.withTokenValue("token")
+                .header("alg", "RS256")
+                .subject(userId.toString())
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+        List<GrantedAuthority> authorityList = Arrays.asList(authorities);
+        SecurityContextHolder.getContext().setAuthentication(
+                new JwtAuthenticationToken(jwt, authorityList));
+    }
 
     @SuppressWarnings("unused")
     static class DummyHandler {

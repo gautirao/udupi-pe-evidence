@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -90,7 +92,7 @@ class BrokerDemandGapsControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(service, userRoleService);
+        reset(service);
     }
 
     // -----------------------------------------------------------------------
@@ -112,10 +114,8 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /demand-gaps returns 403 when caller has 'user' role")
     void demandGaps_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(get("/api/broker/demand-gaps")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires broker, dealer, or admin role"));
     }
@@ -123,30 +123,24 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /alerts returns 403 when caller has 'user' role")
     void alerts_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(get("/api/broker/alerts")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @DisplayName("POST /alerts/{id}/read returns 403 for 'user' role")
     void markRead_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(post("/api/broker/alerts/{id}/read", STATE_ID)
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @DisplayName("POST /alerts/{id}/dismiss returns 403 for 'user' role")
     void dismiss_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(post("/api/broker/alerts/{id}/dismiss", STATE_ID)
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden());
     }
 
@@ -157,8 +151,6 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /demand-gaps returns 200 with page payload for broker role")
     void demandGaps_brokerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         BrokerDemandGapsResponse.Summary summary = new BrokerDemandGapsResponse.Summary(
                 new Metric<>(42L, "Enough data"),
                 new Metric<>(7L, "Enough data"),
@@ -169,7 +161,7 @@ class BrokerDemandGapsControllerTest {
         when(service.getDemandGaps(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/demand-gaps")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.summary.demandGapsFound").value(3))
                 .andExpect(jsonPath("$.summary.brokerMatchingListings").value(1))
@@ -186,8 +178,6 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /demand-gaps: null metric values serialise as JSON null (k-anon null-honesty)")
     void demandGaps_suppressedMetrics_serializeAsNull() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         // Summary with null buyerSearches/buyerEnquiries (all suppressed)
         BrokerDemandGapsResponse.Summary summary = new BrokerDemandGapsResponse.Summary(
                 new Metric<>(null, "Not enough data yet"),
@@ -199,7 +189,7 @@ class BrokerDemandGapsControllerTest {
         when(service.getDemandGaps(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/demand-gaps")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 // null values must serialise as JSON null, never as 0
                 .andExpect(jsonPath("$.summary.buyerSearches.value").doesNotExist())
@@ -209,22 +199,20 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /demand-gaps is allowed for dealer role")
     void demandGaps_dealerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("dealer"));
         when(service.getDemandGaps(BROKER_ID)).thenReturn(emptyResponse());
 
         mockMvc.perform(get("/api/broker/demand-gaps")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk());
     }
 
     @Test
     @DisplayName("GET /demand-gaps is allowed for admin role")
     void demandGaps_adminRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("admin"));
         when(service.getDemandGaps(BROKER_ID)).thenReturn(emptyResponse());
 
         mockMvc.perform(get("/api/broker/demand-gaps")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
     }
 
@@ -235,13 +223,11 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /alerts returns 200 with open gaps by default")
     void alerts_defaultStatus_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         BrokerDemandGapsResponse.GapItem gap = buildGapItem();
         when(service.getAlerts(BROKER_ID, "open")).thenReturn(List.of(gap));
 
         mockMvc.perform(get("/api/broker/alerts")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
@@ -254,12 +240,11 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /alerts?status=all includes dismissed gaps")
     void alerts_allStatus_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         when(service.getAlerts(BROKER_ID, "all")).thenReturn(List.of());
 
         mockMvc.perform(get("/api/broker/alerts")
                         .param("status", "all")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk());
 
         verify(service).getAlerts(BROKER_ID, "all");
@@ -268,11 +253,9 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("GET /alerts?status=invalid returns 400")
     void alerts_invalidStatus_returns400() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         mockMvc.perform(get("/api/broker/alerts")
                         .param("status", "pending")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("status must be 'open' or 'all'"));
     }
@@ -284,10 +267,8 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("POST /alerts/{id}/read returns 204 on success")
     void markRead_success_returns204() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         mockMvc.perform(post("/api/broker/alerts/{id}/read", STATE_ID)
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNoContent());
 
         verify(service).markRead(STATE_ID, BROKER_ID);
@@ -296,12 +277,11 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("POST /alerts/{id}/read returns 404 when state row not found for caller")
     void markRead_notFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Demand gap not found"))
                 .when(service).markRead(STATE_ID, BROKER_ID);
 
         mockMvc.perform(post("/api/broker/alerts/{id}/read", STATE_ID)
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Demand gap not found"));
     }
@@ -313,10 +293,8 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("POST /alerts/{id}/dismiss returns 204 on success")
     void dismiss_success_returns204() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         mockMvc.perform(post("/api/broker/alerts/{id}/dismiss", STATE_ID)
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNoContent());
 
         verify(service).dismiss(STATE_ID, BROKER_ID);
@@ -325,12 +303,11 @@ class BrokerDemandGapsControllerTest {
     @Test
     @DisplayName("POST /alerts/{id}/dismiss returns 404 when state row not found (IDOR guard)")
     void dismiss_notFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         doThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "Demand gap not found"))
                 .when(service).dismiss(STATE_ID, BROKER_ID);
 
         mockMvc.perform(post("/api/broker/alerts/{id}/dismiss", STATE_ID)
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Demand gap not found"));
     }
@@ -343,12 +320,11 @@ class BrokerDemandGapsControllerTest {
     @DisplayName("GET /demand-gaps uses broker_id from JWT, not from request; service called with JWT subject")
     void demandGaps_brokerIdFromJwt() throws Exception {
         UUID jwtBrokerId = UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
-        when(userRoleService.getUserRole(jwtBrokerId)).thenReturn(Optional.of("broker"));
         when(service.getDemandGaps(jwtBrokerId)).thenReturn(emptyResponse());
 
         // No broker_id param in request — it comes from JWT subject only
         mockMvc.perform(get("/api/broker/demand-gaps")
-                        .with(jwt().jwt(j -> j.subject(jwtBrokerId.toString()))))
+                        .with(jwt().jwt(j -> j.subject(jwtBrokerId.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk());
 
         // Service MUST be called with the JWT-resolved UUID, not any request param

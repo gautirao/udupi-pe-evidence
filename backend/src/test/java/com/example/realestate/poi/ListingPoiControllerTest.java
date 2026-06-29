@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -134,48 +136,48 @@ class ListingPoiControllerTest {
 
     @Test
     void getSuggestions_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
     }
 
     @Test
     void approvePoi_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/approve", LISTING_ID, POI_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
     }
 
     @Test
     void pinPoi_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(patch("/api/listings/{listingId}/pois/{poiId}/pin", LISTING_ID, POI_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
     }
 
     @Test
     void addManual_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(post("/api/listings/{listingId}/pois/manual", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name":"Test POI","category":"HOSPITAL","latitude":13.34,"longitude":74.74}
@@ -186,12 +188,12 @@ class ListingPoiControllerTest {
 
     @Test
     void deletePoi_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(delete("/api/listings/{listingId}/pois/{poiId}", LISTING_ID, POI_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: not listing owner or admin"));
     }
@@ -207,8 +209,6 @@ class ListingPoiControllerTest {
      */
     @Test
     void getSuggestions_scrapedListing_adminCaller_returns200() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
         // Listing has no coordinates — this bypasses overpassService calls so no additional stubs needed.
         Listing scraped = new Listing();
         scraped.setId(LISTING_ID);
@@ -223,7 +223,7 @@ class ListingPoiControllerTest {
         when(service.getAll(LISTING_ID)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/listings/{listingId}/pois/suggestions", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }

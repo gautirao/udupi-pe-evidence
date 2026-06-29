@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
@@ -103,7 +105,7 @@ class ListingImageControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(listingRepository, imageRepository, userRoleService, imageService, listingWorkflowService);
+        reset(listingRepository, imageRepository, imageService, listingWorkflowService);
 
         draftListing = new Listing();
         draftListing.setId(LISTING_ID);
@@ -123,7 +125,6 @@ class ListingImageControllerTest {
     }
 
     private void stubDealerWithDraftListing() {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenReturn(draftListing);
     }
@@ -140,7 +141,7 @@ class ListingImageControllerTest {
         doReturn(created201).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"%s"}
@@ -161,7 +162,7 @@ class ListingImageControllerTest {
         doReturn(bad400).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"%s"}
@@ -176,13 +177,13 @@ class ListingImageControllerTest {
 
     @Test
     void register_liveStatus_returns400() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         draftListing.setStatus(ListingStatus.LIVE.toDbValue());
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
                 .thenReturn(draftListing);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"%s"}
@@ -199,7 +200,7 @@ class ListingImageControllerTest {
         String gifPath = "listings/" + DEALER_ID + "/" + LISTING_ID + "/photo.gif";
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"https://example.com/photo.gif"}
@@ -216,7 +217,7 @@ class ListingImageControllerTest {
         String wrongPath = "listings/wrong-user/" + LISTING_ID + "/photo.jpg";
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"https://example.com/photo.jpg"}
@@ -229,14 +230,14 @@ class ListingImageControllerTest {
 
     @Test
     void register_otherDealerListing_returns404() throws Exception {
-        when(userRoleService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_DEALER, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
         // draftListing.createdBy = DEALER_ID (non-null), so secondary re-read → 404
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString())))
+                        .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"listings/%s/%s/photo.jpg","url":"https://x.com/p.jpg"}
@@ -255,7 +256,7 @@ class ListingImageControllerTest {
         doReturn(conflict409).when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"%s"}
@@ -287,7 +288,7 @@ class ListingImageControllerTest {
         doNothing().when(imageService).deleteImage(image);
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNoContent());
 
         verify(imageService).deleteImage(image);
@@ -302,7 +303,7 @@ class ListingImageControllerTest {
                 .thenReturn(Optional.empty());
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Image not found"));
     }
@@ -325,7 +326,7 @@ class ListingImageControllerTest {
                 .thenReturn(List.of(img3, img1, img2));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"imageIds":["%s","%s","%s"]}
@@ -349,7 +350,7 @@ class ListingImageControllerTest {
 
         // Only send id1, missing id2
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"imageIds":["%s"]}
@@ -369,7 +370,7 @@ class ListingImageControllerTest {
                 .thenReturn(List.of());
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
     }
@@ -389,7 +390,7 @@ class ListingImageControllerTest {
                 .thenReturn(List.of(img1, img2));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
                 .andExpect(jsonPath("$[0].id").value(id1.toString()))
@@ -410,14 +411,14 @@ class ListingImageControllerTest {
 
     @Test
     void getImages_differentDealer_returns403or404() throws Exception {
-        when(userRoleService.getUserRole(OTHER_DEALER)).thenReturn(Optional.of("dealer"));
+
         when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_DEALER, false))
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
         // draftListing.createdBy = DEALER_ID (non-null), so secondary re-read → 404
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -427,7 +428,7 @@ class ListingImageControllerTest {
     @Test
     void getImages_liveListing_returns200() throws Exception {
         // getImages has no status guard; it intentionally works for any status the caller owns.
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         Listing liveListing = new Listing();
         liveListing.setId(LISTING_ID);
         liveListing.setCreatedBy(DEALER_ID);
@@ -444,7 +445,7 @@ class ListingImageControllerTest {
                 .thenReturn(List.of(img1));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(id1.toString()));
@@ -461,7 +462,6 @@ class ListingImageControllerTest {
     @Test
     void register_scrapedListing_nullCreatedBy_returns403() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000099");
-        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
 
         Listing scraped = new Listing();
         scraped.setId(LISTING_ID);
@@ -474,7 +474,7 @@ class ListingImageControllerTest {
                 .thenReturn(scraped);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(adminId.toString())))
+                        .with(jwt().jwt(j -> j.subject(adminId.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"listings/some-path/photo.jpg","url":"https://x.com/photo.jpg"}
@@ -491,7 +491,7 @@ class ListingImageControllerTest {
      */
     @Test
     void getImages_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
 
         Listing scraped = new Listing();
         scraped.setId(LISTING_ID);
@@ -504,7 +504,7 @@ class ListingImageControllerTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
     }
@@ -517,7 +517,7 @@ class ListingImageControllerTest {
      */
     @Test
     void deleteImage_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
 
         Listing scraped = new Listing();
         scraped.setId(LISTING_ID);
@@ -530,7 +530,7 @@ class ListingImageControllerTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Access denied: listing has no owner"));
     }
@@ -543,7 +543,7 @@ class ListingImageControllerTest {
      */
     @Test
     void reorderImages_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
 
         Listing scraped = new Listing();
         scraped.setId(LISTING_ID);
@@ -556,7 +556,7 @@ class ListingImageControllerTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/images/reorder")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"imageIds":["%s"]}
@@ -580,7 +580,7 @@ class ListingImageControllerTest {
                 .when(imageRegistrar).register(eq(LISTING_ID), any(), eq(DEALER_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"%s"}
@@ -601,7 +601,7 @@ class ListingImageControllerTest {
      */
     @Test
     void registerImage_scrapedListing_dealerCaller_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
 
         Listing scraped = new Listing();
         scraped.setId(LISTING_ID);
@@ -614,7 +614,7 @@ class ListingImageControllerTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"listings/some-path/photo.jpg","url":"https://x.com/photo.jpg"}
@@ -637,7 +637,7 @@ class ListingImageControllerTest {
                 .invalidateSpecificDimension(eq(LISTING_ID), eq("PHOTOS"), eq("IMAGE_CHANGE"));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"storagePath":"%s","url":"%s"}
@@ -660,7 +660,7 @@ class ListingImageControllerTest {
                 .invalidateSpecificDimension(eq(LISTING_ID), eq("PHOTOS"), eq("IMAGE_CHANGE"));
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID + "/images/" + IMAGE_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNoContent());
 
         verify(badgeInvalidationService).invalidateSpecificDimension(LISTING_ID, "PHOTOS", "IMAGE_CHANGE");

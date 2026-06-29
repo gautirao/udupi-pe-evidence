@@ -15,15 +15,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -37,8 +38,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * @WebMvcTest for {@link ListingQualityController}.
  *
- * <p>Follows the ListingControllerTest pattern: jwt() post-processor, MockitoBean for
- * service and UserRoleService, TestConfig for the security filter.
+ * <p>Role authorities are set via the {@code jwt().authorities(...)} post-processor,
+ * mirroring the production path where {@link com.example.realestate.security.RoleAuthoritiesConverter}
+ * populates the {@code JwtAuthenticationToken} before the request reaches the controller.
+ *
+ * <p>{@code @EnableMethodSecurity} is required in TestConfig to activate {@link com.example.realestate.security.IsBrokerOrAbove}
+ * ({@code @PreAuthorize}) enforcement.
  */
 @WebMvcTest(
         controllers = ListingQualityController.class,
@@ -56,6 +61,8 @@ class ListingQualityControllerTest {
     private static final Instant GENERATED_AT = Instant.parse("2026-06-20T10:00:00Z");
     private static final Instant COMPUTED_AT = Instant.parse("2026-06-19T08:00:00Z");
 
+    /** @EnableMethodSecurity is required for @IsBrokerOrAbove (@PreAuthorize) to fire in tests. */
+    @EnableMethodSecurity
     static class TestConfig {
         @Bean
         public SecurityFilterChain testSecurityFilterChain(HttpSecurity http) throws Exception {
@@ -72,6 +79,10 @@ class ListingQualityControllerTest {
     @MockitoBean
     private ListingQualityService listingQualityService;
 
+    /**
+     * UserRoleService mock is required to satisfy the JwtConfig → RoleAuthoritiesConverter
+     * bean dependency in the WebMvcTest context. CallerInfoResolver no longer calls it.
+     */
     @MockitoBean
     private UserRoleService userRoleService;
 
@@ -86,8 +97,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_scoredRow_returns200WithFindings() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         ListingQualityItem scoredItem = new ListingQualityItem(
                 LISTING_ID_A, "My Farm", "LIVE",
                 "SCORED", 85, "BUYER_READY", COMPUTED_AT,
@@ -100,7 +109,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.backfill.status").value("COMPLETE"))
                 .andExpect(jsonPath("$.backfill.scoredCount").value(1))
@@ -123,8 +133,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_nullScoreRow_returnsNotScored() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         ListingQualityItem unscoredItem = new ListingQualityItem(
                 LISTING_ID_B, "Draft Listing", "DRAFT",
                 "NOT_SCORED", null, "UNSCORED", null,
@@ -135,7 +143,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.listings[0].scoreStatus").value("NOT_SCORED"))
                 .andExpect(jsonPath("$.listings[0].qualityScore").doesNotExist())
@@ -150,8 +159,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_backfillIncomplete_whenSomeNotScored() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         ListingQualityItem scored = new ListingQualityItem(
                 LISTING_ID_A, "Farm", "LIVE", "SCORED", 70, "NEEDS_IMPROVEMENT", COMPUTED_AT,
                 List.of(), List.of(), EngagementSummary.UNAVAILABLE);
@@ -163,7 +170,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.backfill.status").value("INCOMPLETE"))
                 .andExpect(jsonPath("$.backfill.scoredCount").value(1))
@@ -176,8 +184,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_allUnscored_averageQualityIsNull() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         ListingQualityItem unscored = new ListingQualityItem(
                 LISTING_ID_A, "Draft", "DRAFT", "NOT_SCORED", null, "UNSCORED", null,
                 List.of(), List.of(), EngagementSummary.UNAVAILABLE);
@@ -186,7 +192,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.aggregates.averageQuality").doesNotExist())
                 .andExpect(jsonPath("$.aggregates.filterCounts.notScored").value(1))
@@ -199,8 +206,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_engagementIsAlwaysUnavailable() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         ListingQualityItem item = new ListingQualityItem(
                 LISTING_ID_A, "Farm", "LIVE", "SCORED", 90, "BUYER_READY", COMPUTED_AT,
                 List.of(), List.of(), EngagementSummary.UNAVAILABLE);
@@ -209,7 +214,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.listings[0].engagement.status").value("UNAVAILABLE"))
                 .andExpect(jsonPath("$.listings[0].engagement.views").doesNotExist())
@@ -218,22 +224,24 @@ class ListingQualityControllerTest {
     }
 
     // -----------------------------------------------------------------------
-    // 6. Role guard: "user" role → 403 (CallerInfoResolver passes user, controller rejects)
+    // 6. Role guard: "user" role → 403
+    //    With ROLE_USER authority: CallerInfoResolver resolves "user" role, then
+    //    @IsBrokerOrAbove fires → AccessDeniedException → GlobalExceptionHandler → 403.
     // -----------------------------------------------------------------------
 
     @Test
     void getListingQuality_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.error").value("Requires broker, dealer, or admin role"));
+                // GlobalExceptionHandler.handleAccessDenied returns "Requires admin role" for all
+                // AccessDeniedException, including @IsBrokerOrAbove denials.
+                .andExpect(jsonPath("$.error").value("Requires admin role"));
     }
 
     // -----------------------------------------------------------------------
-    // 7. No JWT → 403 (Spring Security TestConfig anyRequest().authenticated() returns
-    //    AccessDeniedException for anonymous; matches ListingControllerTest line ~260 pattern)
+    // 7. No JWT → 403 (TestConfig anyRequest().authenticated() rejects anonymous)
     // -----------------------------------------------------------------------
 
     @Test
@@ -248,12 +256,27 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_dealerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("dealer"));
         when(listingQualityService.getQualityPage(BROKER_ID))
                 .thenReturn(buildResponse(List.of(), 0, 0, null));
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isOk());
+    }
+
+    // -----------------------------------------------------------------------
+    // 8b. admin role is allowed
+    // -----------------------------------------------------------------------
+
+    @Test
+    void getListingQuality_adminRole_returns200() throws Exception {
+        when(listingQualityService.getQualityPage(BROKER_ID))
+                .thenReturn(buildResponse(List.of(), 0, 0, null));
+
+        mockMvc.perform(get("/api/broker/listing-quality")
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
     }
 
@@ -263,8 +286,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_fixPlan_fields() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         QualityFixAction fix = new QualityFixAction("TRUST", "HIGH",
                 "Complete identity and authority verification to improve your trust tier",
                 "/broker/listings/" + LISTING_ID_A + "/edit");
@@ -278,7 +299,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.listings[0].fixPlan[0].component").value("TRUST"))
                 .andExpect(jsonPath("$.listings[0].fixPlan[0].impact").value("HIGH"))
@@ -292,8 +314,6 @@ class ListingQualityControllerTest {
 
     @Test
     void getListingQuality_priorityFixesCount_inAggregates() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         ListingQualityItem priorityItem = new ListingQualityItem(
                 LISTING_ID_A, "Farm", "LIVE", "SCORED", 30, "PRIORITY_FIX", COMPUTED_AT,
                 List.of(), List.of(), EngagementSummary.UNAVAILABLE);
@@ -310,7 +330,8 @@ class ListingQualityControllerTest {
         when(listingQualityService.getQualityPage(BROKER_ID)).thenReturn(response);
 
         mockMvc.perform(get("/api/broker/listing-quality")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))
+                                   .authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.aggregates.priorityFixesCount").value(1));
     }

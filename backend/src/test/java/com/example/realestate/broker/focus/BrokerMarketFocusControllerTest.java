@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
@@ -90,7 +92,7 @@ class BrokerMarketFocusControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(service, userRoleService);
+        reset(service);
     }
 
     // -----------------------------------------------------------------------
@@ -100,14 +102,12 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("GET returns 200 with list of focus rows for broker role")
     void get_brokerRole_returns200WithRows() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         BrokerMarketFocusRow row = new BrokerMarketFocusRow(
                 "udupi", "IN|KA|Udupi|Manipal", "land", "sale", "seeded", CREATED_AT);
         when(service.listFocus(BROKER_ID)).thenReturn(List.of(row));
 
         mockMvc.perform(get("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].citySlug").value("udupi"))
                 .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
@@ -119,11 +119,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("GET returns empty list (not 404) when broker has no focus rows")
     void get_noRows_returnsEmptyList() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         when(service.listFocus(BROKER_ID)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isEmpty());
@@ -132,22 +131,20 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("GET is allowed for dealer role")
     void get_dealerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("dealer"));
         when(service.listFocus(BROKER_ID)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk());
     }
 
     @Test
     @DisplayName("GET is allowed for admin role")
     void get_adminRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("admin"));
         when(service.listFocus(BROKER_ID)).thenReturn(List.of());
 
         mockMvc.perform(get("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
     }
 
@@ -158,10 +155,8 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("GET returns 403 when caller has 'user' role")
     void get_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(get("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires broker, dealer, or admin role"));
     }
@@ -181,13 +176,11 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST add returns 204 on success — body has areaKey/propertyType/listingPurpose only")
     void post_add_returns204() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         // Note: AddFocusRequest is now 3-field — no citySlug
         AddFocusRequest req = new AddFocusRequest("IN|KA|Udupi|Manipal", "land", "sale");
 
         mockMvc.perform(post("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNoContent());
@@ -198,12 +191,11 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST add is idempotent: 204 even when row already exists (no-op)")
     void post_add_idempotent_204() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         // service no-ops on conflict (ON CONFLICT DO NOTHING) — no exception thrown
         AddFocusRequest req = new AddFocusRequest("IN|KA|Udupi|Manipal", "land", "sale");
 
         mockMvc.perform(post("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNoContent());
@@ -212,12 +204,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST add returns 422 when areaKey is blank (validation)")
     void post_add_blankAreaKey_returns422() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         String body = "{\"areaKey\":\"\",\"propertyType\":\"land\",\"listingPurpose\":\"sale\"}";
 
         mockMvc.perform(post("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isUnprocessableEntity())
@@ -227,7 +217,6 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST add returns 422 when areaKey has no matching areas row (service-derived slug fails)")
     void post_add_unknownAreaKey_returns422() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         // Service throws 422 when slug cannot be resolved
         doThrow(new ResponseStatusException(UNPROCESSABLE_ENTITY, "Area not found: UNKNOWN|AREA|KEY"))
                 .when(service).addFocus(eq(BROKER_ID), any(AddFocusRequest.class));
@@ -235,7 +224,7 @@ class BrokerMarketFocusControllerTest {
         AddFocusRequest req = new AddFocusRequest("UNKNOWN|AREA|KEY", "land", "sale");
 
         mockMvc.perform(post("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isUnprocessableEntity())
@@ -245,12 +234,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST add returns 403 for user role")
     void post_add_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         AddFocusRequest req = new AddFocusRequest("IN|KA|Udupi|Manipal", "land", "sale");
 
         mockMvc.perform(post("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isForbidden());
@@ -263,12 +250,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("DELETE returns 204 when row is removed")
     void delete_returns204() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         RemoveFocusRequest req = new RemoveFocusRequest("udupi", "IN|KA|Udupi|Manipal", "land", "sale");
 
         mockMvc.perform(delete("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNoContent());
@@ -279,14 +264,13 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("DELETE returns 404 when row not found (service throws 404)")
     void delete_notFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         doThrow(new ResponseStatusException(NOT_FOUND, "Market focus entry not found"))
                 .when(service).removeFocus(eq(BROKER_ID), any(RemoveFocusRequest.class));
 
         RemoveFocusRequest req = new RemoveFocusRequest("udupi", "IN|KA|Udupi|Manipal", "land", "sale");
 
         mockMvc.perform(delete("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isNotFound())
@@ -296,12 +280,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("DELETE returns 403 for user role")
     void delete_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         RemoveFocusRequest req = new RemoveFocusRequest("udupi", "IN|KA|Udupi|Manipal", "land", "sale");
 
         mockMvc.perform(delete("/api/broker/market-focus")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isForbidden());
@@ -314,11 +296,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST seed returns 200 with inserted count")
     void post_seed_returns200WithCount() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         when(service.seedFocus(BROKER_ID)).thenReturn(5);
 
         mockMvc.perform(post("/api/broker/market-focus/seed")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inserted").value(5));
 
@@ -328,11 +309,10 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST seed returns 200 with inserted=0 when already up-to-date")
     void post_seed_alreadyUpToDate_returns200WithZero() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
         when(service.seedFocus(BROKER_ID)).thenReturn(0);
 
         mockMvc.perform(post("/api/broker/market-focus/seed")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.inserted").value(0));
     }
@@ -340,10 +320,8 @@ class BrokerMarketFocusControllerTest {
     @Test
     @DisplayName("POST seed returns 403 for user role")
     void post_seed_userRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("user"));
-
         mockMvc.perform(post("/api/broker/market-focus/seed")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden());
     }
 }

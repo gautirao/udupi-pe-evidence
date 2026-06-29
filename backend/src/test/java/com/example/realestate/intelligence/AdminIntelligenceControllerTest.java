@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.reset;
@@ -80,15 +82,13 @@ class AdminIntelligenceControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(adminIntelligenceService, userRoleService);
+        reset(adminIntelligenceService);
     }
 
     // ==================== Test 1: admin → 200 with list response (populated demand fields) ===
 
     @Test
     void getAreas_withAdminRole_returns200WithAreaList() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
         List<AreaTopGap> gaps = List.of(
                 new AreaTopGap("apartment", "sale", "UNDER_5L", "supply_gap", 1.5, "enough_data")
         );
@@ -106,7 +106,7 @@ class AdminIntelligenceControllerTest {
         when(adminIntelligenceService.getAreaIntelligence(null)).thenReturn(List.of(row));
 
         String responseBody = mockMvc.perform(get("/api/admin/intelligence/areas")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].areaKey").value("IN|KA|Udupi|Manipal"))
                 .andExpect(jsonPath("$[0].live90dCount").value(35))
@@ -129,8 +129,6 @@ class AdminIntelligenceControllerTest {
 
     @Test
     void getAreas_withAdminRole_suppressedDemand_demandEventCountNull() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
         // Service returns null demandEventCount (suppressed) and empty topGaps.
         AreaIntelligenceResponse row = new AreaIntelligenceResponse(
                 "IN|KA|Udupi|Karkala",
@@ -146,7 +144,7 @@ class AdminIntelligenceControllerTest {
         when(adminIntelligenceService.getAreaIntelligence(null)).thenReturn(List.of(row));
 
         String responseBody = mockMvc.perform(get("/api/admin/intelligence/areas")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andReturn()
                 .getResponse()
@@ -163,10 +161,8 @@ class AdminIntelligenceControllerTest {
 
     @Test
     void getAreas_withBrokerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(BROKER_ID)).thenReturn(Optional.of("broker"));
-
         mockMvc.perform(get("/api/admin/intelligence/areas")
-                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(BROKER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden());
     }
 
@@ -187,11 +183,10 @@ class AdminIntelligenceControllerTest {
 
     @Test
     void getAreas_withCityFilter_passesDistrictToService() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(adminIntelligenceService.getAreaIntelligence("Udupi")).thenReturn(List.of());
 
         mockMvc.perform(get("/api/admin/intelligence/areas?city=Udupi")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isEmpty());
@@ -201,11 +196,10 @@ class AdminIntelligenceControllerTest {
 
     @Test
     void getAreas_withNoMatches_returns200EmptyList() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
         when(adminIntelligenceService.getAreaIntelligence(any())).thenReturn(List.of());
 
         mockMvc.perform(get("/api/admin/intelligence/areas")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$").isEmpty());
@@ -215,8 +209,6 @@ class AdminIntelligenceControllerTest {
 
     @Test
     void getAreas_withNullAvgQuality_returnsNullNotZero() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-
         AreaIntelligenceResponse backfillIncompleteRow = new AreaIntelligenceResponse(
                 "IN|KA|Udupi|Karkala",
                 "Karkala",
@@ -231,7 +223,7 @@ class AdminIntelligenceControllerTest {
         when(adminIntelligenceService.getAreaIntelligence(null)).thenReturn(List.of(backfillIncompleteRow));
 
         String responseBody = mockMvc.perform(get("/api/admin/intelligence/areas")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].topGaps").isArray())
                 .andExpect(jsonPath("$[0].topGaps").isEmpty())

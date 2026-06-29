@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -43,7 +45,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration.class
         }
 )
-@Import({AdminDuplicateControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class})
+@Import({AdminDuplicateControllerTest.TestConfig.class, WebMvcConfig.class, CallerInfoResolver.class,
+        com.example.realestate.exception.GlobalExceptionHandler.class})
 class AdminDuplicateControllerTest {
 
     private static final UUID ADMIN_ID     = UUID.fromString("00000000-0000-0000-0000-000000000010");
@@ -73,14 +76,14 @@ class AdminDuplicateControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(duplicateCandidateService, userRoleService);
+        reset(duplicateCandidateService);
     }
 
     // ==================== GET /api/admin/duplicates ====================
 
     @Test
     void list_withAdminRole_returns200WithPageContent() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
 
         DuplicateCandidate candidate = buildCandidate();
         Page<DuplicateCandidate> page = new PageImpl<>(
@@ -88,7 +91,7 @@ class AdminDuplicateControllerTest {
         when(duplicateCandidateService.getPage(0, 20)).thenReturn(page);
 
         mockMvc.perform(get("/api/admin/duplicates")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content[0].status").value("PENDING"))
@@ -101,11 +104,11 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_withAdminRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
         doNothing().when(duplicateCandidateService).confirm(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Duplicate confirmed"));
 
@@ -116,11 +119,11 @@ class AdminDuplicateControllerTest {
 
     @Test
     void dismiss_withAdminRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
         doNothing().when(duplicateCandidateService).dismiss(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/dismiss")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Duplicate dismissed"));
 
@@ -131,11 +134,11 @@ class AdminDuplicateControllerTest {
 
     @Test
     void undo_withAdminRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
         doNothing().when(duplicateCandidateService).undo(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/undo")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Duplicate review undone"));
 
@@ -146,12 +149,12 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_notFound_returns404() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
         doThrow(new DuplicateCandidateService.DuplicateCandidateNotFoundException(CANDIDATE_ID))
                 .when(duplicateCandidateService).confirm(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value(
                         "Duplicate candidate not found: " + CANDIDATE_ID));
@@ -159,12 +162,12 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_notPending_returns409() throws Exception {
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
+
         doThrow(new IllegalStateException("Candidate is not PENDING"))
                 .when(duplicateCandidateService).confirm(CANDIDATE_ID, ADMIN_ID);
 
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Candidate is not PENDING"));
     }
@@ -173,10 +176,8 @@ class AdminDuplicateControllerTest {
 
     @Test
     void confirm_withDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
-
         mockMvc.perform(post("/api/admin/duplicates/" + CANDIDATE_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Requires admin role"));
 

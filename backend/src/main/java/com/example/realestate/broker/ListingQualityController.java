@@ -3,16 +3,13 @@ package com.example.realestate.broker;
 import com.example.realestate.broker.dto.ListingQualityResponse;
 import com.example.realestate.quality.ListingQualityService;
 import com.example.realestate.security.CallerInfo;
+import com.example.realestate.security.IsBrokerOrAbove;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
-
-import java.util.Set;
 
 /**
  * GET /api/broker/listing-quality
@@ -23,9 +20,8 @@ import java.util.Set;
  * <ul>
  *   <li>Requires a valid JWT — {@link com.example.realestate.security.CallerInfoResolver}
  *       returns 401 when no JWT is present.</li>
- *   <li>Requires broker, dealer, or admin role — this endpoint explicitly rejects the
- *       "user" role with 403, because {@code CallerInfoResolver.ALLOWED_ROLES} includes
- *       "user" and the resolver alone is not sufficient.</li>
+ *   <li>Requires broker, dealer, or admin role — enforced declaratively by {@link IsBrokerOrAbove}.
+ *       The "user" role is denied with 403.</li>
  *   <li>Ownership boundary is enforced in {@link ListingQualityService#getQualityPage}
  *       via the {@code created_by} predicate in the repository query — no identity
  *       parameter is accepted from the request.</li>
@@ -36,9 +32,6 @@ import java.util.Set;
 public class ListingQualityController {
 
     private static final Logger log = LoggerFactory.getLogger(ListingQualityController.class);
-
-    /** Roles allowed to access broker-facing quality endpoints. */
-    private static final Set<String> BROKER_ROLES = Set.of("broker", "dealer", "admin");
 
     private final ListingQualityService listingQualityService;
 
@@ -55,15 +48,9 @@ public class ListingQualityController {
      * @param caller Resolved from JWT by {@link com.example.realestate.security.CallerInfoResolver}.
      * @return 200 OK with {@link ListingQualityResponse}; 403 if role is not broker/dealer/admin.
      */
+    @IsBrokerOrAbove
     @GetMapping("/listing-quality")
     public ResponseEntity<ListingQualityResponse> getListingQuality(CallerInfo caller) {
-        if (!BROKER_ROLES.contains(caller.role())) {
-            log.warn("GET /api/broker/listing-quality -> 403 userId={} role={}",
-                    caller.userId(), caller.role());
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Requires broker, dealer, or admin role");
-        }
-
         log.debug("GET /api/broker/listing-quality userId={} role={}", caller.userId(), caller.role());
         ListingQualityResponse response = listingQualityService.getQualityPage(caller.userId());
         return ResponseEntity.ok(response);

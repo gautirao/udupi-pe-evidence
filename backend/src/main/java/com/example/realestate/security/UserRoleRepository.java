@@ -21,6 +21,18 @@ public class UserRoleRepository {
     }
 
     /**
+     * Returns ALL roles for the given user (multi-role support).
+     * No LIMIT — returns every row in user_roles for this user_id.
+     * Called by {@link DbRoleJwtAuthenticationConverter} to populate all authorities.
+     */
+    public List<String> findAllRoles(UUID userId) {
+        return jdbc.queryForList(
+                "SELECT role::text FROM public.user_roles WHERE user_id = ?",
+                String.class,
+                userId);
+    }
+
+    /**
      * Returns the role string for the given user, or empty if no row exists.
      * Mirrors the native query formerly in ListingRepository.
      */

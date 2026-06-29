@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -97,11 +99,7 @@ class AdminTrustControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(dimensionRepository, listingRepository, badgeService, userRoleService);
-        // ADMIN_ID has role "admin" → isAdmin() = true
-        when(userRoleService.getUserRole(ADMIN_ID)).thenReturn(Optional.of("admin"));
-        // NON_ADMIN_ID has role "broker" → isAdmin() = false
-        when(userRoleService.getUserRole(NON_ADMIN_ID)).thenReturn(Optional.of("broker"));
+        reset(dimensionRepository, listingRepository, badgeService);
     }
 
     // =========================================================================
@@ -114,7 +112,7 @@ class AdminTrustControllerTest {
     @Test
     void getPendingReviews_notAdmin_returns403() throws Exception {
         mockMvc.perform(get("/api/admin/trust/pending-reviews")
-                        .with(jwt().jwt(j -> j.subject(NON_ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(NON_ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -135,7 +133,7 @@ class AdminTrustControllerTest {
         when(listingRepository.findAllById(any())).thenReturn(List.of(listing));
 
         mockMvc.perform(get("/api/admin/trust/pending-reviews")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(2))
@@ -158,7 +156,7 @@ class AdminTrustControllerTest {
     @Test
     void approve_notAdmin_returns403() throws Exception {
         mockMvc.perform(post("/api/admin/trust/{id}/approve", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(NON_ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(NON_ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -171,7 +169,7 @@ class AdminTrustControllerTest {
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/admin/trust/{id}/approve", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -186,7 +184,7 @@ class AdminTrustControllerTest {
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.of(earned));
 
         mockMvc.perform(post("/api/admin/trust/{id}/approve", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -200,7 +198,7 @@ class AdminTrustControllerTest {
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.of(dim));
 
         mockMvc.perform(post("/api/admin/trust/{id}/approve", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Badge approved"));
 
@@ -218,7 +216,7 @@ class AdminTrustControllerTest {
     @Test
     void reject_notAdmin_returns403() throws Exception {
         mockMvc.perform(post("/api/admin/trust/{id}/reject", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(NON_ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(NON_ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -231,7 +229,7 @@ class AdminTrustControllerTest {
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/admin/trust/{id}/reject", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -246,7 +244,7 @@ class AdminTrustControllerTest {
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.of(available));
 
         mockMvc.perform(post("/api/admin/trust/{id}/reject", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -262,7 +260,7 @@ class AdminTrustControllerTest {
         mockMvc.perform(post("/api/admin/trust/{id}/reject", DIMENSION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"Document appears expired\"}")
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Badge submission rejected"));
 
@@ -278,7 +276,7 @@ class AdminTrustControllerTest {
         when(dimensionRepository.findById(DIMENSION_ID)).thenReturn(Optional.of(dim));
 
         mockMvc.perform(post("/api/admin/trust/{id}/reject", DIMENSION_ID)
-                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(ADMIN_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Badge submission rejected"));
 

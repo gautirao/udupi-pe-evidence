@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -97,7 +99,7 @@ class ListingControllerTest {
     @BeforeEach
     void setUp() {
         reset(listingCrudService, listingWorkflowService, listingImageRepository,
-                listingResponseMapper, userRoleService);
+                listingResponseMapper);
         // Default stub: no images; individual tests override when imageCount matters.
         when(listingImageRepository.countByListingId(any())).thenReturn(0L);
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -152,7 +154,6 @@ class ListingControllerTest {
 
     @Test
     void create_withDealerRole_returns201WithIdAndStatus() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -166,7 +167,7 @@ class ListingControllerTest {
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"propertyType":"land","title":"Test plot","locality":"Manipal",
@@ -189,7 +190,6 @@ class ListingControllerTest {
 
     @Test
     void mine_withDealerRole_returns200WithArray() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
@@ -197,7 +197,7 @@ class ListingControllerTest {
         when(listingCrudService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class))).thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
@@ -210,7 +210,6 @@ class ListingControllerTest {
 
     @Test
     void update_withDealerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Updated title",
                 "Manipal", new BigDecimal("6000000"), "Updated desc");
@@ -224,7 +223,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"propertyType":"land","title":"Updated title","locality":"Manipal",
@@ -247,10 +246,9 @@ class ListingControllerTest {
 
     @Test
     void delete_withDealerRole_returns204() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNoContent());
 
         verify(listingCrudService).deleteListing(LISTING_ID, DEALER_ID, false);
@@ -273,7 +271,6 @@ class ListingControllerTest {
 
     @Test
     void create_withViewerRole_returnsForbidden() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(post("/api/listings")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
@@ -305,7 +302,7 @@ class ListingControllerTest {
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"New title"}
@@ -328,7 +325,7 @@ class ListingControllerTest {
                         "Cannot update listing with status LIVE"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"New title"}
@@ -346,7 +343,7 @@ class ListingControllerTest {
                 .when(listingCrudService).deleteListing(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -361,7 +358,7 @@ class ListingControllerTest {
                 .when(listingCrudService).deleteListing(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(delete("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot delete listing with status LIVE"));
     }
@@ -370,7 +367,6 @@ class ListingControllerTest {
 
     @Test
     void submit_happyPath_returns200WithPendingReview() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -378,7 +374,7 @@ class ListingControllerTest {
         when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("PENDING_REVIEW"));
@@ -390,14 +386,13 @@ class ListingControllerTest {
 
     @Test
     void submit_rejectedListing_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing submitted = buildListing(LISTING_ID, "PENDING_REVIEW", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "Resubmitted");
         when(listingWorkflowService.submitListing(LISTING_ID, DEALER_ID, false)).thenReturn(submitted);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING_REVIEW"));
     }
@@ -413,7 +408,7 @@ class ListingControllerTest {
                                 "message", "Land area is required for land listings"))));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].field").value("land_area"));
     }
@@ -429,7 +424,7 @@ class ListingControllerTest {
                                 "message", "Bedrooms is required for apartment listings"))));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].field").value("bedrooms"));
     }
@@ -445,7 +440,7 @@ class ListingControllerTest {
                                 "message", "At least 3 images required (found 1)"))));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].field").value("images"))
                 .andExpect(jsonPath("$.errors[0].message").value("At least 3 images required (found 1)"));
@@ -462,7 +457,7 @@ class ListingControllerTest {
                                 "message", "Address must be confirmed before submission"))));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].field").value("address_confirmed"));
     }
@@ -476,7 +471,7 @@ class ListingControllerTest {
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -492,7 +487,7 @@ class ListingControllerTest {
                                 "message", "Commercial submission not supported yet"))));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].field").value("property_type"))
                 .andExpect(jsonPath("$.errors[0].message").value("Commercial submission not supported yet"));
@@ -508,7 +503,7 @@ class ListingControllerTest {
                         "Cannot submit listing with status LIVE"));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot submit listing with status LIVE"));
     }
@@ -527,7 +522,7 @@ class ListingControllerTest {
                                 "message", "At least 3 images required (found 0)"))));
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/submit")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors.length()").value(3))
                 .andExpect(jsonPath("$.errors[0].field").value("price"))
@@ -539,7 +534,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_draftListing_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Draft Plot",
                 "Manipal", new BigDecimal("5000000"), "Updated draft");
@@ -551,7 +545,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"Draft Plot","locality":"Manipal","price":5000000}
@@ -563,7 +557,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_rejectedListing_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "REJECTED", "house", "Fixed House",
                 "Udupi", new BigDecimal("8000000"), "Fixed after rejection");
@@ -575,7 +568,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"Fixed House","price":8000000}
@@ -595,7 +588,7 @@ class ListingControllerTest {
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"Someone else's listing"}
@@ -616,7 +609,7 @@ class ListingControllerTest {
                         "Cannot update listing with status PENDING_REVIEW"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"New title"}
@@ -637,7 +630,7 @@ class ListingControllerTest {
                         "Cannot update listing with status LIVE"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"New title"}
@@ -657,7 +650,7 @@ class ListingControllerTest {
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"title":"New title"}
@@ -670,7 +663,6 @@ class ListingControllerTest {
 
     @Test
     void create_responseIncludesImageCount() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "Test plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -682,7 +674,7 @@ class ListingControllerTest {
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(2L);
 
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"propertyType":"land","title":"Test plot","locality":"Manipal",
@@ -694,7 +686,6 @@ class ListingControllerTest {
 
     @Test
     void mine_responseIncludesImageCount() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
@@ -703,7 +694,7 @@ class ListingControllerTest {
         when(listingImageRepository.countByListingId(LISTING_ID)).thenReturn(4L);
 
         mockMvc.perform(get("/api/listings/mine")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].imageCount").value(4));
     }
@@ -712,7 +703,6 @@ class ListingControllerTest {
 
     @Test
     void mine_withStatusFilter_passesStatusToService() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing listing = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("10000000"), "A house");
@@ -721,7 +711,7 @@ class ListingControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine?status=DRAFT")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].status").value("DRAFT"));
@@ -731,14 +721,13 @@ class ListingControllerTest {
 
     @Test
     void mine_withoutStatusFilter_passesNullStatusToService() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Page<Listing> page = new PageImpl<>(List.of());
         when(listingCrudService.getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/listings/mine")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk());
 
         verify(listingCrudService).getListingsByOwner(eq(DEALER_ID), isNull(), any(Pageable.class));
@@ -748,7 +737,6 @@ class ListingControllerTest {
 
     @Test
     void update_withVideoUrl_responseIncludesVideoUrl() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -762,7 +750,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"videoUrl":"https://www.youtube.com/watch?v=abc123","applyVideoUrl":true}
@@ -780,7 +768,6 @@ class ListingControllerTest {
 
     @Test
     void update_withBlankVideoUrl_responseHasNullVideoUrl() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
@@ -794,7 +781,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"videoUrl":"","applyVideoUrl":true}
@@ -822,7 +809,7 @@ class ListingControllerTest {
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(l);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reraValid").value(true));
     }
@@ -837,7 +824,7 @@ class ListingControllerTest {
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(l);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reraValid").value(false));
     }
@@ -855,7 +842,7 @@ class ListingControllerTest {
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(l);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reraValid").value(true))
                 .andExpect(jsonPath("$.possessionStatus").value("under_construction"))
@@ -873,7 +860,7 @@ class ListingControllerTest {
                 .thenReturn(new ListingStatsResponse(2, 1, 3, 1, 7));
 
         mockMvc.perform(get("/api/listings/mine/stats")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draftCount").value(2))
                 .andExpect(jsonPath("$.pendingReviewCount").value(1))
@@ -891,7 +878,7 @@ class ListingControllerTest {
                 .thenReturn(new ListingStatsResponse(0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/listings/mine/stats")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.draftCount").value(0))
                 .andExpect(jsonPath("$.pendingReviewCount").value(0))
@@ -902,7 +889,6 @@ class ListingControllerTest {
 
     @Test
     void stats_withViewerRole_returnsForbidden() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/listings/mine/stats")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
@@ -915,12 +901,11 @@ class ListingControllerTest {
     @Test
     void stats_withAdminRole_returnsOk() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
         when(listingCrudService.getListingStats(adminId))
                 .thenReturn(new ListingStatsResponse(0, 0, 0, 0, 0));
 
         mockMvc.perform(get("/api/listings/mine/stats")
-                        .with(jwt().jwt(j -> j.subject(adminId.toString()))))
+                        .with(jwt().jwt(j -> j.subject(adminId.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk());
 
         verify(listingCrudService).getListingStats(adminId);
@@ -930,8 +915,6 @@ class ListingControllerTest {
 
     @Test
     void create_withUserRole_setsSellerTypeOwner() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
-
         Listing saved = buildListing(LISTING_ID, "DRAFT", "land", "My plot",
                 "Manipal", new BigDecimal("3000000"), "Owner listing");
         saved.setSellerType("owner");
@@ -944,7 +927,7 @@ class ListingControllerTest {
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"propertyType":"land","title":"My plot","locality":"Manipal",
@@ -963,7 +946,6 @@ class ListingControllerTest {
 
     @Test
     void create_withUserRole_atLimit_returns409() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("user"));
         when(listingCrudService.createDraft(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
@@ -972,7 +954,7 @@ class ListingControllerTest {
                         "Owner accounts are limited to 3 active listings"));
 
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"propertyType":"land","title":"4th listing","locality":"Udupi",
@@ -985,8 +967,6 @@ class ListingControllerTest {
     @Test
     void create_withAdminRole_setsSellerTypeBroker() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
-
         Listing saved = buildListing(LISTING_ID, "DRAFT", "house", "Admin house",
                 "Udupi", new BigDecimal("7000000"), "Admin-created");
         saved.setSellerType("broker");
@@ -999,7 +979,7 @@ class ListingControllerTest {
                 .thenReturn(saved);
 
         mockMvc.perform(post("/api/listings")
-                        .with(jwt().jwt(j -> j.subject(adminId.toString())))
+                        .with(jwt().jwt(j -> j.subject(adminId.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"propertyType":"house","title":"Admin house","locality":"Udupi",
@@ -1020,14 +1000,13 @@ class ListingControllerTest {
 
     @Test
     void archive_happyPath_returns200WithArchivedStatus() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing archived = buildListing(LISTING_ID, "ARCHIVED", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Nice plot");
         when(listingWorkflowService.archiveListing(LISTING_ID, DEALER_ID, null)).thenReturn(archived);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("ARCHIVED"));
@@ -1042,7 +1021,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1054,7 +1033,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot archive listing with status PENDING_REVIEW"));
     }
@@ -1066,7 +1045,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).archiveListing(LISTING_ID, DEALER_ID, null);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/archive")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -1075,14 +1054,13 @@ class ListingControllerTest {
 
     @Test
     void reopen_happyPath_returns200WithDraftStatus() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing reopened = buildListing(LISTING_ID, "DRAFT", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "Reopened");
         when(listingWorkflowService.reopenRejectedListing(LISTING_ID, DEALER_ID)).thenReturn(reopened);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("DRAFT"));
@@ -1097,7 +1075,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).reopenRejectedListing(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1109,7 +1087,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).reopenRejectedListing(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot reopen listing with status LIVE"));
     }
@@ -1118,14 +1096,13 @@ class ListingControllerTest {
 
     @Test
     void reopenAsDraft_happyPath_returns200WithDraftStatus() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing reopened = buildListing(LISTING_ID, "DRAFT", "land", "Plot",
                 "Manipal", new BigDecimal("5000000"), "Reopened from archive");
         when(listingWorkflowService.reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID)).thenReturn(reopened);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("DRAFT"));
@@ -1140,7 +1117,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1152,7 +1129,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).reopenArchivedListingAsDraft(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(post("/api/listings/" + LISTING_ID + "/reopen-as-draft")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot reopen listing with status LIVE"));
     }
@@ -1161,10 +1138,9 @@ class ListingControllerTest {
 
     @Test
     void withdraw_happyPath_returns204() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNoContent());
 
         verify(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
@@ -1177,7 +1153,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1189,7 +1165,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Cannot withdraw listing with status DRAFT"));
     }
@@ -1203,7 +1179,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).withdrawListingFromReview(LISTING_ID, DEALER_ID);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/withdraw")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("SUBMISSION_ALREADY_ACTIONED"))
                 .andExpect(jsonPath("$.message").value(
@@ -1214,14 +1190,13 @@ class ListingControllerTest {
 
     @Test
     void restore_happyPath_returns200WithLiveStatus() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing restored = buildListing(LISTING_ID, "LIVE", "house", "House",
                 "Udupi", new BigDecimal("8000000"), "Restored");
         when(listingWorkflowService.restoreArchivedListing(LISTING_ID, DEALER_ID)).thenReturn(restored);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("LIVE"));
@@ -1238,7 +1213,7 @@ class ListingControllerTest {
                         "Listing was never published — use reopen-to-draft instead"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("FAST_RESTORE_NOT_ELIGIBLE"))
                 .andExpect(jsonPath("$.message").value(
@@ -1252,7 +1227,7 @@ class ListingControllerTest {
                 .thenThrow(new ListingOwnershipException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1264,7 +1239,7 @@ class ListingControllerTest {
                 .thenThrow(new ListingNotFoundException(LISTING_ID));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID + "/restore")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -1278,7 +1253,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).findListingForCaller(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1286,14 +1261,13 @@ class ListingControllerTest {
     @Test
     void getById_scrapedListing_adminCaller_returns200() throws Exception {
         UUID adminId = UUID.fromString("00000000-0000-0000-0000-000000000002");
-        when(userRoleService.getUserRole(adminId)).thenReturn(Optional.of("admin"));
         Listing scraped = buildListing(LISTING_ID, "LIVE", "house", "Scraped House",
                 "Udupi", new BigDecimal("8000000"), "Scraped listing");
         scraped.setCreatedBy(null); // SCRAPED: no owner
         when(listingWorkflowService.findListingForCaller(LISTING_ID, adminId, true)).thenReturn(scraped);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(adminId.toString()))))
+                        .with(jwt().jwt(j -> j.subject(adminId.toString())).authorities(new SimpleGrantedAuthority("ROLE_ADMIN"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()));
     }
@@ -1307,7 +1281,7 @@ class ListingControllerTest {
         when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false)).thenReturn(ownedListing);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(LISTING_ID.toString()));
     }
@@ -1319,7 +1293,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).findListingForCaller(LISTING_ID, DEALER_ID, false);
 
         mockMvc.perform(get("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Listing belongs to a different broker"));
     }
@@ -1332,7 +1306,7 @@ class ListingControllerTest {
                 .when(listingWorkflowService).findListingForCaller(unknownId, DEALER_ID, false);
 
         mockMvc.perform(get("/api/listings/" + unknownId)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Listing not found"));
     }
@@ -1341,10 +1315,9 @@ class ListingControllerTest {
 
     @Test
     void updateListing_invalidReraNumber_returns422() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reraNumber":"INVALID"}
@@ -1363,7 +1336,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_validReraNumber_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "House",
                 "Udupi", new BigDecimal("5000000"), "Desc");
@@ -1376,7 +1348,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reraNumber":"PRM/KA/2023/0042"}
@@ -1386,7 +1358,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_nullReraNumber_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "House",
                 "Udupi", new BigDecimal("5000000"), "Desc");
@@ -1398,7 +1369,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reraNumber":null}
@@ -1408,11 +1379,10 @@ class ListingControllerTest {
 
     @Test
     void updateListing_nearMissReraNumber_returns422() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         // 3 digits in last segment instead of 4 — structurally close but invalid
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reraNumber":"PRM/KA/2023/004"}
@@ -1423,7 +1393,7 @@ class ListingControllerTest {
 
         // lowercase letters — must also fail (character-class guard)
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"reraNumber":"prm/ka/2023/0042"}
@@ -1443,7 +1413,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_validAgriBoundary_returns200WithBoundary() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         String boundaryGeoJson = "{\"type\":\"Polygon\",\"coordinates\":[[[74.0,13.0],[74.1,13.0],[74.1,13.1],[74.0,13.1],[74.0,13.0]]]}";
         Listing updated = buildListing(LISTING_ID, "DRAFT", "agricultural_land", "Agri Plot",
@@ -1458,7 +1427,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"propertyType\":\"agricultural_land\",\"boundary\":\"" +
                                 boundaryGeoJson.replace("\"", "\\\"") + "\"}"))
@@ -1468,7 +1437,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_nonAgriBoundary_returns422WithCode() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
@@ -1480,7 +1448,7 @@ class ListingControllerTest {
                                "code", "BOUNDARY_NON_AGRI_TYPE"))));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"propertyType\":\"house\",\"boundary\":\"{\\\"type\\\":\\\"Polygon\\\",\\\"coordinates\\\":[[]]}\"}"))
                 .andExpect(status().isUnprocessableEntity())
@@ -1489,7 +1457,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_unclosedRing_returns422WithCode() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         when(listingCrudService.updateListing(eq(LISTING_ID), eq(DEALER_ID), eq(false),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
@@ -1501,7 +1468,7 @@ class ListingControllerTest {
                                "code", "BOUNDARY_NOT_CLOSED"))));
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"propertyType\":\"agricultural_land\",\"boundary\":\"{\\\"type\\\":\\\"Polygon\\\",\\\"coordinates\\\":[[[]]]}\"}"))
                 .andExpect(status().isUnprocessableEntity())
@@ -1510,7 +1477,6 @@ class ListingControllerTest {
 
     @Test
     void updateListing_residentialWithoutBoundary_boundaryNullInResponse() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
 
         Listing updated = buildListing(LISTING_ID, "DRAFT", "house", "My House",
                 "Udupi", new BigDecimal("8000000"), "No boundary");
@@ -1524,7 +1490,7 @@ class ListingControllerTest {
                 .thenReturn(updated);
 
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"propertyType\":\"house\"}"))
                 .andExpect(status().isOk())

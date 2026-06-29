@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -85,7 +87,7 @@ class BookingControllerTest {
 
     @BeforeEach
     void setUp() {
-        reset(bookingService, transactionManager, rateLimiterService, userRoleService);
+        reset(bookingService, transactionManager, rateLimiterService);
         // Default: bucket allows all requests (tryConsume returns true)
         Bucket allowBucket = Mockito.mock(Bucket.class);
         when(allowBucket.tryConsume(1)).thenReturn(true);
@@ -117,7 +119,7 @@ class BookingControllerTest {
                 .thenReturn(booking);
 
         mockMvc.perform(post("/api/bookings")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"listingId":"%s","requestedDate":"2026-04-01",
@@ -141,7 +143,7 @@ class BookingControllerTest {
                         "You already have an active booking for this listing"));
 
         mockMvc.perform(post("/api/bookings")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"listingId":"%s","requestedDate":"2026-04-01",
@@ -160,7 +162,7 @@ class BookingControllerTest {
                         "listingId", "You cannot request a viewing for your own listing"));
 
         mockMvc.perform(post("/api/bookings")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"listingId":"%s","requestedDate":"2026-04-01",
@@ -179,7 +181,7 @@ class BookingControllerTest {
                         "requestedTimeSlot", "Time slot must match format HH:MM-HH:MM"));
 
         mockMvc.perform(post("/api/bookings")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"listingId":"%s","requestedDate":"2026-04-01",
@@ -198,7 +200,7 @@ class BookingControllerTest {
                         "requestedDate", "Requested date must be in the future"));
 
         mockMvc.perform(post("/api/bookings")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"listingId":"%s","requestedDate":"2020-01-01",
@@ -217,7 +219,7 @@ class BookingControllerTest {
         when(bookingService.confirmBooking(BOOKING_ID, DEALER_ID)).thenReturn(booking);
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(BOOKING_ID.toString()))
                 .andExpect(jsonPath("$.status").value("CONFIRMED"));
@@ -233,7 +235,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingNotFoundException(BOOKING_ID));
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Booking not found"));
     }
@@ -246,7 +248,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
@@ -261,7 +263,7 @@ class BookingControllerTest {
         when(bookingService.cancelBooking(BOOKING_ID, REQUESTER_ID)).thenReturn(booking);
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.cancelledBy").value("user"));
@@ -278,7 +280,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingNotFoundException(BOOKING_ID));
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(unrelatedUser.toString()))))
+                        .with(jwt().jwt(j -> j.subject(unrelatedUser.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("Booking not found"));
     }
@@ -294,7 +296,7 @@ class BookingControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/mine")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(BOOKING_ID.toString()))
@@ -307,7 +309,7 @@ class BookingControllerTest {
 
     @Test
     void dealer_withDealerRole_returns200WithPage() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         ViewingRequest item = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_REQUESTED);
         Page<ViewingRequest> page = new PageImpl<>(List.of(item));
@@ -315,7 +317,7 @@ class BookingControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/broker")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1))
                 .andExpect(jsonPath("$.content[0].id").value(BOOKING_ID.toString()))
@@ -328,7 +330,6 @@ class BookingControllerTest {
 
     @Test
     void dealer_withoutDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
@@ -346,7 +347,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/confirm")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
@@ -359,7 +360,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/decline")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"declineReason\":\"Not available\"}"))
                 .andExpect(status().isConflict())
@@ -374,7 +375,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(put("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
@@ -394,7 +395,7 @@ class BookingControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/mine")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.page.totalElements").value(2))
@@ -406,7 +407,7 @@ class BookingControllerTest {
 
     @Test
     void dealer_getBookings_returnsPage_withPaginationMetadata() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         UUID booking2Id = UUID.fromString("00000000-0000-0000-0000-000000000097");
         ViewingRequest item1 = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
                 BookingService.STATUS_REQUESTED);
@@ -418,7 +419,7 @@ class BookingControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/broker")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.page.totalElements").value(2))
@@ -436,7 +437,7 @@ class BookingControllerTest {
                 .thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/bookings/mine")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.content.length()").value(0))
@@ -453,7 +454,7 @@ class BookingControllerTest {
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/mine?page=1&size=5")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk());
 
         verify(bookingService).getBookingsForRequesterPaged(
@@ -470,7 +471,7 @@ class BookingControllerTest {
         when(rateLimiterService.getBookingBucket(anyString())).thenReturn(exhaustedBucket);
 
         mockMvc.perform(post("/api/bookings")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER")))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"listingId":"%s","requestedDate":"2026-04-01",
@@ -490,7 +491,7 @@ class BookingControllerTest {
         when(bookingService.cancelBookingNew(BOOKING_ID, REQUESTER_ID)).thenReturn(booking);
 
         mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.cancelledBy").value("requester"));
@@ -507,7 +508,7 @@ class BookingControllerTest {
         when(bookingService.cancelBookingNew(BOOKING_ID, DEALER_ID)).thenReturn(booking);
 
         mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
                 .andExpect(jsonPath("$.cancelledBy").value("broker"));
@@ -522,7 +523,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
@@ -535,7 +536,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingForbiddenException());
 
         mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(outsider.toString()))))
+                        .with(jwt().jwt(j -> j.subject(outsider.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").value("Forbidden"));
 
@@ -548,7 +549,7 @@ class BookingControllerTest {
                 .thenThrow(new BookingService.BookingStateConflictException());
 
         mockMvc.perform(post("/api/bookings/" + BOOKING_ID + "/cancel")
-                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("BOOKING_STATE_CONFLICT"));
     }
@@ -557,21 +558,20 @@ class BookingControllerTest {
 
     @Test
     void broker_alias_withDealerRole_returns200() throws Exception {
-        when(userRoleService.getUserRole(DEALER_ID)).thenReturn(Optional.of("dealer"));
+
         Page<ViewingRequest> page = new PageImpl<>(List.of(
                 buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID, BookingService.STATUS_REQUESTED)));
         when(bookingService.getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class)))
                 .thenReturn(page);
 
         mockMvc.perform(get("/api/bookings/broker")
-                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(1));
     }
 
     @Test
     void broker_alias_withoutDealerRole_returns403() throws Exception {
-        when(userRoleService.getUserRole(REQUESTER_ID)).thenReturn(Optional.of("viewer"));
 
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))

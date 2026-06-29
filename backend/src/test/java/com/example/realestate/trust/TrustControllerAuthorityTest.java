@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.reset;
@@ -114,10 +116,8 @@ class TrustControllerAuthorityTest {
 
     @BeforeEach
     void setUp() {
-        reset(badgeService, listingRepository, photoHashService, userRoleService,
+        reset(badgeService, listingRepository, photoHashService,
                 profileRepository, otpService, supabaseStorageService);
-        when(userRoleService.getUserRole(OWNER_ID)).thenReturn(Optional.of("broker"));
-        when(userRoleService.getUserRole(OTHER_ID)).thenReturn(Optional.of("broker"));
     }
 
     // -------------------------------------------------------------------------
@@ -210,7 +210,7 @@ class TrustControllerAuthorityTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.empty());
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -223,7 +223,7 @@ class TrustControllerAuthorityTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(ownerTypeListing()));
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -236,7 +236,7 @@ class TrustControllerAuthorityTest {
         when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(brokerTypeListing()));
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Authority OTP is for owner listings only"));
     }
@@ -250,7 +250,7 @@ class TrustControllerAuthorityTest {
         when(profileRepository.findByUserId(OWNER_ID)).thenReturn(Optional.of(profileWithoutPhone()));
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("No phone number on profile"));
     }
@@ -270,7 +270,7 @@ class TrustControllerAuthorityTest {
         when(badgeService.getBadges(LISTING_ID)).thenReturn(List.of(earned));
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Authority already verified"));
     }
@@ -286,7 +286,7 @@ class TrustControllerAuthorityTest {
         when(otpService.sendOtp(anyString())).thenThrow(new OtpDeliveryException("Provider unreachable"));
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.error").value("OTP delivery failed"));
     }
@@ -302,7 +302,7 @@ class TrustControllerAuthorityTest {
         when(otpService.sendOtp(PHONE)).thenReturn(stubSendResult());
 
         mockMvc.perform(post("/api/listings/{id}/trust/authority/request-otp", LISTING_ID)
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("OTP sent"))
                 .andExpect(jsonPath("$.phone").doesNotExist()); // phone must not be echoed
@@ -324,7 +324,7 @@ class TrustControllerAuthorityTest {
         mockMvc.perform(post("/api/listings/{id}/trust/authority/verify-otp", LISTING_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(verifyBody("000000"))
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Invalid or expired OTP"));
     }
@@ -347,7 +347,7 @@ class TrustControllerAuthorityTest {
         mockMvc.perform(post("/api/listings/{id}/trust/authority/verify-otp", LISTING_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(verifyBody("123456"))
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Authority verified"));
 
@@ -367,7 +367,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(validPdfFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -381,7 +381,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(validPdfFile())
-                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OTHER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error").exists());
     }
@@ -395,7 +395,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(validPdfFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("Mandate upload is for broker listings only"));
     }
@@ -409,7 +409,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(emptyFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("No file uploaded"));
     }
@@ -423,7 +423,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(oversizedFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isPayloadTooLarge())
                 .andExpect(jsonPath("$.error").value("File size must not exceed 10 MB"));
     }
@@ -437,7 +437,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(wrongTypeFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("File must be a PDF or image (JPEG/PNG)"));
     }
@@ -453,7 +453,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(validPdfFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error").value("Authority mandate is already pending"));
     }
@@ -473,7 +473,7 @@ class TrustControllerAuthorityTest {
 
         mockMvc.perform(multipart("/api/listings/{id}/trust/authority/submit-mandate", LISTING_ID)
                         .file(validPdfFile())
-                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString()))))
+                        .with(jwt().jwt(j -> j.subject(OWNER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_BROKER"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Mandate submitted for review"));
 
