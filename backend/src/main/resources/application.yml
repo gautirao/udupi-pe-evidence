@@ -129,6 +129,9 @@ supabase:
   storage:
     enabled: ${SUPABASE_STORAGE_ENABLED:false}
     bucket: ${SUPABASE_STORAGE_BUCKET:listing-images}
+    # TTL hint forwarded to the Supabase upload-sign endpoint. Note: the upload token lifetime
+    # is server-fixed in many storage-api versions; this is a best-effort hint only.
+    upload-url-ttl-seconds: 300
 
 # Sentry error monitoring
 # DSN must be set in Render env vars: SENTRY_DSN=https://...@sentry.io/...

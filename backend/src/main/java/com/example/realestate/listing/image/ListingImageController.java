@@ -5,6 +5,7 @@ import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
+import com.example.realestate.listing.storage.SupabaseStorageService;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import com.example.realestate.trust.BadgeInvalidationService;
@@ -43,7 +44,10 @@ public class ListingImageController {
 
     private static final int MAX_IMAGES = 10;
     private static final String RETRY_AFTER_SECONDS = "1";
+    private static final long MAX_FILE_SIZE = 5L * 1024 * 1024; // 5 MB
+    private static final String LISTING_IMAGES_BUCKET = "listing-images";
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp");
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
     private static final Set<String> MUTABLE_STATUSES = Set.of(
             ListingStatus.DRAFT.toDbValue(), ListingStatus.REJECTED.toDbValue());
     private static final Pattern EXTENSION_PATTERN = Pattern.compile(".*\\.([a-zA-Z]+)$");
@@ -56,19 +60,22 @@ public class ListingImageController {
     private final ListingImageService imageService;
     private final ListingWorkflowService listingWorkflowService;
     private final BadgeInvalidationService badgeInvalidationService;
+    private final SupabaseStorageService storageService;
 
     public ListingImageController(ListingRepository listingRepository,
                                    ListingImageRepository imageRepository,
                                    ListingImageRegistrar imageRegistrar,
                                    ListingImageService imageService,
                                    ListingWorkflowService listingWorkflowService,
-                                   BadgeInvalidationService badgeInvalidationService) {
+                                   BadgeInvalidationService badgeInvalidationService,
+                                   SupabaseStorageService storageService) {
         this.listingRepository = listingRepository;
         this.imageRepository = imageRepository;
         this.imageRegistrar = imageRegistrar;
         this.imageService = imageService;
         this.listingWorkflowService = listingWorkflowService;
         this.badgeInvalidationService = badgeInvalidationService;
+        this.storageService = storageService;
     }
 
     // ==================== GET — list images ====================
@@ -146,6 +153,75 @@ public class ListingImageController {
                     .headers(headers)
                     .body(Map.of("error", "Upload temporarily busy, please retry"));
         }
+    }
+
+    // ==================== POST — request signed upload URL (#1686) ====================
+
+    /**
+     * Issues a Supabase Storage signed upload URL using the service-role key.
+     *
+     * <p>The frontend must PUT the file bytes directly to the returned {@code signedUrl},
+     * then call POST .../images with {@code storagePath} to register metadata. This fixes
+     * #1686: direct frontend uploads fail RLS because Spring manages roles in its own DB and
+     * they are not mirrored into Supabase JWTs; the service-role key bypasses storage RLS.
+     *
+     * <p>Validation fires before any signed URL is minted to avoid wasting sign quota on
+     * invalid requests.
+     */
+    @PostMapping("/upload-url")
+    public ResponseEntity<?> requestUploadUrl(CallerInfo caller,
+                                               @PathVariable UUID listingId,
+                                               @RequestBody UploadUrlRequest req) {
+
+        FindResult result = findOwnedListing(listingId, caller);
+        if (result.error() != null) return result.error();
+        Listing listing = result.listing();
+
+        if (!MUTABLE_STATUSES.contains(listing.getStatus())) {
+            return badRequest("Cannot upload images for listing with status " + listing.getStatus());
+        }
+
+        // Guard: scraped listings (null createdBy) have no valid storage path.
+        // Non-admins are already blocked by findOwnedListing; this catches admin callers on scraped listings.
+        if (listing.getCreatedBy() == null) {
+            log.warn("POST /api/listings/{}/images/upload-url -> 403 reason=scraped_no_owner userId={}",
+                    listingId, caller.userId());
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "Cannot upload images to a listing with no owner"));
+        }
+
+        // Validate BEFORE issuing the signed URL — no URL is minted on bad input.
+        if (req.contentType() == null || !ALLOWED_CONTENT_TYPES.contains(req.contentType())) {
+            return badRequest("Allowed content types: image/jpeg, image/png, image/webp");
+        }
+
+        String ext = extractExtension(req.fileName() != null ? req.fileName() : "");
+        if (ext == null || !ALLOWED_EXTENSIONS.contains(ext)) {
+            return badRequest("Allowed image types: jpg, jpeg, png, webp");
+        }
+
+        if (req.sizeBytes() <= 0 || req.sizeBytes() > MAX_FILE_SIZE) {
+            return badRequest("File size must be between 1 byte and 5 MB");
+        }
+
+        // Build storagePath server-side from DB-owned values (createdBy is from the listing entity,
+        // never from the request). This keeps the existing register prefix validation passing.
+        String storagePath = "listings/" + listing.getCreatedBy() + "/" + listingId
+                + "/" + UUID.randomUUID() + "." + ext;
+
+        Optional<String> signedUrlOpt = storageService.createSignedUploadUrl(LISTING_IMAGES_BUCKET, storagePath);
+        if (signedUrlOpt.isEmpty()) {
+            log.warn("POST /api/listings/{}/images/upload-url -> 503 storage unavailable userId={}",
+                    listingId, caller.userId());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(Map.of("error", "Image storage unavailable, please retry later"));
+        }
+
+        // expiresAt is null — upload token lifetime is server-fixed; see UploadUrlResponse javadoc.
+        UploadUrlResponse response = new UploadUrlResponse(signedUrlOpt.get(), storagePath, null);
+        log.info("POST /api/listings/{}/images/upload-url -> 200 storagePath={} userId={}",
+                listingId, storagePath, caller.userId());
+        return ResponseEntity.ok(response);
     }
 
     // ==================== DELETE — remove image metadata ====================

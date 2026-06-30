@@ -56,6 +56,9 @@ public class SupabaseStorageService {
     @Value("${supabase.storage.enabled:false}")
     private boolean configuredEnabled;
 
+    @Value("${supabase.storage.upload-url-ttl-seconds:300}")
+    private int uploadUrlTtlSeconds;
+
     @Value("${supabase.url:}")
     private String supabaseUrl;
 
@@ -242,6 +245,70 @@ public class SupabaseStorageService {
             return Optional.empty();
         } catch (Exception e) {
             log.warn("Signed URL failed — path={} error={}", storagePath, e.getClass().getSimpleName());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Create a short-lived signed URL for uploading an object to Supabase Storage.
+     * Uses the service-role key on {@code POST /storage/v1/object/upload/sign/{bucket}/{path}},
+     * which bypasses storage RLS and is the correct fix for #1686 (user Supabase JWTs lack the
+     * Spring-managed role claim that storage RLS requires).
+     *
+     * <p>The response {@code url} key is relative (e.g. {@code /object/upload/sign/...?token=...});
+     * this method prepends {@code {supabase.url}/storage/v1} to form the absolute PUT target.
+     *
+     * <p>Note: the upload-sign endpoint may not honour {@code expiresIn} in all storage-api
+     * versions; token lifetime is server-fixed. Callers must not fabricate an expiry timestamp.
+     *
+     * @param storageBucket bucket name (e.g. "listing-images")
+     * @param storagePath   path within bucket (e.g. "listings/{userId}/{listingId}/uuid.jpg")
+     * @return Optional containing the absolute signed upload URL, or empty if disabled or request failed
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<String> createSignedUploadUrl(String storageBucket, String storagePath) {
+        if (!enabled) {
+            log.debug("Signed upload URL skipped (disabled): path={}", storagePath);
+            return Optional.empty();
+        }
+        if (storagePath == null || storagePath.contains("..")) {
+            log.warn("Signed upload URL rejected — unsafe path: path={}", storagePath);
+            return Optional.empty();
+        }
+
+        String url = UriComponentsBuilder.fromHttpUrl(supabaseUrl)
+                .pathSegment("storage", "v1", "object", "upload", "sign", storageBucket)
+                .path("/" + storagePath)
+                .build().toUriString();
+
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            // Authorization header is never logged — it carries the service-role key.
+            headers.set("Authorization", "Bearer " + serviceRoleKey);
+            headers.set("Content-Type", "application/json");
+
+            Map<String, Object> body = Map.of("expiresIn", uploadUrlTtlSeconds);
+            var response = restTemplate.exchange(url, HttpMethod.POST,
+                    new HttpEntity<>(body, headers), Map.class);
+
+            Map<String, Object> responseBody = response.getBody();
+            if (responseBody != null && responseBody.containsKey("url")) {
+                String relativeUrl = (String) responseBody.get("url");
+                // relativeUrl is relative to the storage-api base (e.g. /object/upload/sign/...?token=...)
+                // Prepend {supabase.url}/storage/v1 to form the absolute PUT target.
+                // Log status only — response body carries the upload token; never log it.
+                String absoluteSignedUrl = supabaseUrl + "/storage/v1" + relativeUrl;
+                log.debug("Signed upload URL created: path={} ttl={}s", storagePath, uploadUrlTtlSeconds);
+                return Optional.of(absoluteSignedUrl);
+            }
+            log.warn("Signed upload URL response missing `url` key: path={}", storagePath);
+            return Optional.empty();
+        } catch (RestClientResponseException e) {
+            // Log status code only — response body may contain token fragments.
+            log.warn("Signed upload URL failed — path={} status={}", storagePath, e.getStatusCode());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("Signed upload URL failed — path={} error={}", storagePath, e.getClass().getSimpleName());
             return Optional.empty();
         }
     }

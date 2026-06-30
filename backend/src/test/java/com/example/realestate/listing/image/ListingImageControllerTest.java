@@ -37,8 +37,11 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static org.hamcrest.Matchers.startsWith;
+import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -664,6 +667,163 @@ class ListingImageControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(badgeInvalidationService).invalidateSpecificDimension(LISTING_ID, "PHOTOS", "IMAGE_CHANGE");
+    }
+
+    // ==================== Tests 26–33: POST upload-url ====================
+
+    private static final String SIGNED_URL =
+            "https://example.supabase.co/storage/v1/object/upload/sign/listing-images/listings/uid/lid/uuid.jpg?token=tok";
+
+    /** Test 26: happy path — owner + DRAFT + valid input → 200. */
+    @Test
+    void uploadUrl_ownerDraftValidInput_returns200() throws Exception {
+        stubDealerWithDraftListing();
+        when(storageService.createSignedUploadUrl(eq("listing-images"), anyString()))
+                .thenReturn(Optional.of(SIGNED_URL));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":102400}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.signedUrl").value(SIGNED_URL))
+                .andExpect(jsonPath("$.storagePath", startsWith("listings/" + DEALER_ID + "/" + LISTING_ID + "/")))
+                .andExpect(jsonPath("$.storagePath", endsWith(".jpg")))
+                // Service-role key must never appear in the response
+                .andExpect(jsonPath("$.serviceRoleKey").doesNotExist())
+                .andExpect(jsonPath("$.authorization").doesNotExist());
+
+        verify(storageService).createSignedUploadUrl(eq("listing-images"), anyString());
+    }
+
+    /** Test 27: no JWT → 401. */
+    @Test
+    void uploadUrl_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        verify(storageService, never()).createSignedUploadUrl(any(), any());
+    }
+
+    /** Test 28: authenticated non-owner (existing listing owned by DEALER_ID, caller=OTHER_DEALER) → 404. */
+    @Test
+    void uploadUrl_nonOwner_returns404() throws Exception {
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, OTHER_DEALER, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // draftListing.createdBy = DEALER_ID (non-null) → secondary re-read → 404
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(draftListing));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(OTHER_DEALER.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Listing not found"));
+
+        verify(storageService, never()).createSignedUploadUrl(any(), any());
+    }
+
+    /** Test 29: scraped listing (null createdBy) + non-admin caller → 403 from findOwnedListing. */
+    @Test
+    void uploadUrl_scrapedListing_nonAdmin_returns403() throws Exception {
+        Listing scraped = new Listing();
+        scraped.setId(LISTING_ID);
+        scraped.setCreatedBy(null);
+        scraped.setStatus(ListingStatus.DRAFT.toDbValue());
+        scraped.setPropertyType("house");
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenThrow(new ListingOwnershipException(LISTING_ID));
+        // Secondary re-read: null createdBy → 403
+        when(listingRepository.findById(LISTING_ID)).thenReturn(Optional.of(scraped));
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                                """))
+                .andExpect(status().isForbidden());
+
+        verify(storageService, never()).createSignedUploadUrl(any(), any());
+    }
+
+    /** Test 30: contentType not in allowlist (application/pdf) → 400; createSignedUploadUrl NOT called. */
+    @Test
+    void uploadUrl_invalidContentType_returns400_noSignCall() throws Exception {
+        stubDealerWithDraftListing();
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"doc.pdf","contentType":"application/pdf","sizeBytes":1024}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+
+        verify(storageService, never()).createSignedUploadUrl(any(), any());
+    }
+
+    /** Test 31: sizeBytes > 5 MB → 400; createSignedUploadUrl NOT called. */
+    @Test
+    void uploadUrl_fileTooLarge_returns400_noSignCall() throws Exception {
+        stubDealerWithDraftListing();
+        long sixMb = 6L * 1024 * 1024;
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":%d}
+                                """.formatted(sixMb)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+
+        verify(storageService, never()).createSignedUploadUrl(any(), any());
+    }
+
+    /** Test 32: storage disabled / sign failure (createSignedUploadUrl returns empty) → 503. */
+    @Test
+    void uploadUrl_storageUnavailable_returns503() throws Exception {
+        stubDealerWithDraftListing();
+        when(storageService.createSignedUploadUrl(eq("listing-images"), anyString()))
+                .thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                                """))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    /** Test 33: listing in non-mutable status (LIVE) → 400; createSignedUploadUrl NOT called. */
+    @Test
+    void uploadUrl_liveStatus_returns400() throws Exception {
+        draftListing.setStatus(ListingStatus.LIVE.toDbValue());
+        when(listingWorkflowService.findListingForCaller(LISTING_ID, DEALER_ID, false))
+                .thenReturn(draftListing);
+
+        mockMvc.perform(post("/api/listings/" + LISTING_ID + "/images/upload-url")
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER")))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"fileName":"photo.jpg","contentType":"image/jpeg","sizeBytes":1024}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+
+        verify(storageService, never()).createSignedUploadUrl(any(), any());
     }
 
     // ==================== Helper ====================

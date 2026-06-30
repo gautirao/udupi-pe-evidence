@@ -89,12 +89,13 @@ export function useListingImages(listingId: string | undefined) {
   const canSubmit = imageCount >= 3;
   const remainingSlots = MAX_IMAGES - imageCount;
 
-  // Upload: Storage first, then metadata (per IMAGE_UPLOAD_FAILURE_MODES.md section 2)
+  // Upload: backend-issued signed URL first, then PUT bytes, then metadata
+  // (fixes RLS 42501: the browser never touches storage with a user JWT)
   const uploadImage = useCallback(
     async (file: File) => {
       if (!listingId) return;
 
-      // Client-side validation
+      // Client-side validation (fast UX feedback; backend is authoritative)
       const validationError = validateFile(file);
       if (validationError) {
         toast({ title: 'Invalid file', description: validationError, variant: 'destructive' });
@@ -110,19 +111,8 @@ export function useListingImages(listingId: string | undefined) {
         return;
       }
 
-      // Get current user ID for storage path
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user?.id) {
-        toast({ title: 'Not authenticated', description: 'Please sign in.', variant: 'destructive' });
-        return;
-      }
-      const userId = session.user.id;
-
-      // Build unique file name to avoid collisions
-      const ext = getFileExtension(file.name);
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const storagePath = `listings/${userId}/${listingId}/${uniqueName}`;
-      const uploadKey = storagePath;
+      // Stable upload key generated upfront (independent of server-assigned storagePath)
+      const uploadKey = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
       // Step 0: Compress if above threshold
       let fileToUpload: File = file;
@@ -149,30 +139,77 @@ export function useListingImages(listingId: string | undefined) {
         }
       }
 
-      // Step 1: Upload bytes to Supabase Storage
+      // Use the ACTUAL post-compression file's type and size for the signed-URL request
+      const contentType = fileToUpload.type;
+      const sizeBytes = fileToUpload.size;
+
+      // Step 1: Request a pre-signed upload URL from the backend
       setUploads((prev) => ({
         ...prev,
-        [uploadKey]: { fileName: file.name, progress: 30, status: 'uploading', file, originalSize, compressedSize },
+        [uploadKey]: { fileName: file.name, progress: 20, status: 'uploading', file, originalSize, compressedSize },
       }));
 
-      const { error: storageError } = await supabase.storage
-        .from(BUCKET)
-        .upload(storagePath, fileToUpload, { upsert: false });
+      let signedUrl: string;
+      let storagePath: string;
 
-      if (storageError) {
+      try {
+        const urlResp = await api.post<{ signedUrl: string; storagePath: string; expiresAt: string | null }>(
+          `/api/listings/${listingId}/images/upload-url`,
+          { fileName: fileToUpload.name, contentType, sizeBytes },
+        );
+        signedUrl = urlResp.signedUrl;
+        storagePath = urlResp.storagePath;
+        // expiresAt is informational only; null is valid — no countdown shown
+      } catch (err) {
+        const apiErr = err instanceof ApiError ? err : null;
+        const message = apiErr?.message ?? 'Failed to get upload URL.';
         setUploads((prev) => ({
           ...prev,
-          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: storageError.message, file },
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file },
         }));
-        toast({ title: 'Upload failed', description: storageError.message, variant: 'destructive' });
+        toast({ title: 'Upload failed', description: message, variant: 'destructive' });
         return;
       }
 
-      // Get public URL
+      // Step 2: PUT bytes directly to the pre-signed URL
+      // The URL already carries its own auth token — do NOT add an Authorization header.
+      setUploads((prev) => ({
+        ...prev,
+        [uploadKey]: { fileName: file.name, progress: 40, status: 'uploading', file, originalSize, compressedSize },
+      }));
+
+      let putResponse: Response;
+      try {
+        putResponse = await fetch(signedUrl, {
+          method: 'PUT',
+          body: fileToUpload,
+          headers: { 'Content-Type': contentType },
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Network error during upload.';
+        setUploads((prev) => ({
+          ...prev,
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file },
+        }));
+        toast({ title: 'Upload failed', description: message, variant: 'destructive' });
+        return;
+      }
+
+      if (!putResponse.ok) {
+        const message = `Storage upload failed (${putResponse.status}).`;
+        setUploads((prev) => ({
+          ...prev,
+          [uploadKey]: { fileName: file.name, progress: 0, status: 'error', error: message, file },
+        }));
+        toast({ title: 'Upload failed', description: message, variant: 'destructive' });
+        return;
+      }
+
+      // Derive public display URL from server-returned storagePath (bucket is public)
       const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath);
       const publicUrl = urlData.publicUrl;
 
-      // Step 2: Register metadata with backend
+      // Step 3: Register metadata with backend using the SERVER-returned storagePath
       setUploads((prev) => ({
         ...prev,
         [uploadKey]: { fileName: file.name, progress: 70, status: 'registering' },
