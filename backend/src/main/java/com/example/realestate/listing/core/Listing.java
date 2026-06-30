@@ -36,6 +36,15 @@ public class Listing {
     @Column(name = "property_type", nullable = false, length = 30)
     private String propertyType = "other";
 
+    /**
+     * Typed listing family discriminator — RESIDENTIAL, COMMERCIAL, or AGRICULTURAL.
+     * Nullable: legacy rows (property_type='land', 'other', or NULL) have no family.
+     * Populated by V102 backfill and by the dual-write path introduced in M38-FU2.
+     * Read-only from API consumers; written only by the listing service layer.
+     */
+    @Column(name = "listing_family")
+    private String listingFamily;
+
     @Column(name = "status", nullable = false, length = 30)
     private String status = ListingStatus.SCRAPED.toDbValue();
 
@@ -439,6 +448,14 @@ public class Listing {
 
     public void setPropertyType(String propertyType) {
         this.propertyType = propertyType;
+    }
+
+    public String getListingFamily() {
+        return listingFamily;
+    }
+
+    public void setListingFamily(String listingFamily) {
+        this.listingFamily = listingFamily;
     }
 
     public String getStatus() {
