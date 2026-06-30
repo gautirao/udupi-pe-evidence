@@ -2,8 +2,15 @@ package com.example.realestate.search.indexer;
 
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
+import com.example.realestate.listing.typed.AgriculturalLandDetail;
+import com.example.realestate.listing.typed.AgriculturalLandDetailRepository;
+import com.example.realestate.listing.typed.CommercialSpaceDetail;
+import com.example.realestate.listing.typed.CommercialSpaceDetailRepository;
+import com.example.realestate.listing.typed.ResidentialUnitDetail;
+import com.example.realestate.listing.typed.ResidentialUnitDetailRepository;
 import com.example.realestate.search.outbox.ListingSearchOutboxEntry;
 import com.example.realestate.search.outbox.ListingSearchOutboxRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -64,18 +71,52 @@ public class SearchOutboxPoller {
     private final SearchIndexerProperties props;
     private final ListingRepository listingRepository;
     private final SearchOutboxMetrics metrics;
+    private final ResidentialUnitDetailRepository residentialUnitDetailRepository;
+    private final CommercialSpaceDetailRepository commercialSpaceDetailRepository;
+    private final AgriculturalLandDetailRepository agriculturalLandDetailRepository;
 
+    /**
+     * Primary constructor — used by Spring for dependency injection in production.
+     * All three typed-detail repositories are required when the search indexer is enabled.
+     */
+    @Autowired
+    public SearchOutboxPoller(
+            ListingSearchOutboxRepository repository,
+            OpenSearchIndexingAdapter indexingAdapter,
+            SearchIndexerProperties props,
+            ListingRepository listingRepository,
+            SearchOutboxMetrics metrics,
+            ResidentialUnitDetailRepository residentialUnitDetailRepository,
+            CommercialSpaceDetailRepository commercialSpaceDetailRepository,
+            AgriculturalLandDetailRepository agriculturalLandDetailRepository) {
+        this.repository = repository;
+        this.indexingAdapter = indexingAdapter;
+        this.props = props;
+        this.listingRepository = listingRepository;
+        this.metrics = metrics;
+        this.residentialUnitDetailRepository = residentialUnitDetailRepository;
+        this.commercialSpaceDetailRepository = commercialSpaceDetailRepository;
+        this.agriculturalLandDetailRepository = agriculturalLandDetailRepository;
+    }
+
+    /**
+     * Package-private constructor retained for backward-compatibility with existing unit tests
+     * that pre-date the typed-detail projection feature. Delegates to the primary constructor
+     * with null typed-detail repositories.
+     *
+     * <p><b>Safe:</b> the null repos are never accessed when {@code listingFamily} is null
+     * (legacy/untyped listings), which covers all cases exercised by the legacy tests.
+     *
+     * @deprecated use the 8-argument constructor in all new code.
+     */
+    @Deprecated
     public SearchOutboxPoller(
             ListingSearchOutboxRepository repository,
             OpenSearchIndexingAdapter indexingAdapter,
             SearchIndexerProperties props,
             ListingRepository listingRepository,
             SearchOutboxMetrics metrics) {
-        this.repository = repository;
-        this.indexingAdapter = indexingAdapter;
-        this.props = props;
-        this.listingRepository = listingRepository;
-        this.metrics = metrics;
+        this(repository, indexingAdapter, props, listingRepository, metrics, null, null, null);
     }
 
     /**
@@ -180,7 +221,24 @@ public class SearchOutboxPoller {
         } else if (OPERATION_INDEX.equals(operation) && STATUS_LIVE.equals(status)) {
             Optional<Listing> listingOpt = listingRepository.findById(UUID.fromString(listingId));
             if (listingOpt.isPresent()) {
-                ListingIndexDocument doc = ListingIndexDocument.fromListing(listingOpt.get());
+                Listing listing = listingOpt.get();
+                String family = listing.getListingFamily();
+
+                ResidentialUnitDetail residential = null;
+                CommercialSpaceDetail commercial = null;
+                AgriculturalLandDetail agricultural = null;
+
+                if ("RESIDENTIAL".equals(family) && residentialUnitDetailRepository != null) {
+                    residential = residentialUnitDetailRepository.findById(listing.getId()).orElse(null);
+                } else if ("COMMERCIAL".equals(family) && commercialSpaceDetailRepository != null) {
+                    commercial = commercialSpaceDetailRepository.findById(listing.getId()).orElse(null);
+                } else if ("AGRICULTURAL".equals(family) && agriculturalLandDetailRepository != null) {
+                    agricultural = agriculturalLandDetailRepository.findById(listing.getId()).orElse(null);
+                }
+                // NULL/land/other/unknown family → no detail query; residential/commercial/agricultural stay null
+                // Null repos (legacy test constructor) → treated the same as untyped family: no detail query
+
+                ListingIndexDocument doc = ListingIndexDocument.fromListing(listing, residential, commercial, agricultural);
                 indexingAdapter.indexListing(listingId, doc);
             } else {
                 // Listing was deleted between the outbox write and this poll cycle.
