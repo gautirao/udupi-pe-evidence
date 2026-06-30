@@ -450,8 +450,8 @@ class PublicListingControllerTest {
         mockMvc.perform(get("/api/public/listings/within-polygon")
                         .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.items.length()").value(0))
                 .andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.totalPages").value(0))
                 .andExpect(jsonPath("$.page").value(0))
@@ -472,17 +472,19 @@ class PublicListingControllerTest {
         mockMvc.perform(get("/api/public/listings/within-polygon")
                         .param("polygon", "[[13.35,74.79],[13.36,74.80],[13.34,74.80]]"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(50))
                 // teaser fields present
-                .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
-                .andExpect(jsonPath("$.content[0].locality").value("Udupi"))
-                .andExpect(jsonPath("$.content[0].propertyType").value("house"))
-                .andExpect(jsonPath("$.content[0].listingPurpose").value("SALE"))
-                // sensitive fields absent
-                .andExpect(jsonPath("$.content[0].latitude").doesNotExist())
-                .andExpect(jsonPath("$.content[0].title").doesNotExist());
+                .andExpect(jsonPath("$.items[0].id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.items[0].locality").value("Udupi"))
+                .andExpect(jsonPath("$.items[0].propertyType").value("house"))
+                .andExpect(jsonPath("$.items[0].listingPurpose").value("SALE"))
+                // sensitive fields absent (privacy invariant)
+                .andExpect(jsonPath("$.items[0].latitude").doesNotExist())
+                .andExpect(jsonPath("$.items[0].title").doesNotExist());
     }
 
     // ==================== GET /discovery — empty result ====================

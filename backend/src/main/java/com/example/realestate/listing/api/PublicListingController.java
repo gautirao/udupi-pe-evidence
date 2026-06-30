@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.common.api.PagedResponse;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.core.ListingStatus;
@@ -160,13 +161,7 @@ public class PublicListingController {
                 wkt, PageRequest.of(page, clampedSize));
 
         List<ListingTeaserResponse> content = listingResponseMapper.toTeaserResponseList(results.getContent());
-        return ResponseEntity.ok(Map.of(
-                "content", content,
-                "totalElements", results.getTotalElements(),
-                "totalPages", results.getTotalPages(),
-                "page", results.getNumber(),
-                "size", results.getSize()
-        ));
+        return ResponseEntity.ok(PagedResponse.of(results, content));
     }
 
     /**

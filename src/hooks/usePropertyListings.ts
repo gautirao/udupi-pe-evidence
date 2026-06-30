@@ -199,7 +199,7 @@ interface PolygonListingResponse {
 }
 
 interface PolygonPageResponse {
-  content: PolygonListingResponse[];
+  items: PolygonListingResponse[];
   totalElements: number;
   totalPages: number;
   page: number;
@@ -265,14 +265,14 @@ function polygonResponseToListing(r: PolygonListingResponse): PropertyListing & 
   };
 }
 
-async function fetchPolygonListings(polygon: [number, number][]): Promise<(PropertyListing & { images: PropertyImage[] })[]> {
+export async function fetchPolygonListings(polygon: [number, number][]): Promise<(PropertyListing & { images: PropertyImage[] })[]> {
   const polygonParam = JSON.stringify(polygon);
   // Fetch up to 200 results (backend max page size) — polygon search is spatial, no further pagination in the UI for now
   const data = await api.get<PolygonPageResponse>(
     `/api/public/listings/within-polygon?polygon=${encodeURIComponent(polygonParam)}&size=200`,
     { skipAuth: true },
   );
-  return data.content.map(polygonResponseToListing);
+  return data.items.map(polygonResponseToListing);
 }
 
 export function usePropertyListings(filters?: PropertyFilters) {
