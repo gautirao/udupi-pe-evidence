@@ -285,7 +285,7 @@ class BookingControllerTest {
                 .andExpect(jsonPath("$.error").value("Booking not found"));
     }
 
-    // ==================== Test 12: GET /mine 200 — updated to Page format ====================
+    // ==================== Test 12: GET /mine 200 — PagedResponse envelope ====================
 
     @Test
     void mine_returns200WithPage() throws Exception {
@@ -298,14 +298,21 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/mine")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].id").value(BOOKING_ID.toString()))
-                .andExpect(jsonPath("$.page.totalElements").value(1));
+                // PagedResponse envelope — all 5 fields present
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(BOOKING_ID.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.page").isNumber())
+                .andExpect(jsonPath("$.size").isNumber())
+                .andExpect(jsonPath("$.totalPages").isNumber())
+                // Legacy Spring Page keys MUST be absent
+                .andExpect(jsonPath("$.content").doesNotExist())
+                .andExpect(jsonPath("$.pageable").doesNotExist());
 
         verify(bookingService).getBookingsForRequesterPaged(eq(REQUESTER_ID), any(Pageable.class));
     }
 
-    // ==================== Test 13: GET /broker 200 with broker role — updated to Page format ====================
+    // ==================== Test 13: GET /broker 200 with broker role — PagedResponse envelope ====================
 
     @Test
     void dealer_withDealerRole_returns200WithPage() throws Exception {
@@ -319,9 +326,16 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(1))
-                .andExpect(jsonPath("$.content[0].id").value(BOOKING_ID.toString()))
-                .andExpect(jsonPath("$.page.totalElements").value(1));
+                // PagedResponse envelope — all 5 fields present
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(BOOKING_ID.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.page").isNumber())
+                .andExpect(jsonPath("$.size").isNumber())
+                .andExpect(jsonPath("$.totalPages").isNumber())
+                // Legacy Spring Page keys MUST be absent
+                .andExpect(jsonPath("$.content").doesNotExist())
+                .andExpect(jsonPath("$.pageable").doesNotExist());
 
         verify(bookingService).getBookingsForDealerPaged(eq(DEALER_ID), any(Pageable.class));
     }
@@ -397,10 +411,10 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/mine")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(2))
-                .andExpect(jsonPath("$.page.totalElements").value(2))
-                .andExpect(jsonPath("$.page.totalPages").value(1))
-                .andExpect(jsonPath("$.page.size").value(20));
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.size").value(20));
     }
 
     // ==================== Test 19: GET /broker — 2 items, page metadata ====================
@@ -421,10 +435,10 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(2))
-                .andExpect(jsonPath("$.page.totalElements").value(2))
-                .andExpect(jsonPath("$.page.totalPages").value(1))
-                .andExpect(jsonPath("$.page.size").value(20));
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                .andExpect(jsonPath("$.size").value(20));
     }
 
     // ==================== Test 20: GET /mine — empty page ====================
@@ -439,9 +453,9 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/mine")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_USER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.content.length()").value(0))
-                .andExpect(jsonPath("$.page.totalElements").value(0));
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.items.length()").value(0))
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     // ==================== Test 21: GET /mine — page and size params passed to service ====================
@@ -567,7 +581,7 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content.length()").value(1));
+                .andExpect(jsonPath("$.items.length()").value(1));
     }
 
     @Test
@@ -576,6 +590,37 @@ class BookingControllerTest {
         mockMvc.perform(get("/api/bookings/broker")
                         .with(jwt().jwt(j -> j.subject(REQUESTER_ID.toString()))))
                 .andExpect(status().isForbidden());
+    }
+
+    // ==================== Dealer broker endpoint — listingId filter branch ====================
+
+    @Test
+    void dealer_withListingIdFilter_returns200WithPagedResponseEnvelope() throws Exception {
+        ViewingRequest item = buildBooking(BOOKING_ID, REQUESTER_ID, DEALER_ID,
+                BookingService.STATUS_REQUESTED);
+        Page<ViewingRequest> page = new PageImpl<>(
+                List.of(item), PageRequest.of(0, 20), 1);
+        when(bookingService.getBookingsForDealerByListingPaged(
+                eq(DEALER_ID), eq(LISTING_ID), any(Pageable.class)))
+                .thenReturn(page);
+
+        mockMvc.perform(get("/api/bookings/broker?listingId=" + LISTING_ID)
+                        .with(jwt().jwt(j -> j.subject(DEALER_ID.toString())).authorities(new SimpleGrantedAuthority("ROLE_DEALER"))))
+                .andExpect(status().isOk())
+                // PagedResponse envelope — all 5 fields present
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(BOOKING_ID.toString()))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.page").value(0))
+                .andExpect(jsonPath("$.size").value(20))
+                .andExpect(jsonPath("$.totalPages").value(1))
+                // Legacy Spring Page keys MUST be absent
+                .andExpect(jsonPath("$.content").doesNotExist())
+                .andExpect(jsonPath("$.pageable").doesNotExist());
+
+        verify(bookingService).getBookingsForDealerByListingPaged(
+                eq(DEALER_ID), eq(LISTING_ID), any(Pageable.class));
+        verify(bookingService, never()).getBookingsForDealerPaged(any(), any());
     }
 
     // ==================== Helpers ====================

@@ -1,10 +1,10 @@
 package com.example.realestate.booking;
 
+import com.example.realestate.common.api.PagedResponse;
 import com.example.realestate.exception.RateLimiterService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -35,8 +35,8 @@ import java.util.UUID;
  * - PUT  /api/bookings/:id/confirm: any authenticated user; service enforces dealer_id == JWT.sub (M5)
  * - PUT  /api/bookings/:id/decline: any authenticated user; service enforces dealer_id == JWT.sub (M5)
  * - PUT  /api/bookings/:id/cancel:  any authenticated user; service enforces participation (M5)
- * - GET  /api/bookings/mine: any authenticated user; returns Page<BookingResponse>
- * - GET  /api/bookings/broker: requires broker or admin role; returns Page<BookingResponse>
+ * - GET  /api/bookings/mine: any authenticated user; returns PagedResponse<BookingResponse>
+ * - GET  /api/bookings/broker: requires broker or admin role; returns PagedResponse<BookingResponse>
  */
 @RestController
 @RequestMapping("/api/bookings")
@@ -182,29 +182,29 @@ public class BookingController {
     // ===== GET /api/bookings/mine =====
 
     @GetMapping("/mine")
-    public ResponseEntity<Page<BookingResponse>> mine(
+    public ResponseEntity<PagedResponse<BookingResponse>> mine(
             JwtAuthenticationToken auth,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         validateSort(pageable);
         UUID requesterId = UUID.fromString(auth.getToken().getSubject());
-        return ResponseEntity.ok(bookingService.getBookingsForRequesterPaged(requesterId, pageable).map(this::toResponse));
+        return ResponseEntity.ok(PagedResponse.of(bookingService.getBookingsForRequesterPaged(requesterId, pageable).map(this::toResponse)));
     }
 
     // ===== GET /api/bookings/broker =====
 
     @GetMapping({"/broker"})
-    public ResponseEntity<?> dealer(
+    public ResponseEntity<PagedResponse<BookingResponse>> dealer(
             CallerInfo caller,
             @RequestParam(required = false) UUID listingId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         validateSort(pageable);
 
         if (listingId != null) {
-            return ResponseEntity.ok(bookingService
+            return ResponseEntity.ok(PagedResponse.of(bookingService
                     .getBookingsForDealerByListingPaged(caller.userId(), listingId, pageable)
-                    .map(this::toResponse));
+                    .map(this::toResponse)));
         }
-        return ResponseEntity.ok(bookingService.getBookingsForDealerPaged(caller.userId(), pageable).map(this::toResponse));
+        return ResponseEntity.ok(PagedResponse.of(bookingService.getBookingsForDealerPaged(caller.userId(), pageable).map(this::toResponse)));
     }
 
     // ===== Validation helpers =====
