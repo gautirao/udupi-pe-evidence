@@ -172,7 +172,7 @@ public class PublicListingController {
      * @param size page size (default 50, max 200)
      */
     @GetMapping("/discovery")
-    public ResponseEntity<ListingDiscoveryResponse> getDiscovery(
+    public ResponseEntity<PagedResponse<ListingTeaserResponse>> getDiscovery(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
 
@@ -183,13 +183,7 @@ public class PublicListingController {
         Page<Listing> results = listingRepository.findAllLiveListings(PageRequest.of(page, clampedSize));
         List<ListingTeaserResponse> content = listingResponseMapper.toTeaserResponseList(results.getContent());
 
-        return ResponseEntity.ok(new ListingDiscoveryResponse(
-                content,
-                results.getTotalElements(),
-                results.getTotalPages(),
-                results.getNumber(),
-                results.getSize()
-        ));
+        return ResponseEntity.ok(PagedResponse.of(results, content));
     }
 
     /**
@@ -331,14 +325,4 @@ public class PublicListingController {
             BigDecimal delta
     ) {}
 
-    /**
-     * Paginated feed response for listing discovery.
-     */
-    public record ListingDiscoveryResponse(
-            List<ListingTeaserResponse> content,
-            long totalElements,
-            int totalPages,
-            int page,
-            int size
-    ) {}
 }

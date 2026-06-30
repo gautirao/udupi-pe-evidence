@@ -496,8 +496,8 @@ class PublicListingControllerTest {
 
         mockMvc.perform(get("/api/public/listings/discovery"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
-                .andExpect(jsonPath("$.content.length()").value(0))
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.items.length()").value(0))
                 .andExpect(jsonPath("$.totalElements").value(0))
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(50));
@@ -515,19 +515,19 @@ class PublicListingControllerTest {
 
         mockMvc.perform(get("/api/public/listings/discovery"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1))
                 // teaser fields present
-                .andExpect(jsonPath("$.content[0].id").value(LISTING_ID.toString()))
-                .andExpect(jsonPath("$.content[0].locality").value("Manipal"))
-                .andExpect(jsonPath("$.content[0].propertyType").value("land"))
-                .andExpect(jsonPath("$.content[0].listingPurpose").value("SALE"))
-                .andExpect(jsonPath("$.content[0].price").value(3000000))
+                .andExpect(jsonPath("$.items[0].id").value(LISTING_ID.toString()))
+                .andExpect(jsonPath("$.items[0].locality").value("Manipal"))
+                .andExpect(jsonPath("$.items[0].propertyType").value("land"))
+                .andExpect(jsonPath("$.items[0].listingPurpose").value("SALE"))
+                .andExpect(jsonPath("$.items[0].price").value(3000000))
                 // sensitive fields absent
-                .andExpect(jsonPath("$.content[0].latitude").doesNotExist())
-                .andExpect(jsonPath("$.content[0].title").doesNotExist())
-                .andExpect(jsonPath("$.content[0].description").doesNotExist());
+                .andExpect(jsonPath("$.items[0].latitude").doesNotExist())
+                .andExpect(jsonPath("$.items[0].title").doesNotExist())
+                .andExpect(jsonPath("$.items[0].description").doesNotExist());
     }
 
     // ==================== GET /discovery — JSON shape validation ====================
@@ -542,7 +542,7 @@ class PublicListingControllerTest {
 
         mockMvc.perform(get("/api/public/listings/discovery"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.totalElements").value(1))
                 .andExpect(jsonPath("$.totalPages").value(1))
                 .andExpect(jsonPath("$.page").value(0))

@@ -549,7 +549,7 @@ export interface TeaserListing {
 }
 
 interface TeaserPageResponse {
-  content: TeaserListing[];
+  items: TeaserListing[];
 }
 
 async function fetchTeaserListings(page = 0, size = 50): Promise<TeaserListing[]> {
@@ -558,7 +558,7 @@ async function fetchTeaserListings(page = 0, size = 50): Promise<TeaserListing[]
       `/api/public/listings/discovery?page=${page}&size=${size}`,
       { skipAuth: true },
     );
-    return data.content ?? [];
+    return data.items ?? [];
   } catch (err) {
     if (err instanceof ApiError) {
       return [];
