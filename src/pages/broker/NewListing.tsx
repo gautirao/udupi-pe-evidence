@@ -27,6 +27,8 @@ import { useToast } from '@/hooks/use-toast';
 import { COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
+import { isListingFieldVisible } from '@/lib/listingFieldConfig';
+import type { ListingFieldKey } from '@/lib/listingFieldConfig';
 
 export default function NewListing() {
   const { userRole, isLoading: authLoading } = useAuth();
@@ -100,6 +102,14 @@ export default function NewListing() {
 
   const isCommercialType = COMMERCIAL_TYPES.has(propertyType);
   const isRent = listingPurpose === 'rent';
+
+  /**
+   * Shorthand render-visibility predicate for the current propertyType +
+   * listingPurpose. The `propertyType !== ''` guard keeps TypeScript happy
+   * (state type is PropertyType | '') and returns false when no type is selected.
+   */
+  const fieldVisible = (key: ListingFieldKey): boolean =>
+    propertyType !== '' && isListingFieldVisible(key, propertyType, listingPurpose);
 
   // Sale needs price > 0; rent needs monthlyRent > 0
   const priceValid = isRent
@@ -229,9 +239,7 @@ export default function NewListing() {
             {/* Property details — size, layout and type-specific fields */}
             <SectionCard title="Property details">
             {/* Conditional: Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
-            {(propertyType === 'land' || propertyType === 'commercial_land'
-              || propertyType === 'commercial_building' || propertyType === 'warehouse'
-              || propertyType === 'agricultural_land') && (
+            {fieldVisible('landArea') && (
               <AreaField
                 id="landArea"
                 propertyType={propertyType === 'agricultural_land' ? 'agricultural_land' : 'land'}
@@ -245,7 +253,7 @@ export default function NewListing() {
             )}
 
             {/* Agricultural Land Fields — shown only for agricultural_land */}
-            {propertyType === 'agricultural_land' && (
+            {fieldVisible('waterSource') && (
               <div className="space-y-4" data-testid="agri-fields-section">
                 <h3 className="text-sm font-medium text-foreground">Agricultural Land Details</h3>
 
@@ -388,8 +396,7 @@ export default function NewListing() {
             )}
 
             {/* Conditional: Built Area — house, apartment, commercial_building, warehouse */}
-            {(propertyType === 'house' || propertyType === 'apartment'
-              || propertyType === 'commercial_building' || propertyType === 'warehouse') && (
+            {fieldVisible('builtArea') && (
               <AreaField
                 id="builtArea"
                 label="Built Area"
@@ -404,7 +411,7 @@ export default function NewListing() {
             )}
 
             {/* Conditional: Bedrooms — house / apartment */}
-            {(propertyType === 'apartment' || propertyType === 'house') && (
+            {fieldVisible('bedrooms') && (
               <div className="space-y-2">
                 <Label htmlFor="bedrooms">Bedrooms</Label>
                 <Input
@@ -420,7 +427,7 @@ export default function NewListing() {
             )}
 
             {/* Conditional: Carpet Area — commercial shop/office */}
-            {propertyType === 'commercial' && (
+            {fieldVisible('carpetArea') && (
               <AreaField
                 id="carpetArea"
                 label="Carpet Area"
@@ -435,7 +442,7 @@ export default function NewListing() {
             )}
 
             {/* Conditional: Floor Number — commercial */}
-            {propertyType === 'commercial' && (
+            {fieldVisible('floorNumber') && (
               <div className="space-y-2">
                 <Label htmlFor="floorNumber">Floor Number *</Label>
                 <Input
@@ -451,7 +458,7 @@ export default function NewListing() {
             )}
 
             {/* Conditional: Total Floors — commercial_building */}
-            {propertyType === 'commercial_building' && (
+            {fieldVisible('totalFloors') && (
               <div className="space-y-2">
                 <Label htmlFor="totalFloors">Total Floors *</Label>
                 <Input
@@ -467,7 +474,7 @@ export default function NewListing() {
             )}
 
             {/* Commercial shared fields: furnishing, washrooms, parking, road frontage, usage, units */}
-            {isCommercialType && propertyType !== 'commercial_land' && (
+            {fieldVisible('furnishingStatus') && (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="furnishingStatus">Furnishing Status</Label>
@@ -511,7 +518,7 @@ export default function NewListing() {
               </>
             )}
 
-            {isCommercialType && (
+            {fieldVisible('roadFrontageFt') && (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="roadFrontageFt">Road Frontage (ft)</Label>
@@ -534,7 +541,7 @@ export default function NewListing() {
                     onChange={(e) => setCommercialUsage(e.target.value)}
                   />
                 </div>
-                {(propertyType === 'commercial_building' || propertyType === 'warehouse') && (
+                {fieldVisible('numberOfUnits') && (
                   <div className="space-y-2">
                     <Label htmlFor="numberOfUnits">Number of Units</Label>
                     <Input
@@ -578,7 +585,7 @@ export default function NewListing() {
                 </div>
 
                 {/* Price — for sale listings */}
-                {!isRent && (
+                {fieldVisible('price') && (
                   <div>
                     <PriceField
                       id="price"
@@ -593,7 +600,7 @@ export default function NewListing() {
                 )}
 
                 {/* Rent fields */}
-                {isRent && (
+                {fieldVisible('monthlyRent') && (
                   <div className="space-y-4 rounded-md border p-4 bg-muted/30">
                     <p className="text-sm font-medium">Rent Details</p>
                     <div className="space-y-2">

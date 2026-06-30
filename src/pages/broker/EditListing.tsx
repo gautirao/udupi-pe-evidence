@@ -37,6 +37,8 @@ import { COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
+import { isListingFieldVisible } from '@/lib/listingFieldConfig';
+import type { ListingFieldKey } from '@/lib/listingFieldConfig';
 import {
   WATER_SOURCE_LABELS,
   SOIL_TYPE_LABELS,
@@ -341,9 +343,16 @@ export default function EditListing() {
   const showLandArea = propertyType === 'land' || propertyType === 'commercial_land'
     || propertyType === 'commercial_building' || propertyType === 'warehouse'
     || propertyType === 'agricultural_land';
-  const showBedrooms = propertyType === 'apartment' || propertyType === 'house';
   const showBuiltArea = propertyType === 'apartment' || propertyType === 'house'
     || propertyType === 'commercial_building' || propertyType === 'warehouse';
+
+  /**
+   * Shorthand render-visibility predicate for the current propertyType +
+   * listingPurpose. The `propertyType !== ''` guard keeps TypeScript happy
+   * (state type is PropertyType | '') and returns false when no type is selected.
+   */
+  const fieldVisible = (key: ListingFieldKey): boolean =>
+    propertyType !== '' && isListingFieldVisible(key, propertyType, listingPurpose);
 
   // Saves step 1 form fields, then advances to step 2 (or back to review)
   const handleStep1Save = (e: React.FormEvent) => {
@@ -607,7 +616,7 @@ export default function EditListing() {
             {/* Property details — size, layout and type-specific fields */}
             <SectionCard title="Property details">
                 {/* Land Area — land, commercial_land, commercial_building, warehouse, agricultural_land */}
-                {showLandArea && (
+                {fieldVisible('landArea') && (
                   <AreaField
                     id="landArea"
                     propertyType={propertyType === 'agricultural_land' ? 'agricultural_land' : 'land'}
@@ -621,7 +630,7 @@ export default function EditListing() {
                 )}
 
                 {/* Agricultural Land Fields — shown only for agricultural_land */}
-                {propertyType === 'agricultural_land' && (
+                {fieldVisible('waterSource') && (
                   <div className="space-y-4" data-testid="agri-fields-section">
                     <h3 className="text-sm font-medium text-foreground">Agricultural Land Details</h3>
 
@@ -803,7 +812,7 @@ export default function EditListing() {
                 )}
 
                 {/* Built Area — apartment, house, commercial_building, warehouse */}
-                {showBuiltArea && (
+                {fieldVisible('builtArea') && (
                   <AreaField
                     id="builtArea"
                     label="Built Area"
@@ -818,7 +827,7 @@ export default function EditListing() {
                 )}
 
                 {/* Bedrooms — apartment / house */}
-                {showBedrooms && (
+                {fieldVisible('bedrooms') && (
                   <div className="space-y-2">
                     <Label htmlFor="bedrooms">Bedrooms</Label>
                     <Input
@@ -834,7 +843,7 @@ export default function EditListing() {
                 )}
 
                 {/* Carpet Area — commercial shop/office */}
-                {propertyType === 'commercial' && (
+                {fieldVisible('carpetArea') && (
                   <AreaField
                     id="carpetArea"
                     label="Carpet Area"
@@ -849,7 +858,7 @@ export default function EditListing() {
                 )}
 
                 {/* Floor Number — commercial */}
-                {propertyType === 'commercial' && (
+                {fieldVisible('floorNumber') && (
                   <div className="space-y-2">
                     <Label htmlFor="floorNumber">Floor Number *</Label>
                     <Input
@@ -865,7 +874,7 @@ export default function EditListing() {
                 )}
 
                 {/* Total Floors — commercial_building */}
-                {propertyType === 'commercial_building' && (
+                {fieldVisible('totalFloors') && (
                   <div className="space-y-2">
                     <Label htmlFor="totalFloors">Total Floors *</Label>
                     <Input
@@ -881,7 +890,7 @@ export default function EditListing() {
                 )}
 
                 {/* Commercial shared fields */}
-                {isCommercialType && propertyType !== 'commercial_land' && (
+                {fieldVisible('furnishingStatus') && (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="furnishingStatus">Furnishing Status</Label>
@@ -925,7 +934,7 @@ export default function EditListing() {
                   </>
                 )}
 
-                {isCommercialType && (
+                {fieldVisible('roadFrontageFt') && (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="roadFrontageFt">Road Frontage (ft)</Label>
@@ -948,7 +957,7 @@ export default function EditListing() {
                         onChange={(e) => setCommercialUsage(e.target.value)}
                       />
                     </div>
-                    {(propertyType === 'commercial_building' || propertyType === 'warehouse') && (
+                    {fieldVisible('numberOfUnits') && (
                       <div className="space-y-2">
                         <Label htmlFor="numberOfUnits">Number of Units</Label>
                         <Input
@@ -965,7 +974,7 @@ export default function EditListing() {
                 )}
 
                 {/* Rent fields */}
-                {isRent && (
+                {fieldVisible('monthlyRent') && (
                   <div className="space-y-4 rounded-md border p-4 bg-muted/30">
                     <p className="text-sm font-medium">Rent Details</p>
                     <div className="space-y-2">
