@@ -75,7 +75,7 @@ public class ListingController {
         String sellerType = "user".equals(caller.role()) ? "owner" : "broker";
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.ownershipType());
+                req.cultivationStatus(), req.ownershipType(), req.landCategory());
         try {
             Listing saved = listingCrudService.createDraft(
                     caller.userId(), req.propertyType(), req.title(),
@@ -160,7 +160,7 @@ public class ListingController {
                                     @Valid @RequestBody UpdateRequest req) {
 
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
-                req.cultivationStatus(), req.ownershipType());
+                req.cultivationStatus(), req.ownershipType(), req.landCategory());
         try {
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
             String updateVideoUrl = applyVideo
@@ -334,8 +334,11 @@ public class ListingController {
     // ===== Validation helpers =====
 
     /**
-     * Validates the 5 free-text agri fields against the canonical option sets in
-     * {@link AgriFieldOptions}.  Null or blank values are always accepted (field not supplied).
+     * Validates the 6 agri fields against the canonical option sets in {@link AgriFieldOptions}:
+     * {@code waterSource}, {@code soilType}, {@code roadAccess}, {@code cultivationStatus},
+     * {@code ownershipType}, and {@code landCategory} (wired M38-10b / #1693).
+     *
+     * <p>Null or blank values are always accepted (field not supplied).
      * A non-blank value that is not a member of the canonical set is rejected with 400.
      *
      * <p>Design note: Set&lt;String&gt; membership check is used instead of {@code @Pattern}
@@ -346,12 +349,13 @@ public class ListingController {
      */
     private static void validateAgriFields(String waterSource, String soilType,
                                            String roadAccess, String cultivationStatus,
-                                           String ownershipType) {
+                                           String ownershipType, String landCategory) {
         rejectIfUnknown("waterSource",       waterSource,       AgriFieldOptions.VALID_WATER_SOURCES);
         rejectIfUnknown("soilType",          soilType,          AgriFieldOptions.VALID_SOIL_TYPES);
         rejectIfUnknown("roadAccess",        roadAccess,        AgriFieldOptions.VALID_ROAD_ACCESS_VALUES);
         rejectIfUnknown("cultivationStatus", cultivationStatus, AgriFieldOptions.VALID_CULTIVATION_STATUSES);
         rejectIfUnknown("ownershipType",     ownershipType,     AgriFieldOptions.VALID_OWNERSHIP_TYPES);
+        rejectIfUnknown("landCategory",      landCategory,      AgriFieldOptions.VALID_LAND_CATEGORIES);
     }
 
     private static void rejectIfUnknown(String fieldName, String value, Set<String> validValues) {

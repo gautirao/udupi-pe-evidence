@@ -1,0 +1,80 @@
+{
+  "_comment": "Backend-derived contract. DO NOT edit manually. Generated from Java authority classes (AgriFieldOptions, ResidentialFieldOptions, CommercialFieldOptions). Verified by ListingFieldOptionsContractTest. Frontend parity test (listing-field-options.parity.test.ts) asserts FE constants match this file.",
+  "agri": {
+    "waterSource": [
+      "BOREWELL",
+      "WELL",
+      "RIVER",
+      "RAIN_FED",
+      "POND",
+      "STREAM",
+      "NOT_AVAILABLE",
+      "OTHER"
+    ],
+    "soilType": [
+      "RED_LATERITE",
+      "BLACK_COTTON",
+      "ALLUVIAL",
+      "SANDY_LOAM",
+      "CLAY",
+      "OTHER"
+    ],
+    "roadAccess": [
+      "TARRED_ROAD",
+      "KACHCHA_ROAD",
+      "HIGHWAY_FRONTAGE",
+      "NO_ROAD_ACCESS",
+      "OTHER"
+    ],
+    "cultivationStatus": [
+      "CULTIVATED",
+      "FALLOW",
+      "ARECA_PLANTATION",
+      "COCONUT_PLANTATION",
+      "PARTIALLY_CULTIVATED",
+      "OTHER"
+    ],
+    "ownershipType": [
+      "FREEHOLD",
+      "INHERITED",
+      "PATTA",
+      "SURVEY_SETTLEMENT",
+      "KATHA",
+      "REVENUE",
+      "OTHER"
+    ],
+    "landCategory": [
+      "FARMLAND",
+      "PLANTATION",
+      "FARM_PLOT",
+      "AGRICULTURAL_PLOT",
+      "OTHER"
+    ]
+  },
+  "residential": {
+    "furnishingStatus": [
+      "unfurnished",
+      "semi_furnished",
+      "furnished"
+    ]
+  },
+  "commercial": {
+    "listingPurpose": [
+      "SALE",
+      "RENT",
+      "LEASE"
+    ],
+    "floorChoice": [
+      "GROUND_FLOOR",
+      "FIRST_FLOOR",
+      "UPPER_FLOOR",
+      "MULTIPLE_FLOORS"
+    ],
+    "availability": [
+      "IMMEDIATE",
+      "WITHIN_15_DAYS",
+      "WITHIN_30_DAYS",
+      "AFTER_30_DAYS"
+    ]
+  }
+}
