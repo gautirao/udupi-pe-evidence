@@ -1,5 +1,6 @@
 package com.example.realestate.listing.api;
 
+import com.example.realestate.ai.PropertyType;
 import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.crud.BrokerDashboardService;
 import com.example.realestate.listing.crud.ListingCrudService;
@@ -54,6 +55,20 @@ public class ListingController {
      */
     static final java.util.regex.Pattern RERA_PATTERN = ListingResponse.RERA_PATTERN;
 
+    /**
+     * Exact, closed set of listingPurpose values that permit rental/lease terms
+     * (monthlyRent, securityDepositMonths, lockInMonths).
+     *
+     * <p>Stored as upper-case strings; callers must normalise with
+     * {@code trim().toUpperCase(Locale.ROOT)} before lookup.
+     *
+     * <p>Design note: this is a local literal set, intentionally NOT wired to any
+     * forward-only option class (CommercialFieldOptions, ResidentialFieldOptions, etc.).
+     * The wiring guard ({@link ListingFieldWiringGuardTest}) enforces this by scanning
+     * every {@code validate*} method body for those class names.
+     */
+    private static final Set<String> RENTAL_PURPOSES = Set.of("RENT", "LEASE");
+
     private final ListingCrudService listingCrudService;
     private final ListingWorkflowService listingWorkflowService;
     private final ListingResponseMapper listingResponseMapper;
@@ -76,6 +91,17 @@ public class ListingController {
         String createVideoUrl = (req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl();
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
                 req.cultivationStatus(), req.ownershipType(), req.landCategory());
+        PropertyFamily createFamily = resolveFamily(req.propertyType());
+        validateFamilyFields(createFamily,
+                req.bedrooms(), req.washrooms(), req.parkingCount(),
+                req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
+                req.numberOfUnits(), req.builtArea(), req.carpetArea(),
+                req.floorNumber(), req.totalFloors(),
+                req.waterSource(), req.soilType(), req.roadAccess(),
+                req.cultivationStatus(), req.landCategory(),
+                req.farmhouseAvailable(), req.fencingDone());
+        validateRentalFields(req.listingPurpose(),
+                req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
         try {
             Listing saved = listingCrudService.createDraft(
                     caller.userId(), req.propertyType(), req.title(),
@@ -161,6 +187,19 @@ public class ListingController {
 
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
                 req.cultivationStatus(), req.ownershipType(), req.landCategory());
+        if (req.propertyType() != null) {
+            PropertyFamily updateFamily = resolveFamily(req.propertyType());
+            validateFamilyFields(updateFamily,
+                    req.bedrooms(), req.washrooms(), req.parkingCount(),
+                    req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
+                    req.numberOfUnits(), req.builtArea(), req.carpetArea(),
+                    req.floorNumber(), req.totalFloors(),
+                    req.waterSource(), req.soilType(), req.roadAccess(),
+                    req.cultivationStatus(), req.landCategory(),
+                    req.farmhouseAvailable(), req.fencingDone());
+        }
+        validateRentalFields(req.listingPurpose(),
+                req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
         try {
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
             String updateVideoUrl = applyVideo
@@ -366,6 +405,158 @@ public class ListingController {
                     HttpStatus.BAD_REQUEST,
                     "Invalid value for " + fieldName + ": '" + value + "'. "
                             + "Allowed values: " + allowed);
+        }
+    }
+
+    // ===== Family-level structural validation =====
+
+    /**
+     * Property-type families used for structural field presence checks.
+     * These are derived from the closed {@link PropertyType} enum — no new values.
+     */
+    private enum PropertyFamily { RESIDENTIAL, COMMERCIAL, AGRICULTURAL, PLOT }
+
+    /**
+     * Resolves the family from the raw propertyType string.
+     * Throws HTTP 400 if the value is null, blank, or not a known {@link PropertyType}.
+     */
+    private static PropertyFamily resolveFamily(String rawType) {
+        PropertyType pt;
+        try {
+            pt = PropertyType.fromValue(rawType);
+        } catch (IllegalArgumentException e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Invalid or missing propertyType: '" + rawType + "'");
+        }
+        return switch (pt) {
+            case HOUSE, APARTMENT -> PropertyFamily.RESIDENTIAL;
+            case COMMERCIAL, COMMERCIAL_BUILDING, WAREHOUSE, COMMERCIAL_LAND -> PropertyFamily.COMMERCIAL;
+            case AGRICULTURAL_LAND -> PropertyFamily.AGRICULTURAL;
+            case LAND, OTHER -> PropertyFamily.PLOT;
+        };
+    }
+
+    /**
+     * Rejects a field that is non-null (and, for Strings, non-blank) when it does not belong
+     * to the resolved property-type family.
+     *
+     * <p>Design note: presence is checked by field existence (non-null / non-blank), NOT by
+     * membership in any value set. This keeps the check structural and avoids referencing any
+     * forward-only option set (the wiring guard enforces this).
+     */
+    private static void rejectIfPresent(String fieldName, Object value) {
+        boolean present = value != null && !(value instanceof String s && s.isBlank());
+        if (present) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Field '" + fieldName + "' is not accepted for this property type");
+        }
+    }
+
+    /**
+     * Per-family forbidden-field guard.
+     *
+     * <p>Cross-family rejection is STRUCTURAL (field presence, not value membership).
+     * Shared fields (floorNumber, totalFloors, washrooms, parkingCount) are valid for
+     * both RESIDENTIAL and COMMERCIAL and are NOT listed as forbidden for either family.
+     *
+     * <p>Family-forbidden mapping:
+     * <ul>
+     *   <li>RESIDENTIAL: agri-only + commercial-only fields</li>
+     *   <li>COMMERCIAL: agri-only + residential BHK (bedrooms)</li>
+     *   <li>AGRICULTURAL: parking, BHK, furnishing, commercial fields</li>
+     *   <li>PLOT: BHK (bedrooms/washrooms), unit count, floor-plan, unit-area fields</li>
+     * </ul>
+     */
+    @SuppressWarnings("java:S107") // large param count mirrors flat request shape; no abstraction needed here
+    private static void validateFamilyFields(PropertyFamily family,
+            Integer bedrooms, Integer washrooms, Integer parkingCount,
+            String furnishingStatus, String commercialUsage, java.math.BigDecimal roadFrontageFt,
+            Integer numberOfUnits, java.math.BigDecimal builtArea, java.math.BigDecimal carpetArea,
+            Integer floorNumber, Integer totalFloors,
+            String waterSource, String soilType, String roadAccess,
+            String cultivationStatus, String landCategory,
+            Boolean farmhouseAvailable, Boolean fencingDone) {
+        switch (family) {
+            case RESIDENTIAL -> {
+                // agri-only fields
+                rejectIfPresent("waterSource",       waterSource);
+                rejectIfPresent("soilType",          soilType);
+                rejectIfPresent("roadAccess",        roadAccess);
+                rejectIfPresent("cultivationStatus", cultivationStatus);
+                rejectIfPresent("landCategory",      landCategory);
+                rejectIfPresent("farmhouseAvailable", farmhouseAvailable);
+                rejectIfPresent("fencingDone",       fencingDone);
+                // commercial-only fields
+                rejectIfPresent("commercialUsage",   commercialUsage);
+                rejectIfPresent("roadFrontageFt",    roadFrontageFt);
+                rejectIfPresent("numberOfUnits",     numberOfUnits);
+            }
+            case COMMERCIAL -> {
+                // agri-only fields
+                rejectIfPresent("waterSource",       waterSource);
+                rejectIfPresent("soilType",          soilType);
+                rejectIfPresent("roadAccess",        roadAccess);
+                rejectIfPresent("cultivationStatus", cultivationStatus);
+                rejectIfPresent("landCategory",      landCategory);
+                rejectIfPresent("farmhouseAvailable", farmhouseAvailable);
+                rejectIfPresent("fencingDone",       fencingDone);
+                // residential-BHK field
+                rejectIfPresent("bedrooms",          bedrooms);
+            }
+            case AGRICULTURAL -> {
+                // parking, BHK, furnishing
+                rejectIfPresent("parkingCount",      parkingCount);
+                rejectIfPresent("bedrooms",          bedrooms);
+                rejectIfPresent("furnishingStatus",  furnishingStatus);
+                // commercial-only fields
+                rejectIfPresent("commercialUsage",   commercialUsage);
+                rejectIfPresent("roadFrontageFt",    roadFrontageFt);
+                rejectIfPresent("numberOfUnits",     numberOfUnits);
+            }
+            case PLOT -> {
+                // BHK fields
+                rejectIfPresent("bedrooms",          bedrooms);
+                rejectIfPresent("washrooms",         washrooms);
+                // per-unit field
+                rejectIfPresent("numberOfUnits",     numberOfUnits);
+                // unit-only floor-plan fields
+                rejectIfPresent("builtArea",         builtArea);
+                rejectIfPresent("carpetArea",        carpetArea);
+                rejectIfPresent("furnishingStatus",  furnishingStatus);
+                rejectIfPresent("floorNumber",       floorNumber);
+                rejectIfPresent("totalFloors",       totalFloors);
+            }
+        }
+    }
+
+    /**
+     * Gates rental/lease terms on listingPurpose.
+     *
+     * <p>monthlyRent, securityDepositMonths, lockInMonths are accepted only when
+     * listingPurpose (trimmed, case-insensitive) exactly equals "RENT" or "LEASE".
+     * They are rejected when purpose is null, blank, or any other value (including
+     * substrings like "for-sale-not-rent" which would pass a contains check).
+     *
+     * <p>listingPurpose is NOT validated against any external enum value-set here;
+     * only membership in the local {@link #RENTAL_PURPOSES} closed set is tested.
+     */
+    private static void validateRentalFields(String listingPurpose,
+            Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths) {
+        boolean hasRentalField = monthlyRent != null
+                || securityDepositMonths != null
+                || lockInMonths != null;
+        if (!hasRentalField) {
+            return;
+        }
+        boolean isRentOrLease = listingPurpose != null && !listingPurpose.isBlank()
+                && RENTAL_PURPOSES.contains(listingPurpose.trim().toUpperCase(java.util.Locale.ROOT));
+        if (!isRentOrLease) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Rental/lease terms (monthlyRent, securityDepositMonths, lockInMonths) "
+                            + "are only accepted when listingPurpose is RENT or LEASE");
         }
     }
 
