@@ -377,7 +377,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND longitude IS NOT NULL
               AND ST_Contains(
                     ST_GeomFromText(:polygonWkt, 4326),
-                    ST_Point(longitude, latitude)
+                    ST_SetSRID(ST_Point(longitude, latitude), 4326)
               )
             ORDER BY trust_tier ASC, ranking_score DESC, created_at DESC, id DESC
             """,
@@ -390,7 +390,7 @@ public interface ListingRepository extends JpaRepository<Listing, UUID> {
               AND longitude IS NOT NULL
               AND ST_Contains(
                     ST_GeomFromText(:polygonWkt, 4326),
-                    ST_Point(longitude, latitude)
+                    ST_SetSRID(ST_Point(longitude, latitude), 4326)
               )
             """,
             nativeQuery = true)
