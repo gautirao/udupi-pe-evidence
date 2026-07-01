@@ -18,6 +18,7 @@ import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { useAreaIntelligence } from '@/hooks/useAreaIntelligence';
 import { AreaGuide } from '@/components/area/AreaGuide';
 import { DEFAULT_CITY } from '@/lib/localityUtils';
+import { usePageMeta } from '@/hooks/usePageMeta';
 
 // ─── Q1 = Option A (default): area-guide is THE default /trends experience ────
 // The buyer area-guide (AC2–AC16) is what every user sees on /trends, including
@@ -67,6 +68,11 @@ export default function Trends() {
   //   • Non-pipe areaKey (edge case, not a valid production URL) → legacy #771 fallback.
   const isAreaGuideMode = selectedKey.includes('|');
   const shouldRenderGuide = isAreaGuideMode || selectedKey === '';
+
+  usePageMeta({
+    title: 'Property Market Trends | Udupi Property Explorer',
+    description: 'Browse property price trends across areas in Udupi and Mangalore.',
+  });
 
   const [timeRange, setTimeRange] = useState('6m');
   const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981'];

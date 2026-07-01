@@ -6,6 +6,7 @@ import { useResolveArea } from '@/hooks/useResolveArea';
 import { useAreaIntelligence } from '@/hooks/useAreaIntelligence';
 import { useTrendsOptions } from '@/hooks/useTrendsOptions';
 import { CITY_CONFIG } from '@/lib/localityUtils';
+import { usePageMeta } from '@/hooks/usePageMeta';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,29 @@ export default function TrendsAreaResolved() {
     isLoading: resolveLoading,
     isError: resolveError,
   } = useResolveArea(citySlug, areaSlug);
+
+  // Derive page meta before any conditional returns (Rules of Hooks).
+  // areaName is extracted from the pipe-key the same way the rest of the codebase does it.
+  const metaAreaName =
+    resolveData?.matched && resolveData.areaKey
+      ? (resolveData.areaKey.split('|').pop() ?? areaSlug)
+      : null;
+  const metaTitle = metaAreaName
+    ? `${metaAreaName}, ${cityLabel} — Property Trends | Udupi Property Explorer`
+    : resolveData && !resolveData.matched
+      ? 'Area Not Found | Property Trends | Udupi Property Explorer'
+      : 'Property Trends | Udupi Property Explorer';
+  const metaDescription = metaAreaName
+    ? `See property price trends and market data for ${metaAreaName} in ${cityLabel}.`
+    : resolveData && !resolveData.matched
+      ? 'The requested area could not be found.'
+      : 'See property price trends and market data.';
+  usePageMeta({
+    title: metaTitle,
+    description: metaDescription,
+    ogTitle: metaTitle,
+    ogDescription: metaDescription,
+  });
 
   // useResolveArea is called unconditionally here (Rules of Hooks).
   // useAreaIntelligence is called inside the child ResolvedAreaGuide, which is
