@@ -176,4 +176,38 @@ describe('ListingSpecsGrid — type-adaptive specs', () => {
     );
     expect(screen.queryByText(/Security deposit/i)).not.toBeInTheDocument();
   });
+
+  // T9 — M38-13A (#1626) code-review fix: superBuiltArea is captured on create/edit and
+  // required by design-spec §5 apartment rows ("Built-up, Super built-up") but was never
+  // rendered on public detail. Null-gated: appears when set, absent when null/undefined.
+  it('T9 — Apartment: shows Super built-up row when superBuiltArea is set', () => {
+    render(
+      <ListingSpecsGrid
+        listing={makeListing({
+          propertyType: 'apartment',
+          bedrooms: 3,
+          builtArea: 1200,
+          builtAreaUnit: 'sqft',
+          superBuiltArea: 1350,
+          superBuiltAreaUnit: 'SQ_FT',
+        } as Partial<PublicListingDetail>)}
+      />,
+    );
+    expect(screen.getByText(/super built-up/i)).toBeInTheDocument();
+  });
+
+  it('T9b — Apartment: Super built-up row absent when superBuiltArea is null', () => {
+    render(
+      <ListingSpecsGrid
+        listing={makeListing({
+          propertyType: 'apartment',
+          bedrooms: 3,
+          builtArea: 1200,
+          builtAreaUnit: 'sqft',
+          superBuiltArea: null,
+        } as Partial<PublicListingDetail>)}
+      />,
+    );
+    expect(screen.queryByText(/super built-up/i)).not.toBeInTheDocument();
+  });
 });

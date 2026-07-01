@@ -10,6 +10,9 @@ const PROPERTY_TYPE_ICONS: Record<PropertyType, LucideIcon> = {
   agricultural_land: Sprout,
   apartment: Building2,
   house: Home,
+  // M38-13A (#1626) — villa/residential_plot icons (design §1: house-style / plot-style cards).
+  villa: Home,
+  residential_plot: LandPlot,
   commercial: Store,
   commercial_building: Building,
   warehouse: Warehouse,

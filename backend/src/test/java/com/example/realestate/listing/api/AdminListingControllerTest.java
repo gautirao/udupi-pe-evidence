@@ -125,7 +125,17 @@ class AdminListingControllerTest {
                     l.getTrustTier(), l.getAreaKey(), java.util.List.of(),
                     null, null, null, null, null, null,
                     l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),
-                    l.getBoundaryGeoJson(), null);
+                    l.getBoundaryGeoJson(), null,
+                    l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
+                    l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),
+                    l.getParking2wCount(), l.getParking4wCount(), l.getRoadWidthFt(), l.getPlotDimensions(),
+                    l.getConversionStatus(), l.getKhataNumber(), l.getPropertyTaxPid(), l.getApprovingAuthority(),
+                    l.getProjectName(), l.getBuilderName(), l.getMaintenancePaise(),
+                    l.getHasLift(), l.getHasPowerBackup(), l.getIsGated(), l.getHasGarden(), l.getHasTerrace(),
+                    l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
+                    l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
+                    l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
+                    java.util.List.of(), java.util.List.of(), java.util.List.of());
         });
     }
 

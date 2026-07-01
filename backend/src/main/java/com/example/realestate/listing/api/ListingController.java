@@ -9,6 +9,7 @@ import com.example.realestate.listing.exception.ListingOwnershipException;
 import com.example.realestate.listing.exception.ListingStatusException;
 import com.example.realestate.listing.exception.ListingValidationException;
 import com.example.realestate.listing.exception.OwnerListingLimitException;
+import com.example.realestate.listing.residential.ResidentialListingFields;
 import com.example.realestate.listing.workflow.ListingWorkflowService;
 import com.example.realestate.security.CallerInfo;
 import org.slf4j.Logger;
@@ -102,6 +103,28 @@ public class ListingController {
                 req.farmhouseAvailable(), req.fencingDone());
         validateRentalFields(req.listingPurpose(),
                 req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
+        validateResidentialFieldSet(createFamily, req.propertyType(), req.listingPurpose(),
+                req.bathrooms(), req.balconies(), req.parking2wCount(), req.parking4wCount(),
+                req.hasLift(), req.hasPowerBackup(), req.isGated(),
+                req.hasGarden(), req.hasTerrace(), req.hasCompound(), req.hasServantRoom(),
+                req.propertyAge(), req.residentialWaterSource(), req.amenities(),
+                req.isCornerPlot(), req.hasBoundaryWall(), req.isGatedLayout(),
+                req.hasWaterConnection(), req.hasElectricityConnection(), req.hasDrainage(),
+                req.conversionStatus(), req.khataNumber(), req.propertyTaxPid(),
+                req.approvingAuthority(), req.roadWidthFt(), req.plotDimensions(),
+                req.maintenancePaise(), req.maintenanceIncluded(), req.priceNegotiable(), req.rentNegotiable(),
+                req.preferredTenants(), req.petsAllowed(), req.availabilityTimeline());
+        ResidentialListingFields residentialFields = new ResidentialListingFields(
+                req.bathrooms(), req.balconies(), req.facing(), req.availabilityTimeline(),
+                req.superBuiltArea(), req.superBuiltAreaUnit(), req.propertyAge(), req.residentialWaterSource(),
+                req.parking2wCount(), req.parking4wCount(), req.roadWidthFt(), req.plotDimensions(),
+                req.conversionStatus(), req.khataNumber(), req.propertyTaxPid(), req.approvingAuthority(),
+                req.projectName(), req.builderName(), req.maintenancePaise(),
+                req.hasLift(), req.hasPowerBackup(), req.isGated(), req.hasGarden(), req.hasTerrace(),
+                req.hasCompound(), req.hasServantRoom(), req.isCornerPlot(), req.hasBoundaryWall(),
+                req.isGatedLayout(), req.hasWaterConnection(), req.hasElectricityConnection(), req.hasDrainage(),
+                req.priceNegotiable(), req.rentNegotiable(), req.petsAllowed(), req.maintenanceIncluded(),
+                req.amenities(), req.specialLocationViews(), req.preferredTenants());
         try {
             Listing saved = listingCrudService.createDraft(
                     caller.userId(), req.propertyType(), req.title(),
@@ -117,7 +140,8 @@ public class ListingController {
                     sellerType,
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
-                    req.landCategory(), req.farmhouseAvailable(), req.fencingDone());
+                    req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
+                    residentialFields);
 
             log.info("POST /api/listings -> 201 listingId={} createdBy={} sellerType={}",
                     saved.getId(), caller.userId(), sellerType);
@@ -187,8 +211,20 @@ public class ListingController {
 
         validateAgriFields(req.waterSource(), req.soilType(), req.roadAccess(),
                 req.cultivationStatus(), req.ownershipType(), req.landCategory());
-        if (req.propertyType() != null) {
-            PropertyFamily updateFamily = resolveFamily(req.propertyType());
+        try {
+            // Resolve the EFFECTIVE property type for validation purposes: use the incoming
+            // propertyType when the request supplies one; otherwise fall back to the existing
+            // listing's stored propertyType (mirrors ListingCrudService#updateListing's
+            // effectivePropertyType resolution). Every other field on this PUT is optional, so a
+            // request that omits propertyType must still run the full residential/PLOT validation
+            // matrix against the listing's real (existing) type — never skip it (#1626).
+            String effectivePropertyType = req.propertyType();
+            if (effectivePropertyType == null) {
+                Listing existing = listingWorkflowService.findListingForCaller(
+                        id, caller.userId(), caller.isAdmin());
+                effectivePropertyType = existing.getPropertyType();
+            }
+            PropertyFamily updateFamily = resolveFamily(effectivePropertyType);
             validateFamilyFields(updateFamily,
                     req.bedrooms(), req.washrooms(), req.parkingCount(),
                     req.furnishingStatus(), req.commercialUsage(), req.roadFrontageFt(),
@@ -197,10 +233,30 @@ public class ListingController {
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.landCategory(),
                     req.farmhouseAvailable(), req.fencingDone());
-        }
-        validateRentalFields(req.listingPurpose(),
-                req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
-        try {
+            validateResidentialFieldSet(updateFamily, effectivePropertyType, req.listingPurpose(),
+                    req.bathrooms(), req.balconies(), req.parking2wCount(), req.parking4wCount(),
+                    req.hasLift(), req.hasPowerBackup(), req.isGated(),
+                    req.hasGarden(), req.hasTerrace(), req.hasCompound(), req.hasServantRoom(),
+                    req.propertyAge(), req.residentialWaterSource(), req.amenities(),
+                    req.isCornerPlot(), req.hasBoundaryWall(), req.isGatedLayout(),
+                    req.hasWaterConnection(), req.hasElectricityConnection(), req.hasDrainage(),
+                    req.conversionStatus(), req.khataNumber(), req.propertyTaxPid(),
+                    req.approvingAuthority(), req.roadWidthFt(), req.plotDimensions(),
+                    req.maintenancePaise(), req.maintenanceIncluded(), req.priceNegotiable(), req.rentNegotiable(),
+                    req.preferredTenants(), req.petsAllowed(), req.availabilityTimeline());
+            validateRentalFields(req.listingPurpose(),
+                    req.monthlyRent(), req.securityDepositMonths(), req.lockInMonths());
+            ResidentialListingFields residentialFields = new ResidentialListingFields(
+                    req.bathrooms(), req.balconies(), req.facing(), req.availabilityTimeline(),
+                    req.superBuiltArea(), req.superBuiltAreaUnit(), req.propertyAge(), req.residentialWaterSource(),
+                    req.parking2wCount(), req.parking4wCount(), req.roadWidthFt(), req.plotDimensions(),
+                    req.conversionStatus(), req.khataNumber(), req.propertyTaxPid(), req.approvingAuthority(),
+                    req.projectName(), req.builderName(), req.maintenancePaise(),
+                    req.hasLift(), req.hasPowerBackup(), req.isGated(), req.hasGarden(), req.hasTerrace(),
+                    req.hasCompound(), req.hasServantRoom(), req.isCornerPlot(), req.hasBoundaryWall(),
+                    req.isGatedLayout(), req.hasWaterConnection(), req.hasElectricityConnection(), req.hasDrainage(),
+                    req.priceNegotiable(), req.rentNegotiable(), req.petsAllowed(), req.maintenanceIncluded(),
+                    req.amenities(), req.specialLocationViews(), req.preferredTenants());
             boolean applyVideo = Boolean.TRUE.equals(req.applyVideoUrl());
             String updateVideoUrl = applyVideo
                     ? ((req.videoUrl() == null || req.videoUrl().isBlank()) ? null : req.videoUrl())
@@ -223,7 +279,7 @@ public class ListingController {
                     req.waterSource(), req.soilType(), req.roadAccess(),
                     req.cultivationStatus(), req.ownershipType(), req.surveyNumber(),
                     req.landCategory(), req.farmhouseAvailable(), req.fencingDone(),
-                    req.boundary());
+                    req.boundary(), residentialFields);
             return ResponseEntity.ok(listingResponseMapper.toResponse(updated));
         } catch (ListingNotFoundException e) {
             return notFound();
@@ -430,10 +486,14 @@ public class ListingController {
                     "Invalid or missing propertyType: '" + rawType + "'");
         }
         return switch (pt) {
-            case HOUSE, APARTMENT -> PropertyFamily.RESIDENTIAL;
+            case HOUSE, APARTMENT, VILLA -> PropertyFamily.RESIDENTIAL;
             case COMMERCIAL, COMMERCIAL_BUILDING, WAREHOUSE, COMMERCIAL_LAND -> PropertyFamily.COMMERCIAL;
             case AGRICULTURAL_LAND -> PropertyFamily.AGRICULTURAL;
-            case LAND, OTHER -> PropertyFamily.PLOT;
+            // residential_plot validates as PLOT (architect d6): allows plot fields, rejects
+            // residence-unit fields — same validation-family as legacy land/other. The DB
+            // listing_family STAMP is a separate axis (always 'RESIDENTIAL' for residential_plot);
+            // see ListingCrudService.RESIDENTIAL_PROPERTY_TYPES.
+            case LAND, OTHER, RESIDENTIAL_PLOT -> PropertyFamily.PLOT;
         };
     }
 
@@ -532,6 +592,167 @@ public class ListingController {
     }
 
     /**
+     * Residential typed-listing field validation (M38-13A / #1626) — the net-new field set only.
+     * Runs in addition to {@link #validateFamilyFields}, which continues to govern the pre-existing
+     * flat fields (bedrooms, builtArea, furnishingStatus, etc.) unchanged.
+     *
+     * <p>Two independent axes, both purely structural (field presence, never value membership —
+     * consistent with the {@link ListingFieldWiringGuardTest} guard):
+     * <ul>
+     *   <li>Subtype split within RESIDENTIAL (apartment vs house/villa) for the apartment-only
+     *       ({@code balconies}) vs house/villa-only ({@code hasGarden}, {@code hasTerrace},
+     *       {@code hasCompound}, {@code hasServantRoom}, {@code propertyAge},
+     *       {@code residentialWaterSource}) fields.</li>
+     *   <li>PLOT (residential_plot AND legacy land/other) rejects every residence-unit field.</li>
+     * </ul>
+     *
+     * <p>The sale/rent purpose gate below is intentionally unconditional (not scoped by family):
+     * every field it governs is net-new in V103, so no existing commercial/agricultural caller can
+     * be affected by gating it on purpose alone — this avoids touching the existing, already-shipped,
+     * ungated {@code possessionStatus}/{@code expectedPossessionDate} fields, which are out of scope
+     * for this issue.
+     */
+    @SuppressWarnings("java:S107") // structural per-field checks; mirrors validateFamilyFields shape
+    private static void validateResidentialFieldSet(PropertyFamily family, String rawPropertyType,
+            String listingPurpose,
+            Integer bathrooms, Integer balconies, Integer parking2wCount, Integer parking4wCount,
+            Boolean hasLift, Boolean hasPowerBackup, Boolean isGated,
+            Boolean hasGarden, Boolean hasTerrace, Boolean hasCompound, Boolean hasServantRoom,
+            String propertyAge, String residentialWaterSource, List<String> amenities,
+            Boolean isCornerPlot, Boolean hasBoundaryWall, Boolean isGatedLayout,
+            Boolean hasWaterConnection, Boolean hasElectricityConnection, Boolean hasDrainage,
+            String conversionStatus, String khataNumber, String propertyTaxPid,
+            String approvingAuthority, BigDecimal roadWidthFt, String plotDimensions,
+            Long maintenancePaise, Boolean maintenanceIncluded, Boolean priceNegotiable, Boolean rentNegotiable,
+            List<String> preferredTenants, Boolean petsAllowed, String availabilityTimeline) {
+
+        switch (family) {
+            case RESIDENTIAL -> {
+                // Plot-only fields never valid on a residential-unit subtype.
+                rejectIfPresent("isCornerPlot", isCornerPlot);
+                rejectIfPresent("hasBoundaryWall", hasBoundaryWall);
+                rejectIfPresent("isGatedLayout", isGatedLayout);
+                rejectIfPresent("hasWaterConnection", hasWaterConnection);
+                rejectIfPresent("hasElectricityConnection", hasElectricityConnection);
+                rejectIfPresent("hasDrainage", hasDrainage);
+                rejectIfPresent("conversionStatus", conversionStatus);
+                rejectIfPresent("khataNumber", khataNumber);
+                rejectIfPresent("propertyTaxPid", propertyTaxPid);
+                rejectIfPresent("approvingAuthority", approvingAuthority);
+                rejectIfPresent("roadWidthFt", roadWidthFt);
+                rejectIfPresent("plotDimensions", plotDimensions);
+
+                if ("apartment".equalsIgnoreCase(rawPropertyType)) {
+                    rejectIfPresent("hasGarden", hasGarden);
+                    rejectIfPresent("hasTerrace", hasTerrace);
+                    rejectIfPresent("hasCompound", hasCompound);
+                    rejectIfPresent("hasServantRoom", hasServantRoom);
+                    rejectIfPresent("propertyAge", propertyAge);
+                    rejectIfPresent("residentialWaterSource", residentialWaterSource);
+                } else {
+                    // house or villa
+                    rejectIfPresent("balconies", balconies);
+                }
+            }
+            case PLOT -> {
+                // residential_plot AND legacy land/other: reject every residence-unit field.
+                rejectIfPresent("bathrooms", bathrooms);
+                rejectIfPresent("balconies", balconies);
+                rejectIfPresent("parking2wCount", parking2wCount);
+                rejectIfPresent("parking4wCount", parking4wCount);
+                rejectIfPresent("hasLift", hasLift);
+                rejectIfPresent("hasPowerBackup", hasPowerBackup);
+                rejectIfPresent("isGated", isGated);
+                rejectIfPresent("hasGarden", hasGarden);
+                rejectIfPresent("hasTerrace", hasTerrace);
+                rejectIfPresent("hasCompound", hasCompound);
+                rejectIfPresent("hasServantRoom", hasServantRoom);
+                rejectIfPresent("propertyAge", propertyAge);
+                rejectIfPresent("residentialWaterSource", residentialWaterSource);
+                rejectIfNonEmpty("amenities", amenities);
+
+                // The residential-purpose sale/rent gate below (post-switch) intentionally allows
+                // maintenancePaise/priceNegotiable/rentNegotiable/maintenanceIncluded/petsAllowed/
+                // availabilityTimeline/preferredTenants for residential_plot. Legacy land/other
+                // share this PLOT validation family but are out of scope for M38-13A — preserve
+                // their pre-existing rejection of these fields rather than let the new gate loosen it.
+                if (!"residential_plot".equalsIgnoreCase(rawPropertyType)) {
+                    rejectIfPresent("maintenancePaise", maintenancePaise);
+                    rejectIfPresent("maintenanceIncluded", maintenanceIncluded);
+                    rejectIfPresent("priceNegotiable", priceNegotiable);
+                    rejectIfPresent("rentNegotiable", rentNegotiable);
+                    rejectIfNonEmpty("preferredTenants", preferredTenants);
+                    rejectIfPresent("petsAllowed", petsAllowed);
+                    rejectIfPresent("availabilityTimeline", availabilityTimeline);
+                }
+            }
+            case COMMERCIAL, AGRICULTURAL -> {
+                // None of the M38-13A residential fields belong to these families.
+                rejectIfPresent("bathrooms", bathrooms);
+                rejectIfPresent("balconies", balconies);
+                rejectIfPresent("parking2wCount", parking2wCount);
+                rejectIfPresent("parking4wCount", parking4wCount);
+                rejectIfPresent("hasLift", hasLift);
+                rejectIfPresent("hasPowerBackup", hasPowerBackup);
+                rejectIfPresent("isGated", isGated);
+                rejectIfPresent("hasGarden", hasGarden);
+                rejectIfPresent("hasTerrace", hasTerrace);
+                rejectIfPresent("hasCompound", hasCompound);
+                rejectIfPresent("hasServantRoom", hasServantRoom);
+                rejectIfPresent("propertyAge", propertyAge);
+                rejectIfPresent("residentialWaterSource", residentialWaterSource);
+                rejectIfNonEmpty("amenities", amenities);
+                rejectIfPresent("isCornerPlot", isCornerPlot);
+                rejectIfPresent("hasBoundaryWall", hasBoundaryWall);
+                rejectIfPresent("isGatedLayout", isGatedLayout);
+                rejectIfPresent("hasWaterConnection", hasWaterConnection);
+                rejectIfPresent("hasElectricityConnection", hasElectricityConnection);
+                rejectIfPresent("hasDrainage", hasDrainage);
+                rejectIfPresent("conversionStatus", conversionStatus);
+                rejectIfPresent("khataNumber", khataNumber);
+                rejectIfPresent("propertyTaxPid", propertyTaxPid);
+                rejectIfPresent("approvingAuthority", approvingAuthority);
+                rejectIfPresent("roadWidthFt", roadWidthFt);
+                rejectIfPresent("plotDimensions", plotDimensions);
+                rejectIfPresent("maintenancePaise", maintenancePaise);
+                rejectIfPresent("maintenanceIncluded", maintenanceIncluded);
+                rejectIfPresent("priceNegotiable", priceNegotiable);
+                rejectIfPresent("rentNegotiable", rentNegotiable);
+                rejectIfNonEmpty("preferredTenants", preferredTenants);
+                rejectIfPresent("petsAllowed", petsAllowed);
+                rejectIfPresent("availabilityTimeline", availabilityTimeline);
+            }
+        }
+
+        // Sale vs rent purpose gate — unconditional (net-new fields only; see method javadoc).
+        boolean isRentOrLease = listingPurpose != null && !listingPurpose.isBlank()
+                && RENTAL_PURPOSES.contains(listingPurpose.trim().toUpperCase(java.util.Locale.ROOT));
+        if (isRentOrLease) {
+            rejectIfPresent("maintenancePaise", maintenancePaise);
+            rejectIfPresent("priceNegotiable", priceNegotiable);
+        } else {
+            rejectIfPresent("maintenanceIncluded", maintenanceIncluded);
+            rejectIfPresent("rentNegotiable", rentNegotiable);
+            rejectIfPresent("petsAllowed", petsAllowed);
+            rejectIfPresent("availabilityTimeline", availabilityTimeline);
+            rejectIfNonEmpty("preferredTenants", preferredTenants);
+        }
+    }
+
+    /**
+     * List variant of {@link #rejectIfPresent(String, Object)} — "present" means non-null AND
+     * non-empty, so an omitted field and an explicit empty list are both accepted (an empty list
+     * is a valid "clear the set" signal on update; only an actual non-empty value is forbidden).
+     */
+    private static void rejectIfNonEmpty(String fieldName, List<String> value) {
+        if (value != null && !value.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Field '" + fieldName + "' is not accepted for this property type");
+        }
+    }
+
+    /**
      * Gates rental/lease terms on listingPurpose.
      *
      * <p>monthlyRent, securityDepositMonths, lockInMonths are accepted only when
@@ -605,7 +826,47 @@ public class ListingController {
             String surveyNumber,
             String landCategory,
             Boolean farmhouseAvailable,
-            Boolean fencingDone
+            Boolean fencingDone,
+            // Residential typed listing fields (M38-13A / #1626)
+            Integer bathrooms,
+            Integer balconies,
+            String facing,
+            String availabilityTimeline,
+            BigDecimal superBuiltArea,
+            String superBuiltAreaUnit,
+            String propertyAge,
+            String residentialWaterSource,
+            Integer parking2wCount,
+            Integer parking4wCount,
+            BigDecimal roadWidthFt,
+            String plotDimensions,
+            String conversionStatus,
+            String khataNumber,
+            String propertyTaxPid,
+            String approvingAuthority,
+            String projectName,
+            String builderName,
+            Long maintenancePaise,
+            Boolean hasLift,
+            Boolean hasPowerBackup,
+            Boolean isGated,
+            Boolean hasGarden,
+            Boolean hasTerrace,
+            Boolean hasCompound,
+            Boolean hasServantRoom,
+            Boolean isCornerPlot,
+            Boolean hasBoundaryWall,
+            Boolean isGatedLayout,
+            Boolean hasWaterConnection,
+            Boolean hasElectricityConnection,
+            Boolean hasDrainage,
+            Boolean priceNegotiable,
+            Boolean rentNegotiable,
+            Boolean petsAllowed,
+            Boolean maintenanceIncluded,
+            List<String> amenities,
+            List<String> specialLocationViews,
+            List<String> preferredTenants
     ) {}
 
     public record UpdateRequest(
@@ -656,7 +917,47 @@ public class ListingController {
             String landCategory,
             Boolean farmhouseAvailable,
             Boolean fencingDone,
-            String boundary
+            String boundary,
+            // Residential typed listing fields (M38-13A / #1626)
+            Integer bathrooms,
+            Integer balconies,
+            String facing,
+            String availabilityTimeline,
+            BigDecimal superBuiltArea,
+            String superBuiltAreaUnit,
+            String propertyAge,
+            String residentialWaterSource,
+            Integer parking2wCount,
+            Integer parking4wCount,
+            BigDecimal roadWidthFt,
+            String plotDimensions,
+            String conversionStatus,
+            String khataNumber,
+            String propertyTaxPid,
+            String approvingAuthority,
+            String projectName,
+            String builderName,
+            Long maintenancePaise,
+            Boolean hasLift,
+            Boolean hasPowerBackup,
+            Boolean isGated,
+            Boolean hasGarden,
+            Boolean hasTerrace,
+            Boolean hasCompound,
+            Boolean hasServantRoom,
+            Boolean isCornerPlot,
+            Boolean hasBoundaryWall,
+            Boolean isGatedLayout,
+            Boolean hasWaterConnection,
+            Boolean hasElectricityConnection,
+            Boolean hasDrainage,
+            Boolean priceNegotiable,
+            Boolean rentNegotiable,
+            Boolean petsAllowed,
+            Boolean maintenanceIncluded,
+            List<String> amenities,
+            List<String> specialLocationViews,
+            List<String> preferredTenants
     ) {}
 
     public record BulkDeleteRequest(List<UUID> ids) {}

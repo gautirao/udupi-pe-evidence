@@ -193,6 +193,10 @@ public class ListingIngestionService {
             case COMMERCIAL_LAND -> "commercial_land";
             case OTHER -> "other";
             case AGRICULTURAL_LAND -> "agricultural_land";
+            // M38-13A (#1626): the AI classifier does not emit these yet (broker-only create
+            // flow), but the switch must stay exhaustive against the PropertyType enum.
+            case VILLA -> "villa";
+            case RESIDENTIAL_PLOT -> "residential_plot";
         };
     }
 

@@ -136,7 +136,17 @@ class PublicListingControllerTest {
                             new ListingImageDTO("https://cdn.example.com/img-a.jpg", null, 0),
                             new ListingImageDTO("https://cdn.example.com/img-b.jpg", null, 1),
                             new ListingImageDTO("https://cdn.example.com/img-c.jpg", null, 2)),
-                    null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null);
+                    null, null, null, null, null, null, null, null, null, l.getBoundaryGeoJson(), null,
+                    l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
+                    l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),
+                    l.getParking2wCount(), l.getParking4wCount(), l.getRoadWidthFt(), l.getPlotDimensions(),
+                    l.getConversionStatus(), l.getKhataNumber(), l.getPropertyTaxPid(), l.getApprovingAuthority(),
+                    l.getProjectName(), l.getBuilderName(), l.getMaintenancePaise(),
+                    l.getHasLift(), l.getHasPowerBackup(), l.getIsGated(), l.getHasGarden(), l.getHasTerrace(),
+                    l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
+                    l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
+                    l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
+                    java.util.List.of(), java.util.List.of(), java.util.List.of());
         });
 
         // Teaser mapper — single listing (15 agri fields null for non-agri fixtures in setUp)

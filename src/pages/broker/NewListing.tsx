@@ -29,6 +29,80 @@ import type { PropertyType } from '@/lib/listing-constants';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { isListingFieldVisible } from '@/lib/listingFieldConfig';
 import type { ListingFieldKey } from '@/lib/listingFieldConfig';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+
+// ---------------------------------------------------------------------------
+// M38-13A (#1626) — chip / segmented control affordances (design-spec.md §1).
+// Built from the EXISTING shadcn ToggleGroup primitive — no new dependency.
+// Mirrors the identical helpers in EditListing.tsx (this page duplicates its
+// own inline form, consistent with the existing NewListing/EditListing split).
+// ---------------------------------------------------------------------------
+
+interface ChipOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+/** BHK — 1/2/3/4/5+ (design §1). Value IS the numeric bedrooms string sent on save. */
+const BHK_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
+  { value: '5', label: '5+' },
+];
+
+/**
+ * House/villa "Number of floors" — Ground/G+1/G+2/G+3/G+4+ (design §1). Reuses the
+ * `totalFloors` column/state — see EditListing.tsx for the full rationale.
+ */
+const FLOORS_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '0', label: 'Ground' },
+  { value: '1', label: 'G+1' },
+  { value: '2', label: 'G+2' },
+  { value: '3', label: 'G+3' },
+  { value: '4', label: 'G+4+' },
+];
+
+interface SingleChipGroupProps {
+  id: string;
+  label: string;
+  options: readonly ChipOption[];
+  value: string;
+  onValueChange: (value: string) => void;
+  variant?: 'chip' | 'segmented';
+}
+
+/** Single-select chip/segmented control — shadcn ToggleGroup type="single". */
+function SingleChipGroup({ id, label, options, value, onValueChange, variant = 'chip' }: SingleChipGroupProps) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <ToggleGroup
+        id={id}
+        type="single"
+        value={value}
+        onValueChange={(v) => { if (v) onValueChange(v); }}
+        className={variant === 'segmented' ? 'inline-flex w-fit rounded-lg bg-muted p-1' : 'flex-wrap justify-start gap-2'}
+      >
+        {options.map((opt) => (
+          <ToggleGroupItem
+            key={opt.value}
+            value={opt.value}
+            aria-label={opt.label}
+            className={
+              variant === 'segmented'
+                ? 'rounded-md px-4 py-1.5 text-sm data-[state=on]:bg-card data-[state=on]:shadow-sm'
+                : 'rounded-full border px-4 py-1.5 text-sm data-[state=on]:border-primary data-[state=on]:bg-primary/10'
+            }
+          >
+            {opt.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  );
+}
 
 export default function NewListing() {
   const { userRole, isLoading: authLoading } = useAuth();
@@ -400,7 +474,7 @@ export default function NewListing() {
               <AreaField
                 id="builtArea"
                 label="Built Area"
-                propertyType={isCommercialType ? 'commercial' : (propertyType as 'house' | 'apartment')}
+                propertyType={isCommercialType ? 'commercial' : (propertyType === 'apartment' ? 'apartment' : 'house')}
                 initialArea={builtArea}
                 initialUnit={builtAreaUnit}
                 onChange={(area, unit) => {
@@ -410,20 +484,16 @@ export default function NewListing() {
               />
             )}
 
-            {/* Conditional: Bedrooms — house / apartment */}
+            {/* Conditional: Bedrooms (BHK) — apartment / house / villa. M38-13A (#1626)
+                chip control (design §1); wire value unchanged (plain integer). */}
             {fieldVisible('bedrooms') && (
-              <div className="space-y-2">
-                <Label htmlFor="bedrooms">Bedrooms</Label>
-                <Input
-                  id="bedrooms"
-                  type="number"
-                  min="1"
-                  max="20"
-                  placeholder="e.g. 3"
-                  value={bedrooms}
-                  onChange={(e) => setBedrooms(e.target.value)}
-                />
-              </div>
+              <SingleChipGroup
+                id="bedrooms"
+                label="Bedrooms (BHK)"
+                options={BHK_CHIP_OPTIONS}
+                value={bedrooms}
+                onValueChange={setBedrooms}
+              />
             )}
 
             {/* Conditional: Carpet Area — commercial shop/office */}
@@ -457,8 +527,17 @@ export default function NewListing() {
               </div>
             )}
 
-            {/* Conditional: Total Floors — commercial_building */}
-            {fieldVisible('totalFloors') && (
+            {/* Conditional: Total Floors — commercial_building/apartment (plain numeric count);
+                house/villa (M38-13A #1626 — "Number of floors" chip: Ground/G+1/.../G+4+). */}
+            {fieldVisible('totalFloors') && (propertyType === 'house' || propertyType === 'villa') ? (
+              <SingleChipGroup
+                id="totalFloors"
+                label="Number of floors"
+                options={FLOORS_CHIP_OPTIONS}
+                value={totalFloors}
+                onValueChange={setTotalFloors}
+              />
+            ) : fieldVisible('totalFloors') ? (
               <div className="space-y-2">
                 <Label htmlFor="totalFloors">Total Floors *</Label>
                 <Input
@@ -471,11 +550,17 @@ export default function NewListing() {
                   onChange={(e) => setTotalFloors(e.target.value)}
                 />
               </div>
-            )}
+            ) : null}
 
-            {/* Commercial shared fields: furnishing, washrooms, parking, road frontage, usage, units */}
+            {/* Furnishing — shared by commercial AND residential (apartment/house/villa,
+                M38-13A #1626). Residential renders a segmented control (design §1);
+                commercial keeps the existing Select. washrooms/parkingCount below are
+                gated on their OWN fieldVisible() (commercial-only) — previously both were
+                nested under fieldVisible('furnishingStatus'), which would have incorrectly
+                shown "Washrooms"/"Parking Spots" for apartment/house/villa now that
+                furnishingStatus is also residential-shared. */}
             {fieldVisible('furnishingStatus') && (
-              <>
+              isCommercialType ? (
                 <div className="space-y-2">
                   <Label htmlFor="furnishingStatus">Furnishing Status</Label>
                   <Select value={furnishingStatus} onValueChange={setFurnishingStatus}>
@@ -491,7 +576,21 @@ export default function NewListing() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+              ) : (
+                <SingleChipGroup
+                  id="furnishingStatus"
+                  label="Furnishing"
+                  variant="segmented"
+                  options={FURNISHING_OPTIONS}
+                  value={furnishingStatus}
+                  onValueChange={setFurnishingStatus}
+                />
+              )
+            )}
+
+            {(fieldVisible('washrooms') || fieldVisible('parkingCount')) && (
+              <div className="grid grid-cols-2 gap-4">
+                {fieldVisible('washrooms') && (
                   <div className="space-y-2">
                     <Label htmlFor="washrooms">Washrooms</Label>
                     <Input
@@ -503,6 +602,8 @@ export default function NewListing() {
                       onChange={(e) => setWashrooms(e.target.value)}
                     />
                   </div>
+                )}
+                {fieldVisible('parkingCount') && (
                   <div className="space-y-2">
                     <Label htmlFor="parkingCount">Parking Spots</Label>
                     <Input
@@ -514,8 +615,8 @@ export default function NewListing() {
                       onChange={(e) => setParkingCount(e.target.value)}
                     />
                   </div>
-                </div>
-              </>
+                )}
+              </div>
             )}
 
             {fieldVisible('roadFrontageFt') && (

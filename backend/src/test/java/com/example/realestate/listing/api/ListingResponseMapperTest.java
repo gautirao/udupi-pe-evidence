@@ -5,6 +5,9 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.listing.residential.ListingAmenityRepository;
+import com.example.realestate.listing.residential.ListingLocationFeatureRepository;
+import com.example.realestate.listing.residential.ListingPreferredTenantRepository;
 import com.example.realestate.trust.ListingVerificationDimensionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +37,9 @@ class ListingResponseMapperTest {
     private ListingImageRepository listingImageRepository;
     private ListingVerificationDimensionRepository dimensionRepository;
     private ListingRepository listingRepository;
+    private ListingAmenityRepository listingAmenityRepository;
+    private ListingLocationFeatureRepository listingLocationFeatureRepository;
+    private ListingPreferredTenantRepository listingPreferredTenantRepository;
     private ListingResponseMapper mapper;
 
     @BeforeEach
@@ -41,7 +47,11 @@ class ListingResponseMapperTest {
         listingImageRepository = mock(ListingImageRepository.class);
         dimensionRepository = mock(ListingVerificationDimensionRepository.class);
         listingRepository = mock(ListingRepository.class);
-        mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository, listingRepository);
+        listingAmenityRepository = mock(ListingAmenityRepository.class);
+        listingLocationFeatureRepository = mock(ListingLocationFeatureRepository.class);
+        listingPreferredTenantRepository = mock(ListingPreferredTenantRepository.class);
+        mapper = new ListingResponseMapper(listingImageRepository, dimensionRepository, listingRepository,
+                listingAmenityRepository, listingLocationFeatureRepository, listingPreferredTenantRepository);
 
         // Default: no images
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
@@ -53,6 +63,10 @@ class ListingResponseMapperTest {
         when(listingRepository.findBoundaryGeoJson(any())).thenReturn(Optional.empty());
         // Default: no boundary area (single-listing agri path calls findBoundaryAreaSqm)
         when(listingRepository.findBoundaryAreaSqm(any())).thenReturn(Optional.empty());
+        // Default: no residential child-set rows
+        when(listingAmenityRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
+        when(listingLocationFeatureRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
+        when(listingPreferredTenantRepository.findByListingIdOrderByCodeAsc(any())).thenReturn(List.of());
     }
 
     // ==================== toResponse includes rejectionReason ====================

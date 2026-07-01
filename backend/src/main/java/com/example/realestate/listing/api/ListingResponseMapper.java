@@ -5,6 +5,12 @@ import com.example.realestate.listing.core.Listing;
 import com.example.realestate.listing.core.ListingRepository;
 import com.example.realestate.listing.image.ListingImage;
 import com.example.realestate.listing.image.ListingImageRepository;
+import com.example.realestate.listing.residential.ListingAmenity;
+import com.example.realestate.listing.residential.ListingAmenityRepository;
+import com.example.realestate.listing.residential.ListingLocationFeature;
+import com.example.realestate.listing.residential.ListingLocationFeatureRepository;
+import com.example.realestate.listing.residential.ListingPreferredTenant;
+import com.example.realestate.listing.residential.ListingPreferredTenantRepository;
 import com.example.realestate.trust.ListingVerificationDimensionRepository;
 import org.springframework.stereotype.Component;
 
@@ -34,16 +40,29 @@ public class ListingResponseMapper {
     /** Number of days within which a back-to-market listing is still badged. */
     private static final int BACK_ON_MARKET_WINDOW_DAYS = 30;
 
+    /** Residential-family property types whose child sets are worth a detail-path lookup. */
+    private static final java.util.Set<String> RESIDENTIAL_PROPERTY_TYPES =
+            java.util.Set.of("house", "apartment", "villa", "residential_plot");
+
     private final ListingImageRepository listingImageRepository;
     private final ListingVerificationDimensionRepository dimensionRepository;
     private final ListingRepository listingRepository;
+    private final ListingAmenityRepository listingAmenityRepository;
+    private final ListingLocationFeatureRepository listingLocationFeatureRepository;
+    private final ListingPreferredTenantRepository listingPreferredTenantRepository;
 
     public ListingResponseMapper(ListingImageRepository listingImageRepository,
                                  ListingVerificationDimensionRepository dimensionRepository,
-                                 ListingRepository listingRepository) {
+                                 ListingRepository listingRepository,
+                                 ListingAmenityRepository listingAmenityRepository,
+                                 ListingLocationFeatureRepository listingLocationFeatureRepository,
+                                 ListingPreferredTenantRepository listingPreferredTenantRepository) {
         this.listingImageRepository = listingImageRepository;
         this.dimensionRepository = dimensionRepository;
         this.listingRepository = listingRepository;
+        this.listingAmenityRepository = listingAmenityRepository;
+        this.listingLocationFeatureRepository = listingLocationFeatureRepository;
+        this.listingPreferredTenantRepository = listingPreferredTenantRepository;
     }
 
     /**
@@ -215,19 +234,40 @@ public class ListingResponseMapper {
                                 .map(BigDecimal::valueOf)
                                 .orElse(null))
                 : null;
-        return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary, computedAreaAcres);
+        // Residential child sets (amenities / special-location views / preferred tenants) —
+        // single-listing detail path only (mirrors images-on-detail, #1626). Gated to residential
+        // property types so non-residential listings take no extra DB round trips.
+        boolean isResidential = RESIDENTIAL_PROPERTY_TYPES.contains(l.getPropertyType());
+        List<String> amenities = isResidential
+                ? listingAmenityRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
+                        .map(ListingAmenity::getCode).toList()
+                : List.of();
+        List<String> specialLocationViews = isResidential
+                ? listingLocationFeatureRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
+                        .map(ListingLocationFeature::getCode).toList()
+                : List.of();
+        List<String> preferredTenants = isResidential
+                ? listingPreferredTenantRepository.findByListingIdOrderByCodeAsc(l.getId()).stream()
+                        .map(ListingPreferredTenant::getCode).toList()
+                : List.of();
+        return build(l, rejectionReason, images, earnedBadgeCount, gallery, boundary, computedAreaAcres,
+                amenities, specialLocationViews, preferredTenants);
     }
 
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images, int earnedBadgeCount) {
         // Batch/list path: keep payload unchanged — images[] stays empty so list endpoints do
         // not balloon in size. List views render from firstImageUrl + imageCount (#758).
-        // computedAreaAcres stays null so the hot list path takes NO extra DB call (#1367).
-        return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null, null);
+        // computedAreaAcres stays null and residential child sets stay empty so the hot list
+        // path takes NO extra DB calls (#1367, #1626).
+        return build(l, rejectionReason, images, earnedBadgeCount, List.of(), null, null,
+                List.of(), List.of(), List.of());
     }
 
+    @SuppressWarnings("java:S107") // mirrors existing build() overload chain shape
     private ListingResponse build(Listing l, String rejectionReason, List<ListingImage> images,
                                   int earnedBadgeCount, List<ListingImageDTO> gallery, String boundary,
-                                  BigDecimal computedAreaAcres) {
+                                  BigDecimal computedAreaAcres, List<String> amenities,
+                                  List<String> specialLocationViews, List<String> preferredTenants) {
         int imageCount = images.size();
         String firstImageUrl = images.stream().findFirst()
                 .map(ListingImage::getUrl)
@@ -276,7 +316,17 @@ public class ListingResponseMapper {
                 l.getWaterSource(), l.getSoilType(), l.getRoadAccess(),
                 l.getCultivationStatus(), l.getOwnershipType(), l.getSurveyNumber(),
                 l.getLandCategory(), l.getFarmhouseAvailable(), l.getFencingDone(),
-                boundary, computedAreaAcres);
+                boundary, computedAreaAcres,
+                l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
+                l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),
+                l.getParking2wCount(), l.getParking4wCount(), l.getRoadWidthFt(), l.getPlotDimensions(),
+                l.getConversionStatus(), l.getKhataNumber(), l.getPropertyTaxPid(), l.getApprovingAuthority(),
+                l.getProjectName(), l.getBuilderName(), l.getMaintenancePaise(),
+                l.getHasLift(), l.getHasPowerBackup(), l.getIsGated(), l.getHasGarden(), l.getHasTerrace(),
+                l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
+                l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
+                l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
+                amenities, specialLocationViews, preferredTenants);
     }
 
     /**

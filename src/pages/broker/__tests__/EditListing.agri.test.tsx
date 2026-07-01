@@ -861,3 +861,53 @@ describe('EditListing — agri (h) Null preserved: unset farmhouseAvailable and 
     expect(payload.fencingDone).toBeUndefined();
   });
 });
+
+// ── (i) M38-13A (#1626) no-regression: per-visibility gating must NOT strip ────
+// legitimate agri fields when editing an agricultural_land listing. This proves
+// the fieldVisible('...') gate added to handleStep1Save is PER-TYPE-VISIBILITY
+// (send when visible for the listing's OWN type), not a blanket field removal.
+
+describe('EditListing — M38-13A (#1626) no-regression: agri fields preserved on save', () => {
+  it('saving an agricultural_land listing with all agri fields set still sends every visible agri field in the payload', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({
+      propertyType: 'agricultural_land',
+      waterSource: 'BOREWELL',
+      soilType: 'RED_LATERITE',
+      roadAccess: 'TARRED_ROAD',
+      cultivationStatus: 'ARECA_PLANTATION',
+      ownershipType: 'FREEHOLD',
+      surveyNumber: '123/4A',
+      landCategory: 'FARMLAND',
+      farmhouseAvailable: true,
+      fencingDone: false,
+    });
+
+    renderEditListing();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
+    });
+
+    // Save without changing anything — all fields visible for agricultural_land
+    // (per CONFIG_MAP's AGRI_FIELDS) must still be present in the PUT payload.
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+
+    expect(payload.waterSource).toBe('BOREWELL');
+    expect(payload.soilType).toBe('RED_LATERITE');
+    expect(payload.roadAccess).toBe('TARRED_ROAD');
+    expect(payload.cultivationStatus).toBe('ARECA_PLANTATION');
+    expect(payload.ownershipType).toBe('FREEHOLD');
+    expect(payload.surveyNumber).toBe('123/4A');
+    expect(payload.landCategory).toBe('FARMLAND');
+    expect(payload.farmhouseAvailable).toBe(true);
+    expect(payload.fencingDone).toBe(false);
+  });
+});

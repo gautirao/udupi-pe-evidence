@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { canAccessRoute } from '@/lib/routeAccess';
@@ -33,8 +33,25 @@ import { PropertyTypeCardSelector } from '@/components/broker/PropertyTypeCardSe
 import { BoundaryDrawStep } from '@/components/dealer/BoundaryDrawStep';
 import { ApiError } from '@/lib/api';
 import { formatListingId } from '@/lib/listing-id';
-import { COMMERCIAL_TYPES, FURNISHING_OPTIONS } from '@/lib/listing-constants';
+import {
+  COMMERCIAL_TYPES,
+  FURNISHING_OPTIONS,
+  FACING_OPTIONS,
+  PROPERTY_STATUS_OPTIONS,
+  RESIDENTIAL_OWNERSHIP_OPTIONS,
+  MAINTENANCE_INCLUDED_OPTIONS,
+  AVAILABILITY_OPTIONS,
+  PREFERRED_TENANT_OPTIONS,
+  CONVERSION_STATUS_OPTIONS,
+  RESIDENTIAL_AREA_UNIT_OPTIONS,
+  PROPERTY_AGE_OPTIONS,
+  RESIDENTIAL_WATER_SOURCE_OPTIONS,
+  SPECIAL_LOCATION_VIEW_OPTIONS,
+  APARTMENT_AMENITY_OPTIONS,
+  HOUSE_VILLA_AMENITY_OPTIONS,
+} from '@/lib/listing-constants';
 import type { PropertyType } from '@/lib/listing-constants';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { fromGeoJsonString, toGeoJsonString } from '@/lib/geoJsonUtils';
 import { isListingFieldVisible } from '@/lib/listingFieldConfig';
@@ -69,6 +86,167 @@ function extractYouTubeId(url: string): string | null {
 
 function isInstagramUrl(url: string): boolean {
   return /instagram\.com\/(reel|p)\//.test(url);
+}
+
+/**
+ * M38-13A (#1626) — tri-state boolean → Select string, matching the existing
+ * farmhouseAvailable/fencingDone convention. `null`/`undefined` (unknown) map to
+ * '' (neutral/unset) — distinct from an explicit `false`, which maps to 'false'.
+ * Never defaults an unknown value to "No".
+ */
+function boolToTriState(value: boolean | null | undefined): string {
+  return value === true ? 'true' : value === false ? 'false' : '';
+}
+
+/** Inverse of boolToTriState for building the update payload. '' → undefined (omit; no change). */
+function triStateToBool(value: string): boolean | undefined {
+  return value === 'true' ? true : value === 'false' ? false : undefined;
+}
+
+// ---------------------------------------------------------------------------
+// M38-13A (#1626) — chip / segmented control affordances (design-spec.md §1).
+// Built entirely from the EXISTING shadcn ToggleGroup primitive (Radix
+// `type="single"` / `type="multiple"`) — no new dependency, no new form
+// framework. Wire values are unchanged: chip `value`s ARE the same strings
+// already stored in state / sent in the PUT payload (e.g. bedrooms '5' for
+// the "5+" chip) — only the DISPLAY LABEL differs from the raw value.
+// ---------------------------------------------------------------------------
+
+interface ChipOption {
+  readonly value: string;
+  readonly label: string;
+}
+
+/** BHK — 1/2/3/4/5+ (design §1). Value IS the numeric bedrooms string sent on save. */
+const BHK_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
+  { value: '5', label: '5+' },
+];
+
+/** Bathrooms — 1/2/3/4+ (design §1). */
+const BATHROOM_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4+' },
+];
+
+/** Balconies — 0/1/2/3+ (design §1). */
+const BALCONY_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '0', label: '0' },
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3+' },
+];
+
+/** 2w/4w parking — 0/1/2/3+ (design §1). Shared vocab for both parking chip groups. */
+const PARKING_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '0', label: '0' },
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+  { value: '3', label: '3+' },
+];
+
+/**
+ * House/villa "Number of floors" — Ground/G+1/G+2/G+3/G+4+ (design §1). Reuses the
+ * `totalFloors` column/state (no separate backend column — see HOUSE_VILLA_ONLY_FIELDS
+ * comment in listingFieldConfig.ts); the chip is a house/villa-only display convention,
+ * NOT used for apartment/commercial_building's plain "Total floors" count.
+ */
+const FLOORS_CHIP_OPTIONS: readonly ChipOption[] = [
+  { value: '0', label: 'Ground' },
+  { value: '1', label: 'G+1' },
+  { value: '2', label: 'G+2' },
+  { value: '3', label: 'G+3' },
+  { value: '4', label: 'G+4+' },
+];
+
+interface SingleChipGroupProps {
+  id: string;
+  label: string;
+  options: readonly ChipOption[];
+  value: string;
+  onValueChange: (value: string) => void;
+  /** 'chip' = individual bordered pills (BHK/bathrooms/etc); 'segmented' = single pill-track (furnishing/status/maintenance). */
+  variant?: 'chip' | 'segmented';
+}
+
+/**
+ * Single-select chip/segmented control — shadcn ToggleGroup type="single".
+ * The visible <Label> is associated via aria-labelledby (not htmlFor) because the
+ * ToggleGroup root renders a plain div, which is not a labelable form control —
+ * `<Label htmlFor>` pointing at it is a no-op for assistive tech (a11y fix).
+ */
+function SingleChipGroup({ id, label, options, value, onValueChange, variant = 'chip' }: SingleChipGroupProps) {
+  const labelId = `${id}-label`;
+  return (
+    <div className="space-y-2" data-testid={`chip-group-${id}`}>
+      <Label id={labelId}>{label}</Label>
+      <ToggleGroup
+        id={id}
+        type="single"
+        value={value}
+        aria-labelledby={labelId}
+        // Radix collapses to '' when the pressed item is clicked again — ignore that
+        // so a required single-select control can't be cleared to "nothing selected".
+        onValueChange={(v) => { if (v) onValueChange(v); }}
+        className={variant === 'segmented' ? 'inline-flex w-fit rounded-lg bg-muted p-1' : 'flex-wrap justify-start gap-2'}
+      >
+        {options.map((opt) => (
+          <ToggleGroupItem
+            key={opt.value}
+            value={opt.value}
+            aria-label={opt.label}
+            className={
+              variant === 'segmented'
+                ? 'rounded-md px-4 py-1.5 text-sm data-[state=on]:bg-card data-[state=on]:shadow-sm'
+                : 'rounded-full border px-4 py-1.5 text-sm data-[state=on]:border-primary data-[state=on]:bg-primary/10'
+            }
+          >
+            {opt.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  );
+}
+
+interface MultiChipGroupProps {
+  label: string;
+  options: readonly ChipOption[];
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  testId?: string;
+}
+
+/**
+ * Multi-select chip control — shadcn ToggleGroup type="multiple". Emits the FINAL desired set.
+ * Same aria-labelledby association as SingleChipGroup — the ToggleGroup root div is not a
+ * labelable control, so a plain <Label> with no `htmlFor`/`id` pairing is not enough (a11y fix).
+ */
+function MultiChipGroup({ label, options, value, onValueChange, testId }: MultiChipGroupProps) {
+  const generatedId = useId();
+  const labelId = `${testId ?? generatedId}-label`;
+  return (
+    <div className="space-y-2" data-testid={testId}>
+      <Label id={labelId}>{label}</Label>
+      <ToggleGroup type="multiple" value={value} onValueChange={onValueChange} aria-labelledby={labelId} className="flex-wrap justify-start gap-2">
+        {options.map((opt) => (
+          <ToggleGroupItem
+            key={opt.value}
+            value={opt.value}
+            aria-label={opt.label}
+            className="rounded-full border px-4 py-1.5 text-sm data-[state=on]:border-primary data-[state=on]:bg-primary/10"
+          >
+            {opt.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  );
 }
 
 const LOCKED_STATUSES = ['PENDING_REVIEW', 'LIVE'];
@@ -173,6 +351,51 @@ export default function EditListing() {
   // Agricultural plot boundary — [lat, lng][] coords from DrawControl
   const [boundaryCoords, setBoundaryCoords] = useState<[number, number][]>([]);
 
+  // M38-13A (#1626) — residential typed-listing fields.
+  // Tri-state booleans use '' = not specified / 'true' / 'false' (same convention as
+  // farmhouseAvailable/fencingDone above) so an unset value is never conflated with
+  // an explicit "No" on prefill.
+  const [bathrooms, setBathrooms] = useState('');
+  const [balconies, setBalconies] = useState('');
+  const [facing, setFacing] = useState('');
+  const [availabilityTimeline, setAvailabilityTimeline] = useState('');
+  const [superBuiltArea, setSuperBuiltArea] = useState<number | null>(null);
+  const [superBuiltAreaUnit, setSuperBuiltAreaUnit] = useState('SQ_FT');
+  const [propertyAge, setPropertyAge] = useState('');
+  const [residentialWaterSource, setResidentialWaterSource] = useState('');
+  const [parking2wCount, setParking2wCount] = useState('');
+  const [parking4wCount, setParking4wCount] = useState('');
+  const [roadWidthFt, setRoadWidthFt] = useState('');
+  const [plotDimensions, setPlotDimensions] = useState('');
+  const [conversionStatus, setConversionStatus] = useState('');
+  const [khataNumber, setKhataNumber] = useState('');
+  const [propertyTaxPid, setPropertyTaxPid] = useState('');
+  const [approvingAuthority, setApprovingAuthority] = useState('');
+  const [projectName, setProjectName] = useState('');
+  const [builderName, setBuilderName] = useState('');
+  const [maintenancePaise, setMaintenancePaise] = useState('');
+  const [maintenanceIncluded, setMaintenanceIncluded] = useState('');
+  const [possessionStatus, setPossessionStatus] = useState('');
+  const [priceNegotiable, setPriceNegotiable] = useState('');
+  const [rentNegotiable, setRentNegotiable] = useState('');
+  const [petsAllowed, setPetsAllowed] = useState('');
+  const [hasLift, setHasLift] = useState('');
+  const [hasPowerBackup, setHasPowerBackup] = useState('');
+  const [isGated, setIsGated] = useState('');
+  const [hasGarden, setHasGarden] = useState('');
+  const [hasTerrace, setHasTerrace] = useState('');
+  const [hasCompound, setHasCompound] = useState('');
+  const [hasServantRoom, setHasServantRoom] = useState('');
+  const [isCornerPlot, setIsCornerPlot] = useState('');
+  const [hasBoundaryWall, setHasBoundaryWall] = useState('');
+  const [isGatedLayout, setIsGatedLayout] = useState('');
+  const [hasWaterConnection, setHasWaterConnection] = useState('');
+  const [hasElectricityConnection, setHasElectricityConnection] = useState('');
+  const [hasDrainage, setHasDrainage] = useState('');
+  const [amenities, setAmenities] = useState<string[]>([]);
+  const [specialLocationViews, setSpecialLocationViews] = useState<string[]>([]);
+  const [preferredTenants, setPreferredTenants] = useState<string[]>([]);
+
   // Images for thumbnail strip in step 4 review
   const { images: listingImages } = useListingImages(id);
 
@@ -230,6 +453,50 @@ export default function EditListing() {
     if (listing.boundary) {
       setBoundaryCoords(fromGeoJsonString(listing.boundary));
     }
+
+    // M38-13A (#1626) — residential typed-listing field prefill. All new columns are
+    // nullable (legacy pre-V103 rows and non-residential types read null); nulls stay
+    // '' / [] (neutral), never fabricated as a default value.
+    setBathrooms(listing.bathrooms != null ? String(listing.bathrooms) : '');
+    setBalconies(listing.balconies != null ? String(listing.balconies) : '');
+    setFacing(listing.facing ?? '');
+    setAvailabilityTimeline(listing.availabilityTimeline ?? '');
+    setSuperBuiltArea(listing.superBuiltArea ?? null);
+    setSuperBuiltAreaUnit(listing.superBuiltAreaUnit ?? 'SQ_FT');
+    setPropertyAge(listing.propertyAge ?? '');
+    setResidentialWaterSource(listing.residentialWaterSource ?? '');
+    setParking2wCount(listing.parking2wCount != null ? String(listing.parking2wCount) : '');
+    setParking4wCount(listing.parking4wCount != null ? String(listing.parking4wCount) : '');
+    setRoadWidthFt(listing.roadWidthFt != null ? String(listing.roadWidthFt) : '');
+    setPlotDimensions(listing.plotDimensions ?? '');
+    setConversionStatus(listing.conversionStatus ?? '');
+    setKhataNumber(listing.khataNumber ?? '');
+    setPropertyTaxPid(listing.propertyTaxPid ?? '');
+    setApprovingAuthority(listing.approvingAuthority ?? '');
+    setProjectName(listing.projectName ?? '');
+    setBuilderName(listing.builderName ?? '');
+    setMaintenancePaise(listing.maintenancePaise != null ? String(listing.maintenancePaise) : '');
+    setPossessionStatus(listing.possessionStatus ?? '');
+    setMaintenanceIncluded(boolToTriState(listing.maintenanceIncluded));
+    setPriceNegotiable(boolToTriState(listing.priceNegotiable));
+    setRentNegotiable(boolToTriState(listing.rentNegotiable));
+    setPetsAllowed(boolToTriState(listing.petsAllowed));
+    setHasLift(boolToTriState(listing.hasLift));
+    setHasPowerBackup(boolToTriState(listing.hasPowerBackup));
+    setIsGated(boolToTriState(listing.isGated));
+    setHasGarden(boolToTriState(listing.hasGarden));
+    setHasTerrace(boolToTriState(listing.hasTerrace));
+    setHasCompound(boolToTriState(listing.hasCompound));
+    setHasServantRoom(boolToTriState(listing.hasServantRoom));
+    setIsCornerPlot(boolToTriState(listing.isCornerPlot));
+    setHasBoundaryWall(boolToTriState(listing.hasBoundaryWall));
+    setIsGatedLayout(boolToTriState(listing.isGatedLayout));
+    setHasWaterConnection(boolToTriState(listing.hasWaterConnection));
+    setHasElectricityConnection(boolToTriState(listing.hasElectricityConnection));
+    setHasDrainage(boolToTriState(listing.hasDrainage));
+    setAmenities(listing.amenities ?? []);
+    setSpecialLocationViews(listing.specialLocationViews ?? []);
+    setPreferredTenants(listing.preferredTenants ?? []);
   }, [listing]);
 
   // Auth guard
@@ -342,9 +609,13 @@ export default function EditListing() {
   const isRent = listingPurpose === 'rent';
   const showLandArea = propertyType === 'land' || propertyType === 'commercial_land'
     || propertyType === 'commercial_building' || propertyType === 'warehouse'
-    || propertyType === 'agricultural_land';
+    || propertyType === 'agricultural_land'
+    // M38-13A (#1626) — house/villa (optional plot area) + residential_plot (primary plot area)
+    || propertyType === 'house' || propertyType === 'villa' || propertyType === 'residential_plot';
   const showBuiltArea = propertyType === 'apartment' || propertyType === 'house'
-    || propertyType === 'commercial_building' || propertyType === 'warehouse';
+    || propertyType === 'commercial_building' || propertyType === 'warehouse'
+    // M38-13A (#1626)
+    || propertyType === 'villa';
 
   /**
    * Shorthand render-visibility predicate for the current propertyType +
@@ -378,36 +649,97 @@ export default function EditListing() {
         locality: locality.trim() || undefined,
         landArea: landAreaVal,
         landAreaUnit: showLandArea && landAreaVal !== undefined ? landAreaUnit : undefined,
-        bedrooms: bedroomsNum,
+        // M38-13A (#1626) code-review follow-up: bedrooms and every field through
+        // fencingDone below are PRE-EXISTING type-scoped fields (see listingFieldConfig
+        // CONFIG_MAP) and must be gated the same way as the new M38-13A fields further
+        // down — otherwise a mid-edit PropertyTypeCardSelector switch (e.g.
+        // house→residential_plot, house→commercial) resends a stale prior-type value the
+        // backend's validateFamilyFields/validateResidentialFieldSet rejects with 400.
+        bedrooms: fieldVisible('bedrooms') ? bedroomsNum : undefined,
         builtArea: builtAreaVal,
         builtAreaUnit: showBuiltArea && builtAreaVal !== undefined ? builtAreaUnit : undefined,
-        reraNumber: (propertyType === 'apartment' || propertyType === 'house')
+        reraNumber: (propertyType === 'apartment' || propertyType === 'house' || propertyType === 'villa'
+          || propertyType === 'residential_plot')
           ? (reraNumber.trim() || null)
           : undefined,
         listingPurpose,
         carpetArea: carpetAreaVal,
         carpetAreaUnit: carpetAreaVal !== undefined ? carpetAreaUnit : undefined,
-        floorNumber: intOrUndef(floorNumber),
-        totalFloors: intOrUndef(totalFloors),
-        furnishingStatus: furnishingStatus || undefined,
-        washrooms: intOrUndef(washrooms),
-        parkingCount: intOrUndef(parkingCount),
-        roadFrontageFt: floatOrUndef(roadFrontageFt),
-        commercialUsage: commercialUsage.trim() || undefined,
-        numberOfUnits: intOrUndef(numberOfUnits),
+        floorNumber: fieldVisible('floorNumber') ? intOrUndef(floorNumber) : undefined,
+        totalFloors: fieldVisible('totalFloors') ? intOrUndef(totalFloors) : undefined,
+        furnishingStatus: fieldVisible('furnishingStatus') ? (furnishingStatus || undefined) : undefined,
+        washrooms: fieldVisible('washrooms') ? intOrUndef(washrooms) : undefined,
+        parkingCount: fieldVisible('parkingCount') ? intOrUndef(parkingCount) : undefined,
+        roadFrontageFt: fieldVisible('roadFrontageFt') ? floatOrUndef(roadFrontageFt) : undefined,
+        commercialUsage: fieldVisible('commercialUsage') ? (commercialUsage.trim() || undefined) : undefined,
+        numberOfUnits: fieldVisible('numberOfUnits') ? intOrUndef(numberOfUnits) : undefined,
         monthlyRent: isRent ? intOrUndef(monthlyRent) : undefined,
         securityDepositMonths: isRent ? intOrUndef(securityDepositMonths) : undefined,
         lockInMonths: isRent ? intOrUndef(lockInMonths) : undefined,
-        waterSource: waterSource.trim() || undefined,
-        soilType: soilType.trim() || undefined,
-        roadAccess: roadAccess.trim() || undefined,
-        cultivationStatus: cultivationStatus.trim() || undefined,
-        ownershipType: ownershipType.trim() || undefined,
-        surveyNumber: surveyNumber.trim() || undefined,
+        waterSource: fieldVisible('waterSource') ? (waterSource.trim() || undefined) : undefined,
+        soilType: fieldVisible('soilType') ? (soilType.trim() || undefined) : undefined,
+        roadAccess: fieldVisible('roadAccess') ? (roadAccess.trim() || undefined) : undefined,
+        cultivationStatus: fieldVisible('cultivationStatus') ? (cultivationStatus.trim() || undefined) : undefined,
+        ownershipType: fieldVisible('ownershipType') ? (ownershipType.trim() || undefined) : undefined,
+        surveyNumber: fieldVisible('surveyNumber') ? (surveyNumber.trim() || undefined) : undefined,
         // Issue #1458 — new structured agri fields
-        landCategory: landCategory || undefined,
-        farmhouseAvailable: farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined,
-        fencingDone: fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined,
+        landCategory: fieldVisible('landCategory') ? (landCategory || undefined) : undefined,
+        farmhouseAvailable: fieldVisible('farmhouseAvailable')
+          ? (farmhouseAvailable === 'true' ? true : farmhouseAvailable === 'false' ? false : undefined)
+          : undefined,
+        fencingDone: fieldVisible('fencingDone')
+          ? (fencingDone === 'true' ? true : fencingDone === 'false' ? false : undefined)
+          : undefined,
+        // M38-13A (#1626) — residential typed-listing fields.
+        // Every type-scoped field is gated behind fieldVisible('...') — the SAME predicate
+        // that governs rendering — so that switching PropertyTypeCardSelector mid-edit
+        // (e.g. house→apartment) never sends a stale prior-type value the backend's
+        // validateResidentialFieldSet/validateFamilyFields would reject with 400. Code
+        // review fix (post #1626 REQUEST_CHANGES): these were previously sent unconditionally.
+        bathrooms: fieldVisible('bathrooms') ? intOrUndef(bathrooms) : undefined,
+        balconies: fieldVisible('balconies') ? intOrUndef(balconies) : undefined,
+        facing: fieldVisible('facing') ? (facing || undefined) : undefined,
+        availabilityTimeline: fieldVisible('availabilityTimeline') ? (availabilityTimeline || undefined) : undefined,
+        superBuiltArea: fieldVisible('superBuiltArea') ? floatOrUndef(String(superBuiltArea ?? '')) : undefined,
+        superBuiltAreaUnit: fieldVisible('superBuiltArea') && superBuiltArea != null ? superBuiltAreaUnit : undefined,
+        propertyAge: fieldVisible('propertyAge') ? (propertyAge || undefined) : undefined,
+        residentialWaterSource: fieldVisible('residentialWaterSource') ? (residentialWaterSource || undefined) : undefined,
+        parking2wCount: fieldVisible('parking2wCount') ? intOrUndef(parking2wCount) : undefined,
+        parking4wCount: fieldVisible('parking4wCount') ? intOrUndef(parking4wCount) : undefined,
+        roadWidthFt: fieldVisible('roadWidthFt') ? floatOrUndef(roadWidthFt) : undefined,
+        plotDimensions: fieldVisible('plotDimensions') ? (plotDimensions.trim() || undefined) : undefined,
+        conversionStatus: fieldVisible('conversionStatus') ? (conversionStatus || undefined) : undefined,
+        khataNumber: fieldVisible('khataNumber') ? (khataNumber.trim() || undefined) : undefined,
+        propertyTaxPid: fieldVisible('propertyTaxPid') ? (propertyTaxPid.trim() || undefined) : undefined,
+        approvingAuthority: fieldVisible('approvingAuthority') ? (approvingAuthority.trim() || undefined) : undefined,
+        projectName: fieldVisible('projectName') ? (projectName.trim() || undefined) : undefined,
+        builderName: fieldVisible('builderName') ? (builderName.trim() || undefined) : undefined,
+        maintenancePaise: fieldVisible('maintenancePaise') ? intOrUndef(maintenancePaise) : undefined,
+        possessionStatus: fieldVisible('possessionStatus') ? (possessionStatus || undefined) : undefined,
+        maintenanceIncluded: fieldVisible('maintenanceIncluded') ? triStateToBool(maintenanceIncluded) : undefined,
+        priceNegotiable: fieldVisible('priceNegotiable') ? triStateToBool(priceNegotiable) : undefined,
+        rentNegotiable: fieldVisible('rentNegotiable') ? triStateToBool(rentNegotiable) : undefined,
+        petsAllowed: fieldVisible('petsAllowed') ? triStateToBool(petsAllowed) : undefined,
+        hasLift: fieldVisible('hasLift') ? triStateToBool(hasLift) : undefined,
+        hasPowerBackup: fieldVisible('hasPowerBackup') ? triStateToBool(hasPowerBackup) : undefined,
+        isGated: fieldVisible('isGated') ? triStateToBool(isGated) : undefined,
+        hasGarden: fieldVisible('hasGarden') ? triStateToBool(hasGarden) : undefined,
+        hasTerrace: fieldVisible('hasTerrace') ? triStateToBool(hasTerrace) : undefined,
+        hasCompound: fieldVisible('hasCompound') ? triStateToBool(hasCompound) : undefined,
+        hasServantRoom: fieldVisible('hasServantRoom') ? triStateToBool(hasServantRoom) : undefined,
+        isCornerPlot: fieldVisible('isCornerPlot') ? triStateToBool(isCornerPlot) : undefined,
+        hasBoundaryWall: fieldVisible('hasBoundaryWall') ? triStateToBool(hasBoundaryWall) : undefined,
+        isGatedLayout: fieldVisible('isGatedLayout') ? triStateToBool(isGatedLayout) : undefined,
+        hasWaterConnection: fieldVisible('hasWaterConnection') ? triStateToBool(hasWaterConnection) : undefined,
+        hasElectricityConnection: fieldVisible('hasElectricityConnection') ? triStateToBool(hasElectricityConnection) : undefined,
+        hasDrainage: fieldVisible('hasDrainage') ? triStateToBool(hasDrainage) : undefined,
+        // Multi-selects send the FINAL desired set (not a delta) — omitted when empty
+        // so a type with no applicable section doesn't wipe unrelated child rows.
+        // Also gated on fieldVisible so switching away from a type doesn't resend a
+        // stale prior-type selection the backend would reject.
+        amenities: fieldVisible('amenities') && amenities.length > 0 ? amenities : undefined,
+        specialLocationViews: fieldVisible('specialLocationViews') && specialLocationViews.length > 0 ? specialLocationViews : undefined,
+        preferredTenants: fieldVisible('preferredTenants') && preferredTenants.length > 0 ? preferredTenants : undefined,
       },
       {
         onSuccess: () => {
@@ -811,12 +1143,14 @@ export default function EditListing() {
                   </div>
                 )}
 
-                {/* Built Area — apartment, house, commercial_building, warehouse */}
+                {/* Built Area — apartment, house, villa, commercial_building, warehouse.
+                    AreaField's chip/unit template has no distinct 'villa' variant — villa
+                    reuses the 'house' template (identical visibility set, design §3). */}
                 {fieldVisible('builtArea') && (
                   <AreaField
                     id="builtArea"
                     label="Built Area"
-                    propertyType={isCommercialType ? 'commercial' : (propertyType as 'house' | 'apartment')}
+                    propertyType={isCommercialType ? 'commercial' : (propertyType === 'apartment' ? 'apartment' : 'house')}
                     initialArea={builtArea}
                     initialUnit={builtAreaUnit}
                     onChange={(area, unit) => {
@@ -826,23 +1160,20 @@ export default function EditListing() {
                   />
                 )}
 
-                {/* Bedrooms — apartment / house */}
+                {/* Bedrooms (BHK) — apartment / house / villa. M38-13A (#1626) chip control
+                    (design §1): "5+" caps the chip UI but the underlying wire value stays a
+                    plain integer, unchanged for the backend. */}
                 {fieldVisible('bedrooms') && (
-                  <div className="space-y-2">
-                    <Label htmlFor="bedrooms">Bedrooms</Label>
-                    <Input
-                      id="bedrooms"
-                      type="number"
-                      min="1"
-                      max="20"
-                      placeholder="e.g. 3"
-                      value={bedrooms}
-                      onChange={(e) => setBedrooms(e.target.value)}
-                    />
-                  </div>
+                  <SingleChipGroup
+                    id="bedrooms"
+                    label="Bedrooms (BHK)"
+                    options={BHK_CHIP_OPTIONS}
+                    value={bedrooms}
+                    onValueChange={setBedrooms}
+                  />
                 )}
 
-                {/* Carpet Area — commercial shop/office */}
+                {/* Carpet Area — commercial shop/office, OR apartment primary area (M38-13A) */}
                 {fieldVisible('carpetArea') && (
                   <AreaField
                     id="carpetArea"
@@ -855,6 +1186,333 @@ export default function EditListing() {
                       setCarpetAreaUnit(unit);
                     }}
                   />
+                )}
+
+                {/* ── M38-13A (#1626) — residential typed-listing fields ── */}
+                {fieldVisible('bathrooms') && (
+                  <SingleChipGroup
+                    id="bathrooms"
+                    label="Bathrooms"
+                    options={BATHROOM_CHIP_OPTIONS}
+                    value={bathrooms}
+                    onValueChange={setBathrooms}
+                  />
+                )}
+
+                {fieldVisible('balconies') && (
+                  <SingleChipGroup
+                    id="balconies"
+                    label="Balconies"
+                    options={BALCONY_CHIP_OPTIONS}
+                    value={balconies}
+                    onValueChange={setBalconies}
+                  />
+                )}
+
+                {fieldVisible('superBuiltArea') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="superBuiltArea">Super built-up area (optional)</Label>
+                      <Input
+                        id="superBuiltArea"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="e.g. 1350"
+                        value={superBuiltArea ?? ''}
+                        onChange={(e) => setSuperBuiltArea(e.target.value === '' ? null : Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="superBuiltAreaUnit">Unit</Label>
+                      <Select value={superBuiltAreaUnit} onValueChange={setSuperBuiltAreaUnit}>
+                        <SelectTrigger id="superBuiltAreaUnit">
+                          <SelectValue placeholder="Select unit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RESIDENTIAL_AREA_UNIT_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {fieldVisible('facing') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="facing">Facing</Label>
+                    <Select value={facing} onValueChange={setFacing}>
+                      <SelectTrigger id="facing">
+                        <SelectValue placeholder="Select facing" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FACING_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {fieldVisible('propertyAge') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="propertyAge">Property age</Label>
+                    <Select value={propertyAge} onValueChange={setPropertyAge}>
+                      <SelectTrigger id="propertyAge">
+                        <SelectValue placeholder="Select property age" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROPERTY_AGE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {fieldVisible('residentialWaterSource') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="residentialWaterSource">Water source</Label>
+                    <Select value={residentialWaterSource} onValueChange={setResidentialWaterSource}>
+                      <SelectTrigger id="residentialWaterSource">
+                        <SelectValue placeholder="Select water source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESIDENTIAL_WATER_SOURCE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {fieldVisible('parking2wCount') && (
+                  <SingleChipGroup
+                    id="parking2wCount"
+                    label="2-wheeler parking"
+                    options={PARKING_CHIP_OPTIONS}
+                    value={parking2wCount}
+                    onValueChange={setParking2wCount}
+                  />
+                )}
+                {fieldVisible('parking4wCount') && (
+                  <SingleChipGroup
+                    id="parking4wCount"
+                    label="4-wheeler parking"
+                    options={PARKING_CHIP_OPTIONS}
+                    value={parking4wCount}
+                    onValueChange={setParking4wCount}
+                  />
+                )}
+
+                {/* Boolean toggles — tri-state Select (Yes/No/not specified), same convention
+                    as the existing agri farmhouseAvailable/fencingDone fields above. */}
+                {(fieldVisible('hasLift') || fieldVisible('hasPowerBackup') || fieldVisible('isGated')
+                  || fieldVisible('hasGarden') || fieldVisible('hasTerrace') || fieldVisible('hasCompound')
+                  || fieldVisible('hasServantRoom')) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {([
+                      ['hasLift', 'Lift', hasLift, setHasLift],
+                      ['hasPowerBackup', 'Power backup', hasPowerBackup, setHasPowerBackup],
+                      ['isGated', 'Gated community', isGated, setIsGated],
+                      ['hasGarden', 'Garden', hasGarden, setHasGarden],
+                      ['hasTerrace', 'Terrace', hasTerrace, setHasTerrace],
+                      ['hasCompound', 'Compound wall', hasCompound, setHasCompound],
+                      ['hasServantRoom', 'Servant room', hasServantRoom, setHasServantRoom],
+                    ] as const).map(([key, label, val, setter]) =>
+                      fieldVisible(key) && (
+                        <div className="space-y-2" key={key}>
+                          <Label htmlFor={key}>{label}</Label>
+                          <Select value={val} onValueChange={setter}>
+                            <SelectTrigger id={key}>
+                              <SelectValue placeholder="Not specified" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="true">Yes</SelectItem>
+                              <SelectItem value="false">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                )}
+
+                {/* M38-13A (#1626) — Amenities: multi-select chip group (design §1). Apartment vs
+                    house/villa use different amenity lists per design; emits the FINAL desired
+                    set (not a delta), matching the fieldVisible-gated PUT payload behavior. */}
+                {fieldVisible('amenities') && (
+                  <MultiChipGroup
+                    testId="chip-group-amenities"
+                    label="Amenities"
+                    options={propertyType === 'apartment' ? APARTMENT_AMENITY_OPTIONS : HOUSE_VILLA_AMENITY_OPTIONS}
+                    value={amenities}
+                    onValueChange={setAmenities}
+                  />
+                )}
+
+                {fieldVisible('specialLocationViews') && (
+                  <MultiChipGroup
+                    label="Special location / views"
+                    options={SPECIAL_LOCATION_VIEW_OPTIONS}
+                    value={specialLocationViews}
+                    onValueChange={setSpecialLocationViews}
+                  />
+                )}
+
+                {(fieldVisible('projectName') || fieldVisible('builderName')) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {fieldVisible('projectName') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="projectName">Project / society name</Label>
+                        <Input
+                          id="projectName"
+                          placeholder="e.g. Sunrise Residency"
+                          value={projectName}
+                          onChange={(e) => setProjectName(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    {fieldVisible('builderName') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="builderName">Builder name</Label>
+                        <Input
+                          id="builderName"
+                          placeholder="e.g. ABC Builders"
+                          value={builderName}
+                          onChange={(e) => setBuilderName(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {fieldVisible('ownershipType') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="residentialOwnershipType">Ownership type</Label>
+                    <Select value={ownershipType} onValueChange={setOwnershipType}>
+                      <SelectTrigger id="residentialOwnershipType">
+                        <SelectValue placeholder="Select ownership type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {RESIDENTIAL_OWNERSHIP_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* ── M38-13A — residential_plot-only fields (docs + plot features) ── */}
+                {fieldVisible('plotDimensions') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="plotDimensions">Plot dimensions</Label>
+                      <Input
+                        id="plotDimensions"
+                        placeholder="e.g. 40x60 ft"
+                        value={plotDimensions}
+                        onChange={(e) => setPlotDimensions(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="roadWidthFt">Road width (ft)</Label>
+                      <Input
+                        id="roadWidthFt"
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="e.g. 30"
+                        value={roadWidthFt}
+                        onChange={(e) => setRoadWidthFt(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {fieldVisible('conversionStatus') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="conversionStatus">Conversion status</Label>
+                    <Select value={conversionStatus} onValueChange={setConversionStatus}>
+                      <SelectTrigger id="conversionStatus">
+                        <SelectValue placeholder="Select conversion status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CONVERSION_STATUS_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {(fieldVisible('isCornerPlot') || fieldVisible('hasBoundaryWall') || fieldVisible('isGatedLayout')
+                  || fieldVisible('hasWaterConnection') || fieldVisible('hasElectricityConnection') || fieldVisible('hasDrainage')) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {([
+                      ['isCornerPlot', 'Corner plot', isCornerPlot, setIsCornerPlot],
+                      ['hasBoundaryWall', 'Boundary wall', hasBoundaryWall, setHasBoundaryWall],
+                      ['isGatedLayout', 'Gated layout', isGatedLayout, setIsGatedLayout],
+                      ['hasWaterConnection', 'Water connection', hasWaterConnection, setHasWaterConnection],
+                      ['hasElectricityConnection', 'Electricity connection', hasElectricityConnection, setHasElectricityConnection],
+                      ['hasDrainage', 'Drainage', hasDrainage, setHasDrainage],
+                    ] as const).map(([key, label, val, setter]) =>
+                      fieldVisible(key) && (
+                        <div className="space-y-2" key={key}>
+                          <Label htmlFor={key}>{label}</Label>
+                          <Select value={val} onValueChange={setter}>
+                            <SelectTrigger id={key}>
+                              <SelectValue placeholder="Not specified" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="true">Yes</SelectItem>
+                              <SelectItem value="false">No</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                )}
+
+                {(fieldVisible('khataNumber') || fieldVisible('propertyTaxPid') || fieldVisible('approvingAuthority')) && (
+                  <div className="space-y-4" data-testid="plot-docs-section">
+                    <h3 className="text-sm font-medium text-foreground">Ownership &amp; document details</h3>
+                    {fieldVisible('khataNumber') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="khataNumber">Khata number</Label>
+                        <Input
+                          id="khataNumber"
+                          placeholder="e.g. 123/45"
+                          value={khataNumber}
+                          onChange={(e) => setKhataNumber(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    {fieldVisible('propertyTaxPid') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="propertyTaxPid">Property tax PID</Label>
+                        <Input
+                          id="propertyTaxPid"
+                          placeholder="e.g. PID-00123"
+                          value={propertyTaxPid}
+                          onChange={(e) => setPropertyTaxPid(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    {fieldVisible('approvingAuthority') && (
+                      <div className="space-y-2">
+                        <Label htmlFor="approvingAuthority">Approving authority</Label>
+                        <Input
+                          id="approvingAuthority"
+                          placeholder="e.g. Udupi CMC"
+                          value={approvingAuthority}
+                          onChange={(e) => setApprovingAuthority(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Floor Number — commercial */}
@@ -873,8 +1531,19 @@ export default function EditListing() {
                   </div>
                 )}
 
-                {/* Total Floors — commercial_building */}
-                {fieldVisible('totalFloors') && (
+                {/* Total Floors — commercial_building, apartment (total floors in building):
+                    plain numeric input (free count, not a small enumerable set).
+                    House/villa (Number of floors — M38-13A #1626, reuses the same column):
+                    Ground/G+1/G+2/G+3/G+4+ chip control per design §1. */}
+                {fieldVisible('totalFloors') && (propertyType === 'house' || propertyType === 'villa') ? (
+                  <SingleChipGroup
+                    id="totalFloors"
+                    label="Number of floors"
+                    options={FLOORS_CHIP_OPTIONS}
+                    value={totalFloors}
+                    onValueChange={setTotalFloors}
+                  />
+                ) : fieldVisible('totalFloors') ? (
                   <div className="space-y-2">
                     <Label htmlFor="totalFloors">Total Floors *</Label>
                     <Input
@@ -887,11 +1556,17 @@ export default function EditListing() {
                       onChange={(e) => setTotalFloors(e.target.value)}
                     />
                   </div>
-                )}
+                ) : null}
 
-                {/* Commercial shared fields */}
+                {/* Furnishing — shared by commercial AND residential (apartment/house/villa,
+                    M38-13A #1626). Residential renders it as a segmented control (design §1);
+                    commercial keeps the existing Select. Bug fix: washrooms/parkingCount below
+                    are now gated on their OWN fieldVisible() (commercial-only in CONFIG_MAP) —
+                    previously both were nested under fieldVisible('furnishingStatus'), which
+                    would have incorrectly shown "Washrooms"/"Parking Spots" plain inputs for
+                    apartment/house/villa now that furnishingStatus is also residential-shared. */}
                 {fieldVisible('furnishingStatus') && (
-                  <>
+                  isCommercialType ? (
                     <div className="space-y-2">
                       <Label htmlFor="furnishingStatus">Furnishing Status</Label>
                       <Select value={furnishingStatus} onValueChange={setFurnishingStatus}>
@@ -907,7 +1582,21 @@ export default function EditListing() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                  ) : (
+                    <SingleChipGroup
+                      id="furnishingStatus"
+                      label="Furnishing"
+                      variant="segmented"
+                      options={FURNISHING_OPTIONS}
+                      value={furnishingStatus}
+                      onValueChange={setFurnishingStatus}
+                    />
+                  )
+                )}
+
+                {(fieldVisible('washrooms') || fieldVisible('parkingCount')) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {fieldVisible('washrooms') && (
                       <div className="space-y-2">
                         <Label htmlFor="washrooms">Washrooms</Label>
                         <Input
@@ -919,6 +1608,8 @@ export default function EditListing() {
                           onChange={(e) => setWashrooms(e.target.value)}
                         />
                       </div>
+                    )}
+                    {fieldVisible('parkingCount') && (
                       <div className="space-y-2">
                         <Label htmlFor="parkingCount">Parking Spots</Label>
                         <Input
@@ -930,8 +1621,8 @@ export default function EditListing() {
                           onChange={(e) => setParkingCount(e.target.value)}
                         />
                       </div>
-                    </div>
-                  </>
+                    )}
+                  </div>
                 )}
 
                 {fieldVisible('roadFrontageFt') && (
@@ -1017,8 +1708,108 @@ export default function EditListing() {
                   </div>
                 )}
 
-                {/* RERA Number — apartment / house only */}
-                {(propertyType === 'apartment' || propertyType === 'house') && (
+                {/* ── M38-13A (#1626) — sale vs rent conditional terms (design §4) ── */}
+                {fieldVisible('possessionStatus') && (
+                  <SingleChipGroup
+                    id="possessionStatus"
+                    label="Property status"
+                    variant="segmented"
+                    options={PROPERTY_STATUS_OPTIONS}
+                    value={possessionStatus}
+                    onValueChange={setPossessionStatus}
+                  />
+                )}
+
+                {fieldVisible('maintenancePaise') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="maintenancePaise">Maintenance (₹/mo)</Label>
+                      <Input
+                        id="maintenancePaise"
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 2000"
+                        value={maintenancePaise}
+                        onChange={(e) => setMaintenancePaise(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="priceNegotiable">Negotiable</Label>
+                      <Select value={priceNegotiable} onValueChange={setPriceNegotiable}>
+                        <SelectTrigger id="priceNegotiable">
+                          <SelectValue placeholder="Not specified" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Yes</SelectItem>
+                          <SelectItem value="false">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {fieldVisible('maintenanceIncluded') && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <SingleChipGroup
+                      id="maintenanceIncluded"
+                      label="Maintenance"
+                      variant="segmented"
+                      options={MAINTENANCE_INCLUDED_OPTIONS}
+                      value={maintenanceIncluded === 'true' ? 'INCLUDED' : maintenanceIncluded === 'false' ? 'EXCLUDED' : ''}
+                      onValueChange={(v) => setMaintenanceIncluded(v === 'INCLUDED' ? 'true' : 'false')}
+                    />
+                    <div className="space-y-2">
+                      <Label htmlFor="rentNegotiable">Negotiable</Label>
+                      <Select value={rentNegotiable} onValueChange={setRentNegotiable}>
+                        <SelectTrigger id="rentNegotiable">
+                          <SelectValue placeholder="Not specified" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="true">Yes</SelectItem>
+                          <SelectItem value="false">No</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+
+                {fieldVisible('availabilityTimeline') && (
+                  <SingleChipGroup
+                    id="availabilityTimeline"
+                    label="Availability"
+                    options={AVAILABILITY_OPTIONS}
+                    value={availabilityTimeline}
+                    onValueChange={setAvailabilityTimeline}
+                  />
+                )}
+
+                {fieldVisible('petsAllowed') && (
+                  <div className="space-y-2">
+                    <Label htmlFor="petsAllowed">Pets allowed</Label>
+                    <Select value={petsAllowed} onValueChange={setPetsAllowed}>
+                      <SelectTrigger id="petsAllowed">
+                        <SelectValue placeholder="Not specified" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="true">Yes</SelectItem>
+                        <SelectItem value="false">No</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {fieldVisible('preferredTenants') && (
+                  <MultiChipGroup
+                    label="Preferred tenants"
+                    options={PREFERRED_TENANT_OPTIONS}
+                    value={preferredTenants}
+                    onValueChange={setPreferredTenants}
+                  />
+                )}
+
+                {/* RERA Number — apartment / house / villa / residential_plot */}
+                {(propertyType === 'apartment' || propertyType === 'house' || propertyType === 'villa'
+                  || propertyType === 'residential_plot') && (
                   <div className="space-y-2">
                     <Label htmlFor="reraNumber">RERA Number (optional)</Label>
                     <Input

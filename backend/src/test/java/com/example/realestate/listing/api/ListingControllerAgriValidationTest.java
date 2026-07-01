@@ -91,6 +91,11 @@ class ListingControllerAgriValidationTest {
         // Validation fires before service calls, so for 400 cases the stub is never reached.
         // For 201/200 cases we use lenient anyX() stubs covering the full arg list.
         Listing stub = minimalListing(LISTING_ID);
+        // Default stub: PUT /{id} falls back to this when the request omits propertyType, so the
+        // effective-type resolution (#1626) has an existing listing to resolve against.
+        org.mockito.Mockito.lenient()
+                .when(listingWorkflowService.findListingForCaller(any(), any(), anyBoolean()))
+                .thenReturn(stub);
         // createDraft: 36 params — UUID + 35 typed params (all Object-compatible except primitives)
         org.mockito.Mockito.lenient()
                 .when(listingCrudService.createDraft(
@@ -99,7 +104,8 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(),
-                        any(), any(), any(), any(), any(), any()))
+                        any(), any(), any(), any(), any(), any(),
+                any()))
                 .thenReturn(stub);
         // updateListing: UUID, UUID, boolean (primitive), + 43 Object params = 46 total
         org.mockito.Mockito.lenient()
@@ -108,7 +114,8 @@ class ListingControllerAgriValidationTest {
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyBoolean(), any(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                         any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                        any(), any(), any()))
+                        any(), any(), any(),
+                any()))
                 .thenReturn(stub);
 
         // Minimal mapper stub — just return something that produces the status field
@@ -135,7 +142,17 @@ class ListingControllerAgriValidationTest {
                     l.getExpectedPossessionDate(), l.getApprovalsDeclared(), false, 0,
                     l.getTrustTier(), l.getAreaKey(), List.of(),
                     null, null, null, null, null, null, null, null, null,
-                    l.getBoundaryGeoJson(), null);
+                    l.getBoundaryGeoJson(), null,
+                    l.getBathrooms(), l.getBalconies(), l.getFacing(), l.getAvailabilityTimeline(),
+                    l.getSuperBuiltArea(), l.getSuperBuiltAreaUnit(), l.getPropertyAge(), l.getResidentialWaterSource(),
+                    l.getParking2wCount(), l.getParking4wCount(), l.getRoadWidthFt(), l.getPlotDimensions(),
+                    l.getConversionStatus(), l.getKhataNumber(), l.getPropertyTaxPid(), l.getApprovingAuthority(),
+                    l.getProjectName(), l.getBuilderName(), l.getMaintenancePaise(),
+                    l.getHasLift(), l.getHasPowerBackup(), l.getIsGated(), l.getHasGarden(), l.getHasTerrace(),
+                    l.getHasCompound(), l.getHasServantRoom(), l.getIsCornerPlot(), l.getHasBoundaryWall(),
+                    l.getIsGatedLayout(), l.getHasWaterConnection(), l.getHasElectricityConnection(), l.getHasDrainage(),
+                    l.getPriceNegotiable(), l.getRentNegotiable(), l.getPetsAllowed(), l.getMaintenanceIncluded(),
+                    List.of(), List.of(), List.of());
         });
     }
 

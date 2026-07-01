@@ -56,6 +56,56 @@
       "unfurnished",
       "semi_furnished",
       "furnished"
+    ],
+    "facing": [
+      "EAST",
+      "WEST",
+      "NORTH",
+      "SOUTH",
+      "NE",
+      "NW",
+      "SE",
+      "SW"
+    ],
+    "propertyStatus": [
+      "READY_TO_MOVE",
+      "UNDER_CONSTRUCTION"
+    ],
+    "ownership": [
+      "FREEHOLD",
+      "COOPERATIVE_SOCIETY",
+      "LEASEHOLD",
+      "POWER_OF_ATTORNEY"
+    ],
+    "maintenanceIncluded": [
+      "INCLUDED",
+      "EXCLUDED"
+    ],
+    "availability": [
+      "IMMEDIATE",
+      "WITHIN_15_DAYS",
+      "WITHIN_30_DAYS",
+      "AFTER_30_DAYS"
+    ],
+    "preferredTenants": [
+      "NO_PREFERENCE",
+      "FAMILY",
+      "STUDENTS",
+      "PROFESSIONALS",
+      "COMPANY_LEASE"
+    ],
+    "conversionStatus": [
+      "NOT_CONVERTED",
+      "DC_CONVERTED",
+      "RESIDENTIAL_ZONE",
+      "NOT_SURE"
+    ],
+    "areaUnit": [
+      "SQ_FT",
+      "SQ_M",
+      "SQ_YD",
+      "CENTS",
+      "ACRE"
     ]
   },
   "commercial": {

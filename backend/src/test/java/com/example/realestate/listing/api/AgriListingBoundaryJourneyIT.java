@@ -140,11 +140,14 @@ class AgriListingBoundaryJourneyIT {
         ProximityDuplicateService proximity = mock(ProximityDuplicateService.class);
         BookingCascadeService bookingCascade = mock(BookingCascadeService.class);
         QualityRecomputeService qualityRecompute = mock(QualityRecomputeService.class);
+        var amenityRepo = mock(com.example.realestate.listing.residential.ListingAmenityRepository.class);
+        var locationFeatureRepo = mock(com.example.realestate.listing.residential.ListingLocationFeatureRepository.class);
+        var preferredTenantRepo = mock(com.example.realestate.listing.residential.ListingPreferredTenantRepository.class);
 
         crudService = new ListingCrudService(
                 listingRepository, events, ownershipGuard, dedup,
                 priceChangeLogRepository, badge, outbox, validator,
-                qualityRecompute);
+                qualityRecompute, amenityRepo, locationFeatureRepo, preferredTenantRepo);
 
         workflowService = new ListingWorkflowService(
                 listingRepository, events, ownershipGuard, proximity, policy,

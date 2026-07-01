@@ -256,6 +256,116 @@ public class Listing {
     @Column(name = "fencing_done")
     private Boolean fencingDone;
 
+    // --- Residential typed listing fields (M38-13A / #1626) ---
+    // All nullable, no default. Honest-null: null means "not declared" and must
+    // never be defaulted to false/empty at the mapper or entity level.
+
+    @Column(name = "balconies")
+    private Integer balconies;
+
+    @Column(name = "facing", length = 20)
+    private String facing;
+
+    @Column(name = "availability_timeline", length = 30)
+    private String availabilityTimeline;
+
+    @Column(name = "super_built_area")
+    private BigDecimal superBuiltArea;
+
+    @Column(name = "super_built_area_unit", length = 20)
+    private String superBuiltAreaUnit;
+
+    @Column(name = "property_age", length = 30)
+    private String propertyAge;
+
+    @Column(name = "residential_water_source", length = 30)
+    private String residentialWaterSource;
+
+    @Column(name = "parking_2w_count")
+    private Integer parking2wCount;
+
+    @Column(name = "parking_4w_count")
+    private Integer parking4wCount;
+
+    @Column(name = "road_width_ft")
+    private BigDecimal roadWidthFt;
+
+    @Column(name = "plot_dimensions", length = 100)
+    private String plotDimensions;
+
+    @Column(name = "conversion_status", length = 30)
+    private String conversionStatus;
+
+    @Column(name = "khata_number", length = 100)
+    private String khataNumber;
+
+    @Column(name = "property_tax_pid", length = 100)
+    private String propertyTaxPid;
+
+    @Column(name = "approving_authority", length = 100)
+    private String approvingAuthority;
+
+    @Column(name = "project_name")
+    private String projectName;
+
+    @Column(name = "builder_name")
+    private String builderName;
+
+    /** Monthly maintenance in paise (sale listings only). */
+    @Column(name = "maintenance_paise")
+    private Long maintenancePaise;
+
+    @Column(name = "has_lift")
+    private Boolean hasLift;
+
+    @Column(name = "has_power_backup")
+    private Boolean hasPowerBackup;
+
+    @Column(name = "is_gated")
+    private Boolean isGated;
+
+    @Column(name = "has_garden")
+    private Boolean hasGarden;
+
+    @Column(name = "has_terrace")
+    private Boolean hasTerrace;
+
+    @Column(name = "has_compound")
+    private Boolean hasCompound;
+
+    @Column(name = "has_servant_room")
+    private Boolean hasServantRoom;
+
+    @Column(name = "is_corner_plot")
+    private Boolean isCornerPlot;
+
+    @Column(name = "has_boundary_wall")
+    private Boolean hasBoundaryWall;
+
+    @Column(name = "is_gated_layout")
+    private Boolean isGatedLayout;
+
+    @Column(name = "has_water_connection")
+    private Boolean hasWaterConnection;
+
+    @Column(name = "has_electricity_connection")
+    private Boolean hasElectricityConnection;
+
+    @Column(name = "has_drainage")
+    private Boolean hasDrainage;
+
+    @Column(name = "price_negotiable")
+    private Boolean priceNegotiable;
+
+    @Column(name = "rent_negotiable")
+    private Boolean rentNegotiable;
+
+    @Column(name = "pets_allowed")
+    private Boolean petsAllowed;
+
+    @Column(name = "maintenance_included")
+    private Boolean maintenanceIncluded;
+
     // --- Trust tier and ranking (RE-142 / Phase 3.1) ---
 
     /**
@@ -1142,6 +1252,113 @@ public class Listing {
     public void setFencingDone(Boolean fencingDone) {
         this.fencingDone = fencingDone;
     }
+
+    // --- Residential typed listing getters/setters (M38-13A / #1626) ---
+
+    public Integer getBalconies() { return balconies; }
+    public void setBalconies(Integer balconies) { this.balconies = balconies; }
+
+    public String getFacing() { return facing; }
+    public void setFacing(String facing) { this.facing = facing; }
+
+    public String getAvailabilityTimeline() { return availabilityTimeline; }
+    public void setAvailabilityTimeline(String availabilityTimeline) { this.availabilityTimeline = availabilityTimeline; }
+
+    public BigDecimal getSuperBuiltArea() { return superBuiltArea; }
+    public void setSuperBuiltArea(BigDecimal superBuiltArea) { this.superBuiltArea = superBuiltArea; }
+
+    public String getSuperBuiltAreaUnit() { return superBuiltAreaUnit; }
+    public void setSuperBuiltAreaUnit(String superBuiltAreaUnit) { this.superBuiltAreaUnit = superBuiltAreaUnit; }
+
+    public String getPropertyAge() { return propertyAge; }
+    public void setPropertyAge(String propertyAge) { this.propertyAge = propertyAge; }
+
+    public String getResidentialWaterSource() { return residentialWaterSource; }
+    public void setResidentialWaterSource(String residentialWaterSource) { this.residentialWaterSource = residentialWaterSource; }
+
+    public Integer getParking2wCount() { return parking2wCount; }
+    public void setParking2wCount(Integer parking2wCount) { this.parking2wCount = parking2wCount; }
+
+    public Integer getParking4wCount() { return parking4wCount; }
+    public void setParking4wCount(Integer parking4wCount) { this.parking4wCount = parking4wCount; }
+
+    public BigDecimal getRoadWidthFt() { return roadWidthFt; }
+    public void setRoadWidthFt(BigDecimal roadWidthFt) { this.roadWidthFt = roadWidthFt; }
+
+    public String getPlotDimensions() { return plotDimensions; }
+    public void setPlotDimensions(String plotDimensions) { this.plotDimensions = plotDimensions; }
+
+    public String getConversionStatus() { return conversionStatus; }
+    public void setConversionStatus(String conversionStatus) { this.conversionStatus = conversionStatus; }
+
+    public String getKhataNumber() { return khataNumber; }
+    public void setKhataNumber(String khataNumber) { this.khataNumber = khataNumber; }
+
+    public String getPropertyTaxPid() { return propertyTaxPid; }
+    public void setPropertyTaxPid(String propertyTaxPid) { this.propertyTaxPid = propertyTaxPid; }
+
+    public String getApprovingAuthority() { return approvingAuthority; }
+    public void setApprovingAuthority(String approvingAuthority) { this.approvingAuthority = approvingAuthority; }
+
+    public String getProjectName() { return projectName; }
+    public void setProjectName(String projectName) { this.projectName = projectName; }
+
+    public String getBuilderName() { return builderName; }
+    public void setBuilderName(String builderName) { this.builderName = builderName; }
+
+    public Long getMaintenancePaise() { return maintenancePaise; }
+    public void setMaintenancePaise(Long maintenancePaise) { this.maintenancePaise = maintenancePaise; }
+
+    public Boolean getHasLift() { return hasLift; }
+    public void setHasLift(Boolean hasLift) { this.hasLift = hasLift; }
+
+    public Boolean getHasPowerBackup() { return hasPowerBackup; }
+    public void setHasPowerBackup(Boolean hasPowerBackup) { this.hasPowerBackup = hasPowerBackup; }
+
+    public Boolean getIsGated() { return isGated; }
+    public void setIsGated(Boolean isGated) { this.isGated = isGated; }
+
+    public Boolean getHasGarden() { return hasGarden; }
+    public void setHasGarden(Boolean hasGarden) { this.hasGarden = hasGarden; }
+
+    public Boolean getHasTerrace() { return hasTerrace; }
+    public void setHasTerrace(Boolean hasTerrace) { this.hasTerrace = hasTerrace; }
+
+    public Boolean getHasCompound() { return hasCompound; }
+    public void setHasCompound(Boolean hasCompound) { this.hasCompound = hasCompound; }
+
+    public Boolean getHasServantRoom() { return hasServantRoom; }
+    public void setHasServantRoom(Boolean hasServantRoom) { this.hasServantRoom = hasServantRoom; }
+
+    public Boolean getIsCornerPlot() { return isCornerPlot; }
+    public void setIsCornerPlot(Boolean isCornerPlot) { this.isCornerPlot = isCornerPlot; }
+
+    public Boolean getHasBoundaryWall() { return hasBoundaryWall; }
+    public void setHasBoundaryWall(Boolean hasBoundaryWall) { this.hasBoundaryWall = hasBoundaryWall; }
+
+    public Boolean getIsGatedLayout() { return isGatedLayout; }
+    public void setIsGatedLayout(Boolean isGatedLayout) { this.isGatedLayout = isGatedLayout; }
+
+    public Boolean getHasWaterConnection() { return hasWaterConnection; }
+    public void setHasWaterConnection(Boolean hasWaterConnection) { this.hasWaterConnection = hasWaterConnection; }
+
+    public Boolean getHasElectricityConnection() { return hasElectricityConnection; }
+    public void setHasElectricityConnection(Boolean hasElectricityConnection) { this.hasElectricityConnection = hasElectricityConnection; }
+
+    public Boolean getHasDrainage() { return hasDrainage; }
+    public void setHasDrainage(Boolean hasDrainage) { this.hasDrainage = hasDrainage; }
+
+    public Boolean getPriceNegotiable() { return priceNegotiable; }
+    public void setPriceNegotiable(Boolean priceNegotiable) { this.priceNegotiable = priceNegotiable; }
+
+    public Boolean getRentNegotiable() { return rentNegotiable; }
+    public void setRentNegotiable(Boolean rentNegotiable) { this.rentNegotiable = rentNegotiable; }
+
+    public Boolean getPetsAllowed() { return petsAllowed; }
+    public void setPetsAllowed(Boolean petsAllowed) { this.petsAllowed = petsAllowed; }
+
+    public Boolean getMaintenanceIncluded() { return maintenanceIncluded; }
+    public void setMaintenanceIncluded(Boolean maintenanceIncluded) { this.maintenanceIncluded = maintenanceIncluded; }
 
     // --- Polygon boundary (transient — written/read via native SQL) ---
 

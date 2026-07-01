@@ -13,7 +13,9 @@ public enum PropertyType {
     WAREHOUSE("warehouse"),
     COMMERCIAL_LAND("commercial_land"),
     OTHER("other"),
-    AGRICULTURAL_LAND("agricultural_land");
+    AGRICULTURAL_LAND("agricultural_land"),
+    VILLA("villa"),
+    RESIDENTIAL_PLOT("residential_plot");
 
     private final String value;
 

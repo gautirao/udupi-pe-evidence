@@ -71,6 +71,15 @@ class ListingCrudServiceTest {
     @Mock
     private QualityRecomputeService qualityRecomputeService;
 
+    @Mock
+    private com.example.realestate.listing.residential.ListingAmenityRepository listingAmenityRepository;
+
+    @Mock
+    private com.example.realestate.listing.residential.ListingLocationFeatureRepository listingLocationFeatureRepository;
+
+    @Mock
+    private com.example.realestate.listing.residential.ListingPreferredTenantRepository listingPreferredTenantRepository;
+
     private ListingCrudService crudService;
 
     @BeforeEach
@@ -79,7 +88,8 @@ class ListingCrudServiceTest {
                 listingRepository, applicationEventPublisher, listingOwnershipGuard,
                 listingDeduplicationService, priceChangeLogRepository,
                 badgeInvalidationService, searchOutboxWriter, polygonBoundaryValidator,
-                qualityRecomputeService);
+                qualityRecomputeService, listingAmenityRepository, listingLocationFeatureRepository,
+                listingPreferredTenantRepository);
     }
 
     // --- RE-83: createDraft sets dedupe hash and flags duplicates ---
@@ -962,5 +972,236 @@ class ListingCrudServiceTest {
         // landCategory and fencingDone were not supplied → remain null
         assertThat(draft.getLandCategory()).isNull();
         assertThat(draft.getFencingDone()).isNull();
+    }
+
+    // ==================== Residential typed listing fields (M38-13A / #1626) ====================
+
+    private static com.example.realestate.listing.residential.ResidentialListingFields residentialFields(
+            Integer bathrooms, Integer balconies, Boolean hasGarden, Boolean hasLift,
+            List<String> amenities, List<String> specialLocationViews, List<String> preferredTenants) {
+        return new com.example.realestate.listing.residential.ResidentialListingFields(
+                bathrooms, balconies, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
+                hasLift, null, null, hasGarden, null, null, null, null, null, null,
+                null, null, null, null, null, null, null,
+                amenities, specialLocationViews, preferredTenants);
+    }
+
+    @Test
+    void createDraft_villa_stampsListingFamilyResidential() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "villa", "Nice Villa", "Manipal",
+                new BigDecimal("9000000"), "desc",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                residentialFields(3, 2, true, true, null, null, null));
+
+        assertThat(draft.getListingFamily())
+                .as("villa must stamp listing_family=RESIDENTIAL (architect d6)")
+                .isEqualTo("RESIDENTIAL");
+        assertThat(draft.getBathrooms()).isEqualTo(3);
+        assertThat(draft.getBalconies()).isEqualTo(2);
+        assertThat(draft.getHasGarden()).isTrue();
+        assertThat(draft.getHasLift()).isTrue();
+    }
+
+    @Test
+    void createDraft_residentialPlot_stampsListingFamilyResidential_notPlot() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "residential_plot", "Plot for sale", "Udupi",
+                new BigDecimal("3000000"), "desc",
+                new BigDecimal("2400"), null, null, "sqft", null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                ResidentialListingFieldsEmpty());
+
+        assertThat(draft.getListingFamily())
+                .as("residential_plot DB stamp is RESIDENTIAL — chk_listing_listing_family has no 'PLOT' value")
+                .isEqualTo("RESIDENTIAL")
+                .isNotEqualTo("PLOT");
+    }
+
+    @Test
+    void createDraft_houseAndApartment_alsoStampListingFamilyResidential() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing house = crudService.createDraft(
+                userId, "house", "House", "Udupi", new BigDecimal("1000000"), "desc",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                ResidentialListingFieldsEmpty());
+        Listing apartment = crudService.createDraft(
+                userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                ResidentialListingFieldsEmpty());
+
+        assertThat(house.getListingFamily()).isEqualTo("RESIDENTIAL");
+        assertThat(apartment.getListingFamily()).isEqualTo("RESIDENTIAL");
+    }
+
+    @Test
+    void createDraft_commercial_doesNotStampListingFamily() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "commercial", "Shop", "Udupi", new BigDecimal("4000000"), "desc",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                ResidentialListingFieldsEmpty());
+
+        assertThat(draft.getListingFamily())
+                .as("commercial listings must not be touched by the M38-13A residential family stamp")
+                .isNull();
+    }
+
+    @Test
+    void createDraft_petsAllowedFalse_persistsExplicitFalse_notNull() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var fields = new com.example.realestate.listing.residential.ResidentialListingFields(
+                null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, false, null,
+                null, null, null);
+
+        Listing draft = crudService.createDraft(
+                userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
+                null, null, null, null, null, null,
+                "rent", null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                fields);
+
+        assertThat(draft.getPetsAllowed())
+                .as("explicit false must be persisted, never coerced to/confused with null")
+                .isFalse();
+    }
+
+    @Test
+    void createDraft_petsAllowedOmitted_persistsNull_notDefaultedToFalse() {
+        UUID userId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Listing draft = crudService.createDraft(
+                userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
+                null, null, null, null, null, null,
+                "rent", null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                ResidentialListingFieldsEmpty());
+
+        assertThat(draft.getPetsAllowed())
+                .as("an omitted boolean must stay NULL, never fabricated to false")
+                .isNull();
+    }
+
+    @Test
+    void createDraft_amenities_insertsChildRowsAndDeduplicates() {
+        UUID userId = UUID.randomUUID();
+        UUID listingId = UUID.randomUUID();
+        when(listingRepository.save(any())).thenAnswer(inv -> {
+            Listing l = inv.getArgument(0);
+            l.setId(listingId);
+            return l;
+        });
+
+        crudService.createDraft(
+                userId, "apartment", "Flat", "Udupi", new BigDecimal("2000000"), "desc",
+                null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                "dealer", null, null, null, null, null, null, null, null, null,
+                residentialFields(null, null, null, null,
+                        List.of("LIFT", "GYM", "LIFT"), // duplicate code must be deduplicated
+                        null, null));
+
+        ArgumentCaptor<com.example.realestate.listing.residential.ListingAmenity> captor =
+                ArgumentCaptor.forClass(com.example.realestate.listing.residential.ListingAmenity.class);
+        verify(listingAmenityRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(com.example.realestate.listing.residential.ListingAmenity::getCode)
+                .containsExactlyInAnyOrder("LIFT", "GYM");
+        assertThat(captor.getAllValues())
+                .allMatch(a -> a.getListingId().equals(listingId));
+    }
+
+    @Test
+    void updateListing_childSetReplace_deletesBeforeInserting_noStaleCodes() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("apartment");
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null,
+                residentialFields(null, null, null, null,
+                        null, List.of("PARK_FACING"), List.of("FAMILY", "STUDENTS")));
+
+        // Child-set REPLACE semantics: delete-then-insert, never a bare upsert.
+        verify(listingLocationFeatureRepository).deleteByListingId(listingId);
+        verify(listingPreferredTenantRepository).deleteByListingId(listingId);
+        // amenities list was null in this call → must NOT be touched at all.
+        verify(listingAmenityRepository, never()).deleteByListingId(any());
+        verify(listingAmenityRepository, never()).save(any());
+
+        ArgumentCaptor<com.example.realestate.listing.residential.ListingPreferredTenant> tenantCaptor =
+                ArgumentCaptor.forClass(com.example.realestate.listing.residential.ListingPreferredTenant.class);
+        verify(listingPreferredTenantRepository, times(2)).save(tenantCaptor.capture());
+        assertThat(tenantCaptor.getAllValues())
+                .extracting(com.example.realestate.listing.residential.ListingPreferredTenant::getCode)
+                .containsExactlyInAnyOrder("FAMILY", "STUDENTS");
+    }
+
+    @Test
+    void updateListing_emptyListClearsChildSet() {
+        UUID listingId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        Listing existing = new Listing();
+        existing.setId(listingId);
+        existing.setCreatedBy(userId);
+        existing.setStatus(ListingStatus.DRAFT.toDbValue());
+        existing.setPropertyType("apartment");
+        when(listingOwnershipGuard.findOwned(listingId, userId, false)).thenReturn(existing);
+        when(listingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        crudService.updateListing(
+                listingId, userId, false,
+                null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, false, null,
+                null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null,
+                null, null, null, null, null, null, null, null, null,
+                null, null,
+                residentialFields(null, null, null, null, List.of(), null, null));
+
+        verify(listingAmenityRepository).deleteByListingId(listingId);
+        verify(listingAmenityRepository, never()).save(any());
+    }
+
+    private static com.example.realestate.listing.residential.ResidentialListingFields ResidentialListingFieldsEmpty() {
+        return com.example.realestate.listing.residential.ResidentialListingFields.EMPTY;
     }
 }

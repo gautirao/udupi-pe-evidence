@@ -40,6 +40,47 @@ interface CreateListingRequest {
   landCategory?: string;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
+  // M38-13A (#1626) — residential typed-listing fields (additive, all nullable).
+  bathrooms?: number;
+  balconies?: number;
+  facing?: string;
+  availabilityTimeline?: string;
+  superBuiltArea?: number;
+  superBuiltAreaUnit?: string;
+  propertyAge?: string;
+  residentialWaterSource?: string;
+  parking2wCount?: number;
+  parking4wCount?: number;
+  roadWidthFt?: number;
+  plotDimensions?: string;
+  conversionStatus?: string;
+  khataNumber?: string;
+  propertyTaxPid?: string;
+  approvingAuthority?: string;
+  projectName?: string;
+  builderName?: string;
+  maintenancePaise?: number;
+  possessionStatus?: string;
+  hasLift?: boolean | null;
+  hasPowerBackup?: boolean | null;
+  isGated?: boolean | null;
+  hasGarden?: boolean | null;
+  hasTerrace?: boolean | null;
+  hasCompound?: boolean | null;
+  hasServantRoom?: boolean | null;
+  isCornerPlot?: boolean | null;
+  hasBoundaryWall?: boolean | null;
+  isGatedLayout?: boolean | null;
+  hasWaterConnection?: boolean | null;
+  hasElectricityConnection?: boolean | null;
+  hasDrainage?: boolean | null;
+  priceNegotiable?: boolean | null;
+  rentNegotiable?: boolean | null;
+  petsAllowed?: boolean | null;
+  maintenanceIncluded?: boolean | null;
+  amenities?: string[];
+  specialLocationViews?: string[];
+  preferredTenants?: string[];
 }
 
 // Mirrors backend UpdateRequest DTO
@@ -88,6 +129,47 @@ export interface UpdateListingRequest {
   landCategory?: string;
   farmhouseAvailable?: boolean | null;
   fencingDone?: boolean | null;
+  // M38-13A (#1626) — residential typed-listing fields (additive, all nullable).
+  bathrooms?: number;
+  balconies?: number;
+  facing?: string;
+  availabilityTimeline?: string;
+  superBuiltArea?: number;
+  superBuiltAreaUnit?: string;
+  propertyAge?: string;
+  residentialWaterSource?: string;
+  parking2wCount?: number;
+  parking4wCount?: number;
+  roadWidthFt?: number;
+  plotDimensions?: string;
+  conversionStatus?: string;
+  khataNumber?: string;
+  propertyTaxPid?: string;
+  approvingAuthority?: string;
+  projectName?: string;
+  builderName?: string;
+  maintenancePaise?: number;
+  possessionStatus?: string;
+  hasLift?: boolean | null;
+  hasPowerBackup?: boolean | null;
+  isGated?: boolean | null;
+  hasGarden?: boolean | null;
+  hasTerrace?: boolean | null;
+  hasCompound?: boolean | null;
+  hasServantRoom?: boolean | null;
+  isCornerPlot?: boolean | null;
+  hasBoundaryWall?: boolean | null;
+  isGatedLayout?: boolean | null;
+  hasWaterConnection?: boolean | null;
+  hasElectricityConnection?: boolean | null;
+  hasDrainage?: boolean | null;
+  priceNegotiable?: boolean | null;
+  rentNegotiable?: boolean | null;
+  petsAllowed?: boolean | null;
+  maintenanceIncluded?: boolean | null;
+  amenities?: string[];
+  specialLocationViews?: string[];
+  preferredTenants?: string[];
 }
 
 // Mirrors backend ListingResponse DTO
@@ -154,6 +236,49 @@ export interface ListingResponse {
    * landArea/landAreaUnit — never auto-synced.
    */
   computedAreaAcres?: number | null;
+  // M38-13A (#1626) — residential typed-listing fields (additive, all nullable;
+  // null for legacy pre-V103 rows and non-residential property types — honest-null,
+  // never fabricated/defaulted).
+  bathrooms?: number | null;
+  balconies?: number | null;
+  facing?: string | null;
+  availabilityTimeline?: string | null;
+  superBuiltArea?: number | null;
+  superBuiltAreaUnit?: string | null;
+  propertyAge?: string | null;
+  residentialWaterSource?: string | null;
+  parking2wCount?: number | null;
+  parking4wCount?: number | null;
+  roadWidthFt?: number | null;
+  plotDimensions?: string | null;
+  conversionStatus?: string | null;
+  khataNumber?: string | null;
+  propertyTaxPid?: string | null;
+  approvingAuthority?: string | null;
+  projectName?: string | null;
+  builderName?: string | null;
+  maintenancePaise?: number | null;
+  possessionStatus?: string | null;
+  hasLift?: boolean | null;
+  hasPowerBackup?: boolean | null;
+  isGated?: boolean | null;
+  hasGarden?: boolean | null;
+  hasTerrace?: boolean | null;
+  hasCompound?: boolean | null;
+  hasServantRoom?: boolean | null;
+  isCornerPlot?: boolean | null;
+  hasBoundaryWall?: boolean | null;
+  isGatedLayout?: boolean | null;
+  hasWaterConnection?: boolean | null;
+  hasElectricityConnection?: boolean | null;
+  hasDrainage?: boolean | null;
+  priceNegotiable?: boolean | null;
+  rentNegotiable?: boolean | null;
+  petsAllowed?: boolean | null;
+  maintenanceIncluded?: boolean | null;
+  amenities?: string[];
+  specialLocationViews?: string[];
+  preferredTenants?: string[];
 }
 
 /**

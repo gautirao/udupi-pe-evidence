@@ -29,6 +29,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
@@ -87,13 +88,19 @@ class ListingControllerFamilyValidationTest {
         when(listingImageRepository.findByListingIdOrderByPositionAsc(any())).thenReturn(List.of());
 
         Listing stub = minimalListing(LISTING_ID, "house");
+        // Default stub: PUT /{id} falls back to this when the request omits propertyType, so the
+        // effective-type resolution (#1626) has an existing listing to resolve against. Tests that
+        // specifically target the existing-listing's type (e.g. residential_plot) override this.
+        lenient().when(listingWorkflowService.findListingForCaller(any(), any(), anyBoolean()))
+                .thenReturn(stub);
         lenient().when(listingCrudService.createDraft(
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any()))
+                any(), any(), any(), any(), any(), any(),
+                any()))
                 .thenReturn(stub);
         lenient().when(listingCrudService.updateListing(
                 any(), any(), anyBoolean(),
@@ -101,7 +108,8 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any()))
+                any(), any(), any(),
+                any()))
                 .thenReturn(stub);
 
         when(listingResponseMapper.toResponse(any(Listing.class))).thenAnswer(inv -> {
@@ -120,7 +128,15 @@ class ListingControllerFamilyValidationTest {
                     "broker", 0, false, l.getUpdatedAt(),
                     null, null, null, null, false, 0,
                     null, null, List.of(),
-                    null, null, null, null, null, null, null, null, null, null, null);
+                    null, null, null, null, null, null, null, null, null, null, null,
+                    // 36 nulls: bathrooms .. maintenanceIncluded (residential typed fields, M38-13A / #1626)
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    null, null, null, null, null, null,
+                    List.of(), List.of(), List.of());
         });
     }
 
@@ -441,8 +457,10 @@ class ListingControllerFamilyValidationTest {
     }
 
     @Test
-    void ac7_update_nullPropertyType_skipsFamily_returns200() throws Exception {
-        // Partial update with no propertyType → family validation skipped for backward compat.
+    void ac7_update_nullPropertyType_validatesAgainstExistingType_returns200() throws Exception {
+        // Partial update with no propertyType → family validation now runs against the EXISTING
+        // listing's stored type ("house", per the default stub in setUp()). A plain title update
+        // carries no family-specific fields, so it still passes (#1626 blocking-fix regression).
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
                         .with(dealer())
                         .contentType(MediaType.APPLICATION_JSON)
@@ -620,11 +638,38 @@ class ListingControllerFamilyValidationTest {
 
     @Test
     void ac10_unknownPropertyType_onUpdate_returns400_crudNeverCalled() throws Exception {
+        // NOTE: "villa" is intentionally NOT used here — M38-13A (#1626) added it as a valid
+        // PropertyType. "bungalow" remains genuinely unknown and exercises the same 400 path.
         mockMvc.perform(put("/api/listings/" + LISTING_ID)
                         .with(dealer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"propertyType":"villa","title":"Villa"}
+                                {"propertyType":"bungalow","title":"Bungalow"}
+                                """))
+                .andExpect(status().isBadRequest());
+        verifyUpdateNeverCalled();
+    }
+
+    // ======================== BLOCKING fix regression (#1626 code review): propertyType-omitted
+    // update must still validate against the EXISTING listing's stored propertyType ============
+
+    @Test
+    void ac10b_bathroomsOnResidentialPlot_propertyTypeOmitted_usesExistingType_returns400_crudNeverCalled()
+            throws Exception {
+        // Every other field on this PUT is optional (partial-update pattern). Before this fix,
+        // omitting propertyType entirely bypassed validateFamilyFields/validateResidentialFieldSet,
+        // so a residence-only field like bathrooms could be silently written onto an existing
+        // residential_plot listing. The effective-type resolution must fetch the EXISTING listing's
+        // stored propertyType and validate against it even though the request supplies none.
+        Listing existingPlot = minimalListing(LISTING_ID, "residential_plot");
+        when(listingWorkflowService.findListingForCaller(eq(LISTING_ID), any(), anyBoolean()))
+                .thenReturn(existingPlot);
+
+        mockMvc.perform(put("/api/listings/" + LISTING_ID)
+                        .with(dealer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"bathrooms":3}
                                 """))
                 .andExpect(status().isBadRequest());
         verifyUpdateNeverCalled();
@@ -651,7 +696,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyCreateCalledOnce() {
@@ -661,7 +706,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(),
-                any(), any(), any(), any(), any(), any());
+                any(), any(), any(), any(), any(), any(), any());
     }
 
     private void verifyUpdateNeverCalled() {
@@ -671,7 +716,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any());
+                any(), any(), any(), any());
     }
 
     private void verifyUpdateCalledOnce() {
@@ -681,7 +726,7 @@ class ListingControllerFamilyValidationTest {
                 any(), any(), anyBoolean(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                any(), any(), any());
+                any(), any(), any(), any());
     }
 
     private static Listing minimalListing(UUID id, String propertyType) {

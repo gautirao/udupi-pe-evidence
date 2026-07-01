@@ -12,6 +12,13 @@ import com.example.realestate.listing.pricing.PriceChangeLogRepository;
 import com.example.realestate.listing.pricing.PriceParser;
 import com.example.realestate.listing.api.BulkDeleteResult;
 import com.example.realestate.listing.api.ListingStatsResponse;
+import com.example.realestate.listing.residential.ListingAmenity;
+import com.example.realestate.listing.residential.ListingAmenityRepository;
+import com.example.realestate.listing.residential.ListingLocationFeature;
+import com.example.realestate.listing.residential.ListingLocationFeatureRepository;
+import com.example.realestate.listing.residential.ListingPreferredTenant;
+import com.example.realestate.listing.residential.ListingPreferredTenantRepository;
+import com.example.realestate.listing.residential.ResidentialListingFields;
 import com.example.realestate.listing.event.SettlementEnrichmentRequestedEvent;
 import com.example.realestate.listing.exception.ListingNotFoundException;
 import com.example.realestate.listing.exception.ListingOwnershipException;
@@ -37,6 +44,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,6 +72,13 @@ public class ListingCrudService {
     private final SearchOutboxWriter searchOutboxWriter;
     private final PolygonBoundaryValidator polygonBoundaryValidator;
     private final QualityRecomputeService qualityRecomputeService;
+    private final ListingAmenityRepository listingAmenityRepository;
+    private final ListingLocationFeatureRepository listingLocationFeatureRepository;
+    private final ListingPreferredTenantRepository listingPreferredTenantRepository;
+
+    /** Residential-family property types (M38-13A / #1626) that get the DB listing_family stamp. */
+    private static final Set<String> RESIDENTIAL_PROPERTY_TYPES =
+            Set.of("house", "apartment", "villa", "residential_plot");
 
     public ListingCrudService(
             ListingRepository listingRepository,
@@ -74,7 +89,10 @@ public class ListingCrudService {
             BadgeInvalidationService badgeInvalidationService,
             SearchOutboxWriter searchOutboxWriter,
             PolygonBoundaryValidator polygonBoundaryValidator,
-            QualityRecomputeService qualityRecomputeService) {
+            QualityRecomputeService qualityRecomputeService,
+            ListingAmenityRepository listingAmenityRepository,
+            ListingLocationFeatureRepository listingLocationFeatureRepository,
+            ListingPreferredTenantRepository listingPreferredTenantRepository) {
         this.listingRepository = listingRepository;
         this.applicationEventPublisher = applicationEventPublisher;
         this.listingOwnershipGuard = listingOwnershipGuard;
@@ -84,6 +102,9 @@ public class ListingCrudService {
         this.searchOutboxWriter = searchOutboxWriter;
         this.polygonBoundaryValidator = polygonBoundaryValidator;
         this.qualityRecomputeService = qualityRecomputeService;
+        this.listingAmenityRepository = listingAmenityRepository;
+        this.listingLocationFeatureRepository = listingLocationFeatureRepository;
+        this.listingPreferredTenantRepository = listingPreferredTenantRepository;
     }
 
     /**
@@ -146,6 +167,41 @@ public class ListingCrudService {
                                String waterSource, String soilType, String roadAccess,
                                String cultivationStatus, String ownershipType, String surveyNumber,
                                String landCategory, Boolean farmhouseAvailable, Boolean fencingDone) {
+        return createDraft(createdBy, propertyType, title, locality, price, description,
+                landArea, bedrooms, builtArea, landAreaUnit, builtAreaUnit, videoUrl,
+                listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
+                furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+                monthlyRent, securityDepositMonths, lockInMonths, sellerType,
+                waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
+                landCategory, farmhouseAvailable, fencingDone, ResidentialListingFields.EMPTY);
+    }
+
+    /**
+     * Create a new listing with status DRAFT, including residential typed-listing fields
+     * (M38-13A / #1626). All parameters from the previous overload behave identically;
+     * {@code residentialFields} carries the net-new residential design-spec fields as a single
+     * bounded value object (see {@link ResidentialListingFields} for rationale).
+     *
+     * @param sellerType one of "owner", "dealer", "builder" — inferred by controller from caller's role
+     * @throws OwnerListingLimitException if sellerType is "owner" and the user already has 3 LIVE listings
+     */
+    @Transactional
+    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
+    public Listing createDraft(UUID createdBy, String propertyType, String title,
+                               String locality, BigDecimal price, String description,
+                               BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                               String landAreaUnit, String builtAreaUnit, String videoUrl,
+                               String listingPurpose,
+                               BigDecimal carpetArea, String carpetAreaUnit,
+                               Integer floorNumber, Integer totalFloors,
+                               String furnishingStatus, Integer washrooms, Integer parkingCount,
+                               BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                               Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                               String sellerType,
+                               String waterSource, String soilType, String roadAccess,
+                               String cultivationStatus, String ownershipType, String surveyNumber,
+                               String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                               ResidentialListingFields residentialFields) {
         // Enforce owner listing limit: max 3 LIVE listings for owner accounts.
         // Archived listings must not count against this limit.
         if ("owner".equals(sellerType)) {
@@ -200,6 +256,15 @@ public class ListingCrudService {
         if (farmhouseAvailable != null) listing.setFarmhouseAvailable(farmhouseAvailable);
         if (fencingDone != null) listing.setFencingDone(fencingDone);
 
+        // Residential typed listing fields (M38-13A / #1626)
+        applyResidentialFields(listing, residentialFields);
+        // DB axis: stamp listing_family='RESIDENTIAL' for all 4 residential subtypes.
+        // Independent of the Java-side validation family used by the controller (residential_plot
+        // validates as PLOT there); the DB CHECK (chk_listing_listing_family) has no 'PLOT' value.
+        if (RESIDENTIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
+            listing.setListingFamily("RESIDENTIAL");
+        }
+
         // Compute derived area fields only when both area and unit are supplied
         if (landArea != null && landAreaUnit != null) {
             AreaNormalizer.normalize(listing);
@@ -214,6 +279,9 @@ public class ListingCrudService {
         listing.setUpdatedAt(now);
 
         Listing saved = listingRepository.save(listing);
+        // Child-set writes (amenities / special-location views / preferred tenants) — insert-only
+        // on create (no prior rows can exist for a brand-new listing id).
+        writeResidentialChildSets(saved.getId(), residentialFields);
         log.info("Created draft listing listingId={} createdBy={} sellerType={} isDuplicate={}",
                 saved.getId(), createdBy, sellerType, saved.isDuplicate());
         searchOutboxWriter.writeEvent(
@@ -226,6 +294,96 @@ public class ListingCrudService {
         // the listing save; runs in its own REQUIRES_NEW transaction after commit completes)
         qualityRecomputeService.recomputeAfterCommit(saved.getId());
         return saved;
+    }
+
+    /**
+     * Applies the net-new residential scalar/boolean fields onto the entity. Null-safe:
+     * a null field means "not supplied" and is left untouched (honest-null — never
+     * defaulted to false/empty).
+     */
+    private void applyResidentialFields(Listing listing, ResidentialListingFields f) {
+        if (f.bathrooms() != null) listing.setBathrooms(f.bathrooms());
+        if (f.balconies() != null) listing.setBalconies(f.balconies());
+        if (f.facing() != null) listing.setFacing(f.facing());
+        if (f.availabilityTimeline() != null) listing.setAvailabilityTimeline(f.availabilityTimeline());
+        if (f.superBuiltArea() != null) listing.setSuperBuiltArea(f.superBuiltArea());
+        if (f.superBuiltAreaUnit() != null) listing.setSuperBuiltAreaUnit(f.superBuiltAreaUnit());
+        if (f.propertyAge() != null) listing.setPropertyAge(f.propertyAge());
+        if (f.residentialWaterSource() != null) listing.setResidentialWaterSource(f.residentialWaterSource());
+        if (f.parking2wCount() != null) listing.setParking2wCount(f.parking2wCount());
+        if (f.parking4wCount() != null) listing.setParking4wCount(f.parking4wCount());
+        if (f.roadWidthFt() != null) listing.setRoadWidthFt(f.roadWidthFt());
+        if (f.plotDimensions() != null) listing.setPlotDimensions(f.plotDimensions());
+        if (f.conversionStatus() != null) listing.setConversionStatus(f.conversionStatus());
+        if (f.khataNumber() != null) listing.setKhataNumber(f.khataNumber());
+        if (f.propertyTaxPid() != null) listing.setPropertyTaxPid(f.propertyTaxPid());
+        if (f.approvingAuthority() != null) listing.setApprovingAuthority(f.approvingAuthority());
+        if (f.projectName() != null) listing.setProjectName(f.projectName());
+        if (f.builderName() != null) listing.setBuilderName(f.builderName());
+        if (f.maintenancePaise() != null) listing.setMaintenancePaise(f.maintenancePaise());
+        if (f.hasLift() != null) listing.setHasLift(f.hasLift());
+        if (f.hasPowerBackup() != null) listing.setHasPowerBackup(f.hasPowerBackup());
+        if (f.isGated() != null) listing.setIsGated(f.isGated());
+        if (f.hasGarden() != null) listing.setHasGarden(f.hasGarden());
+        if (f.hasTerrace() != null) listing.setHasTerrace(f.hasTerrace());
+        if (f.hasCompound() != null) listing.setHasCompound(f.hasCompound());
+        if (f.hasServantRoom() != null) listing.setHasServantRoom(f.hasServantRoom());
+        if (f.isCornerPlot() != null) listing.setIsCornerPlot(f.isCornerPlot());
+        if (f.hasBoundaryWall() != null) listing.setHasBoundaryWall(f.hasBoundaryWall());
+        if (f.isGatedLayout() != null) listing.setIsGatedLayout(f.isGatedLayout());
+        if (f.hasWaterConnection() != null) listing.setHasWaterConnection(f.hasWaterConnection());
+        if (f.hasElectricityConnection() != null) listing.setHasElectricityConnection(f.hasElectricityConnection());
+        if (f.hasDrainage() != null) listing.setHasDrainage(f.hasDrainage());
+        if (f.priceNegotiable() != null) listing.setPriceNegotiable(f.priceNegotiable());
+        if (f.rentNegotiable() != null) listing.setRentNegotiable(f.rentNegotiable());
+        if (f.petsAllowed() != null) listing.setPetsAllowed(f.petsAllowed());
+        if (f.maintenanceIncluded() != null) listing.setMaintenanceIncluded(f.maintenanceIncluded());
+    }
+
+    /**
+     * Writes the three multi-select child sets (amenities, special-location views, preferred
+     * tenants) for a listing. EDIT/REPLACE semantics: a non-null list is the FINAL desired set —
+     * existing rows for the listing are deleted first, then the new set (deduplicated,
+     * order-preserving) is inserted. A null list means "not supplied in this request" and leaves
+     * existing rows untouched. An empty (non-null) list clears all existing rows.
+     *
+     * <p>Explicit delete-then-insert (not JPA cascade/merge) so stale codes never linger —
+     * required per architect decision on child-set edit semantics (#1626).
+     */
+    private void writeResidentialChildSets(UUID listingId, ResidentialListingFields f) {
+        if (f.amenities() != null) {
+            listingAmenityRepository.deleteByListingId(listingId);
+            OffsetDateTime now = OffsetDateTime.now();
+            for (String code : new LinkedHashSet<>(f.amenities())) {
+                ListingAmenity row = new ListingAmenity();
+                row.setListingId(listingId);
+                row.setCode(code);
+                row.setCreatedAt(now);
+                listingAmenityRepository.save(row);
+            }
+        }
+        if (f.specialLocationViews() != null) {
+            listingLocationFeatureRepository.deleteByListingId(listingId);
+            OffsetDateTime now = OffsetDateTime.now();
+            for (String code : new LinkedHashSet<>(f.specialLocationViews())) {
+                ListingLocationFeature row = new ListingLocationFeature();
+                row.setListingId(listingId);
+                row.setCode(code);
+                row.setCreatedAt(now);
+                listingLocationFeatureRepository.save(row);
+            }
+        }
+        if (f.preferredTenants() != null) {
+            listingPreferredTenantRepository.deleteByListingId(listingId);
+            OffsetDateTime now = OffsetDateTime.now();
+            for (String code : new LinkedHashSet<>(f.preferredTenants())) {
+                ListingPreferredTenant row = new ListingPreferredTenant();
+                row.setListingId(listingId);
+                row.setCode(code);
+                row.setCreatedAt(now);
+                listingPreferredTenantRepository.save(row);
+            }
+        }
     }
 
     /**
@@ -368,6 +526,56 @@ public class ListingCrudService {
                                  String cultivationStatus, String ownershipType, String surveyNumber,
                                  String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
                                  String boundaryGeoJson) {
+        return updateListing(listingId, userId, isAdmin, propertyType, title, locality,
+                price, description, landArea, bedrooms, builtArea, addressConfirmed, latitude, longitude,
+                landAreaUnit, builtAreaUnit, videoUrl, applyVideoUrl, reraNumber,
+                listingPurpose, carpetArea, carpetAreaUnit, floorNumber, totalFloors,
+                furnishingStatus, washrooms, parkingCount, roadFrontageFt, commercialUsage, numberOfUnits,
+                monthlyRent, securityDepositMonths, lockInMonths,
+                possessionStatus, expectedPossessionDate, approvalsDeclared,
+                waterSource, soilType, roadAccess, cultivationStatus, ownershipType, surveyNumber,
+                landCategory, farmhouseAvailable, fencingDone, boundaryGeoJson,
+                ResidentialListingFields.EMPTY);
+    }
+
+    /**
+     * Update a listing with extended fields including residential typed-listing fields
+     * (M38-13A / #1626). All parameters from the previous overload behave identically;
+     * {@code residentialFields} carries the net-new residential design-spec fields (nullable
+     * fields left unchanged; a non-null {@code List<String>} in the multi-selects REPLACES the
+     * existing child-set rows for this listing — see {@link ResidentialListingFields}).
+     *
+     * @return the updated listing
+     * @throws ListingNotFoundException  if listing not found
+     * @throws ListingOwnershipException if listing is owned by a different user
+     * @throws ListingStatusException    if status does not allow updates
+     */
+    @Transactional
+    @SuppressWarnings("java:S107") // mirrors existing flat-request telescoping pattern in this class
+    public Listing updateListing(UUID listingId, UUID userId, boolean isAdmin,
+                                 String propertyType, String title, String locality,
+                                 BigDecimal price, String description,
+                                 BigDecimal landArea, Integer bedrooms, BigDecimal builtArea,
+                                 Boolean addressConfirmed, Double latitude, Double longitude,
+                                 String landAreaUnit, String builtAreaUnit,
+                                 String videoUrl, boolean applyVideoUrl,
+                                 String reraNumber,
+                                 String listingPurpose,
+                                 BigDecimal carpetArea, String carpetAreaUnit,
+                                 Integer floorNumber, Integer totalFloors,
+                                 String furnishingStatus, Integer washrooms, Integer parkingCount,
+                                 BigDecimal roadFrontageFt, String commercialUsage, Integer numberOfUnits,
+                                 Long monthlyRent, Integer securityDepositMonths, Integer lockInMonths,
+                                 // RERA & possession fields (RE-99)
+                                 String possessionStatus,
+                                 LocalDate expectedPossessionDate,
+                                 String approvalsDeclared,
+                                 // Agricultural land fields
+                                 String waterSource, String soilType, String roadAccess,
+                                 String cultivationStatus, String ownershipType, String surveyNumber,
+                                 String landCategory, Boolean farmhouseAvailable, Boolean fencingDone,
+                                 String boundaryGeoJson,
+                                 ResidentialListingFields residentialFields) {
         Listing listing = listingOwnershipGuard.findOwned(listingId, userId, isAdmin);
 
         // Admins may edit listings in any non-archived status (including LIVE).
@@ -453,6 +661,14 @@ public class ListingCrudService {
         if (farmhouseAvailable != null) listing.setFarmhouseAvailable(farmhouseAvailable);
         if (fencingDone != null) listing.setFencingDone(fencingDone);
 
+        // Residential typed listing fields (M38-13A / #1626)
+        applyResidentialFields(listing, residentialFields);
+        // DB axis: stamp listing_family='RESIDENTIAL' for all 4 residential subtypes, using the
+        // effective (post-update) property type. Independent of Java-side validation family.
+        if (RESIDENTIAL_PROPERTY_TYPES.contains(listing.getPropertyType())) {
+            listing.setListingFamily("RESIDENTIAL");
+        }
+
         // Recompute dedupe hash if any hash-relevant field changed
         if (description != null || locality != null || price != null) {
             listingDeduplicationService.computeAndSetDedupeHash(
@@ -482,6 +698,8 @@ public class ListingCrudService {
         }
 
         Listing saved = listingRepository.save(listing);
+        // Child-set REPLACE (delete-then-insert) — the request's list is the FINAL desired set.
+        writeResidentialChildSets(saved.getId(), residentialFields);
 
         // Persist boundary via native SQL (after JPA save, within same @Transactional scope).
         // Mapper re-fetches boundary via findBoundaryGeoJson — no need to set @Transient field here.

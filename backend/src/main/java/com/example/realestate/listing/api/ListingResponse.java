@@ -94,7 +94,52 @@ public record ListingResponse(
          * agricultural_land listings with a saved boundary; null otherwise (incl. list/batch).
          * Serialized as a JSON number, mirroring {@code landArea}.
          */
-        BigDecimal computedAreaAcres
+        BigDecimal computedAreaAcres,
+        // Residential typed listing fields (M38-13A / #1626) — nullable, honest-null.
+        // Never defaulted to false/empty at this layer; a null boolean means "not declared".
+        Integer bathrooms,
+        Integer balconies,
+        String facing,
+        String availabilityTimeline,
+        BigDecimal superBuiltArea,
+        String superBuiltAreaUnit,
+        String propertyAge,
+        String residentialWaterSource,
+        Integer parking2wCount,
+        Integer parking4wCount,
+        BigDecimal roadWidthFt,
+        String plotDimensions,
+        String conversionStatus,
+        String khataNumber,
+        String propertyTaxPid,
+        String approvingAuthority,
+        String projectName,
+        String builderName,
+        Long maintenancePaise,
+        Boolean hasLift,
+        Boolean hasPowerBackup,
+        Boolean isGated,
+        Boolean hasGarden,
+        Boolean hasTerrace,
+        Boolean hasCompound,
+        Boolean hasServantRoom,
+        Boolean isCornerPlot,
+        Boolean hasBoundaryWall,
+        Boolean isGatedLayout,
+        Boolean hasWaterConnection,
+        Boolean hasElectricityConnection,
+        Boolean hasDrainage,
+        Boolean priceNegotiable,
+        Boolean rentNegotiable,
+        Boolean petsAllowed,
+        Boolean maintenanceIncluded,
+        /**
+         * Multi-select child sets. Populated ONLY on the single-listing detail path
+         * (mirrors {@link #images}); list/batch endpoints always set these to empty lists.
+         */
+        List<String> amenities,
+        List<String> specialLocationViews,
+        List<String> preferredTenants
 ) {
     /** Raw regex for Karnataka RERA registration number format (e.g. PRM/KA/2023/0042). */
     public static final String RERA_REGEXP = "^[A-Z]{3}/[A-Z]{2}/\\d{4}/\\d{4}$";
