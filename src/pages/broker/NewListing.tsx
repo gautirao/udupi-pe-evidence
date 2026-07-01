@@ -30,6 +30,15 @@ import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
 import { isListingFieldVisible } from '@/lib/listingFieldConfig';
 import type { ListingFieldKey } from '@/lib/listingFieldConfig';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { ResidentialListingForm } from '@/components/broker/ResidentialListingForm';
+
+/**
+ * M38-13A (#1626) — the four residential subtypes that mount the new
+ * single-page residential composition (design-spec.md §D-FE1) instead of the
+ * generic body below. Commercial/agricultural types render the UNCHANGED
+ * generic body — this is the ONLY branch point that differs from pre-#1626.
+ */
+const RESIDENTIAL_TYPES: ReadonlySet<PropertyType | ''> = new Set(['apartment', 'house', 'villa', 'residential_plot']);
 
 // ---------------------------------------------------------------------------
 // M38-13A (#1626) — chip / segmented control affordances (design-spec.md §1).
@@ -110,7 +119,12 @@ export default function NewListing() {
   const createListing = useCreateListing();
   const { toast } = useToast();
 
-  const [propertyType, setPropertyType] = useState<PropertyType | ''>('');
+  // Phase-7A FIX-A (#1626 follow-up): the residential single-page composition is now
+  // the DEFAULT landing at /broker/listings/new (mock default = Apartment preselected),
+  // not something reached only after picking a type. The old unfiltered 10-type generic
+  // body (incl. commercial/agri) is reached via the residential view's "Switch flow"
+  // affordance, which resets this state to '' (see RESIDENTIAL_TYPES branch below).
+  const [propertyType, setPropertyType] = useState<PropertyType | ''>('apartment');
   const [title, setTitle] = useState('');
   const [priceRupees, setPriceRupees] = useState<number | null>(null);
   // Tracks whether the user has attempted to submit — gates inline field errors
@@ -172,6 +186,24 @@ export default function NewListing() {
   }
   if (!canAccessRoute('/broker/listings/new', role)) {
     return <Navigate to="/" replace />;
+  }
+
+  // M38-13A (#1626) — D-FE1, extended by Phase-7A FIX-A: the residential single-page
+  // composition is now the DEFAULT view (propertyType initializes to 'apartment' above),
+  // so this branch is taken on first paint, not only after an explicit selection.
+  // Commercial/agricultural selections (and the "Switch flow" reset to '') fall through
+  // to the UNCHANGED generic body below (this is the "existing generic entry" the
+  // architect plan requires preserving verbatim — FIX-B).
+  if (RESIDENTIAL_TYPES.has(propertyType)) {
+    return (
+      <AppLayout>
+        <ResidentialListingForm
+          initialPropertyType={propertyType as 'apartment' | 'house' | 'villa' | 'residential_plot'}
+          onSwitchToGenericFlow={() => setPropertyType('')}
+          navigate={navigate}
+        />
+      </AppLayout>
+    );
   }
 
   const isCommercialType = COMMERCIAL_TYPES.has(propertyType);

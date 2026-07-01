@@ -38,4 +38,25 @@ describe('PropertyTypeCardSelector', () => {
     expect(screen.getByRole('radio', { name: 'Apartment' })).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByRole('radio', { name: 'House' })).toHaveAttribute('aria-checked', 'false');
   });
+
+  // M38-13A (#1626) — UT-l: the residentialOnly variant must not change default behavior.
+  describe('residentialOnly variant (M38-13A #1626)', () => {
+    it('defaults to false — omitting the prop renders all 10 types exactly as before', () => {
+      render(<PropertyTypeCardSelector value="" onChange={vi.fn()} />);
+      expect(screen.getAllByRole('radio')).toHaveLength(PROPERTY_TYPES.length);
+    });
+
+    it('when true, renders ONLY the 4 residential subtypes', () => {
+      render(<PropertyTypeCardSelector value="" onChange={vi.fn()} residentialOnly />);
+
+      const radios = screen.getAllByRole('radio');
+      expect(radios).toHaveLength(4);
+      expect(screen.getByRole('radio', { name: 'Apartment' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'House' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Villa' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Residential Plot' })).toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: 'Commercial Shop/Office' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('radio', { name: 'Agricultural Land' })).not.toBeInTheDocument();
+    });
+  });
 });

@@ -827,3 +827,44 @@ describe('EditListing — M38-13A per-subtype chip/segmented render matrix', () 
     expect(screen.queryByRole('button', { name: 'Family' })).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// M38-13A (#1626) frontend design-parity follow-up — UT-j (design-spec.md
+// §prototype_only "video_link"): EditListing continues to load/prefill/save a
+// residential listing correctly, and the saved payload never includes a new
+// `videoLink` key — the UpdateListingRequest DTO field is `videoUrl` (existing,
+// step-2-only); no new payload key was introduced by the residential create-flow work.
+// ---------------------------------------------------------------------------
+
+describe('EditListing — residential regression: loads/saves + no stray videoLink payload key', () => {
+  it('loads and prefills a residential (house) listing, saves step 1, and the PUT payload has no "videoLink" key', async () => {
+    const user = userEvent.setup();
+    mockListingData.current = makeBaseListing({
+      propertyType: 'house',
+      title: 'Charming 3BHK house',
+      locality: 'Manipal',
+      bedrooms: 3,
+      bathrooms: 2,
+    });
+
+    renderEditListing();
+
+    // Prefill proof — the residential fixture values render.
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Charming 3BHK house')).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue('Manipal')).toBeInTheDocument();
+
+    const saveBtn = screen.getByRole('button', { name: /save & continue/i });
+    await user.click(saveBtn);
+
+    await waitFor(() => {
+      expect(mockUpdateMutate).toHaveBeenCalledOnce();
+    });
+
+    const [payload] = mockUpdateMutate.mock.calls[0] as [Record<string, unknown>, ...unknown[]];
+    expect(payload.propertyType).toBe('house');
+    expect(payload.title).toBe('Charming 3BHK house');
+    expect('videoLink' in payload).toBe(false);
+  });
+});

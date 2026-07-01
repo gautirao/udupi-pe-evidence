@@ -134,6 +134,17 @@ async function selectPropertyType(
   await user.click(screen.getByRole('radio', { name: label }));
 }
 
+/**
+ * Phase-7A FIX-A/B (#1626 follow-up): /broker/listings/new now lands by DEFAULT on the
+ * residential single-page composition (Apartment preselected), which only offers the 4
+ * residential subtypes. Agricultural/commercial/land types are reached via the residential
+ * view's "Switch flow" affordance, which returns to the original unfiltered 10-type generic
+ * entry these agri tests exercise.
+ */
+async function switchToGenericFlow(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  await user.click(screen.getByRole('button', { name: 'Switch flow' }));
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -146,6 +157,9 @@ describe('NewListing — agricultural_land (AC1: agri section renders)', () => {
     const user = userEvent.setup();
     renderPage();
 
+    // Phase-7A FIX-A: default landing is the residential view — reach the generic
+    // entry (where agricultural_land lives) via "Switch flow" first.
+    await switchToGenericFlow(user);
     await selectPropertyType(user, 'Agricultural Land');
 
     expect(screen.getByTestId('agri-fields-section')).toBeInTheDocument();
@@ -159,6 +173,7 @@ describe('NewListing — agricultural_land (AC2: agri section absent for other t
     const user = userEvent.setup();
     renderPage();
 
+    await switchToGenericFlow(user);
     await selectPropertyType(user, 'Land');
 
     expect(screen.queryByTestId('agri-fields-section')).not.toBeInTheDocument();
@@ -168,6 +183,8 @@ describe('NewListing — agricultural_land (AC2: agri section absent for other t
     const user = userEvent.setup();
     renderPage();
 
+    // Apartment is the residential default — already selected without any click,
+    // and the agri section never existed in the residential composition regardless.
     await selectPropertyType(user, 'Apartment');
 
     expect(screen.queryByTestId('agri-fields-section')).not.toBeInTheDocument();
@@ -179,7 +196,8 @@ describe('NewListing — agricultural_land (AC3: payload includes waterSource)',
     const user = userEvent.setup();
     renderPage();
 
-    // Select agricultural_land
+    // Select agricultural_land via the generic entry (Phase-7A FIX-A/B).
+    await switchToGenericFlow(user);
     await selectPropertyType(user, 'Agricultural Land');
 
     // Set a valid price so the form can submit
