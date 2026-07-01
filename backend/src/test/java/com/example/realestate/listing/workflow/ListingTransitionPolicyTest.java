@@ -609,6 +609,115 @@ class ListingTransitionPolicyTest {
     }
 
     // -----------------------------------------------------------------------
+    // #1718 AC #9: villa and residential_plot are submittable; villa has no
+    // extra required fields (mirrors house), residential_plot mirrors land's
+    // landArea/landAreaUnit completeness rule.
+    // -----------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("villa and residential_plot submit-gate (#1718)")
+    class ResidentialSubmitGate {
+
+        @Test
+        @DisplayName("SUBMITTABLE_PROPERTY_TYPES contains villa and residential_plot")
+        void submittableSet_containsVillaAndResidentialPlot() {
+            assertThat(ListingTransitionPolicy.SUBMITTABLE_PROPERTY_TYPES)
+                    .contains("villa", "residential_plot");
+        }
+
+        @Test
+        @DisplayName("SUBMITTABLE_PROPERTY_TYPES still contains all prior types (no accidental replacement)")
+        void submittableSet_retainsAllPriorTypes() {
+            assertThat(ListingTransitionPolicy.SUBMITTABLE_PROPERTY_TYPES)
+                    .contains("land", "house", "apartment", "commercial",
+                            "commercial_building", "warehouse", "commercial_land", "agricultural_land");
+        }
+
+        @Test
+        @DisplayName("complete villa listing passes completeness (no extra required fields)")
+        void completeVillaListing_doesNotThrow() {
+            Listing listing = completeVillaListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("complete residential_plot listing (with landArea + landAreaUnit) passes completeness")
+        void completeResidentialPlotListing_doesNotThrow() {
+            Listing listing = completeResidentialPlotListing(UUID.randomUUID());
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("residential_plot missing landArea -> completeness error with land_area field")
+        void residentialPlotMissingLandArea_throwsValidationException() {
+            Listing listing = completeResidentialPlotListing(UUID.randomUUID());
+            listing.setLandArea(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("land_area")));
+        }
+
+        @Test
+        @DisplayName("residential_plot missing landAreaUnit -> completeness error with land_area_unit field")
+        void residentialPlotMissingLandAreaUnit_throwsValidationException() {
+            Listing listing = completeResidentialPlotListing(UUID.randomUUID());
+            listing.setLandAreaUnit(null);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatThrownBy(() -> policy.guardCompleteness(listing))
+                    .isInstanceOf(ListingValidationException.class)
+                    .satisfies(ex -> assertThat(((ListingValidationException) ex).getErrors())
+                            .anySatisfy(e -> assertThat(e.get("field")).isEqualTo("land_area_unit")));
+        }
+
+        @Test
+        @DisplayName("regression: existing house listing still validates unchanged")
+        void houseListing_stillValidatesUnchanged() {
+            Listing listing = new Listing();
+            listing.setId(UUID.randomUUID());
+            listing.setPropertyType("house");
+            listing.setPrice(new BigDecimal("5000000"));
+            listing.setLocality("Udupi");
+            listing.setAddressConfirmed(true);
+            when(listingRepository.countImagesByListingId(listing.getId())).thenReturn(3L);
+
+            assertThatCode(() -> policy.guardCompleteness(listing))
+                    .doesNotThrowAnyException();
+        }
+
+        private Listing completeVillaListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("villa");
+            l.setPrice(new BigDecimal("5000000"));
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            return l;
+        }
+
+        private Listing completeResidentialPlotListing(UUID listingId) {
+            Listing l = new Listing();
+            l.setId(listingId);
+            l.setPropertyType("residential_plot");
+            l.setPrice(new BigDecimal("5000000"));
+            l.setLocality("Udupi");
+            l.setAddressConfirmed(true);
+            l.setLandArea(new BigDecimal("5"));
+            l.setLandAreaUnit("cents");
+            return l;
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Guard: guardFastRestore
     // -----------------------------------------------------------------------
 

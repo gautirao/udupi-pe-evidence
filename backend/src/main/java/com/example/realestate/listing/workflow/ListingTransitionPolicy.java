@@ -52,7 +52,7 @@ public class ListingTransitionPolicy {
     // -----------------------------------------------------------------------
 
     static final Set<String> SUBMITTABLE_PROPERTY_TYPES = Set.of(
-            "land", "house", "apartment",
+            "land", "house", "apartment", "villa", "residential_plot",
             "commercial", "commercial_building", "warehouse", "commercial_land",
             "agricultural_land");
 
@@ -425,6 +425,19 @@ public class ListingTransitionPolicy {
                     if (l.getLandAreaUnit() == null || l.getLandAreaUnit().isBlank()) {
                         errors.add(Map.of("field", "land_area_unit",
                                 "message", "Land area unit is required for agricultural land listings"));
+                    }
+                }
+                case "villa" -> {
+                    // villa: no additional required fields (mirrors house)
+                }
+                case "residential_plot" -> {
+                    if (l.getLandArea() == null) {
+                        errors.add(Map.of("field", "land_area",
+                                "message", "Land area is required for residential plot listings"));
+                    }
+                    if (l.getLandAreaUnit() == null || l.getLandAreaUnit().isBlank()) {
+                        errors.add(Map.of("field", "land_area_unit",
+                                "message", "Land area unit is required for residential plot listings"));
                     }
                 }
                 // house: no additional required fields

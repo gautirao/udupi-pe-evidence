@@ -1,7 +1,9 @@
-import { useState } from 'react';
-import { ChevronDown, Info, Loader2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { ChevronDown, Info, Loader2, CheckCircle2 } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
-import { useCreateListing } from '@/hooks/useBrokerListings';
+import { useCreateListing, useUpdateListing, useSubmitListing, useGetListing } from '@/hooks/useBrokerListings';
+import { useListingImages } from '@/hooks/useListingImages';
+import { ApiError } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,10 +16,17 @@ import { PropertyTypeCardSelector } from '@/components/broker/PropertyTypeCardSe
 import { ListingPurposeToggle } from '@/components/broker/ListingPurposeToggle';
 import { AreaField } from '@/components/broker/AreaField';
 import { PriceField } from '@/components/broker/PriceField';
-import { PhotoTileGrid } from '@/components/broker/PhotoTileGrid';
 import { BuyerPreviewCard, type BuyerPreviewSpecChip } from '@/components/broker/BuyerPreviewCard';
-import { ListingStrengthMeter, type ListingStrengthChecklist, computeListingStrength } from '@/components/broker/ListingStrengthMeter';
+import { ListingStrengthMeter, type ListingStrengthChecklist, computeListingStrength as computeFormCompleteness } from '@/components/broker/ListingStrengthMeter';
 import { SingleChipGroup, MultiChipGroup, boolToTriState, triStateToBool, type ChipOption } from '@/components/broker/ChipGroup';
+import { InlinePhotos } from '@/components/broker/residential/InlinePhotos';
+import { InlineLocation } from '@/components/broker/residential/InlineLocation';
+import { InlineNearby } from '@/components/broker/residential/InlineNearby';
+import { DescriptionAssistant } from '@/components/broker/residential/DescriptionAssistant';
+import { StrengthMeter } from '@/components/broker/residential/StrengthMeter';
+import { ResidentialReviewPreview } from '@/components/broker/residential/ResidentialReviewPreview';
+import { computeListingStrength, type ListingStrengthInput } from '@/lib/listingStrength';
+import type { DescriptionFacts } from '@/lib/listingDescriptionBuilder';
 import { isListingFieldVisible } from '@/lib/listingFieldConfig';
 import type { ListingFieldKey } from '@/lib/listingFieldConfig';
 import { intOrUndef, floatOrUndef } from '@/lib/listing-utils';
@@ -157,6 +166,24 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
   const createListing = useCreateListing();
   const { toast } = useToast();
 
+  // M38-13A (#1626) inline single-page composition (issue #1718) — once the
+  // broker has entered core facts, a DRAFT is persisted (idempotent — guarded
+  // by draftInFlightRef below) and its id is kept here so photos/location/POI
+  // mount inline against the REAL listing instead of navigating to EditListing.
+  const [listingId, setListingId] = useState<string | null>(null);
+  const [mode, setMode] = useState<'edit' | 'review'>('edit');
+  const [submitted, setSubmitted] = useState(false);
+  const draftInFlightRef = useRef(false);
+
+  const updateListing = useUpdateListing(listingId ?? '');
+  const submitListing = useSubmitListing(listingId ?? undefined);
+  const { imageCount } = useListingImages(listingId ?? undefined);
+  // Address confirmation/lat/lng are read back from the persisted listing (not local
+  // state) so they survive the edit<->review mode switch, which unmounts AddressPicker —
+  // matches EditListing.tsx's pattern (listing.addressConfirmed / .latitude / .longitude).
+  const { data: draftListing } = useGetListing(listingId ?? '');
+  const addressConfirmed = draftListing?.addressConfirmed ?? false;
+
   const [propertyType, setPropertyType] = useState<ResidentialPropertyType>(initialPropertyType);
   const [listingPurpose, setListingPurpose] = useState<'sale' | 'rent'>('sale');
   const [hasAttempted, setHasAttempted] = useState(false);
@@ -266,8 +293,10 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
     listingPurpose,
     landArea: isPlot && landArea != null && landArea > 0 ? landArea : undefined,
     landAreaUnit: isPlot && landArea != null && landArea > 0 ? landAreaUnit : undefined,
-    builtArea: isHouseOrVilla && builtArea != null && builtArea > 0 ? builtArea : undefined,
-    builtAreaUnit: isHouseOrVilla && builtArea != null && builtArea > 0 ? builtAreaUnit : undefined,
+    // Apartment also collects builtArea (Section 3, distinct from its primary
+    // carpetArea) — the backend submit gate requires it (ListingTransitionPolicy).
+    builtArea: (isHouseOrVilla || isApartment) && builtArea != null && builtArea > 0 ? builtArea : undefined,
+    builtAreaUnit: (isHouseOrVilla || isApartment) && builtArea != null && builtArea > 0 ? builtAreaUnit : undefined,
     carpetArea: isApartment && carpetArea != null && carpetArea > 0 ? carpetArea : undefined,
     carpetAreaUnit: isApartment && carpetArea != null && carpetArea > 0 ? carpetAreaUnit : undefined,
     bedrooms: fieldVisible('bedrooms') ? intOrUndef(bedrooms) : undefined,
@@ -321,23 +350,58 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
     surveyNumber: fieldVisible('surveyNumber') ? (surveyNumber.trim() || undefined) : undefined,
   });
 
-  const handleSaveDraft = (andNavigateToStep?: number) => {
+  /**
+   * Issue #1718 — persists a DRAFT (or, once one exists, syncs core-field
+   * edits into it via PUT) and stays on THIS page — no navigation. Idempotent:
+   * draftInFlightRef guards against a duplicate create firing from a
+   * double-click or re-render race while the mutation is in flight.
+   */
+  const persistDraft = (onDone?: (id: string) => void) => {
     setHasAttempted(true);
     if (!canSubmit) return;
 
+    if (listingId) {
+      updateListing.mutate(buildPayload(), { onSuccess: () => onDone?.(listingId) });
+      return;
+    }
+
+    if (draftInFlightRef.current || createListing.isPending) return;
+    draftInFlightRef.current = true;
+
     createListing.mutate(buildPayload(), {
       onSuccess: (data) => {
-        toast({ title: 'Draft saved', description: 'Your listing has been created as a draft.' });
-        navigate(`/broker/listings/${data.id}/edit?step=${andNavigateToStep ?? 2}`);
+        draftInFlightRef.current = false;
+        setListingId(data.id);
+        toast({ title: 'Draft saved', description: 'Continue adding photos, location, and a description below.' });
+        onDone?.(data.id);
+      },
+      onError: () => {
+        draftInFlightRef.current = false;
       },
     });
   };
 
-  // design-spec.md §prototype_only "photo_tiles" / "map_pin": both CTAs save the
-  // current draft (identical to "Save & Continue" today) then deep-link into the
-  // relevant EXISTING EditListing step — no new backend behavior.
-  const handlePhotoTileClick = () => handleSaveDraft(2);
-  const handlePinLocationClick = () => handleSaveDraft(3);
+  const handleGoToReview = () => persistDraft(() => setMode('review'));
+  const handleBackToEdit = () => setMode('edit');
+
+  const handleSubmitForReview = () => {
+    if (!listingId) return;
+    submitListing.mutate(undefined, {
+      onSuccess: () => {
+        setSubmitted(true);
+        toast({ title: 'Submitted for review', description: 'Pending admin approval.' });
+      },
+      onError: (error: Error) => {
+        const apiErr = error as ApiError;
+        const body = apiErr.body as Record<string, unknown> | undefined;
+        const message =
+          (body?.message as string | undefined) ??
+          (body?.error as string | undefined) ??
+          error.message;
+        toast({ title: 'Submit failed', description: message, variant: 'destructive' });
+      },
+    });
+  };
 
   const checklist: ListingStrengthChecklist = {
     // propertyType is always set in this component (one of the 4 residential values).
@@ -350,11 +414,58 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
     hasPrice: priceValid,
     hasTitle: title.trim() !== '',
     hasConfigDetails: isPlot ? plotDimensions.trim() !== '' : bedrooms !== '',
-    hasPhotos: false,
-    isPinned: false,
+    hasPhotos: imageCount > 0,
+    isPinned: addressConfirmed,
     hasDescription: description.trim().length >= 20,
   };
-  const strengthPercent = computeListingStrength(checklist);
+  const strengthPercent = computeFormCompleteness(checklist);
+
+  // Real submit-gate strength — mirrors ListingTransitionPolicy.validateFields()
+  // (see src/lib/listingStrength.ts). Drives the "Submit for review" gate and
+  // the review-mode "Before you submit" panel — never the cosmetic checklist above.
+  const strengthInput: ListingStrengthInput = {
+    propertyType,
+    listingPurpose,
+    priceRupees,
+    monthlyRent: intOrUndef(monthlyRent) ?? null,
+    securityDepositMonths,
+    locality,
+    imageCount,
+    addressConfirmed,
+    bedrooms,
+    builtArea,
+    builtAreaUnit,
+    landArea,
+    landAreaUnit,
+  };
+  const strengthResult = computeListingStrength(strengthInput);
+
+  const descriptionFacts: DescriptionFacts = {
+    propertyType,
+    listingPurpose,
+    locality,
+    projectName,
+    bedrooms,
+    bathrooms,
+    primaryAreaSqft,
+    furnishingStatus,
+    facing,
+    floorNumber,
+    totalFloors,
+    hasLift,
+    hasPowerBackup,
+    isGated,
+    hasGarden,
+    amenities,
+    possessionStatus,
+    availabilityTimeline,
+    priceRupees,
+    monthlyRent: intOrUndef(monthlyRent) ?? null,
+    securityDepositMonths,
+    priceNegotiable,
+    roadWidthFt,
+    plotDimensions,
+  };
 
   // Gate every chip by fieldVisible() for the CURRENT propertyType/listingPurpose —
   // bedrooms/bathrooms/furnishingStatus/area are raw useState and are not reset on
@@ -375,6 +486,81 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
   }
 
   const amenityOptions = isApartment ? APARTMENT_AMENITY_OPTIONS : HOUSE_VILLA_AMENITY_OPTIONS;
+
+  if (submitted) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center" data-testid="residential-submitted-panel">
+        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+          <CheckCircle2 className="h-7 w-7 text-primary" aria-hidden="true" />
+        </div>
+        <h1 className="font-serif text-2xl font-semibold text-foreground">Submitted for review</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+          Pending admin approval. We'll notify you once it's live — you can keep editing it any time from your dashboard.
+        </p>
+        <Button type="button" className="mt-6" onClick={() => navigate('/broker/listings')}>
+          Back to dashboard
+        </Button>
+      </div>
+    );
+  }
+
+  if (mode === 'review' && listingId) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-8 pb-24">
+        <button type="button" onClick={handleBackToEdit} className="mb-4 text-sm font-semibold text-primary">
+          &larr; Back to editing
+        </button>
+        <div className="mb-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Residential listing
+          </p>
+          <h1 className="text-2xl font-bold text-foreground">Review your listing</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Check everything looks right. Nothing here is publicly verified — it shows exactly what you entered.
+          </p>
+        </div>
+
+        <ResidentialReviewPreview
+          listingId={listingId}
+          addressConfirmed={addressConfirmed}
+          strengthResult={strengthResult}
+          onEditSection={handleBackToEdit}
+          facts={{
+            ...descriptionFacts,
+            title,
+            description,
+            balconies,
+            builtArea,
+            superBuiltArea,
+            parking2wCount,
+            parking4wCount,
+            ownershipType,
+          }}
+        />
+
+        <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-card/95 px-4 py-3 backdrop-blur">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {strengthResult.isSubmittable ? 'Ready to submit for review' : `${strengthResult.missingItems.length} item(s) still needed`}
+            </p>
+            <div className="flex gap-3">
+              <Button type="button" variant="ghost" onClick={handleBackToEdit}>
+                Back to editing
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSubmitForReview}
+                disabled={!strengthResult.isSubmittable || submitListing.isPending}
+              >
+                {submitListing.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Submit for review
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 pb-24">
@@ -442,6 +628,12 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
           <Section number={3} title={isPlot ? 'Plot details' : 'Property details'}>
             {isApartment && (
               <AreaField id="carpetArea" label="Carpet area" propertyType="apartment" initialArea={carpetArea} initialUnit={carpetAreaUnit} onChange={(a, u) => { setCarpetArea(a); setCarpetAreaUnit(u); }} />
+            )}
+            {isApartment && (
+              <div>
+                <AreaField id="builtArea" label="Built-up area" propertyType="apartment" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
+                <p className="mt-1.5 text-xs text-muted-foreground">Required to submit this listing for review.</p>
+              </div>
             )}
             {isHouseOrVilla && (
               <AreaField id="builtArea" label="Built-up area" propertyType="house" initialArea={builtArea} initialUnit={builtAreaUnit} onChange={(a, u) => { setBuiltArea(a); setBuiltAreaUnit(u); }} />
@@ -709,47 +901,50 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
             </section>
           </Collapsible>
 
-          {/* Section 6 — Photos, video & location */}
-          <Section number={6} title="Photos, video & location">
-            <PhotoTileGrid onAddPhoto={handlePhotoTileClick} />
+          {/* Section 6 — Photos & location (issue #1718 — inline, real system, no navigation) */}
+          <Section number={6} title="Photos & location">
+            {listingId ? (
+              <>
+                <InlinePhotos listingId={listingId} />
+                <div className="h-px bg-border" />
+                <InlineLocation
+                  listingId={listingId}
+                  initialLatitude={draftListing?.latitude ?? null}
+                  initialLongitude={draftListing?.longitude ?? null}
+                  initialLocality={locality}
+                  initialConfirmed={addressConfirmed}
+                  onLocalityConfirmed={(loc) => setLocality(loc)}
+                />
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed p-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Save your details to add photos and pin the location.
+                </p>
+                <Button type="button" variant="outline" onClick={() => persistDraft()} disabled={!canSubmit || createListing.isPending}>
+                  {createListing.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Continue
+                </Button>
+              </div>
+            )}
 
             {/* design-spec.md §prototype_only "video_link" — no create-payload field exists;
                 rendered disabled so the value is never wired into buildPayload(). */}
             <Field id="videoLink" label="Video link" hint="Add a video after creating the draft — coming soon on this page.">
               <Input id="videoLink" placeholder="YouTube or Instagram Reel URL" value={videoLinkDraft} onChange={(e) => setVideoLinkDraft(e.target.value)} className="h-11" disabled />
             </Field>
-
-            <div className="space-y-2">
-              <Button type="button" variant="outline" onClick={handlePinLocationClick}>
-                Pin location on map
-              </Button>
-              <div className="flex aspect-[16/9] items-center justify-center rounded-lg bg-muted text-sm text-muted-foreground">
-                Map preview available after pinning
-              </div>
-            </div>
           </Section>
 
-          {/* Section 7 — Description */}
-          <Section number={7} title="Description">
-            <div className="flex flex-wrap gap-2">
-              {/* design-spec.md §prototype_only "ai_description" — no AI service call; disabled for visual parity only. */}
-              <Button type="button" disabled title="Coming soon">
-                Generate description
-              </Button>
-              <Button type="button" variant="outline">
-                Write it myself
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              A good description mentions layout, condition, and what makes the location convenient.
-            </p>
-            <Textarea
-              id="description"
-              placeholder="Brief description of the property..."
-              rows={5}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+          {/* Section 6b — Nearby places (issue #1718 — gated on addressConfirmed, honest derived/broker-added labels) */}
+          {listingId && (
+            <Section number={7} title="Nearby places">
+              <InlineNearby listingId={listingId} propertyType={propertyType} addressConfirmed={addressConfirmed} />
+            </Section>
+          )}
+
+          {/* Section 8 — Description (issue #1718 — deterministic local draft builder, never "AI-generated") */}
+          <Section number={listingId ? 8 : 7} title="Description">
+            <DescriptionAssistant facts={descriptionFacts} value={description} onChange={setDescription} />
           </Section>
         </div>
 
@@ -763,11 +958,16 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
             isRent={isRent}
             areaSqft={primaryAreaSqft}
             specChips={specChips}
-            photoCount={0}
+            photoCount={imageCount}
           />
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <ListingStrengthMeter checklist={checklist} />
           </div>
+          {listingId && (
+            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+              <StrengthMeter result={strengthResult} variant="sidebar" />
+            </div>
+          )}
         </div>
       </div>
 
@@ -775,16 +975,16 @@ export function ResidentialListingForm({ initialPropertyType, onSwitchToGenericF
       <div className="fixed inset-x-0 bottom-0 z-10 border-t bg-card/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <p className="text-sm text-muted-foreground">
-            {canSubmit ? `Good listing · ${strengthPercent}% complete` : 'Add price and property type to publish'}
+            {canSubmit ? `Good listing · ${strengthPercent}% complete` : 'Add price and property type to continue'}
           </p>
           <div className="flex gap-3">
-            <Button type="button" variant="outline" onClick={() => handleSaveDraft(2)} disabled={createListing.isPending}>
-              {createListing.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="button" variant="outline" onClick={() => persistDraft()} disabled={!canSubmit || createListing.isPending || updateListing.isPending}>
+              {(createListing.isPending || updateListing.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save draft
             </Button>
-            <Button type="button" onClick={() => handleSaveDraft(2)} disabled={!canSubmit || createListing.isPending}>
-              {createListing.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Review &amp; publish
+            <Button type="button" onClick={handleGoToReview} disabled={!canSubmit || createListing.isPending || updateListing.isPending}>
+              {(createListing.isPending || updateListing.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Review
             </Button>
           </div>
         </div>

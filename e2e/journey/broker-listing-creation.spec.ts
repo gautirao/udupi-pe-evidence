@@ -1,31 +1,37 @@
 /**
- * DL1 — Full broker listing creation journey
+ * DL1 — Full broker listing creation journey (residential single-page flow)
  *
- * Exercises the complete new-listing wizard from /broker/listings/new through
- * all four EditListing steps, including real image upload, address confirmation,
- * POI approval (if Overpass suggestions are available), and final submission to
- * PENDING_REVIEW status.
+ * Issue #1718 rewrite: the residential create flow (ResidentialListingForm,
+ * mounted by NewListing.tsx for apartment/house/villa/residential_plot) is now
+ * a SINGLE PAGE — there is no more "Save & continue" -> /broker/listings/:id/edit
+ * navigation. A DRAFT is persisted inline (POST /api/listings on first "Save
+ * draft"/"Review" click), and photos (InlinePhotos -> ImageUploader),
+ * location (InlineLocation -> AddressPicker), and nearby places (InlineNearby
+ * -> PoiManager) all mount inline against that real listing id, on the same
+ * page. Review + submit also happen inline (mode='review' swaps the panel,
+ * no route change) followed by an honest "Submitted for review" success panel.
+ *
+ * This spec drives that real inline flow end-to-end against the REAL backend
+ * + shared Supabase for three residential subtypes — House, Villa, and
+ * Residential Plot — which is the real validation of the backend submit-gate
+ * fix that added villa/residential_plot to SUBMITTABLE_PROPERTY_TYPES
+ * (see src/lib/listingStrength.ts).
  *
  * Prerequisites:
  *   - BROKER_EMAIL / BROKER_PASSWORD must be set
+ *   - ADMIN_EMAIL / ADMIN_PASSWORD must be set (teardown uses the admin
+ *     DELETE endpoint, which works for any listing status, incl. PENDING_REVIEW)
  *   - VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY must be set (token grant)
  *   - e2e/fixtures/flat1.jpg, flat2.jpg, flat3.jpg must exist
  *
  * Teardown (afterEach):
- *   - Admin reject via POST /api/admin/listings/{id}/reject
- *   - Broker delete via DELETE /api/listings/{id}
- *   - Failures are logged but do not affect the test result
- *
- * POI approval (step 4):
- *   - PoiManager renders on step 4 after address confirmation
- *   - The backend fetches settlement POIs + amenity suggestions via Overpass
- *   - If amenity suggestions exist, the test approves the first one and verifies
- *     it appears in the Approved tab
- *   - If Overpass returns nothing (non-deterministic), the test continues without
- *     approving — both outcomes are valid
+ *   - Admin delete via DELETE /api/admin/listings/{id} — idempotent, works
+ *     regardless of listing status (mirrors e2e/global-teardown.ts's primary
+ *     path). Failures are logged but do not affect the test result.
  *
  * Run locally:
- *   BROKER_EMAIL=broker@example.com BROKER_PASSWORD=secret npm run test:e2e -- e2e/journey/broker-listing-creation.spec.ts
+ *   BROKER_EMAIL=... BROKER_PASSWORD=... ADMIN_EMAIL=... ADMIN_PASSWORD=... \
+ *     npm run test:e2e:local -- --project=journey broker-listing-creation.spec.ts
  */
 
 import { test, expect } from '@playwright/test';
@@ -46,8 +52,6 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? '';
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'fixtures');
-// fixtures/test-image.jpg — checked-in JPEG for future single-image upload tests (#667 AC)
-// Currently unused here; flat1/2/3.jpg cover the 3-image DL1 upload path.
 
 // ---------------------------------------------------------------------------
 // Token helper — mirrors global-setup.ts getToken exactly
@@ -90,7 +94,7 @@ async function getToken(email: string, password: string): Promise<string | null>
 }
 
 // ---------------------------------------------------------------------------
-// DL1 — Full listing creation journey
+// DL1 — Full listing creation journey (residential single-page flow)
 // ---------------------------------------------------------------------------
 
 test.use({ storageState: 'e2e/fixtures/broker-auth.json' });
@@ -111,56 +115,29 @@ test.afterEach(async () => {
   const CLEANUP_TIMEOUT_MS = 10_000;
 
   const doCleanup = async (): Promise<void> => {
-    // Attempt admin reject so the broker can delete
-    let rejected = false;
+    // Primary path: admin DELETE works for any listing status, including
+    // PENDING_REVIEW (the status these tests leave the listing in on success) —
+    // mirrors e2e/global-teardown.ts's primary path, no reject-then-delete
+    // dance needed.
     const adminToken = await getToken(ADMIN_EMAIL, ADMIN_PASSWORD).catch(() => null);
-    if (adminToken) {
-      try {
-        const rejectRes = await fetch(`${BACKEND}/api/admin/listings/${id}/reject`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${adminToken}`,
-          },
-          body: JSON.stringify({ rejectionReason: 'E2E teardown' }),
-        });
-        if (rejectRes.ok) {
-          rejected = true;
-          console.log(`[DL1 teardown] Rejected listing ${id}`);
-        } else {
-          const text = await rejectRes.text().catch(() => '<unreadable>');
-          console.log(`[DL1 teardown] Admin reject failed (${rejectRes.status}): ${text}`);
-        }
-      } catch (err) {
-        console.log(`[DL1 teardown] Admin reject threw: ${String(err)}`);
-      }
-    } else {
-      console.log('[DL1 teardown] No admin token available — skipping reject step.');
+    if (!adminToken) {
+      console.log('[DL1 teardown] No admin token available — cannot clean up listing', id);
+      return;
     }
 
-    // Broker delete — only attempt if rejection succeeded (backend requires REJECTED status to allow delete)
-    if (rejected) {
-      const brokerToken = await getToken(BROKER_EMAIL, BROKER_PASSWORD).catch(() => null);
-      if (brokerToken) {
-        try {
-          const deleteRes = await fetch(`${BACKEND}/api/listings/${id}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${brokerToken}` },
-          });
-          if (deleteRes.ok) {
-            console.log(`[DL1 teardown] Deleted listing ${id}`);
-          } else {
-            const text = await deleteRes.text().catch(() => '<unreadable>');
-            console.log(`[DL1 teardown] Broker delete failed (${deleteRes.status}): ${text}`);
-          }
-        } catch (err) {
-          console.log(`[DL1 teardown] Broker delete threw: ${String(err)}`);
-        }
+    try {
+      const res = await fetch(`${BACKEND}/api/admin/listings/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      if (res.ok || res.status === 404) {
+        console.log(`[DL1 teardown] Admin deleted listing ${id} (status ${res.status})`);
       } else {
-        console.log('[DL1 teardown] Could not obtain broker token for delete.');
+        const text = await res.text().catch(() => '<unreadable>');
+        console.log(`[DL1 teardown] Admin delete failed (${res.status}): ${text}`);
       }
-    } else {
-      console.log('[DL1 teardown] Reject did not succeed — skipping delete to avoid orphan cleanup failure.');
+    } catch (err) {
+      console.log(`[DL1 teardown] Admin delete threw: ${String(err)}`);
     }
   };
 
@@ -175,265 +152,216 @@ test.afterEach(async () => {
   ]);
 });
 
-// @journey
-test('DL1 — full broker listing creation journey', async ({ page }) => {
-  test.setTimeout(120_000);
-  test.skip(
-    !hasRealCredentials(BROKER_EMAIL, BROKER_PASSWORD),
-    'BROKER_EMAIL / BROKER_PASSWORD not set — skipping DL1',
-  );
+// ---------------------------------------------------------------------------
+// Subtypes under test — covers the real backend submit-gate fix
+// (villa/residential_plot newly added to SUBMITTABLE_PROPERTY_TYPES).
+// Apartment is intentionally excluded here — it was already submittable
+// pre-#1718 and additionally requires bedrooms + built-up area to clear the
+// type-specific gate; House/Villa/Residential-Plot is the real regression
+// surface for this issue.
+// ---------------------------------------------------------------------------
 
-  // -------------------------------------------------------------------------
-  // Step 1 — NewListing form at /broker/listings/new
-  // -------------------------------------------------------------------------
+interface Subtype {
+  key: 'house' | 'villa' | 'residential_plot';
+  radioName: string;
+}
 
-  // Capture browser console messages for upload diagnostics
-  page.on('console', (msg) => console.log(`[Browser ${msg.type().toUpperCase()}] ${msg.text()}`));
-  page.on('pageerror', (err) => console.log('[Browser PAGEERROR]', err.message));
-  page.on('response', async (res) => {
-    const url = res.url();
-    if (res.status() >= 400) {
-      console.log(`[Browser RESPONSE] ${res.status()} ${res.request().method()} ${url}`);
+const SUBTYPES: readonly Subtype[] = [
+  { key: 'house', radioName: 'House' },
+  { key: 'villa', radioName: 'Villa' },
+  { key: 'residential_plot', radioName: 'Residential Plot' },
+];
+
+for (const subtype of SUBTYPES) {
+  // @journey
+  test(`DL1 — full broker listing creation journey (${subtype.key})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    test.skip(
+      !hasRealCredentials(BROKER_EMAIL, BROKER_PASSWORD),
+      'BROKER_EMAIL / BROKER_PASSWORD not set — skipping DL1',
+    );
+
+    page.on('console', (msg) => console.log(`[Browser ${msg.type().toUpperCase()}] ${msg.text()}`));
+    page.on('pageerror', (err) => console.log('[Browser PAGEERROR]', err.message));
+    page.on('response', (res) => {
+      if (res.status() >= 400) {
+        console.log(`[Browser RESPONSE] ${res.status()} ${res.request().method()} ${res.url()}`);
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // Section 1 — Property type & purpose (/broker/listings/new lands directly
+    // on ResidentialListingForm; default type is Apartment, so pick the subtype
+    // under test via its PropertyTypeCardSelector radio card).
+    // -------------------------------------------------------------------------
+
+    await page.goto('/broker/listings/new');
+    await page.waitForLoadState('domcontentloaded');
+
+    await page.getByRole('radio', { name: subtype.radioName, exact: true }).click();
+
+    // -------------------------------------------------------------------------
+    // Sections 2-4 — core facts (locality, title, price) + type-required field
+    // -------------------------------------------------------------------------
+
+    await page.locator('#locality').fill('Manipal');
+    await page.locator('#title').fill(`E2E Test ${subtype.radioName} — delete me`);
+    await page.locator('#price').fill('50 lakh');
+
+    if (subtype.key === 'residential_plot') {
+      // Real submit gate (listingStrength.ts) requires landArea + landAreaUnit
+      // for residential_plot; landAreaUnit defaults to 'cent' already.
+      await page.locator('#plotArea').fill('5');
     }
-    // Log geocode responses to diagnose lat/lon NaN issue
-    if (url.includes('/api/geocode') && !url.includes('reverse')) {
-      try {
-        const body = await res.json().catch(() => '<unparseable>');
-        console.log(`[DL1 geocode] ${res.status()} body:`, JSON.stringify(body).slice(0, 500));
-      } catch { /* ignore */ }
-    }
-  });
 
-  await page.goto('/broker/listings/new');
-  await page.waitForLoadState('domcontentloaded');
+    // -------------------------------------------------------------------------
+    // Persist DRAFT inline via "Save draft" — no navigation. Intercept the
+    // real POST /api/listings response to capture the listing id for the
+    // rest of the flow + teardown.
+    // -------------------------------------------------------------------------
 
-  // Select property type "House" (PropertyTypeCardSelector renders cards as role="radio")
-  await page.getByRole('radio', { name: 'House', exact: true }).click();
+    const createResponsePromise = page.waitForResponse(
+      (resp) => /\/api\/listings$/.test(resp.url()) && resp.request().method() === 'POST',
+      { timeout: 20_000 },
+    );
+    await page.getByRole('button', { name: /^save draft$/i }).click();
+    const createResponse = await createResponsePromise;
+    expect(createResponse.ok(), `POST /api/listings should succeed for ${subtype.key}`).toBeTruthy();
 
-  // Fill title
-  await page.locator('#title').fill('E2E Test House — delete me');
+    const created = await createResponse.json() as { id: string };
+    createdListingId = created.id;
+    console.log(`[DL1:${subtype.key}] Created listing: ${createdListingId}`);
 
-  // Fill price via PriceField text input
-  await page.locator('input#price').fill('50 lakh');
+    // -------------------------------------------------------------------------
+    // Section 6 — Photos (InlinePhotos -> ImageUploader), mounted inline now
+    // that listingId is set. Reuses DL1's original real drag-drop upload
+    // approach with real fixture images.
+    // -------------------------------------------------------------------------
 
-  // Submit step 1 (NewListing form)
-  await page.getByRole('button', { name: /save & continue/i }).click();
+    const dropZone = page.getByRole('button', { name: /drag & drop images here/i });
+    await dropZone.waitFor({ state: 'visible', timeout: 15_000 });
 
-  // Wait for navigation to EditListing URL
-  await page.waitForURL(/\/broker\/listings\/.+\/edit/, { timeout: 30_000 });
+    const [d1, d2, d3] = [
+      Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat1.jpg'))),
+      Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat2.jpg'))),
+      Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat3.jpg'))),
+    ];
+    await dropZone.evaluate(
+      (zone, { bytes1, bytes2, bytes3 }) => {
+        const files = [
+          new File([new Uint8Array(bytes1)], 'flat1.jpg', { type: 'image/jpeg' }),
+          new File([new Uint8Array(bytes2)], 'flat2.jpg', { type: 'image/jpeg' }),
+          new File([new Uint8Array(bytes3)], 'flat3.jpg', { type: 'image/jpeg' }),
+        ];
+        const dt = new DataTransfer();
+        files.forEach((f) => dt.items.add(f));
+        zone.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      },
+      { bytes1: d1, bytes2: d2, bytes3: d3 },
+    );
 
-  // Capture listing ID from URL
-  const urlMatch = page.url().match(/\/listings\/([^/]+)\/edit/);
-  if (!urlMatch || !urlMatch[1]) {
-    throw new Error('DL1: Could not extract listing ID from URL after NewListing submit');
-  }
-  createdListingId = urlMatch[1];
-  console.log(`[DL1] Created listing: ${createdListingId}`);
+    // Wait for at least one preview thumbnail to confirm upload processing started.
+    await expect(page.getByAltText(/^Listing image/).first()).toBeVisible({ timeout: 30_000 });
 
-  // -------------------------------------------------------------------------
-  // Step 2 — EditListing step 1: fill locality
-  // -------------------------------------------------------------------------
+    // Wait for all 3 uploads to complete and TanStack Query to refetch.
+    await expect(page.getByText('3/10 images')).toBeVisible({ timeout: 90_000 });
 
-  await page.goto(`/broker/listings/${createdListingId}/edit?step=1`);
-  await page.waitForLoadState('domcontentloaded');
-  await expect(page.locator('[data-testid="step-1-panel"]')).toBeVisible({ timeout: 15_000 });
+    // -------------------------------------------------------------------------
+    // Section 6 — Location (InlineLocation -> AddressPicker), same section,
+    // mounted alongside photos.
+    // -------------------------------------------------------------------------
 
-  await page.locator('#locality').fill('Manipal');
-
-  // Save & Continue advances to step 2
-  await page.locator('button[type="submit"]').click();
-  await expect(page.locator('[data-testid="step-2-panel"]')).toBeVisible({ timeout: 15_000 });
-
-  // -------------------------------------------------------------------------
-  // Step 3 — Image upload (step 2)
-  // -------------------------------------------------------------------------
-
-  // Wait for ImageUploader to finish loading (skeleton → real UI with drop zone)
-  const dropZone = page.locator('[data-testid="step-2-panel"] [role="button"]').filter({ hasText: /drag/i });
-  await dropZone.waitFor({ state: 'visible', timeout: 15_000 });
-
-  // Simulate a file-drop DragEvent with real File objects.
-  //
-  // Files are read in Node.js and passed as plain byte arrays (JSON-serialisable);
-  // File objects are created inside page.evaluate so they have real content.
-  // A native DragEvent is dispatched on the drop zone — this reliably triggers the
-  // React onDrop handler in headless Chromium without needing to introspect React
-  // internals.
-  const [d1, d2, d3] = [
-    Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat1.jpg'))),
-    Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat2.jpg'))),
-    Array.from(fs.readFileSync(path.join(FIXTURE_DIR, 'flat3.jpg'))),
-  ];
-  await page.evaluate(
-    ({ bytes1, bytes2, bytes3, sel }) => {
-      const zone = document.querySelector<HTMLElement>(sel);
-      console.log('[DL1-eval] drop zone found:', !!zone, 'selector:', sel);
-      if (!zone) throw new Error(`Drop zone not found: ${sel}`);
-
-      const files = [
-        new File([new Uint8Array(bytes1)], 'flat1.jpg', { type: 'image/jpeg' }),
-        new File([new Uint8Array(bytes2)], 'flat2.jpg', { type: 'image/jpeg' }),
-        new File([new Uint8Array(bytes3)], 'flat3.jpg', { type: 'image/jpeg' }),
-      ];
-      console.log('[DL1-eval] created', files.length, 'File objects');
-
-      const dt = new DataTransfer();
-      files.forEach(f => dt.items.add(f));
-      zone.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
-      console.log('[DL1-eval] DragEvent dispatched');
-    },
-    // tabindex="0" uniquely identifies the drop zone vs upload action buttons (Delete/Retry)
-    { bytes1: d1, bytes2: d2, bytes3: d3, sel: '[data-testid="step-2-panel"] [role="button"][tabindex="0"]' },
-  );
-
-  // Wait for at least one preview thumbnail to confirm upload processing has started
-  await expect(
-    page.locator('[data-testid="step-2-panel"] img').first(),
-  ).toBeVisible({ timeout: 30_000 });
-
-  const step2Text = await page.locator('[data-testid="step-2-panel"]').innerText().catch(() => '<not found>');
-  console.log('[DL1] Step-2 panel text (after first thumbnail visible):', step2Text.substring(0, 300));
-
-  // Diagnostic: check Supabase session in localStorage
-  const authDiag = await page.evaluate(() => {
-    const keys = Object.keys(localStorage).filter(k => k.toLowerCase().includes('auth') || k.toLowerCase().includes('supabase'));
-    const session = keys.map(k => ({ key: k, hasValue: !!localStorage.getItem(k)?.length }));
-    return { keys: session, totalKeys: Object.keys(localStorage).length };
-  });
-  console.log('[DL1] Auth localStorage diag:', JSON.stringify(authDiag));
-
-  // Wait for all 3 uploads to complete and TanStack Query to refetch
-  await expect(page.getByText('3/10 images')).toBeVisible({ timeout: 90_000 });
-
-  // Advance to step 3
-  await page.locator('[data-testid="step-2-panel"] button:has-text("Save & Continue")').click();
-  await expect(page.locator('[data-testid="step-3-panel"]')).toBeVisible({ timeout: 15_000 });
-
-  // -------------------------------------------------------------------------
-  // Step 4 — Address confirmation (step 3)
-  // -------------------------------------------------------------------------
-
-  await page
-    .locator('input[placeholder="Search for a location (e.g. Manipal, Udupi)"]')
-    .fill('Manipal, Udupi, Karnataka');
-
-  // Wait for the autocomplete dropdown
-  await expect(
-    page.locator('[data-testid="step-3-panel"] ul li').first(),
-  ).toBeVisible({ timeout: 15_000 });
-
-  // Click the first result
-  await page.locator('[data-testid="step-3-panel"] ul li').first().click({ timeout: 15_000 });
-
-  // Confirm the green "Location confirmed" indicator appears within step 3
-  await expect(
-    page.locator('[data-testid="step-3-panel"]').getByText('Location confirmed'),
-  ).toBeVisible({ timeout: 10_000 });
-
-  // Register waitForResponse for POI suggestions BEFORE advancing to step 4.
-  // PoiManager mounts on step 4 and immediately fires GET /pois/suggestions.
-  // If we register after the click, the response may already have completed.
-  const suggestionsResponsePromise = page.waitForResponse(
-    (resp) => resp.url().includes('/pois/suggestions') && resp.request().method() === 'GET',
-    { timeout: 20_000 },
-  ).catch(() => null);
-
-  // Advance to step 4
-  await page.locator('[data-testid="step-3-panel"] button:has-text("Save & Continue")').click();
-  await expect(page.locator('[data-testid="step-4-panel"]')).toBeVisible({ timeout: 15_000 });
-
-  // -------------------------------------------------------------------------
-  // Step 4a — POI approval (PoiManager on step 4)
-  // -------------------------------------------------------------------------
-
-  // Wait for PoiManager to render
-  await expect(
-    page.getByText('Nearby Points of Interest'),
-  ).toBeVisible({ timeout: 15_000 });
-
-  // Switch to the Nearby Places tab (amenity suggestions)
-  const nearbyTab = page.getByRole('tab', { name: /nearby places/i });
-  await expect(nearbyTab).toBeVisible({ timeout: 10_000 });
-  await nearbyTab.click();
-
-  // Wait for the suggestions endpoint to settle (registered before step-4 advance)
-  const suggestionsResponse = await suggestionsResponsePromise;
-  if (suggestionsResponse) {
-    console.log(`[DL1] POI suggestions response: ${suggestionsResponse.status()}`);
-  } else {
-    console.log('[DL1] POI suggestions response not captured (may have completed before listener)');
-  }
-
-  // Check if any Approve buttons appeared (Overpass is non-deterministic)
-  // Give a brief moment for the UI to render suggestion cards after the response
-  const approveButtons = page.getByRole('button', { name: /^approve /i });
-  const approveCount = await approveButtons.count().catch(() => 0);
-
-  if (approveCount > 0) {
-    // Approve the first available POI
-    const firstApproveBtn = approveButtons.first();
-    const poiLabel = await firstApproveBtn.getAttribute('aria-label');
-    console.log(`[DL1] Approving POI: ${poiLabel}`);
-
-    // Intercept the approve PATCH to detect success vs CORS/backend failure
-    const approveResponsePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/pois/') && resp.url().includes('/approve'),
-      { timeout: 10_000 },
+    // Diagnostic: log the real backend geocode proxy response so a genuine
+    // Nominatim/network failure (zero results) is distinguishable from a
+    // selector bug — AddressPicker.tsx renders a real result <li> with class
+    // "cursor-pointer" + an onClick, vs. a plain non-interactive <li> with
+    // "No locations found for ..." when the search comes back empty. Clicking
+    // whichever <li> happens to render first (old approach) silently no-ops
+    // on the "no results" row and never fires handleSelectResult/onConfirm.
+    const geocodeResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes('/api/geocode?') && resp.request().method() === 'GET',
+      { timeout: 15_000 },
     ).catch(() => null);
 
-    await firstApproveBtn.click();
-    const approveResp = await approveResponsePromise;
+    await page
+      .locator('input[placeholder="Search for a location (e.g. Manipal, Udupi)"]')
+      .fill('Manipal, Udupi, Karnataka');
 
-    if (approveResp && approveResp.ok()) {
-      // After approval, PoiManager auto-switches to "Approved" tab and refetches.
-      // Wait for the refetch to complete before checking the badge.
-      const refetchResponse = page.waitForResponse(
-        (resp) => resp.url().includes('/pois/suggestions') && resp.request().method() === 'GET',
-        { timeout: 10_000 },
-      ).catch(() => null);
-      await refetchResponse;
+    await expect(page.locator('ul li').first()).toBeVisible({ timeout: 15_000 });
 
-      const approvedTab = page.getByRole('tab', { name: /approved/i });
-      await expect(approvedTab).toBeVisible({ timeout: 10_000 });
-
-      // Check if the badge appeared (POI moved to approved list)
-      const badgeVisible = await approvedTab.locator('span.rounded-full')
-        .isVisible({ timeout: 5_000 })
-        .catch(() => false);
-
-      if (badgeVisible) {
-        console.log('[DL1] POI approved and visible in Approved tab ✓');
-      } else {
-        // Approval API returned 200 but refetch didn't reflect it — log, don't fail
-        console.log('[DL1] POI approve returned 200 but badge not visible after refetch — possible timing issue');
-      }
+    const geocodeResponse = await geocodeResponsePromise;
+    if (geocodeResponse) {
+      const body = await geocodeResponse.json().catch(() => '<unparseable>');
+      console.log(`[DL1:${subtype.key}] /api/geocode ${geocodeResponse.status()}:`, JSON.stringify(body).slice(0, 500));
     } else {
-      // CORS or backend failure — log but don't fail (POI approval is not a submit prerequisite)
-      const status = approveResp ? approveResp.status() : 'no response (CORS blocked)';
-      console.log(`[DL1] POI approve failed (${status}) — continuing without approval`);
+      console.log(`[DL1:${subtype.key}] /api/geocode response not captured.`);
     }
-  } else {
-    console.log('[DL1] No amenity suggestions from Overpass — skipping POI approval (acceptable)');
-  }
 
-  // -------------------------------------------------------------------------
-  // Step 5 — Review & Submit (step 4)
-  // -------------------------------------------------------------------------
+    // Real, clickable geocode result — excludes the non-interactive
+    // "No locations found" row (see AddressPicker.tsx: only real results get
+    // the cursor-pointer class + onClick={handleSelectResult}).
+    const realResult = page.locator('ul li.cursor-pointer').first();
+    const hasRealResult = await realResult.isVisible().catch(() => false);
+    if (!hasRealResult) {
+      const noResultsText = await page.getByText(/no locations found/i).textContent().catch(() => null);
+      throw new Error(
+        `[DL1:${subtype.key}] Real geocode search for "Manipal, Udupi, Karnataka" returned no ` +
+        `selectable result (backend /api/geocode proxy to Nominatim) — cannot confirm a real ` +
+        `location in this environment. Dropdown text: ${noResultsText ?? '<unknown>'}`,
+      );
+    }
 
-  // All 3 checklist items must show check icons
-  await expect(
-    page.locator('[data-testid="step-4-panel"] svg.lucide-check'),
-  ).toHaveCount(3, { timeout: 10_000 });
+    // Register the real PUT /api/listings/{id} (address confirm) response
+    // BEFORE clicking, so the backend write is confirmed before we proceed —
+    // the submit gate later depends on the backend's addressConfirmed field,
+    // not just AddressPicker's local "confirmed" UI state.
+    const confirmResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes(`/api/listings/${createdListingId}`) && resp.request().method() === 'PUT',
+      { timeout: 15_000 },
+    ).catch(() => null);
 
-  // Submit button must be enabled
-  const submitButton = page.getByRole('button', { name: /submit for review/i });
-  await expect(submitButton).toBeEnabled({ timeout: 10_000 });
+    await realResult.click({ timeout: 15_000 });
 
-  await submitButton.click();
+    await expect(page.getByText('Location confirmed')).toBeVisible({ timeout: 10_000 });
+    const confirmResponse = await confirmResponsePromise;
+    if (confirmResponse) {
+      console.log(`[DL1:${subtype.key}] Address confirm PUT status: ${confirmResponse.status()}`);
+      expect(confirmResponse.ok(), 'address-confirm PUT should succeed').toBeTruthy();
+    } else {
+      console.log(`[DL1:${subtype.key}] Address confirm PUT response not captured — continuing (UI already shows confirmed).`);
+    }
 
-  // After submission the UI navigates to /broker/listings
-  await page.waitForURL(/\/broker\/listings$/, { timeout: 30_000 });
+    // -------------------------------------------------------------------------
+    // Review — clicking "Review" persists any pending edits (PUT) then swaps
+    // to the inline review panel. No route change.
+    // -------------------------------------------------------------------------
 
-  // The newly submitted listing should appear with "Under Review" badge
-  await expect(page.getByText('Under Review').first()).toBeVisible({ timeout: 10_000 });
-});
+    await page.getByRole('button', { name: /^review$/i }).click();
+    await expect(page.getByRole('heading', { name: /review your listing/i })).toBeVisible({ timeout: 15_000 });
+
+    const submitButton = page.getByRole('button', { name: /submit for review/i });
+    await expect(submitButton).toBeEnabled({ timeout: 15_000 });
+
+    // -------------------------------------------------------------------------
+    // Submit — real POST /api/listings/{id}/submit; assert the honest
+    // success state and PENDING_REVIEW status from the real response body.
+    // -------------------------------------------------------------------------
+
+    const submitResponsePromise = page.waitForResponse(
+      (resp) => resp.url().includes(`/api/listings/${createdListingId}/submit`) && resp.request().method() === 'POST',
+      { timeout: 20_000 },
+    );
+    await submitButton.click();
+    const submitResponse = await submitResponsePromise;
+    expect(submitResponse.ok(), `POST /api/listings/${createdListingId}/submit should succeed for ${subtype.key}`).toBeTruthy();
+
+    const submitted = await submitResponse.json() as { status: string };
+    expect(submitted.status, `${subtype.key} should be PENDING_REVIEW after submit`).toBe('PENDING_REVIEW');
+
+    await expect(page.getByRole('heading', { name: /submitted for review/i })).toBeVisible({ timeout: 15_000 });
+    // Honest post-submit copy appears in two spots (status badge + explanatory
+    // line); assert the first — the PENDING_REVIEW status itself is already
+    // verified from the real submit response body above.
+    await expect(page.getByText(/pending admin approval/i).first()).toBeVisible({ timeout: 10_000 });
+  });
+}
